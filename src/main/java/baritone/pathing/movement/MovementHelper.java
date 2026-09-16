@@ -18,6 +18,7 @@
 package baritone.pathing.movement;
 
 import baritone.Baritone;
+import baritone.altoclef.AltoClefSettings;
 import baritone.api.BaritoneAPI;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
@@ -67,13 +68,18 @@ import static baritone.pathing.precompute.Ternary.*;
 public interface MovementHelper extends ActionCosts, Helper {
 
     static boolean avoidBreaking(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        if (bsi.get0(x, y + 1, z).getBlock() instanceof EndPortalFrameBlock) {
+            return true;
+        }
+        if (AltoClefSettings.getInstance().shouldAvoidBreaking(new BlockPos(x, y, z))) return true;
+
         if (!bsi.worldBorder.canPlaceAt(x, z)) {
             return true;
         }
         Block b = state.getBlock();
         return Baritone.settings().blocksToDisallowBreaking.value.contains(b)
+                || b instanceof EndPortalFrameBlock
                 || b == Blocks.ICE // ice becomes water, and water can mess up the path
-                || b instanceof InfestedBlock // obvious reasons
                 // call context.get directly with x,y,z. no need to make 5 new BlockPos for no reason
                 || avoidAdjacentBreaking(bsi, x, y + 1, z, true)
                 || avoidAdjacentBreaking(bsi, x + 1, y, z, false)
@@ -129,6 +135,15 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
         Ternary canWalkThrough = canWalkThroughBlockState(state);
+        Block block = state.getBlock();
+        BlockState up = bsi.get0(x, y + 1, z);
+        if (AltoClefSettings.getInstance().canSwimThroughLava() && block == Blocks.LAVA) {
+            return up.getFluidState().isEmpty();
+        }
+        if (AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) {
+            return false;
+        }
+
         if (canWalkThrough == YES) {
             return true;
         }
@@ -277,6 +292,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     static boolean fullyPassable(IPlayerContext ctx, BlockPos pos) {
         BlockState state = ctx.world().getBlockState(pos);
         Ternary fullyPassable = fullyPassableBlockState(state);
+        if (AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(pos)) {
+            return false;
+        }
         if (fullyPassable == YES) {
             return true;
         }
@@ -375,6 +393,7 @@ public interface MovementHelper extends ActionCosts, Helper {
                 || block == Blocks.CACTUS
                 || block == Blocks.SWEET_BERRY_BUSH
                 || block instanceof BaseFireBlock
+                || block instanceof EndPortalFrameBlock
                 || block == Blocks.END_PORTAL
                 || block == Blocks.COBWEB
                 || block == Blocks.BUBBLE_COLUMN;
@@ -407,6 +426,13 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static Ternary canWalkOnBlockState(BlockState state) {
         Block block = state.getBlock();
+        // Extra blocks we may want to walk on.
+        if (block instanceof EndPortalFrameBlock) {
+            return YES;
+        }
+        if (block == Blocks.END_PORTAL && AltoClefSettings.getInstance().isCanWalkOnEndPortal()) {
+            return YES;
+        }
         if (isBlockNormalCube(state) && (block != Blocks.MAGMA_BLOCK || Baritone.settings().allowWalkOnMagmaBlocks.value) && block != Blocks.BUBBLE_COLUMN && block != Blocks.HONEY_BLOCK) {
             return YES;
         }
@@ -577,6 +603,8 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canPlaceAgainst(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        if (AltoClefSettings.getInstance().shouldAvoidPlacingAt(x, y, z)) return false;
+
         if (!bsi.worldBorder.canPlaceAt(x, z)) {
             return false;
         }
@@ -619,6 +647,9 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             double strVsBlock = context.toolSet.getStrVsBlock(state);
             if (strVsBlock <= 0) {
+                return COST_INF;
+            }
+            if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z)) {
                 return COST_INF;
             }
             double result = 1 / strVsBlock;

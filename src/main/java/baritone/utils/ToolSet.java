@@ -18,6 +18,7 @@
 package baritone.utils;
 
 import baritone.Baritone;
+import baritone.altoclef.AltoClefSettings;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -142,6 +143,10 @@ public class ToolSet {
         If we actually want know what efficiency our held item has instead of the best one
         possible, this lets us make pathing depend on the actual tool to be used (if auto tool is disabled)
         */
+        if (b.getExplosionResistance() == 0) {
+            return player.getInventory().getSelectedSlot();
+        }
+
         if (!Baritone.settings().autoTool.value && pathingCalculation) {
             return player.getInventory().getSelectedSlot();
         }
@@ -158,6 +163,9 @@ public class ToolSet {
             }
 
             if (Baritone.settings().itemSaver.value && (itemStack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
+                continue;
+            }
+            if (AltoClefSettings.getInstance().shouldForceSaveTool(blockState, itemStack)) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
@@ -229,7 +237,9 @@ public class ToolSet {
                 }
             }
         }
-
+        if (AltoClefSettings.getInstance().shouldForceUseTool(state, item)) {
+            return Double.POSITIVE_INFINITY;
+        }
         speed /= hardness;
         if (!state.requiresCorrectToolForDrops() || (!item.isEmpty() && item.isCorrectToolForDrops(state))) {
             return speed / 30;
