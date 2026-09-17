@@ -83,3 +83,10 @@ See TenorClef `docs/OSTINATO_WIRING.md`.
 
 LGPL-3.0 with upstream Baritone anime exception â€” see `LICENSE` / upstream notices.
 
+
+## Best-of-forks notes (UnionClef / Cabaletta / AltoClef)
+
+- **Travel:** `movementBackend=auto` prefers Tungsten when present (UnionClef tungsten-first travel model); mining/build stay on classic Baritone/Ostinato processes.
+- **Tungsten `ActionCosts.COST_INF`:** must be **positive** (Baritone convention). A negative sentinel breaks A* relaxation (UnionClef fix; ported into TenorClef `vendor/tungsten`).
+- **1.16.1:** Ostinato branch `1.16.1` replaces libs/MiranCZ Baritone; see TenorClef `docs/OSTINATO_WIRING.md`.
+- **1.21.11:** preferred modern MC alignment with Ostinato `main`.
