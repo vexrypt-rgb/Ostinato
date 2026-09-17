@@ -61,7 +61,7 @@ TenorClef still has its own `TungstenMovement` facade for tasks. Prefer Ostinato
 ## Build
 
 ```bat
-cd C:\Users\redfa\Documents\MinecraftDev\Ostinato
+cd C:\Users\user\Documents\MinecraftDev\Ostinato
 gradlew.bat build
 ```
 
