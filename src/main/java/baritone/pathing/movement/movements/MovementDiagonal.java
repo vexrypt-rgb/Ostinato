@@ -21,6 +21,7 @@ import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -279,6 +280,11 @@ public class MovementDiagonal extends Movement {
         }
         state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
         MovementHelper.moveTowards(ctx, state, dest);
+        if (ctx.player().isSwimming() && Baritone.settings().swimInWater.value) {
+            state.setInput(Input.SPRINT, true);
+            state.setTarget(new MovementState.MovementTarget(
+                    new Rotation(state.getTarget().getRotation().get().getYaw(), -30), true));
+        }
         return state;
     }
 

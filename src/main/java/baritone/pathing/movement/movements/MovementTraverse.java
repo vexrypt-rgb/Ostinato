@@ -249,12 +249,20 @@ public class MovementTraverse extends Movement {
             }
         }
 
+        // Sprint-swim when traversing water->water (cabaletta/baritone#3988).
+        boolean swim = Baritone.settings().swimInWater.value
+                && MovementHelper.isLiquid(ctx, src)
+                && MovementHelper.isLiquid(ctx, dest)
+                && (ctx.player().isSwimming()
+                    || (ctx.world().getBlockState(dest.below()).equals(pb1)
+                        && ctx.world().getBlockState(src.below()).equals(pb1)))
+                && ctx.playerFeetAsVec().y >= src.y - 1;
         boolean isTheBridgeBlockThere = MovementHelper.canWalkOn(ctx, positionToPlace) || ladder || MovementHelper.canUseFrostWalker(ctx, positionToPlace);
         BlockPos feet = ctx.playerFeet();
-        if (feet.getY() != dest.getY() && !ladder) {
+        state.setInput(Input.JUMP, false);
+        if (feet.getY() != dest.getY() && !ladder && !swim) {
             logDebug("Wrong Y coordinate");
             if (feet.getY() < dest.getY()) {
-                System.out.println("In movement traverse");
                 return state.setInput(Input.JUMP, true);
             }
             return state;
@@ -286,6 +294,10 @@ public class MovementTraverse extends Movement {
                 state.setInput(Input.JUMP, true);
             }
             MovementHelper.moveTowards(ctx, state, positionsToBreak[0]);
+            if (swim) {
+                state.setTarget(new MovementState.MovementTarget(
+                        new Rotation(state.getTarget().getRotation().get().getYaw(), -30), true));
+            }
             return state;
         } else {
             wasTheBridgeBlockAlwaysThere = false;

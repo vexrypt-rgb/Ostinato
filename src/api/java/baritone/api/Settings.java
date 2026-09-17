@@ -808,6 +808,12 @@ public final class Settings {
     public final Setting<Boolean> sprintInWater = new Setting<>(true);
 
     /**
+     * Attempt to enter the underwater swimming state (sprint-swim via pitch ~-30).
+     * Ported from cabaletta/baritone#3988; reduces water bobbing stuck (issue #2377).
+     */
+    public final Setting<Boolean> swimInWater = new Setting<>(true);
+
+    /**
      * When GetToBlockProcess or MineProcess fails to calculate a path, instead of just giving up, mark the closest instance
      * of that block as "unreachable" and go towards the next closest. GetToBlock expands this search to the whole "vein"; MineProcess does not.
      * This is because MineProcess finds individual impossible blocks (like one block in a vein that has gravel on top then lava, so it can't break)
