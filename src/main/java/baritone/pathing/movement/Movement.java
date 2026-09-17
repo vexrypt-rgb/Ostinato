@@ -124,7 +124,11 @@ public abstract class Movement implements IMovement, MovementHelper {
     public MovementStatus update() {
         ctx.player().abilities.isFlying = false;
         currentState = updateState(currentState);
-        if (MovementHelper.isLiquid(ctx, ctx.playerFeet())) {
+        // Unconditional JUMP-in-liquid causes bobbing stuck (cabaletta/baritone#2377).
+        // When swimInWater is on, MovementTraverse handles sprint-swim instead (#3988).
+        if (MovementHelper.isLiquid(ctx, ctx.playerFeet())
+                && ctx.player().getPositionVec().y < dest.y + 0.6
+                && !(Baritone.settings().swimInWater.value && this instanceof baritone.pathing.movement.movements.MovementTraverse)) {
             currentState.setInput(Input.JUMP, true);
         }
         if (ctx.player().isEntityInsideOpaqueBlock()) {

@@ -237,9 +237,19 @@ public class MovementTraverse extends Movement {
             }
         }
 
+        // Sprint-swim when traversing water->water (cabaletta/baritone#3988).
+        // Avoids infinite JUMP bobbing while still making forward progress.
+        boolean swim = Baritone.settings().swimInWater.value
+                && MovementHelper.isLiquid(ctx, src)
+                && MovementHelper.isLiquid(ctx, dest)
+                && (ctx.player().isSwimming()
+                    || (BlockStateInterface.get(ctx, dest.down()).equals(pb1)
+                        && BlockStateInterface.get(ctx, src.down()).equals(pb1)))
+                && ctx.player().getPositionVec().y >= src.y - 1;
         boolean isTheBridgeBlockThere = MovementHelper.canWalkOn(ctx, positionToPlace) || ladder || MovementHelper.canUseFrostWalker(ctx, positionToPlace);
         BlockPos feet = ctx.playerFeet();
-        if (feet.getY() != dest.getY() && !ladder) {
+        state.setInput(Input.JUMP, false);
+        if (feet.getY() != dest.getY() && !ladder && !swim) {
             logDebug("Wrong Y coordinate");
             if (feet.getY() < dest.getY()) {
                 return state.setInput(Input.JUMP, true);
@@ -278,6 +288,11 @@ public class MovementTraverse extends Movement {
                 }
             }
             MovementHelper.moveTowards(ctx, state, against);
+            if (swim) {
+                // Pitch -30: head above water for air, stay in swim state (#3988).
+                state.setTarget(new MovementState.MovementTarget(
+                        new Rotation(state.getTarget().getRotation().get().getYaw(), -30), true));
+            }
             return state;
         } else {
             wasTheBridgeBlockAlwaysThere = false;
