@@ -1,4 +1,4 @@
-﻿# Ostinato
+# Ostinato
 
 Ostinato is a Baritone fork seeded from modern [cabaletta/baritone](https://github.com/cabaletta/baritone), with AltoClef-specific APIs ported from [MiranCZ/baritone_altoclef](https://github.com/MiranCZ/baritone_altoclef) so [TenorClef](https://github.com/vexrypt-rgb)/AltoClef can drive pathing, inventory, and schematic build hooks.
 
@@ -34,15 +34,29 @@ Ported onto Ostinato with mappings adapted for modern mojmap / 1.21.11:
 | Full Tungsten movement backend | Stub/notes only — see below. TenorClef wiring left for a later step. |
 | Publishing TenorClef `build.gradle` dependency swap | Deferred; optional note below. |
 
-## Tungsten movement backend (future)
+## Tungsten movement backend
 
-TenorClef already has an optional Tungsten jar facade that falls back to Baritone. Ostinato intentionally does **not** implement Tungsten yet.
+Ostinato can execute **goto / custom-goal travel** via Tungsten physics A* when the Tungsten Fabric mod is on the classpath. Mining, digging, schematics, and inventory stay on classic Baritone pathing.
 
-Planned later:
+| Setting | Values | Default |
+| --- | --- | --- |
+| `movementBackend` | `baritone` / `tungsten` / `auto` | `auto` |
 
-- Keep Baritone pathing as the default executor.
-- Add a thin `MovementBackend` SPI (Baritone vs Tungsten) without breaking AltoClefSettings.
-- Document the TenorClef `libs/tungsten-*.jar` drop path once Tungsten targets 1.21.11+.
+- `baritone` — always classic Baritone travel
+- `tungsten` — prefer Tungsten when present; else Baritone
+- `auto` — Tungsten when present; else Baritone
+
+Enable Tungsten:
+
+1. Build or obtain a Tungsten Fabric jar (TenorClef vendors `3ndetz/Tungsten` @ `altoclef-compat`; jar under `altoclef/libs/tungsten-*.jar` or `vendor/tungsten/build/libs`).
+2. Drop that jar next to Ostinato / into the Minecraft `mods` folder with Ostinato.
+3. In game: `#set movementBackend tungsten` (or leave `auto`).
+
+SPI: `baritone.api.movement.IMovementBackend` with `BaritoneMovementBackend` and reflection-based `TungstenMovementBackend`. Hooked from `CustomGoalProcess` only.
+
+### TenorClef note
+
+TenorClef still has its own `TungstenMovement` facade for tasks. Prefer Ostinato `movementBackend` when both mods load together so Baritone custom goals and AltoClef travel share one switch. Point TenorClef at Ostinato’s `baritone-unoptimized-fabric` jar (see TenorClef `build.gradle` / docs).
 
 ## Build
 
@@ -55,10 +69,11 @@ gradlew.bat build
 - Loaders: fabric / forge / neoforge / tweaker (same as upstream).
 - First configure may take a long time (Unimined remaps Minecraft for each loader).
 
-### TenorClef note (not wired yet)
+### TenorClef wiring
 
-When ready, point TenorClef at an Ostinato `baritone-unoptimized-fabric` artifact (local `mavenLocal` or `libs/`), same pattern as the existing MiranCZ/baritone-plus include. Do not commit secrets or machine-local JDK paths into Ostinato.
+TenorClef `1.21` / `1.21.1` Gradle modules consume Ostinato's `baritone-unoptimized-fabric-*.jar` from `../Ostinato/dist` when present (falls back to MiranCZ/maven otherwise).
 
+**Version caveat:** Ostinato targets Minecraft **1.21.11**. TenorClef's newest module is **1.21.1**. Compile-against-Ostinato is supported for API surface (`AltoClefSettings`, etc.); full in-game runtime alignment wants a TenorClef `1.21.11` module or an Ostinato build retargeted to `1.21.1`. `1.16.1` keeps the patched `libs/baritone-unoptimized-fabric-1.16.1.jar`.
 ## License
 
 LGPL-3.0 with upstream Baritone anime exception — see `LICENSE` / upstream notices.
