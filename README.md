@@ -14,9 +14,10 @@ inventory, and schematic processes to make it happen.
 | 1.21.11 | `main` | 21 | Primary target |
 | 1.16.1 | `1.16.1` | branch-specific | Legacy target |
 
-TenorClef's `1.21.11` module is the primary paired configuration. Its `1.21.1` and
-`1.21` modules are maintained API-compatible builds and should be tested with the
-selected artifact before release. See [TenorClef's wiring guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md).
+Ostinato `main` is intended for TenorClef's experimental 1.21.11 port. That port does
+not currently compile, so it is not a supported release pairing. TenorClef 1.21.1 and
+1.21 intentionally resolve matching Baritone artifacts rather than loading an
+incompatible Ostinato 1.21.11 jar. See [TenorClef's wiring guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md).
 
 ## Build
 
@@ -40,14 +41,13 @@ enabled loaders (Fabric, Forge, NeoForge, and Tweaker). Build outputs are writte
 
 ## TenorClef integration
 
-For local development, build Ostinato first, then build TenorClef from a sibling
-directory. TenorClef detects the newest matching artifact in `../Ostinato/dist` and
-prints the selected jar during Gradle configuration.
+For the legacy 1.16.1 integration, build the matching Ostinato branch first, then
+build TenorClef from a sibling directory. Do not point a 1.21 or 1.21.1 TenorClef
+build at an artifact produced from `main`.
 
-This local file lookup is a development bridge, not a stable distribution mechanism.
-Before shipping a release, tag and publish the Fabric artifact under a pinned version
-coordinate, then make TenorClef consume that coordinate. Until then, release notes
-must name the exact compatible Ostinato revision.
+Before shipping a 1.21.11 paired release, finish TenorClef's source port, tag and
+publish the matching Fabric artifact under a pinned version coordinate, then make
+TenorClef consume that coordinate.
 
 ## Movement backends
 
