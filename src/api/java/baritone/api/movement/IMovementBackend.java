@@ -4,7 +4,9 @@ import baritone.api.pathing.goals.Goal;
 import net.minecraft.core.BlockPos;
 
 /**
- * Alternate travel executor. Classic Baritone remains the mining/digging engine.
+ * Low-level alternate travel executor (Baritone marker or Tungsten).
+ * Agent code should prefer {@link IMovementEngine} / HybridMovementEngine.
+ * Classic Baritone remains the mining/digging engine.
  */
 public interface IMovementBackend {
 

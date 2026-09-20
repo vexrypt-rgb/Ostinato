@@ -13,7 +13,12 @@ Phase 0 architecture audit and roadmap live in the TenorClef repo:
 Ostinato owns pathfinding / physics traversal / Baritone+Tungsten backends.
 TenorClef owns goals, planning, tasks, world model, and recovery.
 
-Until the MovementEngine API (roadmap Phase 2) lands, TenorClef still calls Baritone processes directly; tip `main` already has a precursor `IMovementBackend` SPI.
+## MovementEngine (Phase 2)
+
+See [`MOVEMENT_ENGINE.md`](./MOVEMENT_ENGINE.md). Tip `main` exposes `IMovementEngine` /
+`HybridMovementEngine` built on the existing `IMovementBackend` precursor.
+TenorClef migrates travel call sites gradually via a thin adapter (stock Baritone jars
+fall back to `CustomGoalProcess`).
 
 ## Build JDKs (Phase 1 note)
 
