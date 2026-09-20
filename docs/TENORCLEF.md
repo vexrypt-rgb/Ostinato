@@ -19,3 +19,6 @@ gradlew.bat build -Pbaritone.fabric_build
 Copy `dist/baritone-unoptimized-fabric-*.jar` to TenorClef's sibling `../Ostinato/dist/` (or `altoclef/libs/`) as `baritone-unoptimized-fabric-ostinato-1.16.1.jar`.
 
 Do **not** use JDK 21 for this checkout. Tungsten is not part of the 1.16.1 lineage.
+
+## MovementEngine (Phase 2)
+Tip Ostinato owns MovementEngine. This 1.16.1 line stays Baritone-only — see `docs/MOVEMENT_ENGINE_1161.md`.
