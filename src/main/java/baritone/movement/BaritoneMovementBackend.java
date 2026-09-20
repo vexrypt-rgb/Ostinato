@@ -4,7 +4,13 @@ import baritone.api.movement.IMovementBackend;
 import baritone.api.pathing.goals.Goal;
 import net.minecraft.core.BlockPos;
 
-/** Marker: do not intercept — CustomGoalProcess uses classic Baritone pathing. */
+/**
+ * Classic Baritone travel marker for {@link MovementBackends#current()}.
+ * <p>
+ * {@code pathTo} returns false so {@link baritone.process.CustomGoalProcess} keeps
+ * owning classic pathing when this backend is selected. Real Baritone starts go through
+ * {@link HybridMovementEngine} (calls {@code ICustomGoalProcess#setGoalAndPath}).
+ */
 public final class BaritoneMovementBackend implements IMovementBackend {
 
     public static final BaritoneMovementBackend INSTANCE = new BaritoneMovementBackend();
