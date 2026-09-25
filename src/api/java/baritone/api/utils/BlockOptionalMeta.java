@@ -210,17 +210,16 @@ public final class BlockOptionalMeta {
                 if (lootTableLocation == LootTables.EMPTY) {
                     return Collections.emptyList();
                 }
-                // Guard: some 1.16.1 loot paths (e.g. minecraft:origin) throw when generating
-                // without a full server world; BuilderProcess must not crash here.
+                // 1.16.1: LootParameterSets.BLOCK does not allow minecraft:origin.
+                // Never pass origin/position — empty tool + blockstate is enough for drop hashes.
                 List<Item> items = new ArrayList<>();
+                LootContext.Builder builder = new LootContext.Builder(null)
+                        .withRandom(new Random())
+                        .withParameter(LootParameters.TOOL, ItemStack.EMPTY)
+                        .withNullableParameter(LootParameters.BLOCK_ENTITY, null)
+                        .withParameter(LootParameters.BLOCK_STATE, block.getDefaultState());
                 getManager().getLootTableFromLocation(lootTableLocation).generate(
-                        new LootContext.Builder(null)
-                                .withRandom(new Random())
-                                .withParameter(LootParameters.field_237457_g_, Vector3d.copy(BlockPos.NULL_VECTOR))
-                                .withParameter(LootParameters.TOOL, ItemStack.EMPTY)
-                                .withNullableParameter(LootParameters.BLOCK_ENTITY, null)
-                                .withParameter(LootParameters.BLOCK_STATE, block.getDefaultState())
-                                .build(LootParameterSets.BLOCK),
+                        builder.build(LootParameterSets.BLOCK),
                         stack -> items.add(stack.getItem())
                 );
                 return items;

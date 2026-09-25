@@ -40,8 +40,39 @@ import java.util.Set;
 
 public class MovementPillar extends Movement {
 
+    /**
+     * Ticks spent at the same feet-Y while trying to close the final horizontal gap.
+     * Reset whenever we actually gain height. See updateState().
+     */
+    private int stuckTicks;
+    private int lastFeetY = Integer.MIN_VALUE;
+
     public MovementPillar(IBaritone baritone, BetterBlockPos start, BetterBlockPos end) {
         super(baritone, start, end, new BetterBlockPos[]{start.up(2)}, start);
+    }
+
+    /**
+     * True when the four horizontal neighbours around the player's feet are all solid —
+     * i.e. we are boxed into a 1x1 shaft. In that geometry MOVE_FORWARD cannot reduce the
+     * horizontal distance to the destination, so steering is wasted input; the only way
+     * up is jump + place.
+     *
+     * NOTE: MovementHelper.canWalkOn/isBlockNormalCube are package-private to
+     * baritone.pathing.movement and this class lives in ...movement.movements, so the
+     * check has to go through the public BlockStateInterface API instead.
+     */
+    private static boolean isShaft(baritone.api.utils.IPlayerContext ctx, BetterBlockPos p) {
+        return isSolid(ctx, p.north()) && isSolid(ctx, p.south())
+                && isSolid(ctx, p.east()) && isSolid(ctx, p.west());
+    }
+
+    private static boolean isSolid(baritone.api.utils.IPlayerContext ctx, BlockPos pos) {
+        try {
+            BlockState state = BlockStateInterface.get(ctx, pos);
+            return state != null && !state.isAir() && state.getMaterial().blocksMovement();
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     @Override
@@ -229,15 +260,31 @@ public class MovementPillar extends Movement {
             double diffZ = ctx.player().getPositionVec().z - (dest.getZ() + 0.5);
             double dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
             double flatMotion = Math.sqrt(ctx.player().getMotion().x * ctx.player().getMotion().x + ctx.player().getMotion().z * ctx.player().getMotion().z);
+            // Stuck tracking. In a 1x1 shaft MOVE_FORWARD cannot reduce `dist` (walls on
+            // all four sides) and JUMP is gated behind flatMotion < 0.05, so the movement
+            // oscillates and never reports SUCCESS. Count how long we've been unable to
+            // make progress; after the threshold, stop steering and just jump-place.
+            if (ctx.playerFeet().y > lastFeetY) {
+                stuckTicks = 0;
+            } else {
+                stuckTicks++;
+            }
+            lastFeetY = ctx.playerFeet().y;
             if (dist > 0.17) {//why 0.17? because it seemed like a good number, that's why
                 //[explanation added after baritone port lol] also because it needs to be less than 0.2 because of the 0.3 sneak limit
                 //and 0.17 is reasonably less than 0.2
 
-                // If it's been more than forty ticks of trying to jump and we aren't done yet, go forward, maybe we are stuck
-                state.setInput(Input.MOVE_FORWARD, true);
-
-                // revise our target to both yaw and pitch if we're going to be moving forward
-                state.setTarget(new MovementState.MovementTarget(rotation, true));
+                // If we've been failing to close the last bit of horizontal distance for
+                // forty ticks we are in a 1x1 shaft: pushing forward does nothing but burn
+                // time. Jump instead so the placement can actually land under us.
+                if (stuckTicks > 40 && isShaft(ctx, src)) {
+                    state.setInput(Input.JUMP, ctx.player().getPositionVec().y < dest.getY());
+                    state.setTarget(new MovementState.MovementTarget(rotation, true));
+                } else {
+                    state.setInput(Input.MOVE_FORWARD, true);
+                    // revise our target to both yaw and pitch if we're going to be moving forward
+                    state.setTarget(new MovementState.MovementTarget(rotation, true));
+                }
             } else if (flatMotion < 0.05) {
                 // If our Y coordinate is above our goal, stop jumping
                 state.setInput(Input.JUMP, ctx.player().getPositionVec().y < dest.getY());
