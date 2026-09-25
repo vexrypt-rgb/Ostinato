@@ -210,14 +210,17 @@ public final class InventoryBehavior extends Behavior implements Helper {
             // and then it's called during execution
             // since this function is never called during cost calculation, we don't need to migrate
             // acceptableThrowawayItems to the CalculationContext
-            if (desired.test(item)) {
+            if (!item.isEmpty() && desired.test(item)) {
                 if (select) {
                     p.inventory.currentItem = i;
                 }
                 return true;
             }
         }
-        if (desired.test(p.inventory.offHandInventory.get(0))) {
+        // An empty stack is never a throwaway: an AIR entry in acceptableThrowawayItems (TenorClef
+        // S196, unsupported 1.17+ blocks on 1.16.1) matched empty hotbar slots and pillared with
+        // an empty hand forever.
+        if (!p.inventory.offHandInventory.get(0).isEmpty() && desired.test(p.inventory.offHandInventory.get(0))) {
             // main hand takes precedence over off hand
             // that means that if we have block A selected in main hand and block B in off hand, right clicking places block B
             // we've already checked above ^ and the main hand can't possible have an acceptablethrowawayitem
@@ -236,7 +239,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
 
         if (allowInventory) {
             for (int i = 9; i < 36; i++) {
-                if (desired.test(inv.get(i))) {
+                if (!inv.get(i).isEmpty() && desired.test(inv.get(i))) {
                     if (select) {
                         requestSwapWithHotBar(i, 7);
                         p.inventory.currentItem = 7;
