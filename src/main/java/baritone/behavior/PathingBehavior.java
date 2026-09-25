@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.event.events.*;
@@ -78,6 +79,27 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     public PathingBehavior(Baritone baritone) {
         super(baritone);
+        FaultBook.configure(java.nio.file.Path.of("baritone"), this::faultContext, PathingBehavior::faultHint);
+    }
+
+    private java.util.Map<String, String> faultContext() {
+        java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+        try {
+            m.put("pos", String.valueOf(ctx.playerFeet()));
+            m.put("goal", String.valueOf(goal));
+        } catch (Throwable ignored) {}
+        return m;
+    }
+
+    private static String faultHint(String code) {
+        return switch (code) {
+            case "P01" -> "no path found to goal: goal may be unreachable or blocked by avoidance settings";
+            case "P02" -> "next segment failed to calculate: bot will stop at end of current segment";
+            case "P03" -> "path calculation threw: see log for stack trace";
+            case "P04" -> "illegal pathing state (current and next both set); path discarded";
+            case "P05" -> "orphan segment discarded: start did not match player position";
+            default -> "";
+        };
     }
 
     private void queuePathEvent(PathEvent event) {
@@ -514,15 +536,20 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     if (executor.isPresent()) {
                         if (executor.get().getPath().positions().contains(expectedSegmentStart)) {
                             queuePathEvent(PathEvent.CALC_FINISHED_NOW_EXECUTING);
+                            FaultBook.progress(System.currentTimeMillis());
                             current = executor.get();
                             resetEstimatedTicksToGoal(start);
                         } else {
                             logDebug("Warning: discarding orphan path segment with incorrect start");
+                            FaultBook.record("P05", "start " + start + " goal " + goal, System.currentTimeMillis());
                         }
                     } else {
                         if (calcResult.getType() != PathCalculationResult.Type.CANCELLATION && calcResult.getType() != PathCalculationResult.Type.EXCEPTION) {
                             // don't dispatch CALC_FAILED on cancellation
                             queuePathEvent(PathEvent.CALC_FAILED);
+                            FaultBook.record("P01", "from " + start + " to " + goal, System.currentTimeMillis());
+                        } else if (calcResult.getType() == PathCalculationResult.Type.EXCEPTION) {
+                            FaultBook.record("P03", "from " + start + " to " + goal, System.currentTimeMillis());
                         }
                     }
                 } else {
@@ -536,11 +563,13 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                             }
                         } else {
                             queuePathEvent(PathEvent.NEXT_CALC_FAILED);
+                            FaultBook.record("P02", "from " + start + " to " + goal, System.currentTimeMillis());
                         }
                     } else {
                         //throw new IllegalStateException("I have no idea what to do with this path");
                         // no point in throwing an exception here, and it gets it stuck with inProgress being not null
                         logDirect("Warning: PathingBehaivor illegal state! Discarding invalid path!");
+                        FaultBook.record("P04", "start " + start, System.currentTimeMillis());
                     }
                 }
                 if (talkAboutIt && current != null && current.getPath() != null) {
