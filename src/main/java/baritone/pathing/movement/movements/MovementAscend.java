@@ -112,6 +112,11 @@ public class MovementAscend extends Movement {
             // it's possible srcUp is AIR from the start, and srcUp2 is falling
             // and in that scenario, when we arrive and break srcUp2, that lets srcUp3 fall on us and suffocate us
         }
+        // Climbing out of water: floating, feet sit ~0.5 below src, so the hop needs clear air two above src.
+        // A waterlogged ledge also blocks it: vanilla's climb-out boost needs the box above to be fluid-free.
+        if (MovementHelper.isWater(context.get(x, y, z)) && ((!srcUp2.isAir() && !MovementHelper.isWater(srcUp2)) || !toPlace.getFluidState().isEmpty())) {
+            return COST_INF;
+        }
         BlockState srcDown = context.get(x, y - 1, z);
         if (srcDown.getBlock() == Blocks.LADDER || srcDown.getBlock() == Blocks.VINE) {
             return COST_INF;
@@ -157,6 +162,16 @@ public class MovementAscend extends Movement {
 
     @Override
     public MovementState updateState(MovementState state) {
+        if (ctx.player().isInWater() && ctx.playerFeet().y >= src.y - 1) {
+            super.updateState(state);
+            if (state.getStatus() != MovementStatus.RUNNING) return state;
+            // Climbing out of water: bobbing drops feet below src, and vanilla lifts a swimmer
+            // pushing into a ledge while holding jump.
+            if (ctx.playerFeet().equals(dest)) return state.setStatus(MovementStatus.SUCCESS);
+            // Pushing into the ledge pins us low; rise first, then push (the hop needs feet ~0.3 above src).
+            if (ctx.player().getPositionVec().y > src.y + 0.2 || !ctx.player().collidedHorizontally) MovementHelper.moveTowards(ctx, state, dest);
+            return state.setInput(Input.JUMP, true);
+        }
         if (ctx.playerFeet().y < src.y) {
             // this check should run even when in preparing state (breaking blocks)
             return state.setStatus(MovementStatus.UNREACHABLE);

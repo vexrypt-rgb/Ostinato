@@ -1,8 +1,5 @@
 package baritone.process;
 
-import baritone.pathing.movement.Moves;
-import baritone.pathing.movement.CalculationContext;
-import baritone.api.utils.BetterBlockPos;
 import baritone.Baritone;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.process.PathingCommand;
@@ -22,6 +19,7 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     private boolean active;
     private int surfaceY;
+    private int depth;
     /** Built once per surfacing: a fresh Goal each tick would look like a goal change and restart the search. */
     private Goal goal;
 
@@ -35,29 +33,17 @@ public final class AirProcess extends BaritoneProcessHelper {
             return active = false;
         }
         int air = ctx.player().getAir(), max = ctx.player().getMaxAir();
-        if (!active && air < max / 3 && ctx.player().isInWater()) {
+        if (!active && ctx.player().isInWater() && ctx.player().ticksExisted % 10 == 0) depth = findSurfaceY() - ctx.playerFeet().getY();
+        if (!active && ctx.player().isInWater() && air < Math.max(max / 3, depth * 6)) {
+            // Deep dives need a bigger reserve: ~1.5x the straight swim up (paths detour around hulls).
             active = true;
             surfaceY = findSurfaceY();
             goal = surfaceGoal(surfaceY);
-            logDebug("Low on air (" + air + "), surfacing to y=" + surfaceY + " " + probe());
+            logDebug("Low on air (" + air + "), surfacing to y=" + surfaceY);
         } else if (active && air >= max) {
             active = false;
         }
         return active;
-    }
-
-    private String probe() {
-        CalculationContext c = new CalculationContext(baritone);
-        BetterBlockPos p = ctx.playerFeet();
-        StringBuilder b = new StringBuilder("feet=" + p + " ");
-        for (Moves m : Moves.values()) {
-            if (m.name().startsWith("SWIM")) {
-                double v = m.cost(c, p.x, p.y, p.z);
-                b.append(m.name().substring(5)).append('=').append(v >= 1e6 ? "INF" : String.format("%.1f", v)).append(' ');
-            }
-        }
-        for (int dy = -1; dy <= 2; dy++) b.append("b").append(dy).append('=').append(ctx.world().getBlockState(p.up(dy)).getBlock().getTranslationKey().replace("block.minecraft.", "")).append(' ');
-        return b.toString();
     }
 
     /** Top of the water nearby: highest y over a 9x9 area whose block is water with a non-water block above. */

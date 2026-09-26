@@ -111,6 +111,9 @@ public class MovementTraverse extends Movement {
                 hardness1 *= 5;
                 hardness2 *= 5;
             }
+            if (!standingOnABlock && Baritone.settings().swimInWater.value && MovementHelper.isWater(context.get(x, y, z))) {
+                return COST_INF; // floating: can't mine from here reliably, MovementSwim digs instead
+            }
             return WC + hardness1 + hardness2;
         } else {//this is a bridge, so we need to place a block
             if (srcDownBlock == Blocks.LADDER || srcDownBlock == Blocks.VINE) {

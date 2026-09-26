@@ -101,6 +101,8 @@ public class MovementSwim extends Movement {
         if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) == 1) {
             // Axis moves may dig: the new feet/head cells are water, passable, or mined out (slowly).
             double mine = 0;
+            // Can't float in the air above the surface: rising must end in water.
+            if (dy > 0 && !water(c, tx, ty, tz)) return COST_INF;
             if (dy <= 0) mine += dig(c, tx, ty, tz, false);
             if (dy >= 0) mine += dig(c, tx, ty + 1, tz, true);
             if (mine >= COST_INF) return COST_INF;
