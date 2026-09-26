@@ -119,6 +119,7 @@ public class Baritone implements IBaritone {
             this.farmProcess             = this.registerProcess(FarmProcess::new);
             this.inventoryPauserProcess  = this.registerProcess(InventoryPauserProcess::new);
             this.registerProcess(BackfillProcess::new);
+            this.registerProcess(AirProcess::new);
         }
 
         this.worldProvider = new WorldProvider(this);
