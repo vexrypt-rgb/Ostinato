@@ -45,6 +45,9 @@ public class MovementSwim extends Movement {
     /** Ticks per block while sprint-swimming (~5 blocks/s). */
     public static final double SWIM_ONE_BLOCK_COST = 20 / 5.0;
 
+    /** Shared across swim movements: once low on air, keep rising until the bar refills. */
+    private static boolean surfacing;
+
     public MovementSwim(IBaritone baritone, BetterBlockPos src, BetterBlockPos dest) {
         super(baritone, src, dest, new BetterBlockPos[0]);
     }
@@ -73,11 +76,14 @@ public class MovementSwim extends Movement {
         if (!Baritone.settings().swimInWater.value) return COST_INF;
         int tx = x + dx, ty = y + dy, tz = z + dz;
         // Swimming, not walking: both ends must be in water with room for the head.
-        if (!water(c, x, y, z) || !water(c, tx, ty, tz) || !headroom(c, tx, ty + 1, tz)) return COST_INF;
+        // Dest may be the air block just above the surface (surfacing); it must sit on water.
+        boolean destOk = water(c, tx, ty, tz) || (dy > 0 && water(c, tx, ty - 1, tz) && headroom(c, tx, ty, tz));
+        if (!water(c, x, y, z) || !destOk || !headroom(c, tx, ty + 1, tz)) return COST_INF;
         if (dx != 0 || dz != 0) {
             // Don't clip a corner: the column we pass through on either leg must be open water too.
             if (!water(c, tx, y, tz) || !headroom(c, tx, y + 1, tz)) return COST_INF;
-            if (dy != 0 && !water(c, x, ty, z)) return COST_INF;
+            if (dy < 0 && !water(c, x, ty, z)) return COST_INF;
+            if (dy > 0 && !headroom(c, x, ty, z)) return COST_INF;
             if (dx != 0 && dz != 0 && (!water(c, x + dx, y, z) || !water(c, x, y, z + dz))) return COST_INF;
         } else if (dy > 0) {
             return COST_INF; // straight up is MovementPillar
@@ -102,13 +108,20 @@ public class MovementSwim extends Movement {
         if (feet.equals(dest) && (!vertical || horiz < 0.5)) {
             return state.setStatus(MovementStatus.SUCCESS);
         }
-        if (!playerInValidPosition() && !MovementHelper.isWater(ctx, feet)) {
+        // Low on air: rise until the bar is full again (hysteresis), then replan from the surface.
+        // Checked before position validity so leaving the movement's column doesn't abort the ascent.
+        int air = ctx.player().getAir(), max = ctx.player().getMaxAir();
+        if (air < max / 3) surfacing = true;
+        if (surfacing) {
+            if (air < max) {
+                state.setInput(Input.JUMP, true);
+                return state;
+            }
+            surfacing = false;
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        if (ctx.player().getAir() < ctx.player().getMaxAir() / 3) {
-            // Low on air: go up for it. Rising past dest fails this movement and Baritone replans.
-            state.setInput(Input.JUMP, true);
-            return state;
+        if (!playerInValidPosition() && !MovementHelper.isWater(ctx, feet)) {
+            return state.setStatus(MovementStatus.UNREACHABLE);
         }
         if (vertical || horiz < 0.35) {
             // Sink (or rise) in place: sneak/jump, nudge toward the column centre if drifting.
