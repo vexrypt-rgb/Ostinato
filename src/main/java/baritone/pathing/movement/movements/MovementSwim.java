@@ -60,13 +60,15 @@ public class MovementSwim extends Movement {
     }
 
     private static boolean water(CalculationContext c, int x, int y, int z) {
-        return MovementHelper.isWater(c.get(x, y, z));
+        BlockState s = c.get(x, y, z);
+        // waterlogged slabs/stairs/chests report water but are solid
+        return MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.block.IWaterLoggable);
     }
 
     /** Water, or (at the surface) something the head can pass through. */
     private static boolean headroom(CalculationContext c, int x, int y, int z) {
         BlockState s = c.get(x, y, z);
-        return MovementHelper.isWater(s) || MovementHelper.canWalkThrough(c.bsi, x, y, z, s);
+        return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.block.IWaterLoggable)) || MovementHelper.canWalkThrough(c.bsi, x, y, z, s);
     }
 
     public static double cost(CalculationContext c, int x, int y, int z, int dx, int dy, int dz) {
