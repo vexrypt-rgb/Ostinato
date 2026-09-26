@@ -52,6 +52,210 @@ public enum Moves {
         }
     },
 
+    SWIM_DOWN(0, -1, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (0), src.y + (-1), src.z + (0)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 0, -1, 0);
+        }
+    },
+
+    SWIM_NORTH_UP(0, +1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (0), src.y + (1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 0, 1, -1);
+        }
+    },
+
+    SWIM_NORTH_DOWN(0, -1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (0), src.y + (-1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 0, -1, -1);
+        }
+    },
+
+    SWIM_SOUTH_UP(0, +1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (0), src.y + (1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 0, 1, 1);
+        }
+    },
+
+    SWIM_SOUTH_DOWN(0, -1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (0), src.y + (-1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 0, -1, 1);
+        }
+    },
+
+    SWIM_EAST_UP(+1, +1, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (1), src.z + (0)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, 1, 0);
+        }
+    },
+
+    SWIM_EAST_DOWN(+1, -1, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (-1), src.z + (0)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, -1, 0);
+        }
+    },
+
+    SWIM_WEST_UP(-1, +1, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (1), src.z + (0)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, 1, 0);
+        }
+    },
+
+    SWIM_WEST_DOWN(-1, -1, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (-1), src.z + (0)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, -1, 0);
+        }
+    },
+
+    SWIM_NORTHEAST_UP(+1, +1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, 1, -1);
+        }
+    },
+
+    SWIM_NORTHEAST_DOWN(+1, -1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (-1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, -1, -1);
+        }
+    },
+
+    SWIM_NORTHWEST_UP(-1, +1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, 1, -1);
+        }
+    },
+
+    SWIM_NORTHWEST_DOWN(-1, -1, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (-1), src.z + (-1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, -1, -1);
+        }
+    },
+
+    SWIM_SOUTHEAST_UP(+1, +1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, 1, 1);
+        }
+    },
+
+    SWIM_SOUTHEAST_DOWN(+1, -1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (1), src.y + (-1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, 1, -1, 1);
+        }
+    },
+
+    SWIM_SOUTHWEST_UP(-1, +1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, 1, 1);
+        }
+    },
+
+    SWIM_SOUTHWEST_DOWN(-1, -1, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementSwim(context.getBaritone(), src, new BetterBlockPos(src.x + (-1), src.y + (-1), src.z + (1)));
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementSwim.cost(context, x, y, z, -1, -1, 1);
+        }
+    },
+
     TRAVERSE_NORTH(0, 0, -1) {
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
