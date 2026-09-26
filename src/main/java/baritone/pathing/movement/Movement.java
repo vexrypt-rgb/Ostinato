@@ -124,8 +124,9 @@ public abstract class Movement implements IMovement, MovementHelper {
         ctx.player().getAbilities().flying = false;
         currentState = updateState(currentState);
         // Unconditional JUMP-in-liquid causes bobbing stuck (cabaletta/baritone#2377).
-        // When swimInWater is on, MovementTraverse handles sprint-swim instead (#3988).
-        if ((MovementHelper.isLiquid(ctx, ctx.playerFeet()) && ctx.player().position().y < dest.y + 0.6)
+        // In deep water the swim controller steers instead (real sprint-swim, #3988).
+        boolean swimming = applySwim(currentState);
+        if (!swimming && MovementHelper.isLiquid(ctx, ctx.playerFeet()) && ctx.player().position().y < dest.y + 0.6
                 && !(Baritone.settings().swimInWater.value && this instanceof baritone.pathing.movement.movements.MovementTraverse)) {
             currentState.setInput(Input.JUMP, true);
         }
@@ -151,6 +152,49 @@ public abstract class Movement implements IMovement, MovementHelper {
         }
 
         return currentState.getStatus();
+    }
+
+    /**
+     * Vanilla sprint-swimming, for every movement type. Vanilla only enters the swim pose when the
+     * player sprints with its EYES under water, and while swimming vertical motion follows pitch.
+     * Holding JUMP (the old behaviour) keeps the head above the surface, so the bot paddled on top
+     * forever; a fixed -30 pitch could only ever rise. This dips the head under to start swimming,
+     * then steers pitch toward the destination height and surfaces when air runs low.
+     *
+     * @return true if it took over steering (the caller must not force JUMP)
+     */
+    private boolean applySwim(MovementState state) {
+        if (!Baritone.settings().swimInWater.value || currentState.getStatus().isComplete()) return false;
+        net.minecraft.world.entity.player.Player p = ctx.player();
+        if (!p.isInWater() || p.isPassenger()) return false;
+        if (!Boolean.TRUE.equals(state.getInputStates().get(Input.MOVE_FORWARD))) return false;
+        BlockPos feet = ctx.playerFeet();
+        // Need two blocks of water to swim in; shallow water is walked.
+        boolean deep = MovementHelper.isWater(ctx, feet)
+                && (MovementHelper.isWater(ctx, feet.above()) || MovementHelper.isWater(ctx, feet.below()));
+        if (!deep) return false;
+        // Climbing out onto land needs JUMP against the bank: leave that to the normal path.
+        if (!MovementHelper.isWater(ctx, dest) && !MovementHelper.isWater(ctx, dest.below())
+                && dest.y >= feet.getY()) return false;
+
+        double dy = dest.y - p.position().y;
+        boolean lowAir = p.getAirSupply() < p.getMaxAirSupply() / 3;
+        float pitch;
+        if (!p.isSwimming()) {
+            pitch = lowAir ? -35f : 35f;   // dip the eyes under so sprint engages the swim pose
+        } else if (lowAir || dy > 0.5) {
+            pitch = -35f;                  // rise
+        } else if (dy < -0.5) {
+            pitch = 30f;                   // dive
+        } else {
+            pitch = -8f;                   // cruise just under the surface
+        }
+        float yaw = state.getTarget().getRotation().map(Rotation::getYaw)
+                .orElse(ctx.playerRotations().getYaw());
+        state.setInput(Input.SPRINT, true);
+        state.setInput(Input.JUMP, lowAir && !p.isSwimming());
+        state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, pitch), true));
+        return true;
     }
 
     protected boolean prepared(MovementState state) {
