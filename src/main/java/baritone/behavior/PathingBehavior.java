@@ -80,6 +80,8 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     public PathingBehavior(Baritone baritone) {
         super(baritone);
         FaultBook.configure(java.nio.file.Path.of("baritone"), this::faultContext, PathingBehavior::faultHint);
+        // One run per launch: otherwise faults.jsonl grows forever and t= counts from class load.
+        FaultBook.reset(System.currentTimeMillis());
     }
 
     private java.util.Map<String, String> faultContext() {
@@ -558,12 +560,18 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                             if (executor.get().getPath().getSrc().equals(current.getPath().getDest())) {
                                 queuePathEvent(PathEvent.NEXT_SEGMENT_CALC_FINISHED);
                                 next = executor.get();
+                                FaultBook.progress(System.currentTimeMillis());
                             } else {
                                 logDebug("Warning: discarding orphan next segment with incorrect start");
                             }
                         } else {
                             queuePathEvent(PathEvent.NEXT_CALC_FAILED);
-                            FaultBook.record("P02", "from " + start + " to " + goal, System.currentTimeMillis());
+                            // A cancelled lookahead (goal changed, path reset) is routine, not a fault.
+                            if (calcResult.getType() == PathCalculationResult.Type.EXCEPTION) {
+                                FaultBook.record("P03", "next segment from " + start + " to " + goal, System.currentTimeMillis());
+                            } else if (calcResult.getType() != PathCalculationResult.Type.CANCELLATION) {
+                                FaultBook.record("P02", "from " + start + " to " + goal, System.currentTimeMillis());
+                            }
                         }
                     } else {
                         //throw new IllegalStateException("I have no idea what to do with this path");
