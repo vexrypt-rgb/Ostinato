@@ -96,13 +96,20 @@ public class MovementSwim extends Movement {
         Vector3d pos = ctx.player().getPositionVec();
         double hx = dest.x + 0.5 - pos.x, hz = dest.z + 0.5 - pos.z;
         double horiz = Math.sqrt(hx * hx + hz * hz);
-        if (feet.equals(dest) && horiz < 0.35) {
+        // Block-level arrival is enough: sprint-swimming carries momentum, so demanding the column
+        // centre made the bot orbit the target (and drown). The next movement steers from here.
+        boolean vertical = dest.x == src.x && dest.z == src.z;
+        if (feet.equals(dest) && (!vertical || horiz < 0.5)) {
             return state.setStatus(MovementStatus.SUCCESS);
         }
         if (!playerInValidPosition() && !MovementHelper.isWater(ctx, feet)) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        boolean vertical = dest.x == src.x && dest.z == src.z;
+        if (ctx.player().getAir() < ctx.player().getMaxAir() / 3) {
+            // Low on air: go up for it. Rising past dest fails this movement and Baritone replans.
+            state.setInput(Input.JUMP, true);
+            return state;
+        }
         if (vertical || horiz < 0.35) {
             // Sink (or rise) in place: sneak/jump, nudge toward the column centre if drifting.
             if (dest.y < pos.y - 0.05) state.setInput(Input.SNEAK, true);
