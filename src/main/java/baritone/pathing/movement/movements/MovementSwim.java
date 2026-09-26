@@ -73,15 +73,35 @@ public class MovementSwim extends Movement {
     }
 
     /** Ticks to clear a cell for swimming: 0 if already open, COST_INF if it can't/shouldn't be mined. */
-    private static double dig(CalculationContext c, int x, int y, int z, boolean head) {
+    private static double dig(CalculationContext c, int x, int y, int z, boolean head, boolean aboveCleared) {
         BlockState s = c.get(x, y, z);
         if (head ? headroom(c, x, y, z) : water(c, x, y, z)) return 0;
         if (!c.allowBreak || s.getBlock() instanceof net.minecraft.block.ContainerBlock || Baritone.settings().blocksToDisallowBreaking.value.contains(s.getBlock())) return COST_INF;
-        if (c.get(x, y + 1, z).getBlock() instanceof net.minecraft.block.FallingBlock) return COST_INF;
         double str = c.toolSet.getStrVsBlock(s);
         if (str <= 0) return COST_INF;
         // Underwater digging is 5x slower without Aqua Affinity, and another 5x while not on ground.
-        return (1 / str + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+        double t = (1 / str + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+        // Sand/gravel overhead drops into the gap and has to be dug again (a short stack is fine).
+        for (int i = 1; !aboveCleared && c.get(x, y + i, z).getBlock() instanceof net.minecraft.block.FallingBlock; i++) {
+            if (i > 3) return COST_INF;
+            double fs = c.toolSet.getStrVsBlock(c.get(x, y + i, z));
+            if (fs <= 0) return COST_INF;
+            t += (1 / fs + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+        }
+        return t;
+    }
+
+    /**
+     * The planner still sees blocks we will have mined as solid. Other movements never end inside a
+     * solid block, so a breakable solid src can only be a cell we swam/dug into: it floods, we swim in it.
+     */
+    private static boolean dugShaft(CalculationContext c, int x, int y, int z) {
+        BlockState s = c.get(x, y, z);
+        if (MovementHelper.canWalkThrough(c.bsi, x, y, z, s)) {
+            // Just dug and not flooded yet (or a falling block left an air gap): fine if water touches it.
+            return water(c, x, y + 1, z) || water(c, x + 1, y, z) || water(c, x - 1, y, z) || water(c, x, y, z + 1) || water(c, x, y, z - 1);
+        }
+        return dig(c, x, y, z, false, true) < COST_INF;
     }
 
     private BetterBlockPos[] digCells() {
@@ -97,14 +117,15 @@ public class MovementSwim extends Movement {
         int tx = x + dx, ty = y + dy, tz = z + dz;
         // Swimming, not walking: both ends must be in water with room for the head.
         // Dest may be the air block just above the surface (surfacing); it must sit on water.
-        if (!water(c, x, y, z)) return COST_INF;
+        if (!water(c, x, y, z) && !dugShaft(c, x, y, z)) return COST_INF;
         if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) == 1) {
             // Axis moves may dig: the new feet/head cells are water, passable, or mined out (slowly).
             double mine = 0;
             // Can't float in the air above the surface: rising must end in water.
             if (dy > 0 && !water(c, tx, ty, tz)) return COST_INF;
-            if (dy <= 0) mine += dig(c, tx, ty, tz, false);
-            if (dy >= 0) mine += dig(c, tx, ty + 1, tz, true);
+            // Sinking, the cell above the dug one is where we are; sideways, the head cell is dug too.
+            if (dy <= 0) mine += dig(c, tx, ty, tz, false, true);
+            if (dy >= 0) mine += dig(c, tx, ty + 1, tz, true, false);
             if (mine >= COST_INF) return COST_INF;
             return SWIM_ONE_BLOCK_COST + mine;
         }
