@@ -23,6 +23,7 @@ import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
+import baritone.api.utils.VecUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -71,13 +72,42 @@ public class MovementSwim extends Movement {
         return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.block.IWaterLoggable)) || MovementHelper.canWalkThrough(c.bsi, x, y, z, s);
     }
 
+    /** Ticks to clear a cell for swimming: 0 if already open, COST_INF if it can't/shouldn't be mined. */
+    private static double dig(CalculationContext c, int x, int y, int z, boolean head) {
+        BlockState s = c.get(x, y, z);
+        if (head ? headroom(c, x, y, z) : water(c, x, y, z)) return 0;
+        if (!c.allowBreak || s.getBlock() instanceof net.minecraft.block.ContainerBlock || Baritone.settings().blocksToDisallowBreaking.value.contains(s.getBlock())) return COST_INF;
+        if (c.get(x, y + 1, z).getBlock() instanceof net.minecraft.block.FallingBlock) return COST_INF;
+        double str = c.toolSet.getStrVsBlock(s);
+        if (str <= 0) return COST_INF;
+        // Underwater digging is 5x slower without Aqua Affinity, and another 5x while not on ground.
+        return (1 / str + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+    }
+
+    private BetterBlockPos[] digCells() {
+        int dy = dest.y - src.y;
+        if (Math.abs(dest.x - src.x) + Math.abs(dy) + Math.abs(dest.z - src.z) != 1) return new BetterBlockPos[0];
+        if (dy < 0) return new BetterBlockPos[]{dest};
+        if (dy > 0) return new BetterBlockPos[]{dest.up()};
+        return new BetterBlockPos[]{dest, dest.up()};
+    }
+
     public static double cost(CalculationContext c, int x, int y, int z, int dx, int dy, int dz) {
         if (!Baritone.settings().swimInWater.value) return COST_INF;
         int tx = x + dx, ty = y + dy, tz = z + dz;
         // Swimming, not walking: both ends must be in water with room for the head.
         // Dest may be the air block just above the surface (surfacing); it must sit on water.
-        boolean destOk = water(c, tx, ty, tz) || (dy > 0 && water(c, tx, ty - 1, tz) && headroom(c, tx, ty, tz));
-        if (!water(c, x, y, z) || !destOk || !headroom(c, tx, ty + 1, tz)) return COST_INF;
+        if (!water(c, x, y, z)) return COST_INF;
+        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) == 1) {
+            // Axis moves may dig: the new feet/head cells are water, passable, or mined out (slowly).
+            double mine = 0;
+            if (dy <= 0) mine += dig(c, tx, ty, tz, false);
+            if (dy >= 0) mine += dig(c, tx, ty + 1, tz, true);
+            if (mine >= COST_INF) return COST_INF;
+            return SWIM_ONE_BLOCK_COST + mine;
+        }
+        boolean destOk = water(c, tx, ty, tz);
+        if (!destOk || !headroom(c, tx, ty + 1, tz)) return COST_INF;
         if (dx != 0 || dz != 0) {
             // Don't clip a corner: the column we pass through on either leg must be open water too.
             if (!water(c, tx, y, tz) || !headroom(c, tx, y + 1, tz)) return COST_INF;
@@ -93,6 +123,21 @@ public class MovementSwim extends Movement {
     public MovementState updateState(MovementState state) {
         super.updateState(state);
         if (state.getStatus() != MovementStatus.RUNNING) {
+            return state;
+        }
+        for (BetterBlockPos b : digCells()) {
+            BlockState bs = ctx.world().getBlockState(b);
+            if (MovementHelper.isWater(bs) && !(bs.getBlock() instanceof net.minecraft.block.IWaterLoggable)) continue;
+            if (bs.getCollisionShape(ctx.world(), b).isEmpty() && bs.getFluidState().isEmpty()) continue;
+            MovementHelper.switchToBestToolFor(ctx, bs);
+            Rotation rot = RotationUtils.reachable(ctx, b, ctx.playerController().getBlockReachDistance())
+                    .orElse(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(b), ctx.playerRotations()));
+            state.setTarget(new MovementState.MovementTarget(rot, true));
+            // Aim loosely: bobbing wobbles pitch, and seagrass/kelp in front gets broken first (instantly).
+            Rotation cur = ctx.playerRotations();
+            if (ctx.isLookingAt(b) || (Math.abs(cur.getYaw() - rot.getYaw()) % 360 < 4 && Math.abs(cur.getPitch() - rot.getPitch()) < 4)) {
+                state.setInput(Input.CLICK_LEFT, true);
+            }
             return state;
         }
         BetterBlockPos feet = ctx.playerFeet();

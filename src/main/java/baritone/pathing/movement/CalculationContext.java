@@ -58,6 +58,7 @@ public class CalculationContext {
     public final BlockStateInterface bsi;
     public final ToolSet toolSet;
     public final boolean hasWaterBucket;
+    public final boolean aquaAffinity;
     public final boolean hasThrowaway;
     public final boolean canSprint;
     protected final double placeBlockCost; // protected because you should call the function instead
@@ -96,6 +97,7 @@ public class CalculationContext {
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
+        this.aquaAffinity = net.minecraft.enchantment.EnchantmentHelper.hasAquaAffinity(player);
         this.hasThrowaway = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
         this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && PlayerInventory.isHotbar(player.inventory.getSlotFor(STACK_BUCKET_WATER)) && world.getDimensionKey() != World.THE_NETHER;
         this.canSprint = Baritone.settings().allowSprint.value && player.getFoodStats().getFoodLevel() > 6;
