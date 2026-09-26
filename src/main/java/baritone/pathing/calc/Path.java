@@ -18,6 +18,7 @@
 package baritone.pathing.calc;
 
 import baritone.api.pathing.calc.IPath;
+import baritone.api.pathing.movement.ActionCosts;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.movement.IMovement;
 import baritone.api.utils.BetterBlockPos;
@@ -114,15 +115,31 @@ class Path extends PathBase {
     }
 
     private Movement runBackwards(BetterBlockPos src, BetterBlockPos dest, double cost) {
+        // Several Moves can share an offset (e.g. SWIM_*_DOWN and a walking descend), so the first
+        // match by position may not be the move the search used. Take the cheapest feasible one.
+        Movement best = null, first = null;
+        double bestCost = ActionCosts.COST_INF;
         for (Moves moves : Moves.values()) {
             Movement move = moves.apply0(context, src);
             if (move.getDest().equals(dest)) {
-                // have to calculate the cost at calculation time so we can accurately judge whether a cost increase happened between cached calculation and real execution
-                // however, taking into account possible favoring that could skew the node cost, we really want the stricter limit of the two
-                // so we take the minimum of the path node cost difference, and the calculated cost
-                move.override(Math.min(move.calculateCost(context), cost));
-                return move;
+                if (first == null) first = move;
+                double c = move.calculateCost(context);
+                if (c < bestCost) {
+                    best = move;
+                    bestCost = c;
+                }
             }
+        }
+        if (best == null && first != null) {
+            best = first; // none feasible now: keep the old first-match behaviour
+            bestCost = first.calculateCost(context);
+        }
+        if (best != null) {
+            // have to calculate the cost at calculation time so we can accurately judge whether a cost increase happened between cached calculation and real execution
+            // however, taking into account possible favoring that could skew the node cost, we really want the stricter limit of the two
+            // so we take the minimum of the path node cost difference, and the calculated cost
+            best.override(Math.min(bestCost, cost));
+            return best;
         }
         // this is no longer called from bestPathSoFar, now it's in postprocessing
         Helper.HELPER.logDebug("Movement became impossible during calculation " + src + " " + dest + " " + dest.subtract(src));
