@@ -181,6 +181,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             spearHrPrev = -1;
             spearReopen = false;
             spearReopenTicks = 0;
+            spearJabWait = 0;
             spearFacing = false;
             spearFaceTicks = 0;
             spearCommit = false;
@@ -207,16 +208,22 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean safe = horizontalBoxDist(me, target) > 4.5 && target.onGround() && !target.swinging || targetEating;
             // Eating through their dive is the D9 in the logs. Drop the apple and shield it.
             // 0650 bench: 720 eat ticks, 282 right after spear_back. Killing blows were on eat
-            // or spear_back, never on spear_charge. Do not bite while closing, backing, or
-            // anywhere else inside the charge runway, including at HP <= 11.
-            double hrNow = horizontalBoxDist(me, target);
-            boolean spearCycle = spearSlot(me) >= 0 && (spearReopen || spearUseTicks > 0
-                    || me.hasLineOfSight(target) && hrNow < 14);
-            if (eatTicks > 0 && (overhead || spearCycle)) {
+            // or spear_back, never on spear_charge. A charge holds the use key on the spear, so
+            // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
+            // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
+            boolean charging = spearSlot(me) >= 0 && spearUseTicks > 0;
+            boolean critical = me.getHealth() <= 5;
+            if (eatTicks > 0 && overhead) {
                 use(false);
                 eatTicks = 0;
-            } else if (!spearCycle && (eatTicks > 0 || (me.getHealth() <= 5 || me.getHealth() <= 11 && safe && !spearReopen || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
+            } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
                     && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
+                if (charging) {
+                    use(false);
+                    spearUseTicks = 0;
+                    spearReleaseNext = false;
+                    spearCommit = false;
+                }
                 if (eat(me)) return decide("eat");
             }
 
@@ -335,8 +342,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 spearFacing = false;
                 spearFaceTicks = 0;
             }
-            if (spear >= 0 && spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !targetEating && los && hr < 4.8)
+            // Backing out whenever they were inside 4.8 returned before the jab below on every tick.
+            // Take a ready jab first; its cooldown is then spent on the back-out for the next charge.
+            // If the jab has not connected in 30 ticks, stop waiting and back out anyway.
+            boolean jabReady = spearCharged && me.getAttackStrengthScale(0f) >= 0.99f;
+            if (spear >= 0 && spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < 4.8
+                    && (!jabReady || ++spearJabWait > 30)) {
                 spearReopen = true;
+                spearJabWait = 0;
+            }
             if (spearCommit && spearUseTicks == 0 && (++spearCommitTicks > 36 || hr < 3.2)) {
                 spearCommit = false;
                 spearCommitTicks = 0;
@@ -582,7 +596,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private int spearUseTicks, spearUseCool;
     private double spearHrPrev = -1, spearClose;
     private boolean spearReleaseNext, spearReopen, spearFacing, spearCommit;
-    private int spearReopenTicks, spearFaceTicks, spearCommitTicks;
+    private int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
     private PathingCommand special(Player me, double dist, boolean los) {
