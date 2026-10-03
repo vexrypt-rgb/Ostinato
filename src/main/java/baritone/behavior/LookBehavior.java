@@ -290,7 +290,14 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
 
         private float calculateMouseMove(float current, float target) {
-            final float delta = target - current;
+            // Shortest-path turn, capped so PvP aim tracks instead of snapping.
+            float delta = net.minecraft.util.Mth.wrapDegrees(target - current);
+            float cap = 32f;
+            try {
+                cap = Float.parseFloat(System.getProperty("ostinato.aim.deg", "32"));
+            } catch (NumberFormatException ignored) {}
+            if (cap < 1f) cap = 1f;
+            delta = net.minecraft.util.Mth.clamp(delta, -cap, cap);
             final double deltaPx = angleToMouse(delta); // yes, even the mouse movements use double
             return current + mouseToAngle(deltaPx);
         }

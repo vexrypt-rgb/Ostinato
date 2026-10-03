@@ -54,6 +54,28 @@ public class MixinMinecraft {
     @Unique
     private BiFunction<EventState, TickEvent.Type, TickEvent> tickProvider;
 
+    @Unique
+    private boolean ostinato$openedVexflat;
+
+    @Unique
+    private int ostinato$menuTicks;
+
+    /** Title-screen ticks do not reach VexBench. Open the existing vexflat save, never a new world. */
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void ostinato$openBenchWorld(CallbackInfo ci) {
+        if (Integer.getInteger("ostinato.vexbench", 0) <= 0 || this.ostinato$openedVexflat) return;
+        Minecraft mc = (Minecraft) (Object) this;
+        if (this.player != null || mc.getSingleplayerServer() != null) return;
+        if (!(mc.screen instanceof net.minecraft.client.gui.screens.TitleScreen)) {
+            if (mc.screen != null && this.ostinato$menuTicks++ % 100 == 0)
+                System.out.println("VEXBENCH screen " + mc.screen.getClass().getName());
+            return;
+        }
+        this.ostinato$openedVexflat = true;
+        System.out.println("VEXBENCH opening vexflat");
+        mc.createWorldOpenFlows().openWorld("vexflat", () -> {});
+    }
+
     @Inject(
             method = "<init>",
             at = @At("RETURN")

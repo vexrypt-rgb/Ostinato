@@ -1,0 +1,314 @@
+﻿Compiled from "PiercingWeaponComponent.java"
+public final class net.minecraft.component.type.PiercingWeaponComponent extends java.lang.Record {
+  private final boolean dealsKnockback;
+
+  private final boolean dismounts;
+
+  private final java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>> sound;
+
+  private final java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>> hitSound;
+
+  public static final com.mojang.serialization.Codec<net.minecraft.component.type.PiercingWeaponComponent> CODEC;
+
+  public static final net.minecraft.network.codec.PacketCodec<net.minecraft.network.RegistryByteBuf, net.minecraft.component.type.PiercingWeaponComponent> PACKET_CODEC;
+
+  public net.minecraft.component.type.PiercingWeaponComponent(boolean, boolean, java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>>, java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>>);
+    Code:
+         0: aload_0
+         1: invokespecial #49                 // Method java/lang/Record."<init>":()V
+         4: aload_0
+         5: iload_1
+         6: putfield      #51                 // Field dealsKnockback:Z
+         9: aload_0
+        10: iload_2
+        11: putfield      #53                 // Field dismounts:Z
+        14: aload_0
+        15: aload_3
+        16: putfield      #55                 // Field sound:Ljava/util/Optional;
+        19: aload_0
+        20: aload         4
+        22: putfield      #57                 // Field hitSound:Ljava/util/Optional;
+        25: return
+
+  public void playSound(net.minecraft.entity.Entity);
+    Code:
+         0: aload_0
+         1: getfield      #55                 // Field sound:Ljava/util/Optional;
+         4: aload_1
+         5: invokedynamic #82,  0             // InvokeDynamic #0:accept:(Lnet/minecraft/entity/Entity;)Ljava/util/function/Consumer;
+        10: invokevirtual #88                 // Method java/util/Optional.ifPresent:(Ljava/util/function/Consumer;)V
+        13: return
+
+  public void playHitSound(net.minecraft.entity.Entity);
+    Code:
+         0: aload_0
+         1: getfield      #57                 // Field hitSound:Ljava/util/Optional;
+         4: aload_1
+         5: invokedynamic #95,  0             // InvokeDynamic #1:accept:(Lnet/minecraft/entity/Entity;)Ljava/util/function/Consumer;
+        10: invokevirtual #88                 // Method java/util/Optional.ifPresent:(Ljava/util/function/Consumer;)V
+        13: return
+
+  public static boolean canHit(net.minecraft.entity.Entity, net.minecraft.entity.Entity);
+    Code:
+         0: aload_1
+         1: invokevirtual #105                // Method net/minecraft/entity/Entity.isInvulnerable:()Z
+         4: ifne          14
+         7: aload_1
+         8: invokevirtual #108                // Method net/minecraft/entity/Entity.isAlive:()Z
+        11: ifne          16
+        14: iconst_0
+        15: ireturn
+        16: aload_1
+        17: instanceof    #110                // class net/minecraft/entity/decoration/InteractionEntity
+        20: ifeq          25
+        23: iconst_1
+        24: ireturn
+        25: aload_1
+        26: invokevirtual #113                // Method net/minecraft/entity/Entity.canBeHitByProjectile:()Z
+        29: ifne          34
+        32: iconst_0
+        33: ireturn
+        34: aload_1
+        35: instanceof    #115                // class net/minecraft/entity/player/PlayerEntity
+        38: ifeq          68
+        41: aload_1
+        42: checkcast     #115                // class net/minecraft/entity/player/PlayerEntity
+        45: astore_2
+        46: aload_0
+        47: instanceof    #115                // class net/minecraft/entity/player/PlayerEntity
+        50: ifeq          68
+        53: aload_0
+        54: checkcast     #115                // class net/minecraft/entity/player/PlayerEntity
+        57: astore_3
+        58: aload_3
+        59: aload_2
+        60: invokevirtual #119                // Method net/minecraft/entity/player/PlayerEntity.shouldDamagePlayer:(Lnet/minecraft/entity/player/PlayerEntity;)Z
+        63: ifne          68
+        66: iconst_0
+        67: ireturn
+        68: aload_0
+        69: aload_1
+        70: invokevirtual #123                // Method net/minecraft/entity/Entity.isConnectedThroughVehicle:(Lnet/minecraft/entity/Entity;)Z
+        73: ifne          80
+        76: iconst_1
+        77: goto          81
+        80: iconst_0
+        81: ireturn
+
+  public void stab(net.minecraft.entity.LivingEntity, net.minecraft.entity.EquipmentSlot);
+    Code:
+         0: aload_1
+         1: getstatic     #135                // Field net/minecraft/entity/attribute/EntityAttributes.ATTACK_DAMAGE:Lnet/minecraft/registry/entry/RegistryEntry;
+         4: invokevirtual #141                // Method net/minecraft/entity/LivingEntity.getAttributeValue:(Lnet/minecraft/registry/entry/RegistryEntry;)D
+         7: d2f
+         8: fstore_3
+         9: aload_1
+        10: invokevirtual #145                // Method net/minecraft/entity/LivingEntity.getAttackRange:()Lnet/minecraft/component/type/AttackRangeComponent;
+        13: astore        4
+        15: iconst_0
+        16: istore        5
+        18: aload_1
+        19: aload         4
+        21: aload_1
+        22: invokedynamic #157,  0            // InvokeDynamic #2:test:(Lnet/minecraft/entity/LivingEntity;)Ljava/util/function/Predicate;
+        27: getstatic     #161                // Field net/minecraft/world/RaycastContext$ShapeType.COLLIDER:Lnet/minecraft/world/RaycastContext$ShapeType;
+        30: invokestatic  #167                // Method net/minecraft/entity/projectile/ProjectileUtil.collectPiercingCollisions:(Lnet/minecraft/entity/Entity;Lnet/minecraft/component/type/AttackRangeComponent;Ljava/util/function/Predicate;Lnet/minecraft/world/RaycastContext$ShapeType;)Lcom/mojang/datafixers/util/Either;
+        33: invokedynamic #179,  0            // InvokeDynamic #3:apply:()Ljava/util/function/Function;
+        38: invokedynamic #186,  0            // InvokeDynamic #4:apply:()Ljava/util/function/Function;
+        43: invokevirtual #192                // Method com/mojang/datafixers/util/Either.map:(Ljava/util/function/Function;Ljava/util/function/Function;)Ljava/lang/Object;
+        46: checkcast     #194                // class java/util/Collection
+        49: invokeinterface #198,  1          // InterfaceMethod java/util/Collection.iterator:()Ljava/util/Iterator;
+        54: astore        6
+        56: aload         6
+        58: invokeinterface #205,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+        63: ifeq          106
+        66: aload         6
+        68: invokeinterface #209,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        73: checkcast     #211                // class net/minecraft/util/hit/EntityHitResult
+        76: astore        7
+        78: iload         5
+        80: aload_1
+        81: aload_2
+        82: aload         7
+        84: invokevirtual #215                // Method net/minecraft/util/hit/EntityHitResult.getEntity:()Lnet/minecraft/entity/Entity;
+        87: fload_3
+        88: iconst_1
+        89: aload_0
+        90: getfield      #51                 // Field dealsKnockback:Z
+        93: aload_0
+        94: getfield      #53                 // Field dismounts:Z
+        97: invokevirtual #219                // Method net/minecraft/entity/LivingEntity.pierce:(Lnet/minecraft/entity/EquipmentSlot;Lnet/minecraft/entity/Entity;FZZZ)Z
+       100: ior
+       101: istore        5
+       103: goto          56
+       106: aload_1
+       107: invokevirtual #222                // Method net/minecraft/entity/LivingEntity.beforePlayerAttack:()V
+       110: aload_1
+       111: invokevirtual #225                // Method net/minecraft/entity/LivingEntity.useAttackEnchantmentEffects:()V
+       114: iload         5
+       116: ifeq          124
+       119: aload_0
+       120: aload_1
+       121: invokevirtual #227                // Method playHitSound:(Lnet/minecraft/entity/Entity;)V
+       124: aload_0
+       125: aload_1
+       126: invokevirtual #229                // Method playSound:(Lnet/minecraft/entity/Entity;)V
+       129: aload_1
+       130: getstatic     #235                // Field net/minecraft/util/Hand.MAIN_HAND:Lnet/minecraft/util/Hand;
+       133: iconst_0
+       134: invokevirtual #239                // Method net/minecraft/entity/LivingEntity.swingHand:(Lnet/minecraft/util/Hand;Z)V
+       137: return
+
+  public final java.lang.String toString();
+    Code:
+         0: aload_0
+         1: invokedynamic #266,  0            // InvokeDynamic #5:toString:(Lnet/minecraft/component/type/PiercingWeaponComponent;)Ljava/lang/String;
+         6: areturn
+
+  public final int hashCode();
+    Code:
+         0: aload_0
+         1: invokedynamic #271,  0            // InvokeDynamic #5:hashCode:(Lnet/minecraft/component/type/PiercingWeaponComponent;)I
+         6: ireturn
+
+  public final boolean equals(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokedynamic #276,  0            // InvokeDynamic #5:equals:(Lnet/minecraft/component/type/PiercingWeaponComponent;Ljava/lang/Object;)Z
+         7: ireturn
+
+  public boolean dealsKnockback();
+    Code:
+         0: aload_0
+         1: getfield      #51                 // Field dealsKnockback:Z
+         4: ireturn
+
+  public boolean dismounts();
+    Code:
+         0: aload_0
+         1: getfield      #53                 // Field dismounts:Z
+         4: ireturn
+
+  public java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>> sound();
+    Code:
+         0: aload_0
+         1: getfield      #55                 // Field sound:Ljava/util/Optional;
+         4: areturn
+
+  public java.util.Optional<net.minecraft.registry.entry.RegistryEntry<net.minecraft.sound.SoundEvent>> hitSound();
+    Code:
+         0: aload_0
+         1: getfield      #57                 // Field hitSound:Ljava/util/Optional;
+         4: areturn
+
+  private static java.util.Collection method_76744(java.util.Collection);
+    Code:
+         0: aload_0
+         1: areturn
+
+  private static java.util.Collection method_76743(net.minecraft.util.hit.BlockHitResult);
+    Code:
+         0: invokestatic  #288                // InterfaceMethod java/util/List.of:()Ljava/util/List;
+         3: areturn
+
+  private static boolean method_75241(net.minecraft.entity.LivingEntity, net.minecraft.entity.Entity);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #292                // Method canHit:(Lnet/minecraft/entity/Entity;Lnet/minecraft/entity/Entity;)Z
+         5: ireturn
+
+  private static void method_75245(net.minecraft.entity.Entity, net.minecraft.registry.entry.RegistryEntry);
+    Code:
+         0: aload_0
+         1: invokevirtual #296                // Method net/minecraft/entity/Entity.getEntityWorld:()Lnet/minecraft/world/World;
+         4: aconst_null
+         5: aload_0
+         6: invokevirtual #300                // Method net/minecraft/entity/Entity.getX:()D
+         9: aload_0
+        10: invokevirtual #303                // Method net/minecraft/entity/Entity.getY:()D
+        13: aload_0
+        14: invokevirtual #306                // Method net/minecraft/entity/Entity.getZ:()D
+        17: aload_1
+        18: aload_0
+        19: invokevirtual #310                // Method net/minecraft/entity/Entity.getSoundCategory:()Lnet/minecraft/sound/SoundCategory;
+        22: fconst_1
+        23: fconst_1
+        24: invokevirtual #315                // Method net/minecraft/world/World.playSound:(Lnet/minecraft/entity/Entity;DDDLnet/minecraft/registry/entry/RegistryEntry;Lnet/minecraft/sound/SoundCategory;FF)V
+        27: return
+
+  private static void method_75248(net.minecraft.entity.Entity, net.minecraft.registry.entry.RegistryEntry);
+    Code:
+         0: aload_0
+         1: invokevirtual #296                // Method net/minecraft/entity/Entity.getEntityWorld:()Lnet/minecraft/world/World;
+         4: aload_0
+         5: aload_0
+         6: invokevirtual #300                // Method net/minecraft/entity/Entity.getX:()D
+         9: aload_0
+        10: invokevirtual #303                // Method net/minecraft/entity/Entity.getY:()D
+        13: aload_0
+        14: invokevirtual #306                // Method net/minecraft/entity/Entity.getZ:()D
+        17: aload_1
+        18: aload_0
+        19: invokevirtual #310                // Method net/minecraft/entity/Entity.getSoundCategory:()Lnet/minecraft/sound/SoundCategory;
+        22: fconst_1
+        23: fconst_1
+        24: invokevirtual #315                // Method net/minecraft/world/World.playSound:(Lnet/minecraft/entity/Entity;DDDLnet/minecraft/registry/entry/RegistryEntry;Lnet/minecraft/sound/SoundCategory;FF)V
+        27: return
+
+  private static com.mojang.datafixers.kinds.App method_75246(com.mojang.serialization.codecs.RecordCodecBuilder$Instance);
+    Code:
+         0: aload_0
+         1: getstatic     #324                // Field com/mojang/serialization/Codec.BOOL:Lcom/mojang/serialization/codecs/PrimitiveCodec;
+         4: ldc_w         #326                // String deals_knockback
+         7: iconst_1
+         8: invokestatic  #332                // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+        11: invokeinterface #338,  3          // InterfaceMethod com/mojang/serialization/codecs/PrimitiveCodec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+        16: invokedynamic #344,  0            // InvokeDynamic #6:apply:()Ljava/util/function/Function;
+        21: invokevirtual #350                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        24: getstatic     #324                // Field com/mojang/serialization/Codec.BOOL:Lcom/mojang/serialization/codecs/PrimitiveCodec;
+        27: ldc_w         #351                // String dismounts
+        30: iconst_0
+        31: invokestatic  #332                // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+        34: invokeinterface #338,  3          // InterfaceMethod com/mojang/serialization/codecs/PrimitiveCodec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+        39: invokedynamic #355,  0            // InvokeDynamic #7:apply:()Ljava/util/function/Function;
+        44: invokevirtual #350                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        47: getstatic     #360                // Field net/minecraft/sound/SoundEvent.ENTRY_CODEC:Lcom/mojang/serialization/Codec;
+        50: ldc_w         #361                // String sound
+        53: invokeinterface #364,  2          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;)Lcom/mojang/serialization/MapCodec;
+        58: invokedynamic #370,  0            // InvokeDynamic #8:apply:()Ljava/util/function/Function;
+        63: invokevirtual #350                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        66: getstatic     #360                // Field net/minecraft/sound/SoundEvent.ENTRY_CODEC:Lcom/mojang/serialization/Codec;
+        69: ldc_w         #372                // String hit_sound
+        72: invokeinterface #364,  2          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;)Lcom/mojang/serialization/MapCodec;
+        77: invokedynamic #376,  0            // InvokeDynamic #9:apply:()Ljava/util/function/Function;
+        82: invokevirtual #350                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        85: invokevirtual #380                // Method com/mojang/serialization/codecs/RecordCodecBuilder$Instance.group:(Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;)Lcom/mojang/datafixers/Products$P4;
+        88: aload_0
+        89: invokedynamic #390,  0            // InvokeDynamic #10:apply:()Lcom/mojang/datafixers/util/Function4;
+        94: invokevirtual #393                // Method com/mojang/datafixers/Products$P4.apply:(Lcom/mojang/datafixers/kinds/Applicative;Lcom/mojang/datafixers/util/Function4;)Lcom/mojang/datafixers/kinds/App;
+        97: areturn
+
+  static {};
+    Code:
+         0: invokedynamic #400,  0            // InvokeDynamic #11:apply:()Ljava/util/function/Function;
+         5: invokestatic  #404                // Method com/mojang/serialization/codecs/RecordCodecBuilder.create:(Ljava/util/function/Function;)Lcom/mojang/serialization/Codec;
+         8: putstatic     #406                // Field CODEC:Lcom/mojang/serialization/Codec;
+        11: getstatic     #411                // Field net/minecraft/network/codec/PacketCodecs.BOOLEAN:Lnet/minecraft/network/codec/PacketCodec;
+        14: invokedynamic #344,  0            // InvokeDynamic #6:apply:()Ljava/util/function/Function;
+        19: getstatic     #411                // Field net/minecraft/network/codec/PacketCodecs.BOOLEAN:Lnet/minecraft/network/codec/PacketCodec;
+        22: invokedynamic #355,  0            // InvokeDynamic #7:apply:()Ljava/util/function/Function;
+        27: getstatic     #414                // Field net/minecraft/sound/SoundEvent.ENTRY_PACKET_CODEC:Lnet/minecraft/network/codec/PacketCodec;
+        30: invokedynamic #423,  0            // InvokeDynamic #12:apply:()Lnet/minecraft/network/codec/PacketCodec$ResultFunction;
+        35: invokeinterface #427,  2          // InterfaceMethod net/minecraft/network/codec/PacketCodec.collect:(Lnet/minecraft/network/codec/PacketCodec$ResultFunction;)Lnet/minecraft/network/codec/PacketCodec;
+        40: invokedynamic #370,  0            // InvokeDynamic #8:apply:()Ljava/util/function/Function;
+        45: getstatic     #414                // Field net/minecraft/sound/SoundEvent.ENTRY_PACKET_CODEC:Lnet/minecraft/network/codec/PacketCodec;
+        48: invokedynamic #423,  0            // InvokeDynamic #12:apply:()Lnet/minecraft/network/codec/PacketCodec$ResultFunction;
+        53: invokeinterface #427,  2          // InterfaceMethod net/minecraft/network/codec/PacketCodec.collect:(Lnet/minecraft/network/codec/PacketCodec$ResultFunction;)Lnet/minecraft/network/codec/PacketCodec;
+        58: invokedynamic #376,  0            // InvokeDynamic #9:apply:()Ljava/util/function/Function;
+        63: invokedynamic #390,  0            // InvokeDynamic #10:apply:()Lcom/mojang/datafixers/util/Function4;
+        68: invokestatic  #431                // InterfaceMethod net/minecraft/network/codec/PacketCodec.tuple:(Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lcom/mojang/datafixers/util/Function4;)Lnet/minecraft/network/codec/PacketCodec;
+        71: putstatic     #433                // Field PACKET_CODEC:Lnet/minecraft/network/codec/PacketCodec;
+        74: return
+}

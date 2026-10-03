@@ -20,10 +20,13 @@ import java.util.zip.GZIPOutputStream;
  * person (or a bot) can be read back and used to tune the combat. Disable with -Dostinato.record=false.
  * <pre>
  * #fight  header: label, version, both loadouts
- * t | me: x y z vx vy vz yaw pitch hp abs gnd item flags | tg: same | dist | state | events
+ * t | me: x,y,z,vx,vy,vz,yaw,pitch,hp,abs,gnd,item,flags | tg: same | dist | cd=0.00..1.00 | dec=token | state | events
  * #end    result, ticks, damage dealt/taken, attacks
  * </pre>
- * Flags: B blocking, U using item, S swinging, P sprinting, F fall distance&gt;1.5, W wet. Events: A=we attacked, X=target hurt flash (hit landed), D=damage taken, H=damage dealt.
+ * Column 0 is the fight-local tick and is never dropped. {@code cd} is {@code getAttackStrengthScale(0)}.
+ * {@code dec} is the action {@link PvpProcess} chose that tick. Flags: B blocking, U using item, S swinging,
+ * P sprinting, F fall distance&gt;1.5, W wet. Events: A=we attacked, X=target hurt flash (hit landed),
+ * D=damage taken, H=damage dealt.
  */
 public final class PvpRecorder {
     public static final boolean ENABLED = !"false".equals(System.getProperty("ostinato.record"));
@@ -56,7 +59,7 @@ public final class PvpRecorder {
             targetDied = false;
             lastTargetHp = target.getHealth() + target.getAbsorptionAmount();
             lastMyHp = me.getHealth() + me.getAbsorptionAmount();
-            line("#fight v1 label=" + label + " target=" + targetName);
+            line("#fight v2 label=" + label + " target=" + targetName);
             line("#me " + gear(me));
             line("#tg " + gear(target));
         } catch (Exception e) {
@@ -65,7 +68,10 @@ public final class PvpRecorder {
         }
     }
 
-    public void tick(Player me, LivingEntity target, double dist, String state, int totalAttacks) {
+    /**
+     * @param dec short token for the action chosen this tick (hit, spear, lunge, block, …); never prose
+     */
+    public void tick(Player me, LivingEntity target, double dist, String state, String dec, int totalAttacks) {
         if (out == null) return;
         try {
             ticks++;
@@ -92,7 +98,9 @@ public final class PvpRecorder {
             lastTargetHurt = target.hurtTime;
             lastMyHp = myHp;
             lastTargetHp = tHp;
-            line(ticks + "|" + ent(me) + "|" + ent(target) + "|" + f(dist) + "|" + state + "|" + ev);
+            float cd = me.getAttackStrengthScale(0.0f);
+            String token = dec == null || dec.isEmpty() ? "-" : dec;
+            line(ticks + "|" + ent(me) + "|" + ent(target) + "|" + f(dist) + "|cd=" + f(cd) + "|dec=" + token + "|" + state + "|" + ev);
             if (ticks % 100 == 0) out.flush();
         } catch (Exception e) {
             out = null;

@@ -1,0 +1,396 @@
+﻿Compiled from "AttackRangeComponent.java"
+public final class net.minecraft.component.type.AttackRangeComponent extends java.lang.Record {
+  private final float minRange;
+
+  private final float maxRange;
+
+  private final float minCreativeRange;
+
+  private final float maxCreativeRange;
+
+  private final float hitboxMargin;
+
+  private final float mobFactor;
+
+  public static final com.mojang.serialization.Codec<net.minecraft.component.type.AttackRangeComponent> CODEC;
+
+  public static final net.minecraft.network.codec.PacketCodec<io.netty.buffer.ByteBuf, net.minecraft.component.type.AttackRangeComponent> PACKET_CODEC;
+
+  public net.minecraft.component.type.AttackRangeComponent(float, float, float, float, float, float);
+    Code:
+         0: aload_0
+         1: invokespecial #43                 // Method java/lang/Record."<init>":()V
+         4: aload_0
+         5: fload_1
+         6: putfield      #45                 // Field minRange:F
+         9: aload_0
+        10: fload_2
+        11: putfield      #47                 // Field maxRange:F
+        14: aload_0
+        15: fload_3
+        16: putfield      #49                 // Field minCreativeRange:F
+        19: aload_0
+        20: fload         4
+        22: putfield      #51                 // Field maxCreativeRange:F
+        25: aload_0
+        26: fload         5
+        28: putfield      #53                 // Field hitboxMargin:F
+        31: aload_0
+        32: fload         6
+        34: putfield      #55                 // Field mobFactor:F
+        37: return
+
+  public static net.minecraft.component.type.AttackRangeComponent defaultForEntity(net.minecraft.entity.LivingEntity);
+    Code:
+         0: new           #2                  // class net/minecraft/component/type/AttackRangeComponent
+         3: dup
+         4: fconst_0
+         5: aload_0
+         6: getstatic     #66                 // Field net/minecraft/entity/attribute/EntityAttributes.ENTITY_INTERACTION_RANGE:Lnet/minecraft/registry/entry/RegistryEntry;
+         9: invokevirtual #72                 // Method net/minecraft/entity/LivingEntity.getAttributeValue:(Lnet/minecraft/registry/entry/RegistryEntry;)D
+        12: d2f
+        13: fconst_0
+        14: aload_0
+        15: getstatic     #66                 // Field net/minecraft/entity/attribute/EntityAttributes.ENTITY_INTERACTION_RANGE:Lnet/minecraft/registry/entry/RegistryEntry;
+        18: invokevirtual #72                 // Method net/minecraft/entity/LivingEntity.getAttributeValue:(Lnet/minecraft/registry/entry/RegistryEntry;)D
+        21: d2f
+        22: fconst_0
+        23: fconst_1
+        24: invokespecial #74                 // Method "<init>":(FFFFFF)V
+        27: areturn
+
+  public net.minecraft.util.hit.HitResult getHitResult(net.minecraft.entity.Entity, float, java.util.function.Predicate<net.minecraft.entity.Entity>);
+    Code:
+         0: aload_1
+         1: aload_0
+         2: aload_3
+         3: getstatic     #84                 // Field net/minecraft/world/RaycastContext$ShapeType.OUTLINE:Lnet/minecraft/world/RaycastContext$ShapeType;
+         6: invokestatic  #90                 // Method net/minecraft/entity/projectile/ProjectileUtil.collectPiercingCollisions:(Lnet/minecraft/entity/Entity;Lnet/minecraft/component/type/AttackRangeComponent;Ljava/util/function/Predicate;Lnet/minecraft/world/RaycastContext$ShapeType;)Lcom/mojang/datafixers/util/Either;
+         9: astore        4
+        11: aload         4
+        13: invokevirtual #96                 // Method com/mojang/datafixers/util/Either.left:()Ljava/util/Optional;
+        16: invokevirtual #102                // Method java/util/Optional.isPresent:()Z
+        19: ifeq          34
+        22: aload         4
+        24: invokevirtual #96                 // Method com/mojang/datafixers/util/Either.left:()Ljava/util/Optional;
+        27: invokevirtual #106                // Method java/util/Optional.get:()Ljava/lang/Object;
+        30: checkcast     #108                // class net/minecraft/util/hit/HitResult
+        33: areturn
+        34: aload         4
+        36: invokevirtual #113                // Method com/mojang/datafixers/util/Either.right:()Ljava/util/Optional;
+        39: invokevirtual #106                // Method java/util/Optional.get:()Ljava/lang/Object;
+        42: checkcast     #115                // class java/util/Collection
+        45: astore        5
+        47: aconst_null
+        48: astore        6
+        50: aload_1
+        51: fload_2
+        52: invokevirtual #119                // Method net/minecraft/entity/Entity.getCameraPosVec:(F)Lnet/minecraft/util/math/Vec3d;
+        55: astore        7
+        57: ldc2_w        #120                // double 1.7976931348623157E308d
+        60: dstore        8
+        62: aload         5
+        64: invokeinterface #125,  1          // InterfaceMethod java/util/Collection.iterator:()Ljava/util/Iterator;
+        69: astore        10
+        71: aload         10
+        73: invokeinterface #134,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+        78: ifeq          124
+        81: aload         10
+        83: invokeinterface #137,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        88: checkcast     #127                // class net/minecraft/util/hit/EntityHitResult
+        91: astore        11
+        93: aload         7
+        95: aload         11
+        97: invokevirtual #141                // Method net/minecraft/util/hit/EntityHitResult.getPos:()Lnet/minecraft/util/math/Vec3d;
+       100: invokevirtual #145                // Method net/minecraft/util/math/Vec3d.squaredDistanceTo:(Lnet/minecraft/util/math/Vec3d;)D
+       103: dstore        12
+       105: dload         12
+       107: dload         8
+       109: dcmpg
+       110: ifge          121
+       113: dload         12
+       115: dstore        8
+       117: aload         11
+       119: astore        6
+       121: goto          71
+       124: aload         6
+       126: ifnull        132
+       129: aload         6
+       131: areturn
+       132: aload_1
+       133: invokevirtual #148                // Method net/minecraft/entity/Entity.getHeadRotationVector:()Lnet/minecraft/util/math/Vec3d;
+       136: astore        10
+       138: aload_1
+       139: fload_2
+       140: invokevirtual #119                // Method net/minecraft/entity/Entity.getCameraPosVec:(F)Lnet/minecraft/util/math/Vec3d;
+       143: aload         10
+       145: invokevirtual #152                // Method net/minecraft/util/math/Vec3d.add:(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;
+       148: astore        11
+       150: aload         11
+       152: aload         10
+       154: invokestatic  #158                // Method net/minecraft/util/math/Direction.getFacing:(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Direction;
+       157: aload         11
+       159: invokestatic  #164                // Method net/minecraft/util/math/BlockPos.ofFloored:(Lnet/minecraft/util/math/Position;)Lnet/minecraft/util/math/BlockPos;
+       162: invokestatic  #170                // Method net/minecraft/util/hit/BlockHitResult.createMissed:(Lnet/minecraft/util/math/Vec3d;Lnet/minecraft/util/math/Direction;Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/hit/BlockHitResult;
+       165: areturn
+
+  public float getEffectiveMinRange(net.minecraft.entity.Entity);
+    Code:
+         0: aload_1
+         1: instanceof    #193                // class net/minecraft/entity/player/PlayerEntity
+         4: ifeq          40
+         7: aload_1
+         8: checkcast     #193                // class net/minecraft/entity/player/PlayerEntity
+        11: astore_2
+        12: aload_2
+        13: invokevirtual #196                // Method net/minecraft/entity/player/PlayerEntity.isSpectator:()Z
+        16: ifeq          21
+        19: fconst_0
+        20: freturn
+        21: aload_2
+        22: invokevirtual #199                // Method net/minecraft/entity/player/PlayerEntity.isCreative:()Z
+        25: ifeq          35
+        28: aload_0
+        29: getfield      #49                 // Field minCreativeRange:F
+        32: goto          39
+        35: aload_0
+        36: getfield      #45                 // Field minRange:F
+        39: freturn
+        40: aload_0
+        41: getfield      #45                 // Field minRange:F
+        44: aload_0
+        45: getfield      #55                 // Field mobFactor:F
+        48: fmul
+        49: freturn
+
+  public float getEffectiveMaxRange(net.minecraft.entity.Entity);
+    Code:
+         0: aload_1
+         1: instanceof    #193                // class net/minecraft/entity/player/PlayerEntity
+         4: ifeq          31
+         7: aload_1
+         8: checkcast     #193                // class net/minecraft/entity/player/PlayerEntity
+        11: astore_2
+        12: aload_2
+        13: invokevirtual #199                // Method net/minecraft/entity/player/PlayerEntity.isCreative:()Z
+        16: ifeq          26
+        19: aload_0
+        20: getfield      #51                 // Field maxCreativeRange:F
+        23: goto          30
+        26: aload_0
+        27: getfield      #47                 // Field maxRange:F
+        30: freturn
+        31: aload_0
+        32: getfield      #47                 // Field maxRange:F
+        35: aload_0
+        36: getfield      #55                 // Field mobFactor:F
+        39: fmul
+        40: freturn
+
+  public boolean isWithinRange(net.minecraft.entity.LivingEntity, net.minecraft.util.math.Vec3d);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: dup
+         4: invokestatic  #211                // Method java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;
+         7: pop
+         8: invokedynamic #226,  0            // InvokeDynamic #0:applyAsDouble:(Lnet/minecraft/util/math/Vec3d;)Ljava/util/function/ToDoubleFunction;
+        13: dconst_0
+        14: invokevirtual #229                // Method isWithinRange:(Lnet/minecraft/entity/LivingEntity;Ljava/util/function/ToDoubleFunction;D)Z
+        17: ireturn
+
+  public boolean isWithinRange(net.minecraft.entity.LivingEntity, net.minecraft.util.math.Box, double);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: dup
+         4: invokestatic  #211                // Method java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;
+         7: pop
+         8: invokedynamic #241,  0            // InvokeDynamic #1:applyAsDouble:(Lnet/minecraft/util/math/Box;)Ljava/util/function/ToDoubleFunction;
+        13: dload_3
+        14: invokevirtual #229                // Method isWithinRange:(Lnet/minecraft/entity/LivingEntity;Ljava/util/function/ToDoubleFunction;D)Z
+        17: ireturn
+
+  private boolean isWithinRange(net.minecraft.entity.LivingEntity, java.util.function.ToDoubleFunction<net.minecraft.util.math.Vec3d>, double);
+    Code:
+         0: aload_2
+         1: aload_1
+         2: invokevirtual #247                // Method net/minecraft/entity/LivingEntity.getEyePos:()Lnet/minecraft/util/math/Vec3d;
+         5: invokeinterface #251,  2          // InterfaceMethod java/util/function/ToDoubleFunction.applyAsDouble:(Ljava/lang/Object;)D
+        10: invokestatic  #257                // Method java/lang/Math.sqrt:(D)D
+        13: dstore        5
+        15: aload_0
+        16: aload_1
+        17: invokevirtual #259                // Method getEffectiveMinRange:(Lnet/minecraft/entity/Entity;)F
+        20: aload_0
+        21: getfield      #53                 // Field hitboxMargin:F
+        24: fsub
+        25: f2d
+        26: dload_3
+        27: dsub
+        28: dstore        7
+        30: aload_0
+        31: aload_1
+        32: invokevirtual #261                // Method getEffectiveMaxRange:(Lnet/minecraft/entity/Entity;)F
+        35: aload_0
+        36: getfield      #53                 // Field hitboxMargin:F
+        39: fadd
+        40: f2d
+        41: dload_3
+        42: dadd
+        43: dstore        9
+        45: dload         5
+        47: dload         7
+        49: dcmpl
+        50: iflt          65
+        53: dload         5
+        55: dload         9
+        57: dcmpg
+        58: ifgt          65
+        61: iconst_1
+        62: goto          66
+        65: iconst_0
+        66: ireturn
+
+  public final java.lang.String toString();
+    Code:
+         0: aload_0
+         1: invokedynamic #284,  0            // InvokeDynamic #2:toString:(Lnet/minecraft/component/type/AttackRangeComponent;)Ljava/lang/String;
+         6: areturn
+
+  public final int hashCode();
+    Code:
+         0: aload_0
+         1: invokedynamic #289,  0            // InvokeDynamic #2:hashCode:(Lnet/minecraft/component/type/AttackRangeComponent;)I
+         6: ireturn
+
+  public final boolean equals(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokedynamic #295,  0            // InvokeDynamic #2:equals:(Lnet/minecraft/component/type/AttackRangeComponent;Ljava/lang/Object;)Z
+         7: ireturn
+
+  public float minRange();
+    Code:
+         0: aload_0
+         1: getfield      #45                 // Field minRange:F
+         4: freturn
+
+  public float maxRange();
+    Code:
+         0: aload_0
+         1: getfield      #47                 // Field maxRange:F
+         4: freturn
+
+  public float minCreativeRange();
+    Code:
+         0: aload_0
+         1: getfield      #49                 // Field minCreativeRange:F
+         4: freturn
+
+  public float maxCreativeRange();
+    Code:
+         0: aload_0
+         1: getfield      #51                 // Field maxCreativeRange:F
+         4: freturn
+
+  public float hitboxMargin();
+    Code:
+         0: aload_0
+         1: getfield      #53                 // Field hitboxMargin:F
+         4: freturn
+
+  public float mobFactor();
+    Code:
+         0: aload_0
+         1: getfield      #55                 // Field mobFactor:F
+         4: freturn
+
+  private static com.mojang.datafixers.kinds.App method_76738(com.mojang.serialization.codecs.RecordCodecBuilder$Instance);
+    Code:
+         0: aload_0
+         1: fconst_0
+         2: ldc_w         #301                // float 64.0f
+         5: invokestatic  #307                // Method net/minecraft/util/dynamic/Codecs.rangedInclusiveFloat:(FF)Lcom/mojang/serialization/Codec;
+         8: ldc_w         #309                // String min_reach
+        11: fconst_0
+        12: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+        15: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+        20: invokedynamic #331,  0            // InvokeDynamic #3:apply:()Ljava/util/function/Function;
+        25: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        28: fconst_0
+        29: ldc_w         #301                // float 64.0f
+        32: invokestatic  #307                // Method net/minecraft/util/dynamic/Codecs.rangedInclusiveFloat:(FF)Lcom/mojang/serialization/Codec;
+        35: ldc_w         #339                // String max_reach
+        38: ldc_w         #340                // float 3.0f
+        41: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+        44: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+        49: invokedynamic #344,  0            // InvokeDynamic #4:apply:()Ljava/util/function/Function;
+        54: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        57: fconst_0
+        58: ldc_w         #301                // float 64.0f
+        61: invokestatic  #307                // Method net/minecraft/util/dynamic/Codecs.rangedInclusiveFloat:(FF)Lcom/mojang/serialization/Codec;
+        64: ldc_w         #346                // String min_creative_reach
+        67: fconst_0
+        68: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+        71: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+        76: invokedynamic #350,  0            // InvokeDynamic #5:apply:()Ljava/util/function/Function;
+        81: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+        84: fconst_0
+        85: ldc_w         #301                // float 64.0f
+        88: invokestatic  #307                // Method net/minecraft/util/dynamic/Codecs.rangedInclusiveFloat:(FF)Lcom/mojang/serialization/Codec;
+        91: ldc_w         #352                // String max_creative_reach
+        94: ldc_w         #353                // float 5.0f
+        97: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+       100: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+       105: invokedynamic #357,  0            // InvokeDynamic #6:apply:()Ljava/util/function/Function;
+       110: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+       113: fconst_0
+       114: fconst_1
+       115: invokestatic  #307                // Method net/minecraft/util/dynamic/Codecs.rangedInclusiveFloat:(FF)Lcom/mojang/serialization/Codec;
+       118: ldc_w         #359                // String hitbox_margin
+       121: ldc_w         #360                // float 0.3f
+       124: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+       127: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+       132: invokedynamic #364,  0            // InvokeDynamic #7:apply:()Ljava/util/function/Function;
+       137: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+       140: fconst_0
+       141: fconst_2
+       142: invokestatic  #367                // InterfaceMethod com/mojang/serialization/Codec.floatRange:(FF)Lcom/mojang/serialization/Codec;
+       145: ldc_w         #369                // String mob_factor
+       148: fconst_1
+       149: invokestatic  #315                // Method java/lang/Float.valueOf:(F)Ljava/lang/Float;
+       152: invokeinterface #321,  3          // InterfaceMethod com/mojang/serialization/Codec.optionalFieldOf:(Ljava/lang/String;Ljava/lang/Object;)Lcom/mojang/serialization/MapCodec;
+       157: invokedynamic #373,  0            // InvokeDynamic #8:apply:()Ljava/util/function/Function;
+       162: invokevirtual #337                // Method com/mojang/serialization/MapCodec.forGetter:(Ljava/util/function/Function;)Lcom/mojang/serialization/codecs/RecordCodecBuilder;
+       165: invokevirtual #377                // Method com/mojang/serialization/codecs/RecordCodecBuilder$Instance.group:(Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;Lcom/mojang/datafixers/kinds/App;)Lcom/mojang/datafixers/Products$P6;
+       168: aload_0
+       169: invokedynamic #385,  0            // InvokeDynamic #9:apply:()Lcom/mojang/datafixers/util/Function6;
+       174: invokevirtual #388                // Method com/mojang/datafixers/Products$P6.apply:(Lcom/mojang/datafixers/kinds/Applicative;Lcom/mojang/datafixers/util/Function6;)Lcom/mojang/datafixers/kinds/App;
+       177: areturn
+
+  static {};
+    Code:
+         0: invokedynamic #395,  0            // InvokeDynamic #10:apply:()Ljava/util/function/Function;
+         5: invokestatic  #399                // Method com/mojang/serialization/codecs/RecordCodecBuilder.create:(Ljava/util/function/Function;)Lcom/mojang/serialization/Codec;
+         8: putstatic     #401                // Field CODEC:Lcom/mojang/serialization/Codec;
+        11: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        14: invokedynamic #331,  0            // InvokeDynamic #3:apply:()Ljava/util/function/Function;
+        19: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        22: invokedynamic #344,  0            // InvokeDynamic #4:apply:()Ljava/util/function/Function;
+        27: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        30: invokedynamic #350,  0            // InvokeDynamic #5:apply:()Ljava/util/function/Function;
+        35: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        38: invokedynamic #357,  0            // InvokeDynamic #6:apply:()Ljava/util/function/Function;
+        43: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        46: invokedynamic #364,  0            // InvokeDynamic #7:apply:()Ljava/util/function/Function;
+        51: getstatic     #406                // Field net/minecraft/network/codec/PacketCodecs.FLOAT:Lnet/minecraft/network/codec/PacketCodec;
+        54: invokedynamic #373,  0            // InvokeDynamic #8:apply:()Ljava/util/function/Function;
+        59: invokedynamic #385,  0            // InvokeDynamic #9:apply:()Lcom/mojang/datafixers/util/Function6;
+        64: invokestatic  #412                // InterfaceMethod net/minecraft/network/codec/PacketCodec.tuple:(Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lnet/minecraft/network/codec/PacketCodec;Ljava/util/function/Function;Lcom/mojang/datafixers/util/Function6;)Lnet/minecraft/network/codec/PacketCodec;
+        67: putstatic     #414                // Field PACKET_CODEC:Lnet/minecraft/network/codec/PacketCodec;
+        70: return
+}
