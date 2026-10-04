@@ -107,6 +107,8 @@ public final class VexBench implements AbstractGameEventListener {
     private boolean seen, done, setup;
     private float botDmg;
     private static int fixedPadY = Integer.MIN_VALUE;
+    private int settle;
+    private LocalPlayer roundMe; // the player entity the round began with: immediate respawn swaps it, which is a death
     private int padY; // grass top Y for the arena pad (absolute)
     private int spawnWait;
     private int wins;
@@ -218,7 +220,8 @@ public final class VexBench implements AbstractGameEventListener {
                 botDmg += b.getMaxHealth() - b.getHealth();
             }
         }
-        boolean dead = me.isDeadOrDying();
+        if (roundMe == null) roundMe = me;
+        boolean dead = me.isDeadOrDying() || me != roundMe;
         boolean botDead = seen && alive == 0;
         if (!seen && ticks > 100) {
             log("no bot named " + bot + " spawned; check -Dostinato.vex.spawn");
@@ -229,6 +232,11 @@ public final class VexBench implements AbstractGameEventListener {
         if (!loggedSwing && (live.attacks > 0 || botDmg > 0.5f)) {
             loggedSwing = true;
             log("SWING attacks=" + live.attacks + " botDmg=" + botDmg + " taken=" + live.damageTaken + " y=" + (int) Math.floor(me.getY()));
+        }
+        // a kill while airborne can still end in a fatal fall: settle before scoring the win
+        if (botDead && !dead && ticks < ROUND_TICKS && settle < 100 && (!me.onGround() || me.fallDistance > 3)) {
+            settle++;
+            return;
         }
         if (dead || botDead || ticks >= ROUND_TICKS) {
             PvpProcess p = baritone.getPvpProcess();
@@ -260,31 +268,29 @@ public final class VexBench implements AbstractGameEventListener {
         for (int i = 0; i < COUNT; i++) bots.add(COUNT == 1 ? bot : bot + (char) ('a' + i));
         // Grass under the player's feet (superflat surface). Do not lift the pad to sea level.
         LocalPlayer me = Minecraft.getInstance().player;
+        // The world is a superflat save: fight on its own ground, no platform, no walls, nothing to fall off. The first
+        // grass block above the bottom of the world at the origin is that ground (old test platforms sit above it).
         int forced = Integer.getInteger("ostinato.vex.padY", Integer.MIN_VALUE);
+        boolean first = fixedPadY == Integer.MIN_VALUE;
         if (forced != Integer.MIN_VALUE) padY = forced;
-        else if (fixedPadY != Integer.MIN_VALUE) padY = fixedPadY; // one arena height for the whole session: no stacked pads
-        else padY = (int) Math.floor(me.getY()) - 1;
-        if (padY < me.level().getMinY()) padY = me.level().getMinY();
+        else if (!first) padY = fixedPadY;
+        else {
+            padY = me.level().getMinY();
+            for (int y = me.level().getMinY(); y < me.level().getMaxY(); y++) {
+                if (me.level().getBlockState(new net.minecraft.core.BlockPos(0, y, 0)).is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) {
+                    padY = y;
+                    break;
+                }
+            }
+        }
         fixedPadY = padY;
-        int airTop = padY + 16;
         String meName = me.getGameProfile().name();
         clearHostiles();
-        run("kill @a[name=!" + meName + "]", "kill @e[type=item]",
-                // evacuate water / flora in the 33x33 column (-16..16 inclusive)
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air",
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air replace water",
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air replace kelp",
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air replace kelp_plant",
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air replace seagrass",
-                "fill -16 " + (padY - 2) + " -16 16 " + airTop + " 16 air replace tall_seagrass",
-                // solid pad + thin dirt skirt so water cannot flow back onto the grass
-                "fill -16 " + (padY - 2) + " -16 16 " + (padY - 1) + " 16 dirt",
-                "fill -16 " + padY + " -16 16 " + padY + " 16 grass_block",
-                "fill -17 " + (padY - 2) + " -17 17 " + padY + " -17 dirt",
-                "fill -17 " + (padY - 2) + " 17 17 " + padY + " 17 dirt",
-                "fill -17 " + (padY - 2) + " -17 -17 " + padY + " 17 dirt",
-                "fill 17 " + (padY - 2) + " -17 17 " + padY + " 17 dirt");
-        log("pad y=" + padY + " stand=" + (padY + 1));
+        run("kill @a[name=!" + meName + "]", "kill @e[type=item]");
+        if (first) { // sweep away platforms left in the save by earlier benches
+            for (int y = padY + 1; y < padY + 120; y += 4) run("fill -40 " + y + " -40 40 " + (y + 3) + " 40 air");
+        }
+        log("ground y=" + padY + " stand=" + (padY + 1));
         setup = true; // gear up once we're alive again: a kit given to a corpse is lost on respawn
         wait = 20;
         ticks = 0;
@@ -306,6 +312,8 @@ public final class VexBench implements AbstractGameEventListener {
 
     private void setup() {
         setup = false;
+        roundMe = null;
+        settle = 0;
         clearHostiles();
         int standY = padY + 1;
         run("clear @a", "effect clear @a", "tp @a 0 " + standY + " 0 -90 0",

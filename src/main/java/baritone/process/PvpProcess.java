@@ -292,6 +292,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 probeTick = 0;
             }
             boolean blockMelee = spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
+            if (macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
+                    && groundGap(me) < 4 + 12 * Math.min(1.0, -me.getDeltaMovement().y / 1.5)) {
+                // the dive is over (missed, blocked, or called off) and the wings are still pointed at the ground
+                aim(new Rotation(me.getYRot(), -25f), true);
+                return decide("flare");
+            }
             PathingCommand dive = underDive(me, dist, los);
             if (dive != null) return dive;
             if (pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
@@ -687,6 +693,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private BlockPos firePos;
     private LivingEntity tvTarget;
     private Vec3 tvPos = Vec3.ZERO, tvVel = Vec3.ZERO;
+    private double shEx, shEz; // smoothed horizontal offset of a diver above, for the shield facing
+    private double tvRawY; // last tick's actual vertical step: the smoothed velocity lags a dive's start by two ticks
 
     /** Remote players report no velocity client-side, so derive it from their position change per tick. */
     private void trackTarget() {
@@ -696,6 +704,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         } else {
             Vec3 d = target.position().subtract(tvPos);
             tvVel = d.length() > 4 ? Vec3.ZERO : tvVel.scale(0.5).add(d.scale(0.5));
+            tvRawY = d.length() > 4 ? 0 : d.y;
         }
         tvPos = target.position();
     }
@@ -1075,6 +1084,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 return decide("elytra");
             }
             // macePhase 6: gliding
+            // a diver coming down on us from above wins any trade in the air, and it needs only ~6 ticks from a hover to land:
+            // under a mace carrier, take the shield up before it commits. The shield checks the facing with its height
+            // included, so face the bearing level, not the carrier overhead.
+            double aboveBy = target.getY() - me.getY();
+            double hzGap = Math.hypot(target.getX() - me.getX(), target.getZ() - me.getZ());
+            // the last two ticks of the dive are the ones that land: a raised shield stays up until the diver is level with us
+            boolean raised = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD && tv().y < -0.3;
+            if (target.getMainHandItem().getItem() == Items.MACE && aboveBy > (raised ? -0.5 : 3) && aboveBy < 16 && hzGap < 8 && groundGap(me) > 6
+                    && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem())) {
+                if (!select(me, mace)) return decide("swap");
+                Vec3 face = shieldBearing(me, -tv().y > 0.05 ? (aboveBy - 1.0) / -tv().y : 99);
+                if (face != null) look(face);
+                else aim(new Rotation(me.getYRot(), 0f), true);
+                use(true);
+                lastShieldTick = me.tickCount;
+                return decide("block");
+            }
             boolean climbing = rocket >= 0 && me.getY() < target.getY() + 14 && maceTicks < 70;
             Vec3 aim = climbing ? new Vec3(tp.x, me.getEyeY() + 30, tp.z).add(tp.subtract(me.position()).multiply(0.0, 0, 0)) : tp;
             if (climbing) {
@@ -1083,8 +1109,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 aim = me.getEyePosition().add(flat.scale(12)).add(0, 14, 0); // ~50 degrees up
             }
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations());
-            aim(r, true);
+            // a dive that is not going to connect must not end in the ground: flare out while there is still room
+            boolean flare = !climbing && me.isFallFlying() && me.getDeltaMovement().y < -0.5
+                    && groundGap(me) < 6 + 14 * Math.min(1.0, -me.getDeltaMovement().y / 2.0)
+                    && (exactReach(me, target) > REACH + 1.5 || target.getY() > me.getY() + 1.0);
             double speed = me.getDeltaMovement().length();
+            // pulling up at a target overhead with no speed is a stall: wings drop out of the sky. Trade height for speed first.
+            if (!climbing && !flare && r.getPitch() < -35f && speed < 1.3) r = new Rotation(r.getYaw(), groundGap(me) > 25 ? 25f : -5f);
+            if (flare) r = new Rotation(r.getYaw(), -20f);
+            aim(r, true);
             if (climbing && speed < 1.2 && maceTicks % 12 == 3) {
                 if (!select(me, rocket)) return decide("swap");
                 press(ctx.minecraft().options.keyUse);
@@ -1671,13 +1704,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * falling after them with the mace; failing that, be somewhere else when they arrive.
      */
     private PathingCommand underDive(Player me, double dist, boolean los) {
-        if (macePhase != 0 || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && tv().y > -0.6 || target.getY() < me.getY() + 4 || !me.onGround()) return null;
+        boolean hop = macePhase == 2; // our own smash is in the air: a diver coming down on it is a trade we lose
+        // dropping a raised shield in the diver's last two ticks (it is within 4 blocks) is what killed us twice: hold it until the diver is level
+        boolean raised = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD && target.getY() > me.getY() - 0.5;
+        double hzUp = Math.hypot(target.getX() - me.getX(), target.getZ() - me.getZ());
+        // a mace overhead can turn from rising to lethal in one tick (a 5 block smash kills): near it the shield goes up regardless of its velocity
+        boolean closeAbove = hzUp < 4 && target.getY() - me.getY() < 9 && target.getMainHandItem().getItem() == Items.MACE
+                && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
+        double vy = Math.min(tv().y, tvRawY);
+        if (macePhase != 0 && !hop || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
         if (pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
             if (me.position().distanceTo(pearlFrom) > 3.5 || pearlTicks++ > 40) return null;
             pearlFrom = pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
         }
         int pearlSlot = slotOf(me, Items.ENDER_PEARL);
-        if (pearlStage == 0 && slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
+        if (!hop && pearlStage == 0 && slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
             Vec3 eye = me.getEyePosition(), tp = target.getBoundingBox().getCenter(), v = tv(), need = null;
             double sum = 0, drop = 0, u = 0;
             for (int t = 1; t <= 24 && need == null; t++) {
@@ -1705,11 +1746,69 @@ public final class PvpProcess extends BaritoneProcessHelper {
         Vec3 away = me.position().subtract(target.position()).multiply(1, 0, 1);
         if (target.getMainHandItem().getItem() != Items.MACE || away.length() > 6) return null;
         if (away.length() < 0.3) away = Vec3.directionFromRotation(0, me.getYRot());
+        // Running only buys time while the diver is high. In its last few ticks it has committed to a path
+        // that tracks us at our own speed: a raised shield stops a smash, so take the landing behind it.
+        double fall = -vy;
+        double ticksLeft = fall > 0.05 ? (target.getY() - me.getY() - 1.0) / fall : closeAbove ? 5 : 99;
+        if (closeAbove) ticksLeft = Math.min(ticksLeft, 8); // it can commit to a dive in one tick: a drifting diver this close is not a reason to lower the shield
+        if (me.getOffhandItem().getItem() != Items.SHIELD && ticksLeft > 6) { // a wind charge or totem left in the offhand: put the shield back while the diver is still high
+            for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == Items.SHIELD) {
+                toOffhand(me, Items.SHIELD);
+                return decide("swap");
+            }
+        }
+        boolean shield = me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
+        // once it is up, keep it up: the fall speed estimate jumps when the diver is knocked, and dropping it for a step is fatal
+        boolean held = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD;
+        if (hop) {
+            if (!shield || ticksLeft > 20 || away.length() > 5) return null;
+            macePhase = 0;
+            maceCool = 20;
+        }
+        if (shield && ticksLeft <= 30 && away.length() < 6) { // a shield takes ~5 ticks to count as raised
+            int hand = slotOf(me, Items.MACE);
+            if (hand >= 0 && !select(me, hand)) return decide("swap");
+            // face where it is now: a landing point predicted onto our own spot has no bearing, and a shield
+            // only covers the front half, so a diver that ends up behind us gets through
+            Vec3 tp = shieldBearing(me, ticksLeft);
+            // the block test uses the attacker's offset at impact, however small: running away first turned the shield 180 degrees off it
+            if (tp != null) look(tp);
+            // a diver chases us and lags behind our drift: backing away from the side it is on, facing it, keeps its landing inside the shield's half
+            Vec3 side = target.position().subtract(me.position()), view = me.getViewVector(1f);
+            double sideH = Math.hypot(side.x, side.z);
+            if (me.onGround() && ticksLeft <= 12 && sideH > 0.02 && sideH < 1.5 && view.x * side.x + view.z * side.z > 0) key(Input.MOVE_BACK);
+            use(true);
+            if (blockTicks++ == 0) blocks++;
+            lastShieldTick = me.tickCount;
+            return decide("block");
+        }
         use(false);
         aim(new Rotation((float) Math.toDegrees(Math.atan2(-away.x, away.z)), 0f), true);
         key(Input.MOVE_FORWARD);
         key(Input.SPRINT);
-        return decide("dodge");
+        return decide(shield ? "dodge" : me.getOffhandItem().getItem() == Items.SHIELD ? "dodge-cd" : "dodge-off");
+    }
+
+    /**
+     * Where to point a raised shield against a diver. It lands at its offset when it arrives, not the one it has now:
+     * a diver closing on us at 0.07 a tick crosses zero offset before it lands and ends up behind the shield. In its
+     * last few ticks aim at the extrapolated offset; null if that is too small to have a bearing (keep the facing).
+     */
+    private Vec3 shieldBearing(Player me, double ticksLeft) {
+        Vec3 tp = target.position(), v = tv(), mv = me.getDeltaMovement();
+        double t = 0; // extrapolating the offset swung the shield 60 degrees a tick in the logs: the diver's horizontal velocity is too noisy
+        double ox = tp.x + v.x * t - (me.getX() + mv.x * t), oz = tp.z + v.z * t - (me.getZ() + mv.z * t);
+        // a knock (wind burst) in the last ticks shoves us off the diver's line; it keeps falling straight, so it lands on the side we were shoved from
+        boolean knocked = Math.hypot(mv.x, mv.z) > 0.25 && Math.hypot(ox, oz) <= 0.5;
+        // the raw offset flips sign tick to tick; a smoothed one keeps the side the diver has been on
+        if (me.tickCount - lastShieldTick > 2) { shEx = ox; shEz = oz; } else { shEx = shEx * 0.7 + ox * 0.3; shEz = shEz * 0.7 + oz * 0.3; }
+        if (ticksLeft <= 3 && !knocked) return null; // committed: chasing the last ticks' offset spins the shield off the diver
+        if (Math.hypot(ox, oz) > 0.5) return new Vec3(me.getX() + ox, me.getEyeY(), me.getZ() + oz);
+        if (!knocked && Math.hypot(shEx, shEz) > 0.03) return new Vec3(me.getX() + shEx, me.getEyeY(), me.getZ() + shEz);
+        // a diver nearly overhead has no stable bearing (its offset flipped sign every tick and spun the shield 60 degrees a tick):
+        // it chases us and lags behind our drift, so it lands on the side we are moving away from; stood still, keep the facing
+        if (Math.hypot(mv.x, mv.z) > 0.08) return new Vec3(me.getX() - mv.x, me.getEyeY(), me.getZ() - mv.z);
+        return null;
     }
 
     private boolean shieldDive(Player me, double dist) {
@@ -1884,6 +1983,16 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Turn the view toward the angles with the smoothed look; true once it already points there within tol degrees. */
     /** Every PvP look goes out as a bounded, mouse-stepped move; see LookBehavior.human(). */
+    /** Blocks of air straight below the player (capped at 64). */
+    private double groundGap(net.minecraft.world.entity.player.Player me) {
+        net.minecraft.core.BlockPos.MutableBlockPos bp = new net.minecraft.core.BlockPos.MutableBlockPos(me.getBlockX(), 0, me.getBlockZ());
+        for (int i = 0; i < 64; i++) {
+            bp.setY(me.getBlockY() - i - 1);
+            if (me.level().getBlockState(bp).blocksMotion()) return me.getY() - (bp.getY() + 1);
+        }
+        return 64;
+    }
+
     private void aim(Rotation r, boolean blockInteract) {
         baritone.getLookBehavior().human();
         baritone.getLookBehavior().updateTarget(r, blockInteract);

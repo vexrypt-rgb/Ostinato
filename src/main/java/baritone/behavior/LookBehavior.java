@@ -91,16 +91,39 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         this.human = true;
     }
 
+    private float velYaw, velPitch;
+    private final java.util.Random handNoise = new java.util.Random();
+
+    /**
+     * A hand does not jump to its target: the speed ramps up (limited acceleration), the move closes most of
+     * the gap each tick (so a long flick still lands in a few ticks), carries a little momentum past the
+     * target, and the wrist arc leaks a bit of pitch into a yaw sweep. Near the target a tremor of under a
+     * mouse count rides on top; the result is rounded to whole mouse counts as before.
+     */
     private Rotation humanStep(Rotation want) {
         float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
-        if (Math.abs(dy) > 1.5f) dy = net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f);
-        if (Math.abs(dp) > 1.5f) dp = net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f);
+        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f) : dp;
+        // acceleration limit scales with the size of the move: a flick may start hard, a nudge starts soft
+        float accY = 12f + Math.abs(dy) * 0.5f, accP = 9f + Math.abs(dp) * 0.5f;
+        float outY = velYaw + net.minecraft.util.Mth.clamp(wantY - velYaw, -accY, accY);
+        float outP = velPitch + net.minecraft.util.Mth.clamp(wantP - velPitch, -accP, accP);
+        if (Math.abs(dy) <= 1.5f) outY = dy; // fine aim lands exactly, never lags behind a moving target
+        if (Math.abs(dp) <= 1.5f) outP = dp;
+        // momentum carries a fast move slightly past; the next tick corrects it
+        if (Math.abs(dy) > 25f) outY += velYaw * 0.12f;
+        outP += outY * 0.06f * (float) Math.signum(dp == 0 ? 1 : dp) * (Math.abs(dy) > 10f ? 1 : 0);
+        double tremor = Math.min(1.0, Math.abs(dy) / 6.0) < 1.0 ? 0.08 : 0.0;
+        outY += (float) (handNoise.nextGaussian() * tremor);
+        outP += (float) (handNoise.nextGaussian() * tremor);
+        velYaw = outY;
+        velPitch = outP;
         double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
         float step = (float) (f * f * f * 8.0 * 0.15); // degrees per mouse count, as MouseHandler turns the player
-        dy = Math.round(dy / step) * step;
-        dp = Math.round(dp / step) * step;
-        return new Rotation(cy + dy, net.minecraft.util.Mth.clamp(cp + dp, -90f, 90f));
+        outY = Math.round(outY / step) * step;
+        outP = Math.round(outP / step) * step;
+        return new Rotation(cy + outY, net.minecraft.util.Mth.clamp(cp + outP, -90f, 90f));
     }
 
     @Override
@@ -151,6 +174,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
+                if (!this.human) { velYaw = 0; velPitch = 0; }
                 this.human = false;
                 break;
             }
