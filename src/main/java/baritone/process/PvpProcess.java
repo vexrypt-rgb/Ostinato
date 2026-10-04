@@ -770,7 +770,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // a diver still coming (no charge, or too close to counter): block the smash with the shield
         // 1822 fight ticks 505-508: block, jump, block as the diver came inside one block of our height,
         // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
-        boolean dive = !target.onGround() && tv().y < -0.3 && dist < 11 && target.getY() > me.getY() + 1;
+        // 000432 ticks 443-452: the diver topped out nine blocks up at 443, passed -0.3 at 448 and landed its mace
+        // at 452, on the shield's fifth tick. From three blocks up the turn at the top is already the dive.
+        boolean dive = !target.onGround() && dist < 11 && (tv().y < -0.3 && target.getY() > me.getY() + 1 || tv().y < 0.1 && target.getY() > me.getY() + 3);
         if (dive) diveBlock = true;
         else if (target.onGround() || dist > 11) diveBlock = false;
         if (macePhase == 0 && (dive || diveBlock && hasShield)
@@ -1048,7 +1050,25 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // inside 3.5 and falling at 0.3, and the shield blocks 5 ticks later. A dive that drops in
                 // slow and unsprinted meets it less often (4/5 at medium against 1/5 sprinting in).
                 boolean quiet = !spearKit && me.distanceTo(target) < 7;
-                if (!quiet) {
+                // A shield covers the half-circle its holder faces and nothing behind it. 235605 t104 and 235404
+                // t591 came down 0.9 and 0.4 behind a raised shield and killed through it; 000432 t151 came down
+                // in front and did nothing. Against a shield the dive is flown to the far side of its back.
+                Vec3 facing = target.calculateViewVector(0f, target.getYHeadRot());
+                Vec3 offset = me.position().subtract(target.position()).multiply(1, 0, 1);
+                boolean theirShield = target.getOffhandItem().getItem() == Items.SHIELD || target.getMainHandItem().getItem() == Items.SHIELD;
+                boolean behind = offset.dot(facing) < -0.1;
+                boolean around = !spearKit && theirShield && me.getY() > target.getY() + 1.5;
+                if (around) {
+                    Vec3 to = target.position().add(tv().multiply(4, 0, 4)).subtract(facing.scale(0.9)).subtract(me.position());
+                    if (to.horizontalDistance() > 0.15) {
+                        float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
+                        if (Math.abs(rel) < 67.5f) key(Input.MOVE_FORWARD);
+                        else if (Math.abs(rel) > 112.5f) key(Input.MOVE_BACK);
+                        if (rel > 22.5f && rel < 157.5f) key(Input.MOVE_RIGHT);
+                        else if (rel < -22.5f && rel > -157.5f) key(Input.MOVE_LEFT);
+                        if (to.horizontalDistance() > 2.5) key(Input.SPRINT);
+                    }
+                } else if (!quiet) {
                     key(Input.MOVE_FORWARD);
                     key(Input.SPRINT);
                 } else if (!me.isSprinting() && (horizontalBoxDist(me, target) > 2.2 || me.getDeltaMovement().horizontalDistance() < 0.08)) {
@@ -1095,18 +1115,28 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // with the charge: swing on the last tick before the ground with whatever is there.
                 boolean landing = !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0));
                 float sc = me.getAttackStrengthScale(0f);
+                // 234854 mace easy defensive: it launched after our hop and the dive met it ten blocks up at 0.5 charge,
+                // dropped past and landed under its mace. A target in the air that the fall is about to pass is the
+                // same last tick as the ground.
+                // 235231 ticks 606/952: passing it just under the apex smashed for 5 with nothing fallen yet.
+                boolean passing = !spearKit && !target.onGround() && me.fallDistance >= 4 && me.getY() + me.getDeltaMovement().y * 2 < target.getY() + 0.5;
                 if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                        && (spearKit ? sc >= 0.99f : sc >= 0.6f || landing && sc >= 0.4f) && target.hurtTime <= 0
+                        && (spearKit ? sc >= 0.99f : sc >= 0.6f || (landing || passing) && sc >= 0.4f) && target.hurtTime <= 0
                         && exactReach(me, target) <= REACH - 0.05
                         // 1745 fight tick 91: the aim was off on the landing tick, hit() did not click, and the
                         // hop was written off as spent.
                         && (spearKit || aimedAt(me, aimPoint(me, target), 10f))
-                        && (me.fallDistance >= 3 || landing)) {
-                    hit(me);
+                        && (!around || behind || landing || !shielded)
+                        && (me.fallDistance >= 3 || landing || passing)) {
+                    // 235231 ticks 238 and 297: hit() refused the click (crosshair off its own swing point) and
+                    // the dive was closed anyway, three ticks above a target it then fell onto unarmed.
+                    boolean clicked = hit(me);
                     if (!spearKit) look(lead);
-                    macePhase = 0;
-                    maceCool = 14;
-                    if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                    if (clicked || spearKit) {
+                        macePhase = 0;
+                        maceCool = 14;
+                        if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                    }
                 } else if (me.onGround() && (spearKit || maceTicks > 4) || maceTicks > (spearKit ? 40 : 80)) {
                     // A hop that did not smash must not restart. Walk into the jab band first.
                     if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
