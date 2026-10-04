@@ -958,7 +958,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean canJump = me.onGround() && !me.isInWater();
             // Spear kit starts the smash from spearTools, and only from just outside the jab.
             // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
-            if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && dist > 1.0 && dist < 24 && los && wind >= 0) {
+            // 002307 t1527: it stood at 6 health eating 3.6 away and the next 40 ticks went to a hop; two sword hits end it.
+            boolean finish = target.getHealth() + target.getAbsorptionAmount() <= 7 && dist < 5;
+            if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && !finish && dist > 1.0 && dist < 24 && los && wind >= 0) {
                 if (!select(me, wind)) return decide("swap");
                 aim(new Rotation(me.getYRot(), 90f), true);
                 hopThrown = -1;
@@ -1058,15 +1060,24 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 boolean theirShield = target.getOffhandItem().getItem() == Items.SHIELD || target.getMainHandItem().getItem() == Items.SHIELD;
                 boolean behind = offset.dot(facing) < -0.1;
                 boolean around = !spearKit && theirShield && me.getY() > target.getY() + 1.5;
-                if (around) {
-                    Vec3 to = target.position().add(tv().multiply(4, 0, 4)).subtract(facing.scale(0.9)).subtract(me.position());
+                // 002307 t1533-1566: it walked off eating at 0.2 a tick and the dive came down 2.8 behind where it
+                // had been. Fly to where it will be when the fall reaches its height.
+                int fallTicks = 0;
+                for (double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5; dy > 0 && fallTicks < 30; fallTicks++) {
+                    v = (v - 0.08) * 0.98;
+                    dy += v;
+                }
+                Vec3 ahead = target.position().add(tv().multiply(fallTicks, 0, fallTicks));
+                boolean moving = !spearKit && tv().horizontalDistance() > 0.1;
+                if (around || moving) {
+                    Vec3 to = (around ? ahead.subtract(facing.scale(1.6)) : ahead).subtract(me.position()).multiply(1, 0, 1);
                     if (to.horizontalDistance() > 0.15) {
                         float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
                         if (Math.abs(rel) < 67.5f) key(Input.MOVE_FORWARD);
                         else if (Math.abs(rel) > 112.5f) key(Input.MOVE_BACK);
                         if (rel > 22.5f && rel < 157.5f) key(Input.MOVE_RIGHT);
                         else if (rel < -22.5f && rel > -157.5f) key(Input.MOVE_LEFT);
-                        if (to.horizontalDistance() > 2.5) key(Input.SPRINT);
+                        if (around || to.horizontalDistance() > 2.5) key(Input.SPRINT);
                     }
                 } else if (!quiet) {
                     key(Input.MOVE_FORWARD);
@@ -1125,7 +1136,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         && exactReach(me, target) <= REACH - 0.05
                         // 1745 fight tick 91: the aim was off on the landing tick, hit() did not click, and the
                         // hop was written off as spent.
-                        && (spearKit || aimedAt(me, aimPoint(me, target), 10f))
+                        && (spearKit || aimedAt(me, aimPoint(me, target), 10f)
+                        || ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult on && on.getEntity() == target)
                         && (!around || behind || landing || !shielded)
                         && (me.fallDistance >= 3 || landing || passing)) {
                     // 235231 ticks 238 and 297: hit() refused the click (crosshair off its own swing point) and
@@ -1357,6 +1369,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return decide("flee", new PathingCommand(new baritone.api.pathing.goals.GoalRunAway(18, target.blockPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
     }
 
+    private double groundY = Double.NaN;
+
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
     }
@@ -1364,7 +1378,53 @@ public final class PvpProcess extends BaritoneProcessHelper {
     /** Record the action chosen this tick for {@link PvpRecorder}, then pause pathing. */
     private PathingCommand decide(String d) {
         tickDec = d;
+        ledgeGuard();
         return pause();
+    }
+
+    /** True when the column at {@code at} has something to land on within a survivable fall of the last floor we stood on. */
+    private boolean floorUnder(Player me, Vec3 at) {
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        int x = Mth.floor(at.x), z = Mth.floor(at.z);
+        for (int y = Mth.floor(me.getY()); y >= Mth.floor(groundY) - 5; y--) {
+            p.set(x, y, z);
+            if (!ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * A strafe and a hop off the rim of a raised floor was a 29 block fall and the whole health bar.
+     * When the keys and the momentum of this tick carry us over a drop the target is not down, steer back in.
+     */
+    private void ledgeGuard() {
+        Player me = ctx.player();
+        if (me == null || target == null) return;
+        if (me.onGround()) groundY = me.getY();
+        if (Double.isNaN(groundY)) return;
+        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
+        baritone.api.utils.IInputOverrideHandler in = baritone.getInputOverrideHandler();
+        double f = (in.isInputForcedDown(Input.MOVE_FORWARD) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_BACK) ? 1 : 0);
+        double s = (in.isInputForcedDown(Input.MOVE_LEFT) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_RIGHT) ? 1 : 0);
+        Vec3 want = new Vec3(s, 0, f).yRot(-me.getYRot() * Mth.DEG_TO_RAD);
+        if (want.lengthSqr() > 0) want = want.normalize();
+        Vec3 h = me.getDeltaMovement().multiply(4, 0, 4).add(want.scale(1.1));
+        if (h.lengthSqr() < 0.01) return;
+        if (floorUnder(me, me.position().add(h.scale(0.5))) && floorUnder(me, me.position().add(h))) return;
+        Vec3 to = target.position().subtract(me.position()).multiply(1, 0, 1);
+        if (to.lengthSqr() < 0.01 || !floorUnder(me, me.position().add(to.normalize().scale(1.5))) || to.dot(h) > 0 && !floorUnder(me, me.position())) {
+            to = h.scale(-1);
+        }
+        in.setInputForceState(Input.MOVE_FORWARD, false);
+        in.setInputForceState(Input.MOVE_BACK, false);
+        in.setInputForceState(Input.MOVE_LEFT, false);
+        in.setInputForceState(Input.MOVE_RIGHT, false);
+        float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
+        if (Math.abs(rel) < 67.5f) key(Input.MOVE_FORWARD);
+        else if (Math.abs(rel) > 112.5f) key(Input.MOVE_BACK);
+        if (rel > 22.5f && rel < 157.5f) key(Input.MOVE_RIGHT);
+        else if (rel < -22.5f && rel > -157.5f) key(Input.MOVE_LEFT);
+        tickDec = tickDec + "+ledge";
     }
 
     /** Record the action chosen this tick for {@link PvpRecorder}, then return {@code cmd}. */
@@ -1660,7 +1720,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
             attacks++;
             return true;
         }
-        if (!aimedAt(me, aim, 10f)) { clickKind = 'a'; return false; } // must be looking at the target
+        // 003156 mace medium: twelve dives came down on its head and none clicked. Falling 1.2 a tick past a target
+        // a block away the bearing swings 40 degrees a tick, and the look is always one behind it. The crosshair
+        // being on the entity is what a click needs; the angle only guards a swing on level ground.
+        boolean onIt = me.fallDistance > 1.5 && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult on && on.getEntity() == target;
+        if (!onIt && !aimedAt(me, aim, 10f)) { clickKind = 'a'; return false; } // must be looking at the target
         if (hit(me, target)) {
             attacks++;
             clickKind = 'E';
