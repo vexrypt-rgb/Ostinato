@@ -232,12 +232,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
             // stops a bite, and with a shield in hand a bite does not start inside its reach.
             boolean pressed = !targetEating && eyeToBox(me, target) < 9 && target.getMainHandItem().getItem() != Items.MACE
-                    && (me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0);
+                    && (me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem()) || slotOf(me, Items.SHIELD) >= 0);
+            // 232733 axe expert safe: 76 ticks at 2.9 HP behind a shield with eight apples, taking 35 damage all fight
+            // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
+            // before most of a bite is down: that is the opening, shield or no shield.
+            int sinceSwing = me.tickCount - targetSwingTick;
+            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16;
+            pressed &= !opening;
             boolean critical = me.getHealth() <= 5 && (eatTicks > 0 || !pressed);
             if (eatTicks > 0 && overhead && target.getY() > me.getY() + 2.0) {
                 use(false);
                 eatTicks = 0;
-            } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && safe && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
+            } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
                     && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
@@ -489,6 +495,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     || tgShield && best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
             boolean falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
             boolean canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
+            boolean hurry = me.getCurrentItemAttackStrengthDelay() < 14;
+            // 233514 axe expert adaptive: it ate from 4 HP back to 20 under plain 3.84s swung on the run, and an apple
+            // is worth 8. A target chewing in reach is not going anywhere: it gets the crit like any other.
+            boolean run = chase && (hurry || !targetEating);
+            // Same fight, t544: jumped fully charged and hung in the air for the fall while its axe, due, landed first.
+            // With its next swing due inside the jump, the charged swing goes now.
+            int swingAge = me.tickCount - targetSwingTick;
+            boolean rushed = !hurry && !targetEating && cd >= 0.95f
+                    && swingAge >= (swingGap > 0 ? swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20) - 6;
 
             // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
             // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
@@ -590,7 +605,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             // Only in the first two ticks of a jump. A sword jumped at 0.55 is charged five ticks
             // later, still rising, and this swing took the crit that was two ticks away.
-            if (!me.onGround() && me.getDeltaMovement().y > 0.25 && targetReady && inReach && cd >= 0.95f && !immune) {
+            if (!me.onGround() && (me.getDeltaMovement().y > 0.25 && targetReady || !falling && rushed) && inReach && cd >= 0.95f && !immune) {
                 hit(me); // don't hang in the air waiting for a crit while it swings first
                 critArmed = false;
                 return decide("hit");
@@ -603,7 +618,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 critArmed = false;
                 return decide("hit");
             }
-            if ((chase || counter) && inReach && cd >= 0.9f && !immune) {
+            if ((run || counter) && inReach && cd >= 0.9f && !immune) {
                 hit(me);
                 return decide("hit");
             }
@@ -619,19 +634,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
             else groundedJumps = 0;
 
             boolean breached = axeHeld && me.tickCount - lastAxeTick < 100;
-            if (breached && inReach && cd >= 0.95f && !immune) {
+            // 232146 axe expert adaptive: 47 ground hits of 3.65 into an opponent eating apples, two jumps all fight.
+            // A slow weapon is charged by the time the jump falls, so the crit costs nothing: only a sword hurries.
+            if (breached && hurry && inReach && cd >= 0.95f && !immune) {
                 hit(me); // its shield is on cooldown: land the follow-up as soon as the sword is charged
                 return decide("hit");
             }
             boolean diving = !target.onGround() && tv().y < -0.2 && target.getY() > me.getY() + 1.5;
             // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
             float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
-            if (!breached && !duel && !diving && !chase && !counter && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
+            if (!(breached && hurry) && !duel && !diving && !run && !counter && !(rushed && inReach) && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
                 key(Input.JUMP);
                 groundedJumps++;
                 return decide("jump");
             }
-            if (me.onGround() && inReach && cd >= (duel ? 0.9f : 0.95f) && !immune && (duel || !canJump || groundedJumps >= 4)) {
+            if (me.onGround() && inReach && cd >= (duel ? 0.9f : 0.95f) && !immune && (duel || !canJump || groundedJumps >= 4 || rushed)) {
                 boolean sprint = me.isSprinting();
                 hit(me);
                 if (sprint) {
