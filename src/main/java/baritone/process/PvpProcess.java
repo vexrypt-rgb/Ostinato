@@ -322,6 +322,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 lastShieldTick = me.tickCount;
                 return decide("block");
             }
+            if (pearlStage == 0 && eatTicks == 0 && macePhase == 0 && foeAimed(dist)) {
+                select(me, weapon(me));
+                look(target.getEyePosition());
+                use(false);
+                dodgeRanged(me);
+                return decide("dodge");
+            }
             if (blockTicks > 0) {
                 use(false);
                 blockTicks = 0;
@@ -1438,7 +1445,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             fireStage = 0;
         }
         int xb = slotOf(me, Items.CROSSBOW);
-        if (xb >= 0 && los && dist > 5 && dist < 70 && (slotOf(me, Items.ARROW) >= 0 || net.minecraft.world.item.CrossbowItem.isCharged(me.getInventory().getItem(xb)))) {
+        if (xbAdvance > 0) xbAdvance--;
+        // 135907 crossbow easy: shooting from 15 blocks for 1800 ticks never closed the gap. One bolt, then walk in for a while.
+        if (xb >= 0 && xbAdvance == 0 && los && dist > 5 && dist < 70 && (slotOf(me, Items.ARROW) >= 0 || net.minecraft.world.item.CrossbowItem.isCharged(me.getInventory().getItem(xb)))) {
             if (!select(me, xb)) return decide("swap");
             Vec3 at = arcAim(me.getEyePosition(), target.getBoundingBox().getCenter(), tv(), 3.15);
             look(at);
@@ -1450,6 +1459,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     press(ctx.minecraft().options.keyUse);
                     attacks++;
                     xbWait = 0;
+                    xbAdvance = 70;
                 }
             } else if (me.isUsingItem()) {
                 // a crossbow only loads when the use key is let go after the full draw
@@ -1843,27 +1853,48 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return true;
     }
 
+    /** Shield as the last resort against shots: only an arrow already in flight that will really hit us. */
     private boolean shouldBlock(Player me, double dist) {
         if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
-        ItemStack using = target.getUseItem();
-        if (target.isUsingItem() && (using.getItem() == Items.BOW || using.getItem() == Items.CROSSBOW) && dist > 4) {
-            foeDrawTick = me.tickCount;
-            return true;
-        }
-        // 064035 bow expert: the shield dropped on the tick the arrow left the string and our own shot started, and the arrow
-        // arrived 5 ticks later onto a shield still warming up. A released arrow is still in the air for dist / ~2.5 ticks.
-        if (dist > 4 && me.tickCount - foeDrawTick <= Math.min(24, dist / 2.5 + 5)) return true;
-        AABB around = me.getBoundingBox().inflate(6);
+        AABB around = me.getBoundingBox().inflate(18);
+        Vec3 chest = me.position().add(0, 1, 0);
         for (AbstractArrow a : ctx.world().getEntitiesOfClass(AbstractArrow.class, around, x -> true)) {
             Vec3 v = a.getDeltaMovement();
-            if (v.lengthSqr() < 0.25) continue;
-            Vec3 to = me.position().add(0, 1, 0).subtract(a.position());
-            if (to.normalize().dot(v.normalize()) > 0.9) return true;
+            double v2 = v.lengthSqr();
+            if (v2 < 0.25) continue;
+            Vec3 to = chest.subtract(a.position());
+            double t = to.dot(v) / v2; // ticks until closest approach
+            if (t < 0 || t > 9) continue;
+            if (to.subtract(v.scale(t)).length() < 1.4) return blockWhy(3);
         }
         return false;
     }
 
-    private int xbWait, foeDrawTick = -1000;
+    /** The foe has a bow or crossbow drawn or loaded and aimed from range. */
+    private boolean foeAimed(double dist) {
+        if (dist <= 5) return false;
+        ItemStack held = target.getMainHandItem();
+        if (held.getItem() == Items.BOW) return target.isUsingItem();
+        return held.getItem() == Items.CROSSBOW && (target.isUsingItem() || net.minecraft.world.item.CrossbowItem.isCharged(held));
+    }
+
+    private int dodgeLeft, dodgeDir = 1;
+
+    /** Close in on an aimed shooter, reversing sideways often enough that its lead on our velocity is wrong. */
+    private void dodgeRanged(Player me) {
+        if (--dodgeLeft <= 0) {
+            dodgeDir = -dodgeDir;
+            dodgeLeft = 4 + rng.nextInt(6);
+        }
+        key(Input.MOVE_FORWARD);
+        key(dodgeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
+        if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
+        if (me.onGround() && rng.nextInt(12) == 0) key(Input.JUMP);
+    }
+
+    private int blockWhy;
+    private boolean blockWhy(int w) { blockWhy = w; return true; }
+    private int xbAdvance, xbWait;
 
     /** Whether our view is within {@code deg} degrees of looking at the point. */
     private boolean aimedAt(Player me, Vec3 at, float deg) {
@@ -2434,7 +2465,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         eatTicks = blockTicks = duelOpenUntil = targetSwingTick = 0;
         axeHeld = flicked = false;
         swingGap = unseenBlock = probeTick = 0;
-        foeDrawTick = -1000;
+        xbAdvance = 0;
         lastShieldTick = lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
