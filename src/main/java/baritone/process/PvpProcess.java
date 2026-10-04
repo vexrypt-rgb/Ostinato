@@ -63,6 +63,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private String label;
     private LivingEntity target;
     private final Random rng = new Random(7);
+    private boolean chase;
     private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps, blockTicks;
     private boolean crystalFight;
     private int backingOff;
@@ -203,6 +204,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
         tickDec = "-";
         try {
             boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
+            // 210415 medium defensive: it backed off at 3.9 HP and ate for 80 ticks while every hop
+            // dropped the sprint just outside reach. 211205 safe: at 1 HP it ate for 500 ticks while
+            // the strafe ran parallel to its retreat. A target eating or walking away is run down
+            // in a straight line and hit on charge, no crit setup until it is in reach.
+            Vec3 gap = target.position().subtract(me.position());
+            chase = targetEating || gap.horizontalDistance() > 0.5
+                    && (tv().x * gap.x + tv().z * gap.z) / gap.horizontalDistance() > 0.1;
             // Horizontal only. A mace hop makes the 3D gap > 4.5 while they are about to land.
             boolean overhead = !target.onGround() && target.getY() > me.getY() + 1.0;
             boolean safe = horizontalBoxDist(me, target) > 4.5 && target.onGround() && !target.swinging || targetEating;
@@ -212,8 +220,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
             boolean charging = spearSlot(me) >= 0 && spearUseTicks > 0;
-            boolean critical = me.getHealth() <= 5;
-            if (eatTicks > 0 && overhead) {
+            // 211909 medium balanced: four apples started inside its sword reach, each dropped
+            // when its crit jump read as overhead, each bite costing a 6. Only a real dive (2 up)
+            // stops a bite, and with a shield in hand a bite does not start inside its reach.
+            boolean pressed = !targetEating && eyeToBox(me, target) < 3.8 && target.getMainHandItem().getItem() != Items.MACE
+                    && (me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0);
+            boolean critical = me.getHealth() <= 5 && (eatTicks > 0 || !pressed);
+            if (eatTicks > 0 && overhead && target.getY() > me.getY() + 2.0) {
                 use(false);
                 eatTicks = 0;
             } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
@@ -543,7 +556,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 critArmed = false;
                 return decide("hit");
             }
-            if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.5f) {
+            if (chase && inReach && cd >= 0.9f && !immune) {
+                hit(me);
+                return decide("hit");
+            }
+            if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.5f && (inReach || !chase)) {
                 wtap = Math.max(wtap, 1); // let go of forward for a tick so the sprint drops: a sprinting hit is never a crit
                 critArmed = true;
             }
@@ -562,7 +579,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean diving = !target.onGround() && tv().y < -0.2 && target.getY() > me.getY() + 1.5;
             // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
             float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
-            if (!breached && !diving && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
+            if (!breached && !diving && !chase && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
                 key(Input.JUMP);
                 groundedJumps++;
                 return decide("jump");
@@ -1263,6 +1280,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
             strafeDir = rng.nextBoolean() ? 1 : -1;
             strafeLeft = 10 + rng.nextInt(20);
         }
+        if (chase) {
+            wtap = 0;
+            key(Input.MOVE_FORWARD);
+            if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
+            if (dist > 3.5 && me.onGround() && me.isSprinting() && !me.isInWater()) key(Input.JUMP);
+            return;
+        }
         if (wtap > 0) {
             wtap--;
         } else if (dist > 2.4) {
@@ -1286,6 +1310,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private boolean meleeBlock(Player me, double dist) {
         if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
         if (dist > 4.2 || !me.onGround() || me.isInWater() || eatTicks > 0 || macePhase != 0) return false;
+        if (target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) return false; // it cannot swing mid-bite
+
         if (target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD || target.isBlocking()) {
             if (best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 60) return false;
         }
