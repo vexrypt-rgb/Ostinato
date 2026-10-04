@@ -239,7 +239,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             int sinceSwing = me.tickCount - targetSwingTick;
             boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16;
             pressed &= !opening;
-            boolean critical = me.getHealth() <= 5 && (eatTicks > 0 || !pressed);
+            // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
+            boolean critical = me.getHealth() <= 9 && (eatTicks > 0 || !pressed);
             boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
             if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
                 use(false);
@@ -310,7 +311,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             PathingCommand dive = underDive(me, dist, los);
             if (dive != null) return dive;
             if (pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
-                if (blockMelee) select(me, weapon(me)); // the use key must not start a bow or food in the main hand
+                // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
+                // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
+                select(me, weapon(me));
                 if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
                 look(target.getEyePosition());
                 if (blockMelee && dist > 2.4) key(Input.MOVE_FORWARD); // stay where the answer to its swing still reaches
@@ -1843,7 +1846,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private boolean shouldBlock(Player me, double dist) {
         if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
         ItemStack using = target.getUseItem();
-        if (target.isUsingItem() && (using.getItem() == Items.BOW || using.getItem() == Items.CROSSBOW) && dist > 4) return true;
+        if (target.isUsingItem() && (using.getItem() == Items.BOW || using.getItem() == Items.CROSSBOW) && dist > 4) {
+            foeDrawTick = me.tickCount;
+            return true;
+        }
+        // 064035 bow expert: the shield dropped on the tick the arrow left the string and our own shot started, and the arrow
+        // arrived 5 ticks later onto a shield still warming up. A released arrow is still in the air for dist / ~2.5 ticks.
+        if (dist > 4 && me.tickCount - foeDrawTick <= Math.min(24, dist / 2.5 + 5)) return true;
         AABB around = me.getBoundingBox().inflate(6);
         for (AbstractArrow a : ctx.world().getEntitiesOfClass(AbstractArrow.class, around, x -> true)) {
             Vec3 v = a.getDeltaMovement();
@@ -1854,7 +1863,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return false;
     }
 
-    private int xbWait;
+    private int xbWait, foeDrawTick = -1000;
 
     /** Whether our view is within {@code deg} degrees of looking at the point. */
     private boolean aimedAt(Player me, Vec3 at, float deg) {
@@ -2425,6 +2434,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         eatTicks = blockTicks = duelOpenUntil = targetSwingTick = 0;
         axeHeld = flicked = false;
         swingGap = unseenBlock = probeTick = 0;
+        foeDrawTick = -1000;
         lastShieldTick = lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
