@@ -274,6 +274,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     return decide("dig");
                 }
             }
+            // 1907 bench: they fell 8 blocks off the platform and no path follows a drop that deep, so
+            // 945 ticks went to standing at the edge. Walk off after them; with a mace the fall is a dive.
+            double drop = me.getY() - target.getY();
+            if (drop > 3.5 && drop < 20 && horizontalBoxDist(me, target) < 8 && eatTicks == 0
+                    && (slotOf(me, Items.MACE) >= 0 || me.getHealth() > drop + 4)) {
+                use(false);
+                int mace = slotOf(me, Items.MACE);
+                select(me, mace >= 0 ? mace : weapon(me));
+                look(target.getEyePosition());
+                key(Input.MOVE_FORWARD);
+                key(Input.SPRINT);
+                if (!me.onGround() && mace >= 0) {
+                    macePhase = 2;
+                    maceTicks = 5;
+                }
+                return decide("drop");
+            }
             if (dist > DRIVE || !los) {
                 // Charge needs a sprint runway. Baritone chase from 7 blocks never reaches 4.6 blocks/s
                 // before the pierce window, so a plain spear closes that gap on foot.
@@ -612,6 +629,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private int hopThrown;
     // ticks from the wind charge leaving the hand to the jump under it
     private static final int HOP_JUMP_DELAY = Integer.getInteger("ostinato.pvp.hopJumpDelay", 1);
+    private int flickLeft, flickAge;
     private int feetCool, feetTicks;
 
     private PathingCommand special(Player me, double dist, boolean los) {
@@ -857,6 +875,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 if (!select(me, wind)) return decide("swap");
                 aim(new Rotation(me.getYRot(), 90f), true);
                 hopThrown = -1;
+                flickLeft = 0;
+                flickAge = 100;
                 macePhase = 1;
                 maceTicks = 0;
             }
@@ -929,13 +949,42 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     maceCool = 8;
                     return decide("block");
                 }
+                flickAge++;
+                if (flickLeft > 0 && select(me, wind)) { // two ticks, so the server sees it
+                    flickLeft--;
+                    return decide("flick");
+                }
                 if (!select(me, mace)) return decide("swap");
                 // The fall is 0.9 a tick, 15 degrees of pitch at this range, and a look set now is read
                 // from the next tick's eye. Aim from there, or hit() finds the aim 10 degrees off and does not click.
                 Vec3 lead = spearKit ? aimPoint(me, target) : aimPoint(me, target).subtract(me.getDeltaMovement());
                 look(lead);
-                key(Input.MOVE_FORWARD);
-                key(Input.SPRINT);
+                // VexBot's SwordPvpController.isIncomingFallAttack raises its shield when a mace is 3 above it,
+                // inside 3.5 and falling at 0.3, and the shield blocks 5 ticks later. A dive that drops in
+                // slow and unsprinted meets it less often (4/5 at medium against 1/5 sprinting in).
+                boolean quiet = !spearKit && me.distanceTo(target) < 7;
+                if (!quiet) {
+                    key(Input.MOVE_FORWARD);
+                    key(Input.SPRINT);
+                } else if (!me.isSprinting() && (horizontalBoxDist(me, target) > 2.2 || me.getDeltaMovement().horizontalDistance() < 0.08)) {
+                    key(Input.MOVE_FORWARD);
+                }
+                if (!spearKit && wind >= 0 && !me.onGround() && flickAge > 40) {
+                    // The cooldown restarts when the held item changes: flick off the mace so the fall ends near 0.8.
+                    int n = 0;
+                    double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5;
+                    while (dy > 0 && n < 60) {
+                        v = (v - 0.08) * 0.98;
+                        dy += v;
+                        n++;
+                    }
+                    if (n >= 14 && n <= 26 && me.getAttackStrengthScale(0f) + n / 33f >= 0.84f) {
+                        flickAge = 0;
+                        flickLeft = 1;
+                        select(me, wind);
+                        return decide("flick");
+                    }
+                }
                 int sp = spearSlot(me), axe = best(me, AXES);
                 boolean shielded = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
                 if (shielded && axe >= 0 && me.fallDistance > 1.5 && me.tickCount - lastAxeTick > 20 && exactReach(me, target) <= REACH - 0.05) {
@@ -962,7 +1011,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 boolean landing = !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0));
                 float sc = me.getAttackStrengthScale(0f);
                 if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                        && (spearKit ? sc >= 0.99f : sc >= 0.9f || sc >= 0.65f && me.fallDistance >= 3 || landing && sc >= 0.5f) && target.hurtTime <= 0
+                        && (spearKit ? sc >= 0.99f : sc >= 0.6f || landing && sc >= 0.4f) && target.hurtTime <= 0
                         && exactReach(me, target) <= REACH - 0.05
                         // 1745 fight tick 91: the aim was off on the landing tick, hit() did not click, and the
                         // hop was written off as spent.
