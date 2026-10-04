@@ -221,15 +221,16 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
             boolean charging = spearSlot(me) >= 0 && spearUseTicks > 0;
             // 211909 medium balanced: four apples started inside its sword reach, each dropped
-            // when its crit jump read as overhead, each bite costing a 6. Only a real dive (2 up)
+            // when its crit jump read as overhead, each bite costing a 6. 212743 hard aggressive: a
+            // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
             // stops a bite, and with a shield in hand a bite does not start inside its reach.
-            boolean pressed = !targetEating && eyeToBox(me, target) < 3.8 && target.getMainHandItem().getItem() != Items.MACE
+            boolean pressed = !targetEating && eyeToBox(me, target) < 9 && target.getMainHandItem().getItem() != Items.MACE
                     && (me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0);
             boolean critical = me.getHealth() <= 5 && (eatTicks > 0 || !pressed);
             if (eatTicks > 0 && overhead && target.getY() > me.getY() + 2.0) {
                 use(false);
                 eatTicks = 0;
-            } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
+            } else if ((!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && safe && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
                     && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
@@ -1309,13 +1310,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
      */
     private boolean meleeBlock(Player me, double dist) {
         if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
-        if (dist > 4.2 || !me.onGround() || me.isInWater() || eatTicks > 0 || macePhase != 0) return false;
+        // 212743 hard aggressive: every 6 and 9 landed in the air after our own jump swing.
+        if (dist > 4.2 || me.isInWater() || eatTicks > 0 || macePhase != 0) return false;
         if (target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) return false; // it cannot swing mid-bite
 
         if (target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD || target.isBlocking()) {
             if (best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 60) return false;
         }
-        if (me.tickCount - lastAxeTick < 90) return false; // its shield is on cooldown: press
         if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
                 || isSpear(target.getMainHandItem())
                 || target.getMainHandItem().getItem() == Items.MACE)) return false;
