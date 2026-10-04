@@ -242,7 +242,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16;
             pressed &= !opening;
             // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
-            boolean critical = me.getHealth() <= 9 && (eatTicks > 0 || !pressed);
+            // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
+            boolean roomy = eyeToBox(me, target) > 6;
+            boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (eatTicks > 0 || !pressed);
             boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
             if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
                 use(false);
@@ -1992,6 +1994,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         if (!select(me, slotOf(me, apple))) return true;
         if (me.getMainHandItem().getItem() != apple) return true;
+        // a raised offhand shield stays in use across a hotbar switch, so the apple never starts: let go first
+        if (me.isUsingItem() && me.getUseItem().getItem() != apple) {
+            use(false);
+            return true;
+        }
         if (eatTicks++ == 0) gapples++;
         key(Input.MOVE_BACK); // back off while chewing
         use(true);
