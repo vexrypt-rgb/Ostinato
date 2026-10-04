@@ -34,7 +34,8 @@ public final class PvpRecorder {
     private Path file;
     private int ticks;
     private float dealt, taken, lastTargetHp, lastMyHp;
-    private int attacks, lastAttacks, hits, lastTargetHurt;
+    private int attacks, lastAttacks, hits, lastTargetHurt, lastOffDmg;
+    private net.minecraft.world.item.Item lastOff;
     private String targetName;
     private boolean targetDied;
 
@@ -96,6 +97,11 @@ public final class PvpRecorder {
                 ev.append('X');
             }
             lastTargetHurt = target.hurtTime;
+            net.minecraft.world.item.ItemStack off = me.getOffhandItem();
+            if (off.getItem() != lastOff) ev.append("O:").append(off.isEmpty() ? "none" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(off.getItem()).getPath());
+            lastOff = off.getItem();
+            if (off.isDamageableItem() && off.getDamageValue() != lastOffDmg) ev.append("dur").append(off.getMaxDamage() - off.getDamageValue());
+            lastOffDmg = off.getDamageValue();
             lastMyHp = myHp;
             lastTargetHp = tHp;
             float cd = me.getAttackStrengthScale(0.0f);

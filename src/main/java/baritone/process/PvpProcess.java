@@ -292,6 +292,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 probeTick = 0;
             }
             boolean blockMelee = spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
+            // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
+            // wings and pitch do not reset the fall distance, a wind burst under the feet does
+            int clutch = slotOf(me, Items.WIND_CHARGE);
+            if (clutch >= 0 && !me.onGround() && me.fallDistance > 12 && me.getDeltaMovement().y < -0.5 && groundGap(me) < 9
+                    && exactReach(me, target) > REACH + 1.5 && !me.isInWater()) {
+                if (!select(me, clutch)) return decide("swap");
+                throwStraightDown(me);
+                return decide("clutch");
+            }
             if (macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
                     && groundGap(me) < 4 + 12 * Math.min(1.0, -me.getDeltaMovement().y / 1.5)) {
                 // the dive is over (missed, blocked, or called off) and the wings are still pointed at the ground
@@ -753,7 +762,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return null;
         }
         // arrows, tridents, fireballs, potions: a wind charge on the projectile's path deflects it
-        if (wind >= 0 && macePhase == 0 && windCool == 0) {
+        // a mace carrier above us is the lethal one: the knock from its wind charge is not, and the shield needs the ticks
+        boolean diverAbove = target.getMainHandItem().getItem() == Items.MACE && !target.onGround() && target.getY() > me.getY() + 2
+                && me.getOffhandItem().getItem() == Items.SHIELD;
+        if (wind >= 0 && macePhase == 0 && windCool == 0 && !diverAbove) {
             for (net.minecraft.world.entity.projectile.Projectile pr : ctx.world().getEntitiesOfClass(net.minecraft.world.entity.projectile.Projectile.class,
                     me.getBoundingBox().inflate(14), e -> e.getOwner() != me && !e.onGround() && e.getDeltaMovement().lengthSqr() > 0.09)) {
                 Vec3 v = pr.getDeltaMovement(), rel = me.getEyePosition().subtract(pr.position());
@@ -1712,7 +1724,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean closeAbove = hzUp < 4 && target.getY() - me.getY() < 9 && target.getMainHandItem().getItem() == Items.MACE
                 && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
         double vy = Math.min(tv().y, tvRawY);
-        if (macePhase != 0 && !hop || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
+        if (macePhase != 0 && !hop || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised && !(me.getDeltaMovement().y < -0.3 && groundGap(me) < 20)) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
         if (pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
             if (me.position().distanceTo(pearlFrom) > 3.5 || pearlTicks++ > 40) return null;
             pearlFrom = pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
