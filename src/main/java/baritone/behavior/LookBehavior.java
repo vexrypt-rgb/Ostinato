@@ -80,6 +80,29 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
     }
 
+    private boolean human;
+
+    /**
+     * For this tick, the rotation that is sent is a hand's move from the last one: most of the way to the
+     * target, at most 60 degrees of yaw and 45 of pitch, in whole steps of the mouse at the current
+     * sensitivity. smoothLook only averages what the camera shows; the packet still carried the full snap.
+     */
+    public void human() {
+        this.human = true;
+    }
+
+    private Rotation humanStep(Rotation want) {
+        float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
+        float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
+        if (Math.abs(dy) > 1.5f) dy = net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f);
+        if (Math.abs(dp) > 1.5f) dp = net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f);
+        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
+        float step = (float) (f * f * f * 8.0 * 0.15); // degrees per mouse count, as MouseHandler turns the player
+        dy = Math.round(dy / step) * step;
+        dp = Math.round(dp / step) * step;
+        return new Rotation(cy + dy, net.minecraft.util.Mth.clamp(cp + dp, -90f, 90f));
+    }
+
     @Override
     public void onPlayerUpdate(PlayerUpdateEvent event) {
 
@@ -95,7 +118,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
 
                 this.prevRotation = new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
-                final Rotation actual = this.processor.peekRotation(this.target.rotation);
+                final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 ctx.player().setYRot(actual.getYaw());
                 ctx.player().setXRot(actual.getPitch());
                 break;
@@ -111,7 +134,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     while (this.smoothPitchBuffer.size() > Baritone.settings().smoothLookTicks.value) {
                         this.smoothPitchBuffer.removeFirst();
                     }
-                    if (this.target.mode == Target.Mode.SERVER) {
+                    if (this.human) {
+                        // the camera stays on the rotation that was sent
+                    } else if (this.target.mode == Target.Mode.SERVER) {
                         ctx.player().setYRot(this.prevRotation.getYaw());
                         ctx.player().setXRot(this.prevRotation.getPitch());
                     } else if (ctx.player().isFallFlying() ? Baritone.settings().elytraSmoothLook.value : Baritone.settings().smoothLook.value) {
@@ -126,6 +151,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
+                this.human = false;
                 break;
             }
             default:

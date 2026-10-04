@@ -608,6 +608,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
+    private boolean diveBlock;
+    private int hopThrown;
+    // ticks from the wind charge leaving the hand to the jump under it
+    private static final int HOP_JUMP_DELAY = Integer.getInteger("ostinato.pvp.hopJumpDelay", 1);
+    private int feetCool, feetTicks;
+
     private PathingCommand special(Player me, double dist, boolean los) {
         if (maceCool > 0) maceCool--;
         int mace = slotOf(me, Items.MACE), wind = slotOf(me, Items.WIND_CHARGE);
@@ -659,12 +665,31 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("wind");
         }
         // a diver still coming (no charge, or too close to counter): block the smash with the shield
-        if (macePhase == 0 && !target.onGround() && tv().y < -0.3 && dist < 11 && target.getY() > me.getY() + 1
+        // 1822 fight ticks 505-508: block, jump, block as the diver came inside one block of our height,
+        // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
+        boolean dive = !target.onGround() && tv().y < -0.3 && dist < 11 && target.getY() > me.getY() + 1;
+        if (dive) diveBlock = true;
+        else if (target.onGround() || dist > 11) diveBlock = false;
+        if (macePhase == 0 && (dive || diveBlock && hasShield)
                 && (me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0)) {
             if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
             look(target.getEyePosition());
             use(true);
             return decide("block");
+        }
+        // A wind charge at the feet of an opponent standing behind its shield or eating throws it off the
+        // spot and into the air, where the hop that follows finds it.
+        if (feetCool > 0) feetCool--;
+        if (wind >= 0 && macePhase == 0 && pearlStage == 0 && feetCool == 0 && windCool == 0 && me.onGround() && target.onGround() && los
+                && dist > 2.5 && dist < 10 && (target.isBlocking() || target.isUsingItem())) {
+            Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), target.position().add(0, 0.1, 0), ctx.playerRotations());
+            if (!select(me, wind)) return decide("swap");
+            if (!face(r.getYaw(), r.getPitch(), 3f) && ++feetTicks < 15) return decide("windfeet");
+            if (feetTicks < 15) press(ctx.minecraft().options.keyUse);
+            feetTicks = 0;
+            feetCool = 80;
+            windCool = 8;
+            return decide("windfeet");
         }
         // pearl strike: lob a pearl so it peaks above the target, pop it mid-air with a wind charge to teleport there, then drop the mace
         if (mace >= 0 && wind >= 0 && macePhase == 0 && (pearlStage > 0 || pearlCool == 0 && maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
@@ -784,8 +809,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     maceTicks = 0;
                 } else if (rocket < 0 && !boosted && maceTicks >= 2 && wind >= 0) {
                     if (!select(me, wind)) return decide("swap");
-                    throwStraightDown(me);
-                    boosted = true;
+                    if (throwStraightDown(me)) boosted = true;
                 } else if (me.getDeltaMovement().y < 0 && !me.onGround() && (rocket >= 0 || boosted)) {
                     if (maceTicks % 2 == 0) key(Input.JUMP);
                 } else if (maceTicks > 40) {
@@ -803,7 +827,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 aim = me.getEyePosition().add(flat.scale(12)).add(0, 14, 0); // ~50 degrees up
             }
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations());
-            baritone.getLookBehavior().updateTarget(r, true);
+            aim(r, true);
             double speed = me.getDeltaMovement().length();
             if (climbing && speed < 1.2 && maceTicks % 12 == 3) {
                 if (!select(me, rocket)) return decide("swap");
@@ -831,7 +855,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
             if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && dist > 1.0 && dist < 24 && los && wind >= 0) {
                 if (!select(me, wind)) return decide("swap");
-                key(Input.JUMP);
+                aim(new Rotation(me.getYRot(), 90f), true);
+                hopThrown = -1;
                 macePhase = 1;
                 maceTicks = 0;
             }
@@ -869,19 +894,30 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         key(Input.JUMP);
                         return decide("mace");
                     }
-                    throwStraightDown(me);
-                    macePhase = 2;
-                    maceTicks = 0;
+                    if (throwStraightDown(me)) {
+                        macePhase = 2;
+                        maceTicks = 0;
+                    }
                     return decide("mace");
                 }
                 // Do not look at the target or walk in. A 2.5 deg/tick look throws into the ground ahead.
                 if (!select(me, wind)) return decide("swap");
-                if (maceTicks >= 2 && !me.onGround()) {
-                    throwStraightDown(me);
+                // 1740 fight ticks 249-262: jumped, threw two ticks later, and the burst met the feet a block
+                // up for +0.84 and a 7 block hop. The burst is strongest at the feet: tip down on the ground,
+                // throw, and jump as it lands so the jump adds to it.
+                aim(new Rotation(me.getYRot(), 90f), true);
+                if (hopThrown < 0) {
+                    if (me.getXRot() >= 78f && me.onGround()) {
+                        press(ctx.minecraft().options.keyUse);
+                        hopThrown = maceTicks;
+                    } else if (maceTicks > 10) {
+                        macePhase = 0;
+                        maceCool = 20;
+                    }
+                } else if (maceTicks - hopThrown >= HOP_JUMP_DELAY) {
+                    key(Input.JUMP);
                     macePhase = 2;
                     maceTicks = 0;
-                } else if (maceTicks > 8 && me.onGround()) {
-                    macePhase = 0;
                 }
                 return decide("mace");
             }
@@ -937,7 +973,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     macePhase = 0;
                     maceCool = 14;
                     if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
-                } else if (me.onGround() || maceTicks > (spearKit ? 40 : 80)) {
+                } else if (me.onGround() && (spearKit || maceTicks > 4) || maceTicks > (spearKit ? 40 : 80)) {
                     // A hop that did not smash must not restart. Walk into the jab band first.
                     if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
                     macePhase = 0;
@@ -1149,7 +1185,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (++fleeTicks > 40 && dist < 6 && blk >= 0 && me.getY() - target.getY() < 5) {
             // can't shake it: tower up out of melee
             if (!select(me, blk)) return decide("swap");
-            baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90f), true);
+            aim(new Rotation(me.getYRot(), 90f), true);
             if (me.onGround()) key(Input.JUMP);
             else if (me.getDeltaMovement().y < 0.1 && ctx.world().getBlockState(me.blockPosition().below()).isAir()) click(me, me.blockPosition().below().below());
             return decide("pillar");
@@ -1386,8 +1422,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     /** Turn the view toward the angles with the smoothed look; true once it already points there within tol degrees. */
+    /** Every PvP look goes out as a bounded, mouse-stepped move; see LookBehavior.human(). */
+    private void aim(Rotation r, boolean blockInteract) {
+        baritone.getLookBehavior().human();
+        baritone.getLookBehavior().updateTarget(r, blockInteract);
+    }
+
     private boolean face(float yaw, float pitch, float tol) {
-        baritone.getLookBehavior().updateTarget(new Rotation(yaw, pitch), true);
+        aim(new Rotation(yaw, pitch), true);
         Player me = ctx.player();
         return Math.abs(Mth.wrapDegrees(yaw - me.getYRot())) <= tol && Math.abs(pitch - me.getXRot()) <= tol;
     }
@@ -1396,12 +1438,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * Foot wind-charge only. Pitch is set to 90 and use is pressed on this tick, before keybinds,
      * so the charge leaves straight down. A smoothed look makes it hit the ground ahead. Other aims stay human.
      */
-    private void throwStraightDown(Player me) {
-        float yaw = me.getYRot();
-        me.setXRot(90f);
-        System.out.println("VEXBENCH WIND down pitch=" + me.getXRot());
-        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 90f), true);
+    private boolean throwStraightDown(Player me) {
+        aim(new Rotation(me.getYRot(), 90f), true);
+        if (me.getXRot() < 78f) return false; // still tipping down: a 90 degree pitch change inside one tick is a snap
         press(ctx.minecraft().options.keyUse);
+        return true;
     }
 
     /** Left-click only if the crosshair is on the entity, as the mouse button would. */
@@ -1469,7 +1510,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             wanderP = Mth.clamp((wanderP + wanderVp) * 0.96, -1.0, 1.0);
             r = new Rotation(r.getYaw() + (float) wanderY, Mth.clamp(r.getPitch() + (float) wanderP, -90f, 90f));
         }
-        baritone.getLookBehavior().updateTarget(r, true);
+        aim(r, true);
     }
 
     /** With several opponents in reach, finish the weakest one rather than whichever was nearest first. */

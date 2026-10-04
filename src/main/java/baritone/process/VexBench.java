@@ -53,7 +53,7 @@ public final class VexBench implements AbstractGameEventListener {
     }
 
     // -Dostinato.vex.kit=sword|crystal|anchor|axe|bow|crossbow|cobweb|potion|mace|elytramace|spear|trident picks which of VexBot's combat modes the round exercises
-    private static final String[] KIT = switch (System.getProperty("ostinato.vex.kit", "sword")) {
+    private static final String[] KIT = enchant(switch (System.getProperty("ostinato.vex.kit", "sword")) {
         case "crystal" -> CRYSTAL_KIT;
         case "anchor" -> ANCHOR_KIT;
         case "axe" -> gear("hotbar.0 with diamond_axe", "hotbar.1 with golden_apple 8");
@@ -74,7 +74,29 @@ public final class VexBench implements AbstractGameEventListener {
         case "spear" -> gear("hotbar.0 with diamond_spear", "hotbar.1 with mace", "hotbar.2 with wind_charge 64", "hotbar.3 with golden_apple 8");
         case "trident" -> gear("hotbar.0 with trident", "hotbar.1 with mace", "hotbar.2 with wind_charge 64", "hotbar.3 with golden_apple 8");
         default -> SWORD_KIT;
-    };
+    });
+
+    // Max-level damage enchantments on both sides' weapons, so a round resolves inside ROUND_TICKS.
+    // Armour stays plain. -Dostinato.vex.enchant=false gives the bare kits.
+    private static String[] enchant(String[] kit) {
+        if ("false".equals(System.getProperty("ostinato.vex.enchant"))) return kit;
+        // Built here: KIT's initializer runs before any static field declared below it.
+        java.util.Map<String, String> enchants = java.util.Map.of(
+                "diamond_sword", "{\"minecraft:sharpness\":5}",
+                "diamond_axe", "{\"minecraft:sharpness\":5}",
+                "diamond_spear", "{\"minecraft:sharpness\":5}",
+                "mace", "{\"minecraft:density\":5}",
+                "bow", "{\"minecraft:power\":5}",
+                "crossbow", "{\"minecraft:quick_charge\":3,\"minecraft:piercing\":4}",
+                "trident", "{\"minecraft:loyalty\":3,\"minecraft:impaling\":5}");
+        String[] out = kit.clone();
+        for (int i = 0; i < out.length; i++) {
+            String[] t = out[i].split(" ", 4); // slot, "with", item, optional count
+            String e = enchants.get(t[2]);
+            if (e != null) out[i] = t[0] + " with " + t[2] + "[enchantments=" + e + "]" + (t.length > 3 ? " " + t[3] : "");
+        }
+        return out;
+    }
 
     private final Baritone baritone;
     private final int rounds;
