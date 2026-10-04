@@ -106,6 +106,7 @@ public final class VexBench implements AbstractGameEventListener {
     private final List<String> bots = new ArrayList<>();
     private boolean seen, done, setup;
     private float botDmg;
+    private static int fixedPadY = Integer.MIN_VALUE;
     private int padY; // grass top Y for the arena pad (absolute)
     private int spawnWait;
     private int wins;
@@ -261,8 +262,10 @@ public final class VexBench implements AbstractGameEventListener {
         LocalPlayer me = Minecraft.getInstance().player;
         int forced = Integer.getInteger("ostinato.vex.padY", Integer.MIN_VALUE);
         if (forced != Integer.MIN_VALUE) padY = forced;
+        else if (fixedPadY != Integer.MIN_VALUE) padY = fixedPadY; // one arena height for the whole session: no stacked pads
         else padY = (int) Math.floor(me.getY()) - 1;
         if (padY < me.level().getMinY()) padY = me.level().getMinY();
+        fixedPadY = padY;
         int airTop = padY + 16;
         String meName = me.getGameProfile().name();
         clearHostiles();
