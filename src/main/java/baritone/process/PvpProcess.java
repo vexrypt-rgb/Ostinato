@@ -238,7 +238,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
 
             // A spear that raises its shield here never steps into the 2-4 jab band.
-            boolean blockMelee = spearSlot(me) < 0 && meleeBlock(me, dist);
+            // 1654 bench: a mace's 33-tick cooldown kept the shield up for 405 of 1800 ticks, and
+            // the hop that makes the damage starts from the ground. A mace with wind charges hops.
+            boolean maceHop = slotOf(me, Items.MACE) >= 0 && slotOf(me, Items.WIND_CHARGE) >= 0;
+            boolean blockMelee = spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
             if (blockMelee || shouldBlock(me, dist)) {
                 if (blockMelee) select(me, weapon(me)); // the use key must not start a bow or food in the main hand
                 if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
@@ -508,22 +511,26 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 lastAxeTick = me.tickCount;
                 return decide("axe");
             }
-            if (!me.onGround() && !falling && targetReady && inReach && cd >= 0.95f && !immune) {
+            // Only in the first two ticks of a jump. A sword jumped at 0.55 is charged five ticks
+            // later, still rising, and this swing took the crit that was two ticks away.
+            if (!me.onGround() && me.getDeltaMovement().y > 0.25 && targetReady && inReach && cd >= 0.95f && !immune) {
                 hit(me); // don't hang in the air waiting for a crit while it swings first
                 critArmed = false;
                 return decide("hit");
             }
-            if (critArmed && falling && inReach && cd >= 0.9f && !immune) {
+            // 1740 fight tick 334: swung on the first tick with y speed below zero, before the move
+            // that makes fallDistance positive. Vanilla wants fallDistance > 0, so it was a plain 1.56.
+            if (critArmed && falling && me.fallDistance > 0 && inReach && cd >= 0.9f && !immune) {
                 hit(me);
                 crits++;
                 critArmed = false;
                 return decide("hit");
             }
-            if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.75f) {
+            if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.5f) {
                 wtap = Math.max(wtap, 1); // let go of forward for a tick so the sprint drops: a sprinting hit is never a crit
                 critArmed = true;
             }
-            if (!me.onGround() && !critArmed && inReach && cd >= 0.95f && !immune) {
+            if (!me.onGround() && !critArmed && me.getDeltaMovement().y < 0.08 && inReach && cd >= 0.95f && !immune) {
                 hit(me); // knocked airborne without a crit set up: don't waste the cooldown
                 return decide("hit");
             }
@@ -536,7 +543,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 return decide("hit");
             }
             boolean diving = !target.onGround() && tv().y < -0.2 && target.getY() > me.getY() + 1.5;
-            if (!breached && !diving && canJump && dist <= REACH + 0.8 && cd >= 0.55f && !immune && groundedJumps < 4) {
+            // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
+            float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
+            if (!breached && !diving && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
                 key(Input.JUMP);
                 groundedJumps++;
                 return decide("jump");
@@ -635,8 +644,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         // an airborne opponent diving at us: a wind charge on its predicted path knocks it off the smash
-        if (wind >= 0 && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
-                && (tv().y < -0.1 || target.getY() > me.getY() + 2)) {
+        // Only a real dive. Every ordinary jump matched the old test, which was 347 of 1800 ticks.
+        // 1726 bench: 235 ticks of this and the 9.1 smashes landed anyway. A shield stops a smash, so a kit
+        // with one blocks below and keeps the mace in hand and charged.
+        boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0;
+        if (wind >= 0 && !hasShield && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
+                && target.getY() > me.getY() + 2) {
             Vec3 at = target.getBoundingBox().getCenter().add(tv().scale(dist / 1.5));
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
             if (!select(me, wind)) return decide("swap");
@@ -815,7 +828,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean spearKit = spearSlot(me) >= 0;
             boolean canJump = me.onGround() && !me.isInWater();
             // Spear kit starts the smash from spearTools, and only from just outside the jab.
-            if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && dist > 2.5 && dist < 24 && los && wind >= 0) {
+            // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
+            if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && dist > 1.0 && dist < 24 && los && wind >= 0) {
                 if (!select(me, wind)) return decide("swap");
                 key(Input.JUMP);
                 macePhase = 1;
@@ -860,8 +874,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     maceTicks = 0;
                     return decide("mace");
                 }
-                if (!select(me, wind)) return decide("swap");
                 // Do not look at the target or walk in. A 2.5 deg/tick look throws into the ground ahead.
+                if (!select(me, wind)) return decide("swap");
                 if (maceTicks >= 2 && !me.onGround()) {
                     throwStraightDown(me);
                     macePhase = 2;
@@ -880,7 +894,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     return decide("block");
                 }
                 if (!select(me, mace)) return decide("swap");
-                look(aimPoint(me, target));
+                // The fall is 0.9 a tick, 15 degrees of pitch at this range, and a look set now is read
+                // from the next tick's eye. Aim from there, or hit() finds the aim 10 degrees off and does not click.
+                Vec3 lead = spearKit ? aimPoint(me, target) : aimPoint(me, target).subtract(me.getDeltaMovement());
+                look(lead);
                 key(Input.MOVE_FORWARD);
                 key(Input.SPRINT);
                 int sp = spearSlot(me), axe = best(me, AXES);
@@ -903,18 +920,28 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     spearCool = 45 - lungeLvl * 5;
                     return decide("lunge");
                 }
+                // 1740 fight ticks 249-277: the swap back to the mace zeroes a 33-tick cooldown and the
+                // hop lands 28 ticks later at 0.78, so a 0.99 gate never opened. The fall bonus scales
+                // with the charge: swing on the last tick before the ground with whatever is there.
+                boolean landing = !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0));
+                float sc = me.getAttackStrengthScale(0f);
                 if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                        && me.getAttackStrengthScale(0f) >= 0.99f && target.hurtTime <= 0
+                        && (spearKit ? sc >= 0.99f : sc >= 0.9f || sc >= 0.65f && me.fallDistance >= 3 || landing && sc >= 0.5f) && target.hurtTime <= 0
                         && exactReach(me, target) <= REACH - 0.05
-                        && (me.fallDistance >= 3 || !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0)))) {
+                        // 1745 fight tick 91: the aim was off on the landing tick, hit() did not click, and the
+                        // hop was written off as spent.
+                        && (spearKit || aimedAt(me, aimPoint(me, target), 10f))
+                        && (me.fallDistance >= 3 || landing)) {
                     hit(me);
+                    if (!spearKit) look(lead);
                     macePhase = 0;
                     maceCool = 14;
-                } else if (me.onGround() || maceTicks > 40) {
+                    if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                } else if (me.onGround() || maceTicks > (spearKit ? 40 : 80)) {
                     // A hop that did not smash must not restart. Walk into the jab band first.
-                    if (spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                    if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
                     macePhase = 0;
-                    maceCool = 300;
+                    maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
                 }
                 return decide("mace");
             }
@@ -1043,6 +1070,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Hotbar slot of a plain spear (unenchanted diamond_spear etc.), or -1. */
     private int spearSlot(Player me) {
+        // 1626 bench, 17 rounds: the spear routine dealt 0-4 a round and died in 11. A plain jab
+        // is 0.96 through diamond and a smash is 4-7, so a kit with a mace and wind charges
+        // plays the mace and leaves the spear in the hotbar.
+        if (slotOf(me, Items.MACE) >= 0 && (slotOf(me, Items.WIND_CHARGE) >= 0 || me.getOffhandItem().getItem() == Items.WIND_CHARGE)) return -1;
         int byItem = best(me, SPEARS);
         if (byItem >= 0) return byItem;
         for (int i = 0; i < 9; i++) {
