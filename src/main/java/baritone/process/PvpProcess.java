@@ -207,7 +207,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (!recorder.active()) recorder.begin(me, target, label);
         tickDec = "-";
         try {
-            boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
+            // 230839 axe hard safe: it ate six apples with no use flag on the client while we stood at 6 HP with
+            // eight of our own, "pressed" by an opponent holding food. A main hand full of food is not swinging a weapon.
+            boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)
+                    || target.getMainHandItem().has(net.minecraft.core.component.DataComponents.FOOD);
             // 210415 medium defensive: it backed off at 3.9 HP and ate for 80 ticks while every hop
             // dropped the sprint just outside reach. 211205 safe: at 1 HP it ate for 500 ticks while
             // the strafe ran parallel to its retreat. A target eating or walking away is run down
