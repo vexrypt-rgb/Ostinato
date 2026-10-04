@@ -91,6 +91,39 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         this.human = true;
     }
 
+    /**
+     * Prototype (the frameLook setting): between ticks the view keeps moving toward the last aim goal, one small
+     * mouse-count step per rendered frame, as a hand does, instead of arriving in one jump at the tick. The goal is
+     * dropped after two ticks without a refresh, so a stale aim never drags the view.
+     */
+        private Rotation frameGoal;
+    private int frameGoalTick;
+    private long lastFrameNanos;
+
+    public void frame() {
+        if (!Baritone.settings().frameLook.value) return;
+        long now = System.nanoTime();
+        double ticks = lastFrameNanos == 0 ? 0 : Math.min(2.0, (now - lastFrameNanos) / 50_000_000.0);
+        lastFrameNanos = now;
+        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        if (frameGoal == null || p == null || ticks <= 0) return;
+        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().screen != null) {
+            frameGoal = null;
+            return;
+        }
+        float dy = net.minecraft.util.Mth.wrapDegrees(frameGoal.getYaw() - p.getYRot()), dp = frameGoal.getPitch() - p.getXRot();
+        // the tick step closes 60% of the gap per tick: the same rate, in frame-sized pieces
+        float k = (float) (1 - Math.pow(0.4, ticks));
+        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
+        float step = (float) (f * f * f * 8.0 * 0.15);
+        float my = Math.round(dy * k / step) * step, mp = Math.round(dp * k / step) * step;
+        if (my == 0 && mp == 0) return;
+        p.setYRot(p.getYRot() + my);
+        p.setXRot(net.minecraft.util.Mth.clamp(p.getXRot() + mp, -90f, 90f));
+        p.yRotO += my;
+        p.xRotO = net.minecraft.util.Mth.clamp(p.xRotO + mp, -90f, 90f);
+    }
+
     private float velYaw, velPitch;
     private final java.util.Random handNoise = new java.util.Random();
 
@@ -159,6 +192,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     }
                     if (this.human) {
                         // the camera stays on the rotation that was sent
+                        this.frameGoal = this.target.rotation;
+                        this.frameGoalTick = ctx.player().tickCount;
                     } else if (this.target.mode == Target.Mode.SERVER) {
                         ctx.player().setYRot(this.prevRotation.getYaw());
                         ctx.player().setXRot(this.prevRotation.getPitch());

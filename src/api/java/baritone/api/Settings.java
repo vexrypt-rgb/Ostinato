@@ -805,6 +805,12 @@ public final class Settings {
     public final Setting<Boolean> smoothLook = new Setting<>(false);
 
     /**
+     * Prototype: between ticks the view keeps moving toward the last aim goal in mouse-count steps, one per rendered
+     * frame, instead of arriving in one jump at the tick. Only used by the PvP look.
+     */
+    public final Setting<Boolean> frameLook = new Setting<>(false);
+
+    /**
      * Same as {@link #smoothLook} but for elytra flying.
      */
     public final Setting<Boolean> elytraSmoothLook = new Setting<>(false);

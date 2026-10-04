@@ -170,6 +170,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         float hp = me.getHealth() + me.getAbsorptionAmount();
         if (lastHealth >= 0 && hp < lastHealth) damageTaken += lastHealth - hp;
         boolean respawned = lastHealth >= 0 && lastHealth < 5 && hp > lastHealth + 8;
+        if (respawned) kitCount.clear();
         lastHealth = hp;
         // Bench respawn drops the kit before VexBench's item replace lands. Do not swing naked.
         if (Integer.getInteger("ostinato.vexbench", 0) > 0 && (respawned
@@ -206,6 +207,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         trackTarget();
         if (!recorder.active()) recorder.begin(me, target, label);
         tickDec = "-";
+        noteBreaks(me);
         try {
             // 230839 axe hard safe: it ate six apples with no use flag on the client while we stood at 6 HP with
             // eight of our own, "pressed" by an opponent holding food. A main hand full of food is not swinging a weapon.
@@ -693,7 +695,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                             + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + clickKind,
-                    tickDec, attacks);
+                    tickDec + brokeNote, attacks);
             clickKind = '-';
         }
     }
@@ -795,7 +797,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // 1726 bench: 235 ticks of this and the 9.1 smashes landed anyway. A shield stops a smash, so a kit
         // with one blocks below and keeps the mace in hand and charged.
         boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0;
-        if (wind >= 0 && !hasShield && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
+        // a shield kit still gets one charge at a diver that is high and far (the shield needs its five ticks only once the diver is close)
+        boolean farDiver = hasShield && dist > 5 && target.getY() > me.getY() + 4 && tv().y < 0.1;
+        if (wind >= 0 && (!hasShield || farDiver) && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
                 && target.getY() > me.getY() + 2) {
             Vec3 at = target.getBoundingBox().getCenter().add(tv().scale(dist / 1.5));
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
@@ -1892,6 +1896,33 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (me.onGround() && rng.nextInt(12) == 0) key(Input.JUMP);
     }
 
+    private final java.util.Map<Item, Integer> kitCount = new java.util.HashMap<>();
+    private String brokeNote = "";
+
+    /**
+     * An item that used up its durability simply vanishes. Count the damageable combat items each tick: one fewer than
+     * last tick is a break (a trident is thrown, not broken, so it is not counted). The shield, the weapon in hand and any
+     * held use key were all keyed to the lost item, so drop them and let the next tick pick again.
+     */
+    private void noteBreaks(Player me) {
+        brokeNote = "";
+        java.util.Map<Item, Integer> now = new java.util.HashMap<>();
+        for (int i = 0; i < me.getInventory().getContainerSize(); i++) {
+            ItemStack st = me.getInventory().getItem(i);
+            if (st.isDamageableItem() && st.getItem() != Items.TRIDENT && st.getItem() != Items.ELYTRA && !st.isEmpty()) now.merge(st.getItem(), 1, Integer::sum);
+        }
+        for (java.util.Map.Entry<Item, Integer> e : kitCount.entrySet()) {
+            if (now.getOrDefault(e.getKey(), 0) < e.getValue() && me.isAlive() && me.getHealth() > 0) {
+                brokeNote += " broke:" + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.getKey()).getPath();
+                blockTicks = 0;
+                lastShieldTick = -1000;
+                use(false);
+            }
+        }
+        kitCount.clear();
+        kitCount.putAll(now);
+    }
+
     private int blockWhy;
     private boolean blockWhy(int w) { blockWhy = w; return true; }
     private int xbAdvance, xbWait;
@@ -2466,6 +2497,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         axeHeld = flicked = false;
         swingGap = unseenBlock = probeTick = 0;
         xbAdvance = 0;
+        kitCount.clear();
         lastShieldTick = lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();

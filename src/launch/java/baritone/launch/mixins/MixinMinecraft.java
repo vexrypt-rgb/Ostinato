@@ -76,6 +76,14 @@ public class MixinMinecraft {
         mc.createWorldOpenFlows().openWorld("vexflat", () -> {});
     }
 
+    /** Every rendered frame, not just every tick: the look layer's per-frame mouse prototype. */
+    @Inject(method = "runTick", at = @At("HEAD"))
+    private void ostinato$frame(boolean renderLevel, CallbackInfo ci) {
+        for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (baritone.getLookBehavior() instanceof baritone.behavior.LookBehavior lb) lb.frame();
+        }
+    }
+
     @Inject(
             method = "<init>",
             at = @At("RETURN")

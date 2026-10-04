@@ -229,6 +229,7 @@
  "allowPlaceInFluidsSource": "Allow Baritone to place blocks in fluid source blocks",
  "allowPlaceInFluidsFlow": "Allow Baritone to place blocks in flowing fluid",
  "allowJumpAtBuildLimit": "If true, parkour is allowed to make jumps when standing on blocks at the maximum height, so player feet is y=256 Defaults to false because this fails on constantiam. Please let me know if this is ever disabled. Please.",
+ "frameLook": "Prototype: the PvP view keeps moving toward the aim goal in small mouse-count steps every rendered frame, instead of one jump per tick.",
  "smoothLook": "Forces the client-sided yaw rotation to an average of the last smoothLookTicks of server-sided rotations.",
  "smoothLookTicks": "The number of ticks to average across for smoothLook;",
  "farmUsingSelection": "When enabled, farming will be restricted to the current selection.",
