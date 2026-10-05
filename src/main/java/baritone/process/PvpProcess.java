@@ -820,7 +820,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
         // 000432 ticks 443-452: the diver topped out nine blocks up at 443, passed -0.3 at 448 and landed its mace
         // at 452, on the shield's fifth tick. From three blocks up the turn at the top is already the dive.
-        boolean dive = !target.onGround() && dist < 11 && (tv().y < -0.3 && target.getY() > me.getY() + 1 || tv().y < 0.1 && target.getY() > me.getY() + 3);
+        // the smoothed position velocity still reads the climb for four ticks after the diver has turned over: its own
+        // reported velocity is already negative at the top, and a shield needs five ticks before the smash
+        double diveVy = Math.min(tv().y, target.getDeltaMovement().y);
+        boolean dive = !target.onGround() && dist < 11 && (diveVy < -0.3 && target.getY() > me.getY() + 1 || diveVy < 0.1 && target.getY() > me.getY() + 3);
         if (dive) diveBlock = true;
         else if (target.onGround() || dist > 11) diveBlock = false;
         if (macePhase == 0 && (dive || diveBlock && hasShield)
