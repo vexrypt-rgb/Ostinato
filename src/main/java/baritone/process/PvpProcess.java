@@ -64,8 +64,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private final Random rng = new Random(7);
     private boolean chase;
     /** The hit being watched. */
-    private int probeTick, probeSince;
-    private char clickKind = '-';
     private int duelOpenUntil, lastSeenTick;
     private float lastHealth = -1;
     private final PvpRecorder recorder = new PvpRecorder();
@@ -268,7 +266,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 duelOpenUntil = shield.targetSwingTick = 0;
                 shield.lastShieldTick = shield.lastAxeTick = -1000;
                 shield.axeHeld = shield.flicked = false;
-                shield.swingGap = shield.unseenBlock = probeTick = 0;
+                shield.swingGap = shield.unseenBlock = click.probeTick = 0;
             }
             // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
             if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
@@ -281,11 +279,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             // a click that connected and left it unhurt met a shield the client was never shown:
             // remember how long after its swing that was and keep the sword out of that window
-            if (probeTick > 0 && me.tickCount - probeTick >= 3) {
-                if (target.hurtTime == 0 && target.getOffhandItem().getItem() == Items.SHIELD && probeSince < 20)
-                    shield.unseenBlock = Math.max(shield.unseenBlock, probeSince + 1);
-                probeTick = 0;
-            }
+            click.settle(me, target);
             boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && shield.meleeBlock(me, target, dist);
             // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
             // wings and pitch do not reset the fall distance, a wind burst under the feet does
@@ -454,9 +448,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
                             + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
-                            + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + clickKind,
+                            + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + click.clickKind,
                     tickDec + brokeNote, attacks);
-            clickKind = '-';
+            click.clickKind = '-';
         }
     }
 
@@ -498,6 +492,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public int eatTicks() { return survival.eatTicks; }
         public void blockStarted() { blocks++; }
+    });
+    private final CombatClick click = new CombatClick(ctx.minecraft(), aimer, swing, targeting, shield, new CombatClick.Hands() {
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void attacked() { attacks++; }
     });
     private final CombatMelee melee = new CombatMelee(inv, targeting, shield, movement, new CombatMelee.Hands() {
         public void key(Input in) { PvpProcess.this.key(in); }
@@ -685,46 +683,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Turn the view toward the angles with the smoothed look; true once it already points there within tol degrees. */
     /** Every PvP look goes out as a bounded, mouse-stepped move; see LookBehavior.human(). */
-    /** Left-click only if the crosshair is on the entity, as the mouse button would. */
-    private boolean hit(Player me, Entity e) {
-        if (!(ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != e) return false;
-        press(ctx.minecraft().options.keyAttack);
-        return true;
-    }
+    private boolean hit(Player me, Entity e) { return click.hit(me, e); }
 
-    private boolean hit(Player me) {
-        boolean spearAim = isSpear(me.getMainHandItem());
-        Vec3 aim = spearAim ? aimPoint(me, target) : swing.swingPoint(me, target, tv());
-        look(aim);
-        double er = exactReach(me, target);
-        boolean spear = isSpear(me.getMainHandItem());
-        if (spear) {
-            // Piercing jab raycasts along the look vector. A click that is merely near the eyes misses
-            // and, below full charge, is rejected. Do not press attack unless this ray connects.
-            if (!swing.spearRayHits(me, target)) return false;
-            press(ctx.minecraft().options.keyAttack);
-            attacks++;
-            return true;
-        }
-        // 003156 mace medium: twelve dives came down on its head and none clicked. Falling 1.2 a tick past a target
-        // a block away the bearing swings 40 degrees a tick, and the look is always one behind it. The crosshair
-        // being on the entity is what a click needs; the angle only guards a swing on level ground.
-        boolean onIt = me.fallDistance > 1.5 && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult on && on.getEntity() == target;
-        if (!onIt && !aimer.aimedAt(me, aim, 10f)) { clickKind = 'a'; return false; } // must be looking at the target
-        if (hit(me, target)) {
-            attacks++;
-            clickKind = 'E';
-            if (!me.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)) {
-                probeTick = me.tickCount;
-                probeSince = me.tickCount - shield.targetSwingTick;
-            }
-            return true;
-        }
-        // 223541 expert adaptive t32: a click with the crosshair beside the hitbox swung at air and spent
-        // the full charge. The click is handled this tick against the pick already made, so no entity, no click.
-        clickKind = 'r';
-        return false;
-    }
+    private boolean hit(Player me) { return click.hit(me, target); }
 
     private void key(Input in) {
         baritone.getInputOverrideHandler().setInputForceState(in, true);
@@ -746,7 +707,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         target = null;
         survival.eatTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
         shield.axeHeld = shield.flicked = false;
-        shield.swingGap = shield.unseenBlock = probeTick = 0;
+        shield.swingGap = shield.unseenBlock = click.probeTick = 0;
         tools.reset();
         inv.resetBreaks();
         shield.lastShieldTick = shield.lastAxeTick = -1000; // tickCount restarts with the respawned player
