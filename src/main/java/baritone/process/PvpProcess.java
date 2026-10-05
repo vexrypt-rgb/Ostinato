@@ -63,10 +63,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private LivingEntity target;
     private final Random rng = new Random(7);
     private boolean chase;
-    private int groundedJumps;
     /** The hit being watched. */
     private int probeTick, probeSince;
-    private boolean critArmed;
     private char clickKind = '-';
     private int duelOpenUntil, lastSeenTick;
     private float lastHealth = -1;
@@ -343,7 +341,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
             if (explosives.crystal(me, target)) {
-                if (dist <= DRIVE) movement.steer(me, target, dist, chase, critArmed);
+                if (dist <= DRIVE) movement.steer(me, target, dist, chase, melee.critArmed);
                 return decide("crystal");
             }
             PathingCommand sp = special(me, dist, los);
@@ -626,76 +624,19 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 }
                 return decide("spear_hold"); // inside the band: no step in or out this tick
             }
-            if (!inReach) movement.steer(me, target, dist, chase, critArmed);
-            else if (dist < 1.4) key(Input.MOVE_BACK); // sword: too close, make space
-            // its reach is measured centre to centre, a little shorter than ours: recharge just outside it
-            else if (duel && cd < 0.75f && dist < 2.9) key(Input.MOVE_BACK);
-            if (me.hurtTime == me.hurtDuration - 1 && canJump) key(Input.JUMP); // jump reset
-
-            if (axeTime && inReach && me.tickCount - shield.lastShieldTick >= 2) { // an axe disables a raised shield whatever the charge
-                if (hit(me)) { // only a click that connected starts the wait for its shield
-                    axeHits++;
-                    shield.lastAxeTick = me.tickCount;
-                    shield.axeHeld = true;
-                }
-                return decide("axe");
-            }
-            // Only in the first two ticks of a jump. A sword jumped at 0.55 is charged five ticks
-            // later, still rising, and this swing took the crit that was two ticks away.
-            if (!me.onGround() && (me.getDeltaMovement().y > 0.25 && targetReady || !falling && rushed) && inReach && cd >= 0.95f && !immune) {
-                hit(me); // don't hang in the air waiting for a crit while it swings first
-                critArmed = false;
-                return decide("hit");
-            }
-            // 1740 fight tick 334: swung on the first tick with y speed below zero, before the move
-            // that makes fallDistance positive. Vanilla wants fallDistance > 0, so it was a plain 1.56.
-            if (critArmed && falling && me.fallDistance > 0 && inReach && cd >= 0.9f && !immune) {
-                hit(me);
-                crits++;
-                critArmed = false;
-                return decide("hit");
-            }
-            if ((run || shield.counter) && inReach && cd >= 0.9f && !immune) {
-                hit(me);
-                return decide("hit");
-            }
-            if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.5f && (inReach || !chase)) {
-                movement.wtap = Math.max(movement.wtap, 1); // let go of forward for a tick so the sprint drops: a sprinting hit is never a crit
-                critArmed = true;
-            }
-            if (!me.onGround() && !critArmed && me.getDeltaMovement().y < 0.08 && inReach && cd >= 0.95f && !immune) {
-                hit(me); // knocked airborne without a crit set up: don't waste the cooldown
-                return decide("hit");
-            }
-            if (me.onGround()) critArmed = false;
-            else groundedJumps = 0;
-
-            boolean breached = shield.axeHeld && me.tickCount - shield.lastAxeTick < 100;
-            // 232146 axe expert adaptive: 47 ground hits of 3.65 into an opponent eating apples, two jumps all fight.
-            // A slow weapon is charged by the time the jump falls, so the crit costs nothing: only a sword hurries.
-            if (breached && hurry && inReach && cd >= 0.95f && !immune) {
-                hit(me); // its shield is on cooldown: land the follow-up as soon as the sword is charged
-                return decide("hit");
-            }
-            boolean diving = !target.onGround() && tv().y < -0.2 && target.getY() > me.getY() + 1.5;
-            // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
-            float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
-            if (!(breached && hurry) && !duel && !diving && !run && !shield.counter && !(rushed && inReach) && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
-                key(Input.JUMP);
-                groundedJumps++;
-                return decide("jump");
-            }
-            if (me.onGround() && inReach && cd >= (duel ? 0.9f : 0.95f) && !immune && (duel || !canJump || groundedJumps >= 4 || rushed)) {
-                boolean sprint = me.isSprinting();
-                hit(me);
-                if (sprint) {
-                    sprintHits++;
-                    movement.wtap = 2;
-                }
-                groundedJumps = 0;
-                return decide("hit");
-            }
-            return decide("strafe");
+            melee.inReach = inReach;
+            melee.chase = chase;
+            melee.duel = duel;
+            melee.canJump = canJump;
+            melee.axeTime = axeTime;
+            melee.targetReady = targetReady;
+            melee.falling = falling;
+            melee.rushed = rushed;
+            melee.immune = immune;
+            melee.run = run;
+            melee.hurry = hurry;
+            melee.cd = cd;
+            return melee.exchange(me, target, dist);
         } finally {
             recorder.tick(me, target, eyeToBox(me, target),
                     targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
@@ -745,6 +686,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public int eatTicks() { return survival.eatTicks; }
         public void blockStarted() { blocks++; }
+    });
+    private final CombatMelee melee = new CombatMelee(inv, targeting, shield, movement, new CombatMelee.Hands() {
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public void axeHit() { axeHits++; }
+        public void crit() { crits++; }
+        public void sprintHit() { sprintHits++; }
     });
     private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
