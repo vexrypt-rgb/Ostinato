@@ -28,6 +28,7 @@ final class CombatShield {
         PathingCommand decide(String d);
         int eatTicks();
         void blockStarted();
+        void dodge(Player me);
     }
 
     int blockTicks, lastShieldTick = -1000, lastAxeTick = -1000, targetSwingTick;
@@ -72,6 +73,37 @@ final class CombatShield {
             if (sinceLast >= 6 && sinceLast <= 40) swingGap = sinceLast;
             targetSwingTick = me.tickCount;
         }
+    }
+
+    /**
+     * Raise the shield against a melee swing or an arrow in flight, or step out of a ranged aim; otherwise let the
+     * shield down if it was up. Null when neither applies. {@code blockMelee} is {@link #meleeBlock}'s verdict.
+     */
+    PathingCommand guard(Player me, LivingEntity target, double dist, boolean blockMelee) {
+        if (phase.pearlStage == 0 && (blockMelee || defense.arrowIncoming(me))) {
+            // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
+            // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
+            hands.select(me, inv.weapon(me));
+            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
+            hands.look(target.getEyePosition());
+            if (blockMelee && dist > 2.4) hands.key(Input.MOVE_FORWARD); // stay where the answer to its swing still reaches
+            hands.use(true);
+            if (blockTicks++ == 0) hands.blockStarted();
+            lastShieldTick = me.tickCount;
+            return hands.decide("block");
+        }
+        if (phase.pearlStage == 0 && hands.eatTicks() == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
+            hands.select(me, inv.weapon(me));
+            hands.look(target.getEyePosition());
+            hands.use(false);
+            hands.dodge(me);
+            return hands.decide("dodge");
+        }
+        if (blockTicks > 0) {
+            hands.use(false);
+            blockTicks = 0;
+        }
+        return null;
     }
 
     /**

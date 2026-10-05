@@ -250,29 +250,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (flared != null) return flared;
             PathingCommand dive = shield.underDive(me, target, dist, los);
             if (dive != null) return dive;
-            if (phase.pearlStage == 0 && (blockMelee || defense.arrowIncoming(me))) {
-                // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
-                // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
-                select(me, inv.weapon(me));
-                if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                look(target.getEyePosition());
-                if (blockMelee && dist > 2.4) key(Input.MOVE_FORWARD); // stay where the answer to its swing still reaches
-                use(true);
-                if (shield.blockTicks++ == 0) blocks++;
-                shield.lastShieldTick = me.tickCount;
-                return decide("block");
-            }
-            if (phase.pearlStage == 0 && survival.eatTicks == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
-                select(me, inv.weapon(me));
-                look(target.getEyePosition());
-                use(false);
-                movement.dodgeRanged(me);
-                return decide("dodge");
-            }
-            if (shield.blockTicks > 0) {
-                use(false);
-                shield.blockTicks = 0;
-            }
+            PathingCommand guarded = shield.guard(me, target, dist, blockMelee);
+            if (guarded != null) return guarded;
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
             if (explosives.crystal(me, target)) {
@@ -445,6 +424,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public int eatTicks() { return survival.eatTicks; }
         public void blockStarted() { blocks++; }
+        public void dodge(Player me) { movement.dodgeRanged(me); }
     });
     private final CombatClick click = new CombatClick(ctx.minecraft(), aimer, swing, targeting, shield, new CombatClick.Hands() {
         public void look(Vec3 at) { PvpProcess.this.look(at); }
