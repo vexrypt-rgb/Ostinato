@@ -63,7 +63,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private LivingEntity target;
     private final Random rng = new Random(7);
     private boolean chase;
-    private int strafeDir = 1, strafeLeft, wtap, groundedJumps;
+    private int groundedJumps;
     /** The hit being watched. */
     private int probeTick, probeSince;
     private boolean critArmed;
@@ -333,7 +333,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 select(me, inv.weapon(me));
                 look(target.getEyePosition());
                 use(false);
-                dodgeRanged(me);
+                movement.dodgeRanged(me);
                 return decide("dodge");
             }
             if (shield.blockTicks > 0) {
@@ -343,7 +343,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
             if (explosives.crystal(me, target)) {
-                if (dist <= DRIVE) steer(me, dist);
+                if (dist <= DRIVE) movement.steer(me, target, dist, chase, critArmed);
                 return decide("crystal");
             }
             PathingCommand sp = special(me, dist, los);
@@ -626,7 +626,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 }
                 return decide("spear_hold"); // inside the band: no step in or out this tick
             }
-            if (!inReach) steer(me, dist);
+            if (!inReach) movement.steer(me, target, dist, chase, critArmed);
             else if (dist < 1.4) key(Input.MOVE_BACK); // sword: too close, make space
             // its reach is measured centre to centre, a little shorter than ours: recharge just outside it
             else if (duel && cd < 0.75f && dist < 2.9) key(Input.MOVE_BACK);
@@ -660,7 +660,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 return decide("hit");
             }
             if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.5f && (inReach || !chase)) {
-                wtap = Math.max(wtap, 1); // let go of forward for a tick so the sprint drops: a sprinting hit is never a crit
+                movement.wtap = Math.max(movement.wtap, 1); // let go of forward for a tick so the sprint drops: a sprinting hit is never a crit
                 critArmed = true;
             }
             if (!me.onGround() && !critArmed && me.getDeltaMovement().y < 0.08 && inReach && cd >= 0.95f && !immune) {
@@ -690,7 +690,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 hit(me);
                 if (sprint) {
                     sprintHits++;
-                    wtap = 2;
+                    movement.wtap = 2;
                 }
                 groundedJumps = 0;
                 return decide("hit");
@@ -707,12 +707,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
     }
 
-    private static final boolean KINEMATIC = !"false".equals(System.getProperty("ostinato.kinematic"));
-    private baritone.pathing.kinematic.KinematicController kin;
     private final CombatTargeting targeting = new CombatTargeting(ctx, this::matches);
     private final CombatInventory inv = new CombatInventory(ctx);
     private final CombatDefense defense = new CombatDefense(ctx, inv);
     private final CombatAim aimer = new CombatAim(baritone, ctx, rng);
+    private final CombatMovement movement = new CombatMovement(ctx, rng, PvpProcess.this::key);
     private final CombatExplosives explosives = new CombatExplosives(ctx, inv, aimer, new CombatExplosives.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -900,50 +899,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return cmd;
     }
 
-    private void steer(Player me, double dist) {
-        if (--strafeLeft <= 0) {
-            strafeDir = rng.nextBoolean() ? 1 : -1;
-            strafeLeft = 10 + rng.nextInt(20);
-        }
-        if (chase) {
-            wtap = 0;
-            key(Input.MOVE_FORWARD);
-            if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-            if (dist > 3.5 && me.onGround() && me.isSprinting() && !me.isInWater()) key(Input.JUMP);
-            return;
-        }
-        if (wtap > 0) {
-            wtap--;
-        } else if (dist > 2.4) {
-            key(Input.MOVE_FORWARD);
-            if (!critArmed && me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-        } else if (dist < 1.2) {
-            key(Input.MOVE_BACK);
-        }
-        if (dist > 3.5) {
-            // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
-            if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) key(Input.JUMP);
-            return;
-        }
-        key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
-    }
-
     private boolean shouldBlock(Player me, double dist) {
         return defense.arrowIncoming(me) && blockWhy(3);
-    }
-
-    private int dodgeLeft, dodgeDir = 1;
-
-    /** Close in on an aimed shooter, reversing sideways often enough that its lead on our velocity is wrong. */
-    private void dodgeRanged(Player me) {
-        if (--dodgeLeft <= 0) {
-            dodgeDir = -dodgeDir;
-            dodgeLeft = 4 + rng.nextInt(6);
-        }
-        key(Input.MOVE_FORWARD);
-        key(dodgeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
-        if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-        if (me.onGround() && rng.nextInt(12) == 0) key(Input.JUMP);
     }
 
     private String brokeNote = "";
