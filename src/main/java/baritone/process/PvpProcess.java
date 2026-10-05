@@ -217,36 +217,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
             boolean charging = inv.spearSlot(me) >= 0 && spears.spearUseTicks > 0;
-            // 211909 medium balanced: four apples started inside its sword reach, each dropped
-            // when its crit jump read as overhead, each bite costing a 6. 212743 hard aggressive: a
-            // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
-            // stops a bite, and with a shield in hand a bite does not start inside its reach.
-            boolean pressed = !targetEating && eyeToBox(me, target) < 9 && target.getMainHandItem().getItem() != Items.MACE
-                    && (me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem()) || inv.slotOf(me, Items.SHIELD) >= 0);
-            // 232733 axe expert safe: 76 ticks at 2.9 HP behind a shield with eight apples, taking 35 damage all fight
-            // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
-            // before most of a bite is down: that is the opening, shield or no shield.
-            int sinceSwing = me.tickCount - shield.targetSwingTick;
-            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16
-                    && !(target instanceof Player hp2 && hp2.getCurrentItemAttackStrengthDelay() < 16); // a foe that swapped back to a sword has no slow swing to wait out
-            pressed &= !opening;
-            // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
-            // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
-            boolean roomy = eyeToBox(me, target) > 6;
-            boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (survival.eatTicks > 0 || !pressed);
-            boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
-            if (survival.eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
-                use(false);
-                survival.eatTicks = 0;
-            } else if (!longFall && !(survival.eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
-                && !explosives.blastThreat(me) && (!charging || critical) && (survival.eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
-                    && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
-                if (charging) {
-                    use(false);
-                    spears.abortCharge();
-                }
-                if (survival.eat(me, target)) return decide("eat");
-            }
+            PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
+            if (ate != null) return ate;
 
             double dist = eyeToBox(me, target);
             boolean los = me.hasLineOfSight(target);
@@ -474,6 +446,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
         public void gappleEaten() { gapples++; }
+        public void abortCharge() { spears.abortCharge(); }
     });
     private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, new CombatShield.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }

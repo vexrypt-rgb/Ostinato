@@ -13,6 +13,7 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import static baritone.process.CombatAim.press;
+import static baritone.process.CombatGeometry.*;
 
 /**
  * Staying alive: the totem in the offhand, eating a golden apple, and running (or pearling away) when low with
@@ -28,6 +29,7 @@ final class CombatSurvival {
         PathingCommand decide(String d);
         PathingCommand decide(String d, PathingCommand cmd);
         void gappleEaten();
+        void abortCharge();
     }
 
     int eatTicks, fleeTicks;
@@ -52,6 +54,44 @@ final class CombatSurvival {
     boolean canHeal(Player me) {
         return me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING || inv.slotOf(me, Items.GOLDEN_APPLE) >= 0
                 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 || inv.potion(me, MobEffects.INSTANT_HEALTH) >= 0;
+    }
+
+    /**
+     * Decide whether this tick is a bite: low enough, safe enough, nothing in the way. Null when it is not (or the
+     * bite did not start), else the "eat" decision. The caller hands over the foe's state; a charge in progress is
+     * let go of here so the use key is free for the apple.
+     */
+    PathingCommand tend(Player me, LivingEntity target, boolean targetEating, boolean overhead, boolean safe, boolean charging, int sinceSwing, int swingGap) {
+        // 211909 medium balanced: four apples started inside its sword reach, each dropped
+        // when its crit jump read as overhead, each bite costing a 6. 212743 hard aggressive: a
+        // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
+        // stops a bite, and with a shield in hand a bite does not start inside its reach.
+        boolean pressed = !targetEating && eyeToBox(me, target) < 9 && target.getMainHandItem().getItem() != Items.MACE
+                && (me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem()) || inv.slotOf(me, Items.SHIELD) >= 0);
+        // 232733 axe expert safe: 76 ticks at 2.9 HP behind a shield with eight apples, taking 35 damage all fight
+        // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
+        // before most of a bite is down: that is the opening, shield or no shield.
+                boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16
+                && !(target instanceof Player hp2 && hp2.getCurrentItemAttackStrengthDelay() < 16); // a foe that swapped back to a sword has no slow swing to wait out
+        pressed &= !opening;
+        // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
+        // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
+        boolean roomy = eyeToBox(me, target) > 6;
+        boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (eatTicks > 0 || !pressed);
+        boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
+        if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
+            hands.use(false);
+            eatTicks = 0;
+        } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
+            && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+                && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
+            if (charging) {
+                hands.use(false);
+                hands.abortCharge();
+            }
+            if (eat(me, target)) return hands.decide("eat");
+        }
+        return null;
     }
 
     /** Low on health with nothing to heal: pearl away from the target, else run. */
