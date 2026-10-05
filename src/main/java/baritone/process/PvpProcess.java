@@ -180,7 +180,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
 
         LivingEntity prevTarget = target;
-        if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = pick(me);
+        if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = targeting.pick(me, CHASE);
         if (target != prevTarget) {
             spearBand = 0;
             spearHrPrev = -1;
@@ -194,7 +194,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             spearUseTicks = 0;
             spearReleaseNext = false;
         }
-        if (target != null && me.tickCount % 5 == 0 && macePhase == 0) retarget(me);
+        if (target != null && me.tickCount % 5 == 0 && macePhase == 0) target = targeting.retarget(me, target);
         baritone.getInputOverrideHandler().clearAllKeys();
         if (target == null) {
             if (prevTarget != null && prevTarget.isDeadOrDying()) recorder.markWin();
@@ -203,7 +203,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         keepTotem(me);
-        trackTarget();
+        targeting.track(target);
         if (!recorder.active()) recorder.begin(me, target, label);
         tickDec = "-";
         brokeNote = inv.noteBreaks(me);
@@ -701,7 +701,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("strafe");
         } finally {
             recorder.tick(me, target, eyeToBox(me, target),
-                    others(me) + " m" + macePhase + " p" + pearlStage + " f" + fleeTicks + " e" + eatTicks + " s" + me.getInventory().getSelectedSlot()
+                    targeting.others(me, target) + " m" + macePhase + " p" + pearlStage + " f" + fleeTicks + " e" + eatTicks + " s" + me.getInventory().getSelectedSlot()
                             + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + clickKind,
@@ -712,6 +712,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private static final boolean KINEMATIC = !"false".equals(System.getProperty("ostinato.kinematic"));
     private baritone.pathing.kinematic.KinematicController kin;
+    private final CombatTargeting targeting = new CombatTargeting(ctx, this::matches);
     private final CombatAim aimer = new CombatAim(baritone, ctx, rng);
     private int pearlStage, pearlTicks;
     private boolean pearlDive, digDown;
@@ -721,29 +722,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private Vec3 pearlFrom, pearlLast;
     private int fireCool, fireStage, fireTicks, fleeTicks;
     private BlockPos firePos;
-    private LivingEntity tvTarget;
-    private Vec3 tvPos = Vec3.ZERO, tvVel = Vec3.ZERO;
     private double shEx, shEz; // smoothed horizontal offset of a diver above, for the shield facing
-    private double tvRawY; // last tick's actual vertical step: the smoothed velocity lags a dive's start by two ticks
-
-    /** Remote players report no velocity client-side, so derive it from their position change per tick. */
-    private void trackTarget() {
-        if (target != tvTarget || tvTarget == null) {
-            tvTarget = target;
-            tvVel = Vec3.ZERO;
-        } else {
-            Vec3 d = target.position().subtract(tvPos);
-            tvVel = d.length() > 4 ? Vec3.ZERO : tvVel.scale(0.5).add(d.scale(0.5));
-            tvRawY = d.length() > 4 ? 0 : d.y;
-        }
-        tvPos = target.position();
-    }
-
     private Vec3 tv() {
-        // Remote players keep a stale getDeltaMovement (Vex0 vy stayed 1.16 for a whole jump).
-        Vec3 own = target.getDeltaMovement();
-        if (target != ctx.player() && tvVel.lengthSqr() > 1e-4) return tvVel;
-        return own.lengthSqr() > 1e-4 ? own : tvVel;
+        return targeting.velocity(target);
     }
 
     private Item chestSaved;
@@ -1687,7 +1668,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // a mace overhead can turn from rising to lethal in one tick (a 5 block smash kills): near it the shield goes up regardless of its velocity
         boolean closeAbove = hzUp < 4 && target.getY() - me.getY() < 9 && target.getMainHandItem().getItem() == Items.MACE
                 && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
-        double vy = Math.min(tv().y, tvRawY);
+        double vy = Math.min(tv().y, targeting.rawY());
         if (macePhase != 0 && !hop || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised && !(me.getDeltaMovement().y < -0.3 && groundGap(me) < 20)) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
         if (pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
             if (me.position().distanceTo(pearlFrom) > 3.5 || pearlTicks++ > 40) return null;
@@ -1975,33 +1956,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private void look(Vec3 at) {
         aimer.look(at, target == null ? 0 : tv().horizontalDistance());
-    }
-
-    /** With several opponents in reach, finish the weakest one rather than whichever was nearest first. */
-    private void retarget(Player me) {
-        java.util.function.ToDoubleFunction<LivingEntity> score = e -> e.getHealth() + e.getAbsorptionAmount() + 0.6 * me.distanceTo(e);
-        LivingEntity best = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(7),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && matches(e))
-                .stream().min(Comparator.comparingDouble(score)).orElse(null);
-        if (best != null && best != target && score.applyAsDouble(best) < score.applyAsDouble(target) - 3) target = best;
-    }
-
-    /** Recorder tag: opponents within 12 blocks as "n<count>:<nearest-other dist>". */
-    private String others(Player me) {
-        double near = 99;
-        int n = 0;
-        for (LivingEntity e : ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(12), x -> x != me && x != target && x.isAlive() && matches(x))) {
-            n++;
-            near = Math.min(near, me.distanceTo(e));
-        }
-        return n == 0 ? "n0" : String.format("n%d:%.1f", n, near);
-    }
-
-    private LivingEntity pick(Player me) {
-        return ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(CHASE),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && matches(e))
-                .stream().filter(e -> me.distanceTo(e) <= CHASE)
-                .min(Comparator.comparingDouble(me::distanceToSqr)).orElse(null);
     }
 
     /**
