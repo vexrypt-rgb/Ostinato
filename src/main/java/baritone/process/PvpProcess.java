@@ -332,7 +332,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 lastShieldTick = me.tickCount;
                 return decide("block");
             }
-            if (pearlStage == 0 && eatTicks == 0 && macePhase == 0 && foeAimed(dist)) {
+            if (pearlStage == 0 && eatTicks == 0 && macePhase == 0 && defense.foeAimed(target, dist)) {
                 select(me, inv.weapon(me));
                 look(target.getEyePosition());
                 use(false);
@@ -713,6 +713,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private static final boolean KINEMATIC = !"false".equals(System.getProperty("ostinato.kinematic"));
     private baritone.pathing.kinematic.KinematicController kin;
     private final CombatTargeting targeting = new CombatTargeting(ctx, this::matches);
+    private final CombatInventory inv = new CombatInventory(ctx);
+    private final CombatDefense defense = new CombatDefense(ctx, inv);
     private final CombatAim aimer = new CombatAim(baritone, ctx, rng);
     private int pearlStage, pearlTicks;
     private boolean pearlDive, digDown;
@@ -722,7 +724,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private Vec3 pearlFrom, pearlLast;
     private int fireCool, fireStage, fireTicks, fleeTicks;
     private BlockPos firePos;
-    private double shEx, shEz; // smoothed horizontal offset of a diver above, for the shield facing
     private Vec3 tv() {
         return targeting.velocity(target);
     }
@@ -1113,7 +1114,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (target.getMainHandItem().getItem() == Items.MACE && aboveBy > (raised ? -0.5 : 3) && aboveBy < 16 && hzGap < 8 && groundGap(me) > 6
                     && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem())) {
                 if (!select(me, mace)) return decide("swap");
-                Vec3 face = shieldBearing(me, -tv().y > 0.05 ? (aboveBy - 1.0) / -tv().y : 99);
+                Vec3 face = defense.shieldBearing(me, target, tv(), lastShieldTick, -tv().y > 0.05 ? (aboveBy - 1.0) / -tv().y : 99);
                 if (face != null) look(face);
                 else aimer.aim(new Rotation(me.getYRot(), 0f), true);
                 use(true);
@@ -1728,7 +1729,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (hand >= 0 && !select(me, hand)) return decide("swap");
             // face where it is now: a landing point predicted onto our own spot has no bearing, and a shield
             // only covers the front half, so a diver that ends up behind us gets through
-            Vec3 tp = shieldBearing(me, ticksLeft);
+            Vec3 tp = defense.shieldBearing(me, target, tv(), lastShieldTick, ticksLeft);
             // the block test uses the attacker's offset at impact, however small: running away first turned the shield 180 degrees off it
             if (tp != null) look(tp);
             // a diver chases us and lags behind our drift: backing away from the side it is on, facing it, keeps its landing inside the shield's half
@@ -1745,29 +1746,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         key(Input.MOVE_FORWARD);
         key(Input.SPRINT);
         return decide(shield ? "dodge" : me.getOffhandItem().getItem() == Items.SHIELD ? "dodge-cd" : "dodge-off");
-    }
-
-    /**
-     * Where to point a raised shield against a diver. It lands at its offset when it arrives, not the one it has now:
-     * a diver closing on us at 0.07 a tick crosses zero offset before it lands and ends up behind the shield. In its
-     * last few ticks aim at the extrapolated offset; null if that is too small to have a bearing (keep the facing).
-     */
-    private Vec3 shieldBearing(Player me, double ticksLeft) {
-        Vec3 tp = target.position(), v = tv(), mv = me.getDeltaMovement();
-        // a diver sweeping over us at a steady lateral speed (pearlmace log: +1.6 to -1.0 in six ticks) lands on the far side of us
-        double t = Math.hypot(v.x, v.z) > 0.15 && ticksLeft <= 8 ? Math.min(ticksLeft, 6) : 0; // extrapolating the offset swung the shield 60 degrees a tick in the logs: the diver's horizontal velocity is too noisy
-        double ox = tp.x + v.x * t - (me.getX() + mv.x * t), oz = tp.z + v.z * t - (me.getZ() + mv.z * t);
-        // a knock (wind burst) in the last ticks shoves us off the diver's line; it keeps falling straight, so it lands on the side we were shoved from
-        boolean knocked = Math.hypot(mv.x, mv.z) > 0.25 && Math.hypot(ox, oz) <= 0.5;
-        // the raw offset flips sign tick to tick; a smoothed one keeps the side the diver has been on
-        if (me.tickCount - lastShieldTick > 2) { shEx = ox; shEz = oz; } else { shEx = shEx * 0.7 + ox * 0.3; shEz = shEz * 0.7 + oz * 0.3; }
-        if (ticksLeft <= 3 && !knocked && t == 0) return null; // committed: chasing the last ticks' offset spins the shield off the diver
-        if (Math.hypot(ox, oz) > 0.5) return new Vec3(me.getX() + ox, me.getEyeY(), me.getZ() + oz);
-        if (!knocked && Math.hypot(shEx, shEz) > 0.03) return new Vec3(me.getX() + shEx, me.getEyeY(), me.getZ() + shEz);
-        // a diver nearly overhead has no stable bearing (its offset flipped sign every tick and spun the shield 60 degrees a tick):
-        // it chases us and lags behind our drift, so it lands on the side we are moving away from; stood still, keep the facing
-        if (Math.hypot(mv.x, mv.z) > 0.08) return new Vec3(me.getX() - mv.x, me.getEyeY(), me.getZ() - mv.z);
-        return null;
     }
 
     private boolean shieldDive(Player me, double dist) {
@@ -1789,29 +1767,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return true;
     }
 
-    /** Shield as the last resort against shots: only an arrow already in flight that will really hit us. */
     private boolean shouldBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
-        AABB around = me.getBoundingBox().inflate(18);
-        Vec3 chest = me.position().add(0, 1, 0);
-        for (AbstractArrow a : ctx.world().getEntitiesOfClass(AbstractArrow.class, around, x -> true)) {
-            Vec3 v = a.getDeltaMovement();
-            double v2 = v.lengthSqr();
-            if (v2 < 0.25) continue;
-            Vec3 to = chest.subtract(a.position());
-            double t = to.dot(v) / v2; // ticks until closest approach
-            if (t < 0 || t > 9) continue;
-            if (to.subtract(v.scale(t)).length() < 1.4) return blockWhy(3);
-        }
-        return false;
-    }
-
-    /** The foe has a bow or crossbow drawn or loaded and aimed from range. */
-    private boolean foeAimed(double dist) {
-        if (dist <= 5) return false;
-        ItemStack held = target.getMainHandItem();
-        if (held.getItem() == Items.BOW) return target.isUsingItem();
-        return held.getItem() == Items.CROSSBOW && (target.isUsingItem() || net.minecraft.world.item.CrossbowItem.isCharged(held));
+        return defense.arrowIncoming(me) && blockWhy(3);
     }
 
     private int dodgeLeft, dodgeDir = 1;
@@ -1828,7 +1785,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (me.onGround() && rng.nextInt(12) == 0) key(Input.JUMP);
     }
 
-    private final CombatInventory inv = new CombatInventory(ctx);
     private String brokeNote = "";
 
     private int blockWhy;
