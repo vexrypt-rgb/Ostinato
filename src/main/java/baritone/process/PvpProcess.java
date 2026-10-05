@@ -2451,7 +2451,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // once they're low an even trade wins the race
         if (dmg < 3 || dmg < self * (size == 10 ? (target.getHealth() + target.getAbsorptionAmount() > 10 ? 1.5f : 1) : (target.getHealth() + target.getAbsorptionAmount() <= 10 ? 0.8f : 1))) return 0;
         if (size == 10 && self >= myHp - 4 && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0; // don't pop our own totem
-        return dmg - self * 0.6f;
+        // our own blasts were landing 7-16 on us right after a place or a boom: unless it kills them, keep our share small
+        // and weigh it heavier than the foe's (self 1.4 weight, small safe self-damage)
+        boolean kills = dmg >= target.getHealth() + target.getAbsorptionAmount();
+        if (!kills && self > (totem ? 3f : 4f)) return 0;
+        return Math.max(0, dmg - self * 1.4f);
     }
 
     /** Vanilla end crystal (power 6) damage to {@code e} after armour. */
