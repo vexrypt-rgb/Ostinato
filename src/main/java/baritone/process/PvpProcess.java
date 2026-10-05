@@ -239,7 +239,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
             // before most of a bite is down: that is the opening, shield or no shield.
             int sinceSwing = me.tickCount - targetSwingTick;
-            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16;
+            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16
+                    && !(target instanceof Player hp2 && hp2.getCurrentItemAttackStrengthDelay() < 16); // a foe that swapped back to a sword has no slow swing to wait out
             pressed &= !opening;
             // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
             // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
