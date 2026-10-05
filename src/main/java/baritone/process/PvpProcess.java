@@ -63,13 +63,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private LivingEntity target;
     private final Random rng = new Random(7);
     private boolean chase;
-    private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps, blockTicks;
-    private int targetSwingTick, lastAxeTick = -1000;
-    /** Learned in the fight: ticks between the opponent's swings, how long after a swing our hits bounce off it, and the hit being watched. */
-    private int swingGap, unseenBlock, probeTick, probeSince;
-    private boolean critArmed, counter, axeHeld, flicked;
+    private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps;
+    /** The hit being watched. */
+    private int probeTick, probeSince;
+    private boolean critArmed;
     private char clickKind = '-';
-    private int duelOpenUntil, lastShieldTick = -1000, lastSeenTick;
+    private int duelOpenUntil, lastSeenTick;
     private float lastHealth = -1;
     private final PvpRecorder recorder = new PvpRecorder();
     /** Short action token written to the PvP log this tick; set by {@link #decide}. */
@@ -206,8 +205,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         tickDec = "-";
         brokeNote = inv.noteBreaks(me);
         if (!brokeNote.isEmpty()) {
-            blockTicks = 0;
-            lastShieldTick = -1000;
+            shield.blockTicks = 0;
+            shield.lastShieldTick = -1000;
             use(false);
         }
         try {
@@ -240,8 +239,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // 232733 axe expert safe: 76 ticks at 2.9 HP behind a shield with eight apples, taking 35 damage all fight
             // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
             // before most of a bite is down: that is the opening, shield or no shield.
-            int sinceSwing = me.tickCount - targetSwingTick;
-            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (swingGap > 0 ? swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16
+            int sinceSwing = me.tickCount - shield.targetSwingTick;
+            boolean opening = sinceSwing >= 1 && sinceSwing <= 5 && (shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? tp.getCurrentItemAttackStrengthDelay() : 20) >= 16
                     && !(target instanceof Player hp2 && hp2.getCurrentItemAttackStrengthDelay() < 16); // a foe that swapped back to a sword has no slow swing to wait out
             pressed &= !opening;
             // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
@@ -279,28 +278,28 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // the hop that makes the damage starts from the ground. A mace with wind charges hops.
             boolean maceHop = inv.slotOf(me, Items.MACE) >= 0 && inv.slotOf(me, Items.WIND_CHARGE) >= 0;
             if (me.tickCount < lastSeenTick) { // respawned between bench rounds: tickCount restarted under the old stamps
-                duelOpenUntil = targetSwingTick = 0;
-                lastShieldTick = lastAxeTick = -1000;
-                axeHeld = flicked = false;
-                swingGap = unseenBlock = probeTick = 0;
+                duelOpenUntil = shield.targetSwingTick = 0;
+                shield.lastShieldTick = shield.lastAxeTick = -1000;
+                shield.axeHeld = shield.flicked = false;
+                shield.swingGap = shield.unseenBlock = probeTick = 0;
             }
             // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
             if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
-                    && me.getCooldowns().isOnCooldown(me.getOffhandItem())) flicked = true;
+                    && me.getCooldowns().isOnCooldown(me.getOffhandItem())) shield.flicked = true;
             lastSeenTick = me.tickCount;
             if (target.swinging && target.swingTime == 0) { // before the block: a held shield returns early
-                int sinceLast = me.tickCount - targetSwingTick;
-                if (sinceLast >= 6 && sinceLast <= 40) swingGap = sinceLast;
-                targetSwingTick = me.tickCount;
+                int sinceLast = me.tickCount - shield.targetSwingTick;
+                if (sinceLast >= 6 && sinceLast <= 40) shield.swingGap = sinceLast;
+                shield.targetSwingTick = me.tickCount;
             }
             // a click that connected and left it unhurt met a shield the client was never shown:
             // remember how long after its swing that was and keep the sword out of that window
             if (probeTick > 0 && me.tickCount - probeTick >= 3) {
                 if (target.hurtTime == 0 && target.getOffhandItem().getItem() == Items.SHIELD && probeSince < 20)
-                    unseenBlock = Math.max(unseenBlock, probeSince + 1);
+                    shield.unseenBlock = Math.max(shield.unseenBlock, probeSince + 1);
                 probeTick = 0;
             }
-            boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
+            boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && shield.meleeBlock(me, target, dist);
             // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
             // wings and pitch do not reset the fall distance, a wind burst under the feet does
             int clutch = inv.slotOf(me, Items.WIND_CHARGE);
@@ -316,7 +315,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 aimer.aim(new Rotation(me.getYRot(), -25f), true);
                 return decide("flare");
             }
-            PathingCommand dive = underDive(me, dist, los);
+            PathingCommand dive = shield.underDive(me, target, dist, los);
             if (dive != null) return dive;
             if (phase.pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
                 // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
@@ -326,8 +325,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 look(target.getEyePosition());
                 if (blockMelee && dist > 2.4) key(Input.MOVE_FORWARD); // stay where the answer to its swing still reaches
                 use(true);
-                if (blockTicks++ == 0) blocks++;
-                lastShieldTick = me.tickCount;
+                if (shield.blockTicks++ == 0) blocks++;
+                shield.lastShieldTick = me.tickCount;
                 return decide("block");
             }
             if (phase.pearlStage == 0 && eatTicks == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
@@ -337,9 +336,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 dodgeRanged(me);
                 return decide("dodge");
             }
-            if (blockTicks > 0) {
+            if (shield.blockTicks > 0) {
                 use(false);
-                blockTicks = 0;
+                shield.blockTicks = 0;
             }
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
@@ -516,20 +515,20 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // only a shield past its 5-tick warm-up is disabled by the axe; a swing into the raise is a wasted cooldown
             // VexBot's shield blocks from its first tick (no warm-up), so the use flag is the shield
             boolean tgShield = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
-            if (tgShield && me.tickCount - lastAxeTick >= 4) axeHeld = false; // it is back up: that swing did not disable it
+            if (tgShield && me.tickCount - shield.lastAxeTick >= 4) shield.axeHeld = false; // it is back up: that swing did not disable it
             // the axe drew blood: there was no shield in its way, so none is on cooldown either
-            if (axeHeld && me.tickCount - lastAxeTick <= 3 && target.hurtTime >= 8) axeHeld = false;
+            if (shield.axeHeld && me.tickCount - shield.lastAxeTick <= 3 && target.hurtTime >= 8) shield.axeHeld = false;
             boolean duel = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && target.getOffhandItem().getItem() == Items.SHIELD;
             // 224436 expert adaptive: swords at t17 and t32 did nothing against a target showing no use flag.
             // A blockhitter's shield goes up with its swing, flag or no flag; the window is learned from bounced hits.
-            if (duel && hiddenShield(me)) tgShield = true;
-            boolean axeTime = tgShield && inReach && me.tickCount - lastAxeTick > 8 && inv.best(me, AXES) >= 0;
+            if (duel && shield.hiddenShield(me, target)) tgShield = true;
+            boolean axeTime = tgShield && inReach && me.tickCount - shield.lastAxeTick > 8 && inv.best(me, AXES) >= 0;
             if (!select(me, axeTime ? inv.best(me, AXES) : inv.weapon(me))) return decide("swap");
             look(swing.swingPoint(me, target, tv()));
 
-            boolean targetReady = me.tickCount - targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
+            boolean targetReady = me.tickCount - shield.targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
             // the tick the use key comes up, an attack click is still swallowed by the item in use
-            boolean immune = target.hurtTime > 1 || me.tickCount - lastShieldTick < (counter ? 2 : 3)
+            boolean immune = target.hurtTime > 1 || me.tickCount - shield.lastShieldTick < (shield.counter ? 2 : 3)
                     || tgShield && inv.best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
             boolean falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
             boolean canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
@@ -539,9 +538,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean run = chase && (hurry || !targetEating);
             // Same fight, t544: jumped fully charged and hung in the air for the fall while its axe, due, landed first.
             // With its next swing due inside the jump, the charged swing goes now.
-            int swingAge = me.tickCount - targetSwingTick;
+            int swingAge = me.tickCount - shield.targetSwingTick;
             boolean rushed = !hurry && !targetEating && cd >= 0.95f
-                    && swingAge >= (swingGap > 0 ? swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20) - 6;
+                    && swingAge >= (shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20) - 6;
 
             // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
             // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
@@ -633,11 +632,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
             else if (duel && cd < 0.75f && dist < 2.9) key(Input.MOVE_BACK);
             if (me.hurtTime == me.hurtDuration - 1 && canJump) key(Input.JUMP); // jump reset
 
-            if (axeTime && inReach && me.tickCount - lastShieldTick >= 2) { // an axe disables a raised shield whatever the charge
+            if (axeTime && inReach && me.tickCount - shield.lastShieldTick >= 2) { // an axe disables a raised shield whatever the charge
                 if (hit(me)) { // only a click that connected starts the wait for its shield
                     axeHits++;
-                    lastAxeTick = me.tickCount;
-                    axeHeld = true;
+                    shield.lastAxeTick = me.tickCount;
+                    shield.axeHeld = true;
                 }
                 return decide("axe");
             }
@@ -656,7 +655,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 critArmed = false;
                 return decide("hit");
             }
-            if ((run || counter) && inReach && cd >= 0.9f && !immune) {
+            if ((run || shield.counter) && inReach && cd >= 0.9f && !immune) {
                 hit(me);
                 return decide("hit");
             }
@@ -671,7 +670,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (me.onGround()) critArmed = false;
             else groundedJumps = 0;
 
-            boolean breached = axeHeld && me.tickCount - lastAxeTick < 100;
+            boolean breached = shield.axeHeld && me.tickCount - shield.lastAxeTick < 100;
             // 232146 axe expert adaptive: 47 ground hits of 3.65 into an opponent eating apples, two jumps all fight.
             // A slow weapon is charged by the time the jump falls, so the crit costs nothing: only a sword hurries.
             if (breached && hurry && inReach && cd >= 0.95f && !immune) {
@@ -681,7 +680,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean diving = !target.onGround() && tv().y < -0.2 && target.getY() > me.getY() + 1.5;
             // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
             float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
-            if (!(breached && hurry) && !duel && !diving && !run && !counter && !(rushed && inReach) && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
+            if (!(breached && hurry) && !duel && !diving && !run && !shield.counter && !(rushed && inReach) && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
                 key(Input.JUMP);
                 groundedJumps++;
                 return decide("jump");
@@ -731,6 +730,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand bow(Player me) { return PvpProcess.this.bow(me); }
         public void attacked() { attacks++; }
     });
+    private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, new CombatShield.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int eatTicks() { return eatTicks; }
+        public void blockStarted() { blocks++; }
+    });
     private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -743,18 +751,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void key(Input in) { PvpProcess.this.key(in); }
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
-        public int lastShield() { return lastShieldTick; }
-        public void shielded(int tick) { lastShieldTick = tick; }
+        public int lastShield() { return shield.lastShieldTick; }
+        public void shielded(int tick) { shield.lastShieldTick = tick; }
     });
     private final CombatMace maces = new CombatMace(ctx, inv, aimer, targeting, phase, new CombatMace.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void key(Input in) { PvpProcess.this.key(in); }
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
-        public boolean shieldDive(Player me, double dist) { return PvpProcess.this.shieldDive(me, dist); }
+        public boolean shieldDive(Player me, double dist) { return shield.shieldDive(me, target, dist); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
-        public int lastAxe() { return lastAxeTick; }
-        public void axeHit(int tick) { axeHits++; lastAxeTick = tick; }
+        public int lastAxe() { return shield.lastAxeTick; }
+        public void axeHit(int tick) { axeHits++; shield.lastAxeTick = tick; }
         public int spearCool() { return spearCool; }
         public void spearCool(int ticks) { spearCool = ticks; }
     });
@@ -787,7 +795,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Their mace dive is the ~9 damage in the spear logs. Shield it; do not hop into it.
             // Melee and the mace smash landed on spear_back, never on spear_charge.
             // Shielding mid-charge swaps off the spear. Dive-block only while use is not held.
-            if (spearUseTicks == 0 && shieldDive(me, dist)) return decide("block");
+            if (spearUseTicks == 0 && shield.shieldDive(me, target, dist)) return decide("block");
             // Do not hop in the middle of a charge approach. The hop was the whole fight and use never started.
             boolean foeEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
             PathingCommand tool = spearUseTicks == 0 && !spearReopen && !spearCommit && !foeEating && !(spearUseCool == 0 && horizontalBoxDist(me, target) > 4.6)
@@ -964,161 +972,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
     }
 
-    /**
-     * Between our own swings the opponent's sword is the only thing hurting us: hold the shield up while the
-     * weapon recharges and drop it as the swing comes back. A raised target shield is the axe's job instead.
-     */
-    private boolean meleeBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
-        // 212743 hard aggressive: every 6 and 9 landed in the air after our own jump swing.
-        if (dist > 5.5 || me.isInWater() || eatTicks > 0 || phase.macePhase != 0) return false;
-        if (target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) return false; // it cannot swing mid-bite
-
-        counter = false;
-        // 221131 expert: VexBot's sword put our shield on cooldown with the first blocked swing, and the
-        // next 60 ticks were spent standing behind a shield that was not there.
-        if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) return false;
-        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 25) return false;
-        if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
-                || isSpear(target.getMainHandItem())
-                || target.getMainHandItem().getItem() == Items.MACE)) return false;
-        float cd = me.getAttackStrengthScale(0.5f);
-        // VexBot's ShieldController drops its shield at 0.95 charge to swing and needs 5 ticks to get it back:
-        // against sword and shield, take the swing on ours and answer inside that warm-up.
-        // 215619 expert defensive: with its shield axed it still won every trade, its charged sword waiting
-        // for ours to come down. The answer after its swing is the only free hit, shield or no shield.
-        if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS)) {
-            if (flicked) return false;
-            if (!me.isBlocking() && cd >= 0.9f && dist <= REACH && !target.isUsingItem() && !hiddenShield(me)) return false; // a free swing beats a shield it will axe
-        }
-        boolean holding = blockTicks > 0 && me.isUsingItem();
-        // 224436 expert adaptive: the shield came down at 0.78 charge, six ticks before each of its swings.
-        // Its next swing is due one observed swing gap after the last: be behind a warmed-up shield for it, then answer.
-        int since = me.tickCount - targetSwingTick;
-        int gap = swingGap > 0 ? swingGap : 13; // a sword recharges in 12.5 ticks
-        boolean due = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && since >= gap - 6 && since < gap + 10 && dist < 4.5;
-        // raise early enough for the shield's warm-up, hold until the swing is nearly ready
-        return holding ? (cd < 0.78f || due) && blockTicks < 40 : (cd < 0.45f || due) && since > 2;
-    }
-
-    /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */
-    private boolean hiddenShield(Player me) {
-        int since = me.tickCount - targetSwingTick;
-        return since >= 0 && since < unseenBlock && !(axeHeld && me.tickCount - lastAxeTick < 100);
-    }
-
-    /** Shield a mace dive. True when the shield is being raised this tick. */
-    /**
-     * They are well above us and coming down. A shield only covers the half-circle we face and a dive lands where
-     * it likes, so standing under it is the one wrong answer. A pearl that meets them puts us at their height,
-     * falling after them with the mace; failing that, be somewhere else when they arrive.
-     */
-    private PathingCommand underDive(Player me, double dist, boolean los) {
-        boolean hop = phase.macePhase == 2; // our own smash is in the air: a diver coming down on it is a trade we lose
-        // dropping a raised shield in the diver's last two ticks (it is within 4 blocks) is what killed us twice: hold it until the diver is level
-        boolean raised = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD && target.getY() > me.getY() - 0.5;
-        double hzUp = Math.hypot(target.getX() - me.getX(), target.getZ() - me.getZ());
-        // a mace overhead can turn from rising to lethal in one tick (a 5 block smash kills): near it the shield goes up regardless of its velocity
-        boolean closeAbove = hzUp < 4 && target.getY() - me.getY() < 9 && target.getMainHandItem().getItem() == Items.MACE
-                && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
-        double vy = Math.min(tv().y, targeting.rawY());
-        if (phase.macePhase != 0 && !hop || phase.pearlStage != 0 && phase.pearlStage != 2 || eatTicks > 0 || target.onGround() || phase.pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised && !(me.getDeltaMovement().y < -0.3 && groundGap(me) < 20)) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
-        if (phase.pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
-            if (me.position().distanceTo(phase.pearlFrom) > 3.5 || phase.pearlTicks++ > 40) return null;
-            phase.pearlFrom = phase.pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
-        }
-        int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
-        // off: the 5 HP landing put us in the diver's path (pearlmace 12/25 with it, 16/25 without)
-        if (false && !hop && phase.pearlStage == 0 && inv.slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && phase.pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
-            Vec3 eye = me.getEyePosition(), tp = target.getBoundingBox().getCenter(), v = tv(), need = null;
-            double sum = 0, drop = 0, u = 0;
-            for (int t = 1; t <= 24 && need == null; t++) {
-                sum += Math.pow(0.99, t - 1);
-                drop += u;
-                u = u * 0.99 - 0.03;
-                tp = tp.add(v);
-                v = new Vec3(v.x, (v.y - 0.08) * 0.98, v.z);
-                if (tp.y - 0.9 < me.getY() + 3) break; // it will be down before the pearl is there
-                Vec3 n = tp.subtract(eye).subtract(0, drop, 0).scale(1 / sum);
-                if (n.length() <= 1.6) need = n; // the first tick the pearl can be where they will be
-            }
-            if (need != null) {
-                use(false);
-                if (!select(me, pearlSlot)) return decide("swap");
-                Rotation r = RotationUtils.calcRotationFromVec3d(eye, eye.add(need), ctx.playerRotations());
-                if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
-                press(ctx.minecraft().options.keyUse);
-                phase.pearlStage = 2;
-                phase.pearlTicks = 0;
-                phase.pearlFrom = me.position();
-                return decide("pearl");
-            }
-        }
-        Vec3 away = me.position().subtract(target.position()).multiply(1, 0, 1);
-        if (target.getMainHandItem().getItem() != Items.MACE || away.length() > 6) return null;
-        if (away.length() < 0.3) away = Vec3.directionFromRotation(0, me.getYRot());
-        // Running only buys time while the diver is high. In its last few ticks it has committed to a path
-        // that tracks us at our own speed: a raised shield stops a smash, so take the landing behind it.
-        double fall = -vy;
-        double ticksLeft = fall > 0.05 ? (target.getY() - me.getY() - 1.0) / fall : closeAbove ? 5 : 99;
-        if (closeAbove) ticksLeft = Math.min(ticksLeft, 8); // it can commit to a dive in one tick: a drifting diver this close is not a reason to lower the shield
-        if (me.getOffhandItem().getItem() != Items.SHIELD && ticksLeft > 6) { // a wind charge or totem left in the offhand: put the shield back while the diver is still high
-            for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == Items.SHIELD) {
-                inv.toOffhand(me, Items.SHIELD);
-                return decide("swap");
-            }
-        }
-        boolean shield = me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
-        // once it is up, keep it up: the fall speed estimate jumps when the diver is knocked, and dropping it for a step is fatal
-        boolean held = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD;
-        if (hop) {
-            if (!shield || ticksLeft > 20 || away.length() > 5) return null;
-            phase.macePhase = 0;
-            phase.maceCool = 20;
-        }
-        if (shield && ticksLeft <= 30 && away.length() < 6) { // a shield takes ~5 ticks to count as raised
-            int hand = inv.slotOf(me, Items.MACE);
-            if (hand >= 0 && !select(me, hand)) return decide("swap");
-            // face where it is now: a landing point predicted onto our own spot has no bearing, and a shield
-            // only covers the front half, so a diver that ends up behind us gets through
-            Vec3 tp = defense.shieldBearing(me, target, tv(), lastShieldTick, ticksLeft);
-            // the block test uses the attacker's offset at impact, however small: running away first turned the shield 180 degrees off it
-            if (tp != null) look(tp);
-            // a diver chases us and lags behind our drift: backing away from the side it is on, facing it, keeps its landing inside the shield's half
-            Vec3 side = target.position().subtract(me.position()), view = me.getViewVector(1f);
-            double sideH = Math.hypot(side.x, side.z);
-            if (me.onGround() && ticksLeft <= 12 && sideH > 0.02 && sideH < 1.5 && view.x * side.x + view.z * side.z > 0) key(Input.MOVE_BACK);
-            use(true);
-            if (blockTicks++ == 0) blocks++;
-            lastShieldTick = me.tickCount;
-            return decide("block");
-        }
-        use(false);
-        aimer.aim(new Rotation((float) Math.toDegrees(Math.atan2(-away.x, away.z)), 0f), true);
-        key(Input.MOVE_FORWARD);
-        key(Input.SPRINT);
-        return decide(shield ? "dodge" : me.getOffhandItem().getItem() == Items.SHIELD ? "dodge-cd" : "dodge-off");
-    }
-
-    private boolean shieldDive(Player me, double dist) {
-        if (dist > 7 || target.onGround() || target.getY() < me.getY() + 1.0) return false;
-        // 05:32 blocked for the whole jump (507 ticks) and still took D9 with the shield up.
-        // Only the last part of a real descent. While they are high, keep jabbing.
-        if (tv().y >= -0.08 || target.getY() > me.getY() + 2.6) return false;
-        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
-        if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-        // A spear's right-click uses the spear, so the shield never reaches isBlocking() (logs: flag U, never B, D9).
-        int hand = inv.slotOf(me, Items.MACE);
-        if (hand < 0) hand = inv.spearSlot(me);
-        if (hand >= 0 && !select(me, hand)) return true;
-        look(target.getEyePosition());
-        use(true);
-        // a diver lands where we stand: step out from under it as well as covering up
-        if (horizontalBoxDist(me, target) < 2.5) key(Input.MOVE_BACK);
-        if (blockTicks++ == 0) blocks++;
-        return true;
-    }
-
     private boolean shouldBlock(Player me, double dist) {
         return defense.arrowIncoming(me) && blockWhy(3);
     }
@@ -1233,7 +1086,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             clickKind = 'E';
             if (!me.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)) {
                 probeTick = me.tickCount;
-                probeSince = me.tickCount - targetSwingTick;
+                probeSince = me.tickCount - shield.targetSwingTick;
             }
             return true;
         }
@@ -1281,12 +1134,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
         filter = null;
         enemies.clear();
         target = null;
-        eatTicks = blockTicks = duelOpenUntil = targetSwingTick = 0;
-        axeHeld = flicked = false;
-        swingGap = unseenBlock = probeTick = 0;
+        eatTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
+        shield.axeHeld = shield.flicked = false;
+        shield.swingGap = shield.unseenBlock = probeTick = 0;
         tools.reset();
         inv.resetBreaks();
-        lastShieldTick = lastAxeTick = -1000; // tickCount restarts with the respawned player
+        shield.lastShieldTick = shield.lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
     }
