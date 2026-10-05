@@ -2244,17 +2244,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
      */
     private boolean crystal(Player me) {
         // a ray the foe's body blocks never clicks, and a stall here froze the whole fight: no swing for a while, let melee have it
-        if (me.swinging) crystalIdle = 0;
-        else if (crystalIdle < 200) crystalIdle++;
-        if (crystalIdle > 25 && crystalIdle < 60) {
+        // a swing is not progress (a refused click swings too): the foe losing health is
+        float tgHp = target.getHealth() + target.getAbsorptionAmount();
+        if (tgHp < crystalTgHp - 0.1f) crystalIdle = 0;
+        else if (crystalIdle < 400) crystalIdle++;
+        crystalTgHp = tgHp;
+        if (crystalIdle > 40 && crystalIdle < 100) {
             crystalFight = true;
             return false;
         }
-        if (crystalIdle >= 60) crystalIdle = 0;
+        if (crystalIdle >= 100) crystalIdle = 30;
         return crystalWork(me);
     }
 
     private int crystalIdle;
+    private float crystalTgHp;
 
     private boolean crystalWork(Player me) {
         crystalFight = slotOf(me, Items.END_CRYSTAL) >= 0 || slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
