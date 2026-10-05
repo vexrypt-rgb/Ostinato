@@ -1836,13 +1836,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
      */
     private Vec3 shieldBearing(Player me, double ticksLeft) {
         Vec3 tp = target.position(), v = tv(), mv = me.getDeltaMovement();
-        double t = 0; // extrapolating the offset swung the shield 60 degrees a tick in the logs: the diver's horizontal velocity is too noisy
+        // a diver sweeping over us at a steady lateral speed (pearlmace log: +1.6 to -1.0 in six ticks) lands on the far side of us
+        double t = Math.hypot(v.x, v.z) > 0.15 && ticksLeft <= 8 ? Math.min(ticksLeft, 6) : 0; // extrapolating the offset swung the shield 60 degrees a tick in the logs: the diver's horizontal velocity is too noisy
         double ox = tp.x + v.x * t - (me.getX() + mv.x * t), oz = tp.z + v.z * t - (me.getZ() + mv.z * t);
         // a knock (wind burst) in the last ticks shoves us off the diver's line; it keeps falling straight, so it lands on the side we were shoved from
         boolean knocked = Math.hypot(mv.x, mv.z) > 0.25 && Math.hypot(ox, oz) <= 0.5;
         // the raw offset flips sign tick to tick; a smoothed one keeps the side the diver has been on
         if (me.tickCount - lastShieldTick > 2) { shEx = ox; shEz = oz; } else { shEx = shEx * 0.7 + ox * 0.3; shEz = shEz * 0.7 + oz * 0.3; }
-        if (ticksLeft <= 3 && !knocked) return null; // committed: chasing the last ticks' offset spins the shield off the diver
+        if (ticksLeft <= 3 && !knocked && t == 0) return null; // committed: chasing the last ticks' offset spins the shield off the diver
         if (Math.hypot(ox, oz) > 0.5) return new Vec3(me.getX() + ox, me.getEyeY(), me.getZ() + oz);
         if (!knocked && Math.hypot(shEx, shEz) > 0.03) return new Vec3(me.getX() + shEx, me.getEyeY(), me.getZ() + shEz);
         // a diver nearly overhead has no stable bearing (its offset flipped sign every tick and spun the shield 60 degrees a tick):
