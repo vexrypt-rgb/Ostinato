@@ -106,4 +106,14 @@ final class CombatGeometry {
     static double eyeToBox(Player me, LivingEntity t) {
         return me.getEyePosition().distanceTo(aimPoint(me, t));
     }
+
+    /** Blocks of air straight below the player (capped at 64). */
+    static double groundGap(net.minecraft.world.entity.player.Player me) {
+        net.minecraft.core.BlockPos.MutableBlockPos bp = new net.minecraft.core.BlockPos.MutableBlockPos(me.getBlockX(), 0, me.getBlockZ());
+        for (int i = 0; i < 64; i++) {
+            bp.setY(me.getBlockY() - i - 1);
+            if (me.level().getBlockState(bp).blocksMotion()) return me.getY() - (bp.getY() + 1);
+        }
+        return 64;
+    }
 }
