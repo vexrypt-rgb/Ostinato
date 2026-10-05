@@ -1569,7 +1569,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     /** Low on health with nothing to heal: pearl away from the target, else run. */
     private PathingCommand flee(Player me, double dist) {
         use(false);
-        if (dist < 10 && pearlCool == 0 && slotOf(me, Items.ENDER_PEARL) >= 0) {
+        // the landing costs about 3 HP in this kit: a pearl thrown at 2 HP is a suicide (pillar perfect, tick 243)
+        if (dist < 10 && pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && slotOf(me, Items.ENDER_PEARL) >= 0) {
             Vec3 away = new Vec3(me.getX() - target.getX(), 0, me.getZ() - target.getZ());
             away = away.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : away.normalize();
             Vec3 at = me.getEyePosition().add(away.scale(24)).add(0, 7, 0);
@@ -1752,7 +1753,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             pearlFrom = pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
         }
         int pearlSlot = slotOf(me, Items.ENDER_PEARL);
-        if (!hop && pearlStage == 0 && slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
+        // off: the 5 HP landing put us in the diver's path (pearlmace 12/25 with it, 16/25 without)
+        if (false && !hop && pearlStage == 0 && slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
             Vec3 eye = me.getEyePosition(), tp = target.getBoundingBox().getCenter(), v = tv(), need = null;
             double sum = 0, drop = 0, u = 0;
             for (int t = 1; t <= 24 && need == null; t++) {
