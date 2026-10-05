@@ -8,6 +8,7 @@ import net.minecraft.world.phys.Vec3;
 import baritone.api.process.PathingCommand;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
+import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import static baritone.process.CombatAim.press;
 import static baritone.process.CombatGeometry.*;
@@ -269,6 +270,64 @@ final class CombatMace {
             int alt = inv.weapon(me);
             if (alt < 0) alt = mace;
             if (!hands.select(me, alt)) return hands.decide("swap");
+        }
+        return null;
+    }
+
+    /** They are far below with no path down: step off over them, or dig down through the floor, and fall on them. */
+    PathingCommand drop(Player me, LivingEntity target, boolean los, int mace, int wind) {
+        // They are down a drop no path leads down. With a mace the drop is the attack: step off over them and fall on
+        // it, and if the fall is going to miss, a wind charge at the feet takes the landing.
+        double below = me.getY() - target.getY();
+        double gap = me.position().subtract(target.position()).horizontalDistance();
+        if (below <= 6 || phase.macePhase != 0) phase.digDown = false;
+        if (mace >= 0 && wind >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && below > 6 && (target.onGround() || phase.digDown)
+                && gap < (los ? 2 + below * 0.15 : 12)) {
+            if (!me.onGround() && me.getDeltaMovement().y < 0) {
+                phase.macePhase = 2;
+                phase.maceTicks = 0;
+                phase.pearlDive = true;
+                return hands.decide("drop");
+            }
+            if ((!los || phase.digDown) && me.onGround()) {
+                // The floor we stand on is what separates us. Walk over them and dig down through it: the hole drops
+                // us on them from above, which is the mace's whole attack.
+                if (gap > 3.5 && !phase.digDown) { // once the hole is started it stays: they pace about and the fall steers
+                    if (!hands.select(me, mace)) return hands.decide("swap");
+                    hands.look(target.position());
+                    hands.key(Input.MOVE_FORWARD);
+                    return hands.decide("drop");
+                }
+                phase.digDown = true;
+                // A hole we cut beside our feet is no use until we step into it: walk to the open column with ordinary
+                // movement keys and a smoothed look, like a player stepping off an edge.
+                net.minecraft.core.BlockPos feet = me.blockPosition();
+                net.minecraft.world.phys.Vec3 hole = null;
+                for (int dx = -2; dx <= 2 && hole == null; dx++) {
+                    for (int dz = -2; dz <= 2; dz++) {
+                        net.minecraft.core.BlockPos c = feet.offset(dx, -1, dz);
+                        if (ctx.world().getBlockState(c).getCollisionShape(ctx.world(), c).isEmpty()
+                                && ctx.world().getBlockState(c.below()).getCollisionShape(ctx.world(), c.below()).isEmpty()) {
+                            hole = net.minecraft.world.phys.Vec3.atBottomCenterOf(c);
+                            break;
+                        }
+                    }
+                }
+                if (hole != null) {
+                    Rotation r = RotationUtils.calcRotationFromVec3d(me.getEyePosition(), hole.add(0, 0.5, 0), ctx.playerRotations());
+                    aimer.aim(new Rotation(r.getYaw(), Math.min(r.getPitch(), 60f)), true);
+                    if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.getYaw() - me.getYRot())) < 30) hands.key(Input.MOVE_FORWARD);
+                    return hands.decide("dig");
+                }
+                if (!hands.select(me, mace)) return hands.decide("swap");
+                aimer.aim(new Rotation(me.getYRot(), 90f), true);
+                if (me.getXRot() > 80f) hands.key(Input.CLICK_LEFT);
+                return hands.decide("dig");
+            }
+            Rotation r = RotationUtils.calcRotationFromVec3d(me.getEyePosition(), target.getBoundingBox().getCenter(), ctx.playerRotations());
+            aimer.aim(new Rotation(r.getYaw(), Math.min(r.getPitch(), 60f)), true);
+            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.getYaw() - me.getYRot())) < 30) hands.key(Input.MOVE_FORWARD);
+            return hands.decide("drop");
         }
         return null;
     }

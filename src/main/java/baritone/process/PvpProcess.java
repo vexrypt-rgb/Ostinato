@@ -758,6 +758,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public int spearCool() { return spearCool; }
         public void spearCool(int ticks) { spearCool = ticks; }
     });
+    private final CombatWind winds = new CombatWind(ctx, aimer, targeting, phase, new CombatWind.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+    });
     private int fleeTicks;
     private Vec3 tv() {
         return targeting.velocity(target);
@@ -791,42 +795,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (tool != null) return tool;
             return null;
         }
-        // arrows, tridents, fireballs, potions: a wind charge on the projectile's path deflects it
-        // a mace carrier above us is the lethal one: the knock from its wind charge is not, and the shield needs the ticks
-        boolean diverAbove = target.getMainHandItem().getItem() == Items.MACE && !target.onGround() && target.getY() > me.getY() + 2
-                && me.getOffhandItem().getItem() == Items.SHIELD;
-        if (wind >= 0 && phase.macePhase == 0 && phase.windCool == 0 && !diverAbove) {
-            for (net.minecraft.world.entity.projectile.Projectile pr : ctx.world().getEntitiesOfClass(net.minecraft.world.entity.projectile.Projectile.class,
-                    me.getBoundingBox().inflate(14), e -> e.getOwner() != me && !e.onGround() && e.getDeltaMovement().lengthSqr() > 0.09)) {
-                Vec3 v = pr.getDeltaMovement(), rel = me.getEyePosition().subtract(pr.position());
-                double d = rel.length();
-                if (d < 3.5 || d > 13 || v.dot(rel) <= 0 || v.normalize().dot(rel.normalize()) < 0.85) continue;
-                Vec3 at = pr.position().add(v.scale(d / (v.length() + 1.5)));
-                Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-                if (!select(me, wind)) return decide("swap");
-                if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("deflect");
-                press(ctx.minecraft().options.keyUse);
-                phase.windCool = 8;
-                return decide("deflect");
-            }
-        }
-        // an airborne opponent diving at us: a wind charge on its predicted path knocks it off the smash
-        // Only a real dive. Every ordinary jump matched the old test, which was 347 of 1800 ticks.
-        // 1726 bench: 235 ticks of this and the 9.1 smashes landed anyway. A shield stops a smash, so a kit
-        // with one blocks below and keeps the mace in hand and charged.
+        PathingCommand deflected = winds.deflect(me, target, wind);
+        if (deflected != null) return deflected;
         boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0;
-        // a shield kit still gets one charge at a diver that is high and far (the shield needs its five ticks only once the diver is close)
-        boolean farDiver = hasShield && dist > 5 && target.getY() > me.getY() + 4 && tv().y < 0.1;
-        if (wind >= 0 && (!hasShield || farDiver) && phase.macePhase == 0 && phase.windCool == 0 && !target.onGround() && dist < 12 && dist > 2
-                && target.getY() > me.getY() + 2) {
-            Vec3 at = target.getBoundingBox().getCenter().add(tv().scale(dist / 1.5));
-            Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-            if (!select(me, wind)) return decide("swap");
-            if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("wind");
-            press(ctx.minecraft().options.keyUse);
-            phase.windCool = 12;
-            return decide("wind");
-        }
+        PathingCommand dived = winds.diver(me, target, dist, wind, hasShield);
+        if (dived != null) return dived;
         // a diver still coming (no charge, or too close to counter): block the smash with the shield
         // 1822 fight ticks 505-508: block, jump, block as the diver came inside one block of our height,
         // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
@@ -845,75 +818,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
             use(true);
             return decide("block");
         }
-        // A wind charge at the feet of an opponent standing behind its shield or eating throws it off the
-        // spot and into the air, where the hop that follows finds it.
-        if (phase.feetCool > 0) phase.feetCool--;
-        if (wind >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && phase.feetCool == 0 && phase.windCool == 0 && me.onGround() && target.onGround() && los
-                && dist > 2.5 && dist < 10 && (target.isBlocking() || target.isUsingItem())) {
-            Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), target.position().add(0, 0.1, 0), ctx.playerRotations());
-            if (!select(me, wind)) return decide("swap");
-            if (!aimer.face(r.getYaw(), r.getPitch(), 3f) && ++phase.feetTicks < 15) return decide("windfeet");
-            if (phase.feetTicks < 15) press(ctx.minecraft().options.keyUse);
-            phase.feetTicks = 0;
-            phase.feetCool = 80;
-            phase.windCool = 8;
-            return decide("windfeet");
-        }
+        PathingCommand feet = winds.feet(me, target, dist, los, wind);
+        if (feet != null) return feet;
         int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
         float myHp = me.getHealth() + me.getAbsorptionAmount();
-        // They are down a drop no path leads down. With a mace the drop is the attack: step off over them and fall on
-        // it, and if the fall is going to miss, a wind charge at the feet takes the landing.
-        double below = me.getY() - target.getY();
-        double gap = me.position().subtract(target.position()).horizontalDistance();
-        if (below <= 6 || phase.macePhase != 0) phase.digDown = false;
-        if (mace >= 0 && wind >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && below > 6 && (target.onGround() || phase.digDown)
-                && gap < (los ? 2 + below * 0.15 : 12)) {
-            if (!me.onGround() && me.getDeltaMovement().y < 0) {
-                phase.macePhase = 2;
-                phase.maceTicks = 0;
-                phase.pearlDive = true;
-                return decide("drop");
-            }
-            if ((!los || phase.digDown) && me.onGround()) {
-                // The floor we stand on is what separates us. Walk over them and dig down through it: the hole drops
-                // us on them from above, which is the mace's whole attack.
-                if (gap > 3.5 && !phase.digDown) { // once the hole is started it stays: they pace about and the fall steers
-                    if (!select(me, mace)) return decide("swap");
-                    look(target.position());
-                    key(Input.MOVE_FORWARD);
-                    return decide("drop");
-                }
-                phase.digDown = true;
-                // A hole we cut beside our feet is no use until we step into it: walk to the open column with ordinary
-                // movement keys and a smoothed look, like a player stepping off an edge.
-                net.minecraft.core.BlockPos feet = me.blockPosition();
-                net.minecraft.world.phys.Vec3 hole = null;
-                for (int dx = -2; dx <= 2 && hole == null; dx++) {
-                    for (int dz = -2; dz <= 2; dz++) {
-                        net.minecraft.core.BlockPos c = feet.offset(dx, -1, dz);
-                        if (ctx.world().getBlockState(c).getCollisionShape(ctx.world(), c).isEmpty()
-                                && ctx.world().getBlockState(c.below()).getCollisionShape(ctx.world(), c.below()).isEmpty()) {
-                            hole = net.minecraft.world.phys.Vec3.atBottomCenterOf(c);
-                            break;
-                        }
-                    }
-                }
-                if (hole != null) {
-                    Rotation r = RotationUtils.calcRotationFromVec3d(me.getEyePosition(), hole.add(0, 0.5, 0), ctx.playerRotations());
-                    aimer.aim(new Rotation(r.getYaw(), Math.min(r.getPitch(), 60f)), true);
-                    if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.getYaw() - me.getYRot())) < 30) key(Input.MOVE_FORWARD);
-                    return decide("dig");
-                }
-                if (!select(me, mace)) return decide("swap");
-                aimer.aim(new Rotation(me.getYRot(), 90f), true);
-                if (me.getXRot() > 80f) key(Input.CLICK_LEFT);
-                return decide("dig");
-            }
-            Rotation r = RotationUtils.calcRotationFromVec3d(me.getEyePosition(), target.getBoundingBox().getCenter(), ctx.playerRotations());
-            aimer.aim(new Rotation(r.getYaw(), Math.min(r.getPitch(), 60f)), true);
-            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.getYaw() - me.getYRot())) < 30) key(Input.MOVE_FORWARD);
-            return decide("drop");
-        }
+        PathingCommand dropped = maces.drop(me, target, los, mace, wind);
+        if (dropped != null) return dropped;
         PathingCommand stranded = pearls.strand(me, target, pearlSlot, myHp, eatTicks);
         if (stranded != null) return stranded;
         PathingCommand lifted = pearls.lift(me, target, dist, los, overhead, mace, wind, pearlSlot, myHp);
