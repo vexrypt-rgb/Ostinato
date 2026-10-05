@@ -50,7 +50,7 @@ import java.util.function.Predicate;
  */
 public final class PvpProcess extends BaritoneProcessHelper {
 
-    private static final double SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
+    private static final double DRIVE = 7, BOW_MIN = 10, CHASE = 48;
 
     private Predicate<LivingEntity> filter;
     /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
@@ -177,17 +177,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         LivingEntity prevTarget = target;
         if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = targeting.pick(me, CHASE);
         if (target != prevTarget) {
-            spearBand = 0;
-            spearHrPrev = -1;
-            spearReopen = false;
-            spearReopenTicks = 0;
-            spearJabWait = 0;
-            spearFacing = false;
-            spearFaceTicks = 0;
-            spearCommit = false;
-            spearCommitTicks = 0;
-            spearUseTicks = 0;
-            spearReleaseNext = false;
+            spears.retarget();
+            spears.spearReleaseNext = false;
         }
         if (target != null && me.tickCount % 5 == 0 && phase.macePhase == 0) target = targeting.retarget(me, target);
         baritone.getInputOverrideHandler().clearAllKeys();
@@ -227,7 +218,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // or spear_back, never on spear_charge. A charge holds the use key on the spear, so
             // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
-            boolean charging = inv.spearSlot(me) >= 0 && spearUseTicks > 0;
+            boolean charging = inv.spearSlot(me) >= 0 && spears.spearUseTicks > 0;
             // 211909 medium balanced: four apples started inside its sword reach, each dropped
             // when its crit jump read as overhead, each bite costing a 6. 212743 hard aggressive: a
             // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
@@ -254,9 +245,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
-                    spearUseTicks = 0;
-                    spearReleaseNext = false;
-                    spearCommit = false;
+                    spears.abortCharge();
                 }
                 if (survival.eat(me, target)) return decide("eat");
             }
@@ -266,7 +255,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
             if (phase.pearlCool > 0) phase.pearlCool--;
             tools.coolFire();
-            if (spearCool > 0) spearCool--;
+            if (spears.spearCool > 0) spears.spearCool--;
             if (hp <= 6 && !survival.canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
                 return decide("flee", survival.flee(me, target, dist));
             }
@@ -380,7 +369,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (dist > DRIVE || !los) {
                 // Charge needs a sprint runway. Baritone chase from 7 blocks never reaches 4.6 blocks/s
                 // before the pierce window, so a plain spear closes that gap on foot.
-                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && survival.eatTicks == 0 && spearUseCool == 0
+                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && survival.eatTicks == 0 && spears.spearUseCool == 0
                         && me.getFoodData().getFoodLevel() > 6;
                 if (!spearRush) {
                     if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", tools.bow(me, target));
@@ -391,7 +380,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 }
             }
             // A spear charge is the use key. Releasing here every tick reset the 10-tick delay.
-            if (me.isUsingItem() && spearUseTicks == 0) use(false);
+            if (me.isUsingItem() && spears.spearUseTicks == 0) use(false);
 
             int spear = inv.spearSlot(me);
             // Spear jabs from farther than a sword; never jab inside SPEAR_MIN (vanilla spear dead zone).
@@ -400,11 +389,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Movement uses horizontal distance to the hitbox. A mace hop makes the 3D eye distance
             // jump to ~5 while we are already in the jab band, which was the close/back oscillation.
             double hr = horizontalBoxDist(me, target);
-            if (spearHrPrev >= 0) {
-                double inst = spearHrPrev - hr;
-                if (inst > -2 && inst < 2) spearClose = spearClose * 0.5 + inst * 0.5;
-            }
-            spearHrPrev = hr;
+            spears.observe(me, spear, hr);
             // Jab only in the middle of the 2-4 band. Outer edge (~4) misses; under SPEAR_MIN cannot connect.
             boolean inReach = spear >= 0
                     ? (hr >= SPEAR_JAB_LO && hr <= SPEAR_JAB_HI)
@@ -414,100 +399,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             float cd = me.getAttackStrengthScale(0.5f);
             boolean meFalling = !me.onGround() && me.getDeltaMovement().y < -0.05;
             boolean targetFalling = !target.onGround() && tv().y < -0.05;
-            // Spear jab: only the connectable middle of the band (~2.6-3.4). Aim first, then swing.
-            // Hysteresis is on horizontal distance so a jump does not flip close/back. SPEAR_MIN stays 2.
-            // Plain spears never lunge. A jab is impossible below full charge (minimum_attack_charge = 1).
-            if (spear >= 0) {
-                if (spearBand > 0) {
-                    if (hr <= SPEAR_JAB_HI - 0.15) spearBand = 0; // walk in until ~3.25
-                } else if (spearBand < 0) {
-                    if (hr >= SPEAR_JAB_LO + 0.15) spearBand = 0; // back out until ~2.75
-                } else if (hr < SPEAR_JAB_LO - 0.2 || hr < SPEAR_MIN) {
-                    spearBand = -1; // too close for a connectable jab
-                } else if (hr > SPEAR_JAB_HI + 0.2) {
-                    spearBand = 1; // outside the connectable band, not a 3.4-edge flicker
-                }
-            }
-            ItemStack spearStack = spear >= 0 ? me.getInventory().getItem(spear) : ItemStack.EMPTY;
-            boolean spearCharged = spear >= 0 && !me.cannotAttackWithItem(spearStack, 0);
-            double slide = Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z);
-            // 05:32 easy: jabs with slide 0.04-0.06 missed; the one at slide 0.02 landed. Stay stopped.
-            // 062727: one pierce, then jabs at 3 blocks and a mace hop. The 4 damage was healed.
-            // Back to the charge runway before the next pass. Do not jab during that back-out.
-            // 070413 never left the jab band (spear_back only to horiz 3.06, then a jab and a mace hop
-            // at along 4.20). 070505's only charge started use at box-distance ~9.9, after along had
-            // been >= 4.6 since ~12. The reopen handoff at hr 4.55 was still facing away: t52 along
-            // 5.60 was the wrong direction (at10 under 2.4) and spear_run died by t56, along 3.29.
-            // Sprint out to where that window can see a real approach, face them, then run. Do not
-            // stop at 4.55 and do not dump into jabs at 8. Do not eat.
-            // 074115: H4.29 stuck (14.00 to 9.71). They held a golden apple t61-t99 while we
-            // sprinted away, and t100 finished it at 10.71 plus 4 absorption. Later hits ate the
-            // absorption, not the kill. Do not back off while that eat is in progress.
-            if (targetEating && spear >= 0 && spearUseTicks == 0) {
-                spearReopen = false;
-                spearFacing = false;
-                spearFaceTicks = 0;
-            }
-            // Backing out whenever they were inside 4.8 returned before the jab below on every tick.
-            // Take a ready jab first; its cooldown is then spent on the back-out for the next charge.
-            // If the jab has not connected in 30 ticks, stop waiting and back out anyway.
-            boolean jabReady = spearCharged && me.getAttackStrengthScale(0f) >= 0.99f;
-            if (spear >= 0 && inv.spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < 4.8
-                    && (!jabReady || ++spearJabWait > 30)) {
-                spearReopen = true;
-                spearJabWait = 0;
-            }
-            if (spearCommit && spearUseTicks == 0 && (++spearCommitTicks > 36 || hr < 3.2)) {
-                spearCommit = false;
-                spearCommitTicks = 0;
-            }
-            if (spear >= 0 && spearReopen) {
-                if (spearUseCool > 0) spearUseCool--;
-                use(false);
-                // 072935 full charge: use at hr 6.18 along 4.69, pierce tick t120 hr 2.98 along 5.64.
-                // The run that made it started at hr 7.52. 8.3 is above the chase plateau, so the
-                // reset kept going and the next charge was 92 ticks later. Face them at 7.4.
-                if (hr >= 7.4) spearFacing = true;
-                if (!los || ++spearReopenTicks > 70) {
-                    spearReopen = false;
-                    spearReopenTicks = 0;
-                    spearFacing = false;
-                    spearFaceTicks = 0;
-                } else if (spearFacing) {
-                    Vec3 aim = aimPoint(me, target);
-                    look(aim);
-                    spearFaceTicks++;
-                    if (aimer.aimedAt(me, aim, 25f) || spearFaceTicks > 3 && aimer.aimedAt(me, aim, 50f)) {
-                        spearReopen = false;
-                        spearReopenTicks = 0;
-                        spearFacing = false;
-                        spearFaceTicks = 0;
-                        spearCommit = true;
-                        spearCommitTicks = 0;
-                        key(Input.MOVE_FORWARD);
-                        if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-                        return decide("spear_run");
-                    }
-                    return decide("spear_back");
-                } else {
-                    Vec3 away = me.getEyePosition().scale(2).subtract(target.getEyePosition());
-                    look(away);
-                    key(Input.MOVE_FORWARD);
-                    if (me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-                    return decide("spear_back");
-                }
-            }
-            if (spear >= 0 && !spearCommit && spearUseTicks == 0 && spearBand == 0 && los && spearCharged && inReach && slide < 0.03 && target.hurtTime <= 0
-                    && me.getAttackStrengthScale(0f) >= 0.99f) {
-                if (!select(me, spear)) return decide("swap");
-                Vec3 aim = aimPoint(me, target);
-                look(aim);
-                // 8 degrees is wider than a player hitbox at 3 blocks, so that gate clicked air.
-                if (!swing.spearRayHits(me, target)) return decide("spear_aim");
-                use(false); // a held charge would eat the jab click
-                hit(me);
-                return decide(meFalling ? "spear_fall" : targetFalling ? "spear_air" : "spear");
-            }
+            PathingCommand jabbed = spears.jab(me, target, los, spear, hr, targetEating, inReach, meFalling, targetFalling);
+            if (jabbed != null) return jabbed;
 
             // a disabled shield stays "raised" for its 5s cooldown; don't keep throwing uncharged axe swings at it
             // only a shield past its 5-tick warm-up is disabled by the axe; a swing into the raise is a wasted cooldown
@@ -542,88 +435,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
             // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
             // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
-            if (spear >= 0) {
-                int lungeLvl = inv.spearLungeLevel(me.getInventory().getItem(spear));
-                double lungeMax = 6.0 + lungeLvl * 5.0; // L1 ~11, L2 ~16, L3 ~21
-                // Jab is 4 raw (0.96 through diamond). Charge is KineticWeaponComponent.usageTick
-                // while use is held, after a 10-tick delay. Damage needs look.dot(movement)*20 >= 4.6.
-                // Hold use on the approach so the delay ends inside the 2-4.5 pierce window, then release.
-                if (spearUseCool > 0) spearUseCool--;
-                if (lungeLvl < 1 && los && survival.eatTicks == 0 && me.getFoodData().getFoodLevel() > 6) {
-                    double along = swing.kineticAlong(me);
-                    // 062018 started use at 6.8 using only our 5.5 blocks/s. They were also closing
-                    // on us, so tick 10 was at 2.14, leaving the 2-4.5 window. Lead with the
-                    // observed distance drop. Do not release at tick 10 if still outside.
-                    double step = Math.max(along / 20.0, spearClose);
-                    double at10 = hr - step * 10.0;
-                    if (spearUseTicks > 0) {
-                        boolean pierce = spearUseTicks >= 11 && along >= 4.6 && hr > 2.05 && hr <= 4.5;
-                        boolean failed = along < 4.2 || hr <= 2.0 || hr > 16 || spearUseTicks >= 200;
-                        if (spearReleaseNext || failed) {
-                            use(false);
-                            if (spearReleaseNext) {
-                                spearCommit = false;
-                                spearFacing = false;
-                                spearFaceTicks = 0;
-                                if (!targetEating) {
-                                    spearReopen = true;
-                                    spearReopenTicks = 0;
-                                }
-                            }
-                            spearUseTicks = 0;
-                            spearReleaseNext = false;
-                            spearUseCool = 8;
-                        } else {
-                            if (!select(me, spear)) return decide("swap");
-                            look(aimPoint(me, target));
-                            key(Input.MOVE_FORWARD);
-                            key(Input.SPRINT);
-                            use(true);
-                            spearUseTicks++;
-                            if (pierce) spearReleaseNext = true;
-                            return decide("spear_charge");
-                        }
-                    } else if (spearUseCool == 0 && along >= 4.6 && hr > 4.55 && hr < 14 && at10 <= 4.4 && at10 >= 2.4) {
-                        if (!select(me, spear)) return decide("swap");
-                        look(aimPoint(me, target));
-                        key(Input.MOVE_FORWARD);
-                        key(Input.SPRINT);
-                        use(true);
-                        spearUseTicks = 1;
-                        spearReleaseNext = false;
-                        return decide("spear_charge");
-                    } else if (spearUseCool == 0 && hr > 4.6 && hr < 14 && (along < 4.6 || at10 > 4.4)) {
-                        if (!select(me, spear)) return decide("swap");
-                        look(aimPoint(me, target));
-                        key(Input.MOVE_FORWARD);
-                        key(Input.SPRINT);
-                        use(false);
-                        return decide("spear_run");
-                    }
-                }
-                if (spearUseTicks == 0) use(false);
-                if (lungeLvl >= 1 && spearCool == 0 && !me.onGround() && los
-                        && dist > SPEAR_REACH && dist < lungeMax && me.getFoodData().getFoodLevel() >= 7) {
-                    if (!select(me, spear)) return decide("swap");
-                    look(aimPoint(me, target));
-                    hit(me);
-                    spearCool = 45 - lungeLvl * 5;
-                    return decide("lunge");
-                }
-                if (spearBand < 0) {
-                    look(aimPoint(me, target));
-                    key(Input.MOVE_BACK);
-                    return decide("spear_back");
-                }
-                if (spearBand > 0) {
-                    if (!select(me, spear)) return decide("swap");
-                    look(aimPoint(me, target));
-                    key(Input.MOVE_FORWARD);
-                    if (er > 5.2 && me.getFoodData().getFoodLevel() > 6) key(Input.SPRINT);
-                    return decide("spear_close");
-                }
-                return decide("spear_hold"); // inside the band: no step in or out this tick
-            }
+            if (spear >= 0) return spears.pass(me, target, dist, los, spear, hr, er, targetEating);
             melee.inReach = inReach;
             melee.chase = chase;
             melee.duel = duel;
@@ -695,6 +507,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void crit() { crits++; }
         public void sprintHit() { sprintHits++; }
     });
+    private final CombatSpear spears = new CombatSpear(inv, aimer, swing, new CombatSpear.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int eatTicks() { return survival.eatTicks; }
+    });
     private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -719,8 +540,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public int lastAxe() { return shield.lastAxeTick; }
         public void axeHit(int tick) { axeHits++; shield.lastAxeTick = tick; }
-        public int spearCool() { return spearCool; }
-        public void spearCool(int ticks) { spearCool = ticks; }
+        public int spearCool() { return spears.spearCool; }
+        public void spearCool(int ticks) { spears.spearCool = ticks; }
     });
     private final CombatWind winds = new CombatWind(ctx, aimer, targeting, phase, new CombatWind.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
@@ -729,13 +550,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private Vec3 tv() {
         return targeting.velocity(target);
     }
-
-    private int spearCool, spearBand;
-    /** Ticks the spear use-key has been held this pass, and ticks to wait before another pass. */
-    private int spearUseTicks, spearUseCool;
-    private double spearHrPrev = -1, spearClose;
-    private boolean spearReleaseNext, spearReopen, spearFacing, spearCommit;
-    private int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
 
@@ -750,10 +564,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Their mace dive is the ~9 damage in the spear logs. Shield it; do not hop into it.
             // Melee and the mace smash landed on spear_back, never on spear_charge.
             // Shielding mid-charge swaps off the spear. Dive-block only while use is not held.
-            if (spearUseTicks == 0 && shield.shieldDive(me, target, dist)) return decide("block");
+            if (spears.spearUseTicks == 0 && shield.shieldDive(me, target, dist)) return decide("block");
             // Do not hop in the middle of a charge approach. The hop was the whole fight and use never started.
             boolean foeEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
-            PathingCommand tool = spearUseTicks == 0 && !spearReopen && !spearCommit && !foeEating && !(spearUseCool == 0 && horizontalBoxDist(me, target) > 4.6)
+            PathingCommand tool = spears.spearUseTicks == 0 && !spears.spearReopen && !spears.spearCommit && !foeEating && !(spears.spearUseCool == 0 && horizontalBoxDist(me, target) > 4.6)
                     ? maces.spearTools(me, target, los, wind, mace) : null;
             if (tool != null) return tool;
             return null;
