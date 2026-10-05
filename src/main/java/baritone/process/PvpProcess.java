@@ -50,7 +50,7 @@ import java.util.function.Predicate;
  */
 public final class PvpProcess extends BaritoneProcessHelper {
 
-    private static final double SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, SPEAR_JAB_LO = 2.6, SPEAR_JAB_HI = 3.4, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
+    private static final double SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
 
     private Predicate<LivingEntity> filter;
     /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
@@ -506,7 +506,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 Vec3 aim = aimPoint(me, target);
                 look(aim);
                 // 8 degrees is wider than a player hitbox at 3 blocks, so that gate clicked air.
-                if (!spearRayHits(me)) return decide("spear_aim");
+                if (!swing.spearRayHits(me, target)) return decide("spear_aim");
                 use(false); // a held charge would eat the jab click
                 hit(me);
                 return decide(meFalling ? "spear_fall" : targetFalling ? "spear_air" : "spear");
@@ -525,7 +525,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (duel && hiddenShield(me)) tgShield = true;
             boolean axeTime = tgShield && inReach && me.tickCount - lastAxeTick > 8 && inv.best(me, AXES) >= 0;
             if (!select(me, axeTime ? inv.best(me, AXES) : inv.weapon(me))) return decide("swap");
-            look(swingPoint(me, target));
+            look(swing.swingPoint(me, target, tv()));
 
             boolean targetReady = me.tickCount - targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
             // the tick the use key comes up, an attack click is still swallowed by the item in use
@@ -553,7 +553,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // Hold use on the approach so the delay ends inside the 2-4.5 pierce window, then release.
                 if (spearUseCool > 0) spearUseCool--;
                 if (lungeLvl < 1 && los && eatTicks == 0 && me.getFoodData().getFoodLevel() > 6) {
-                    double along = kineticAlong(me);
+                    double along = swing.kineticAlong(me);
                     // 062018 started use at 6.8 using only our 5.5 blocks/s. They were also closing
                     // on us, so tick 10 was at 2.14, leaving the 2-4.5 window. Lead with the
                     // observed distance drop. Do not release at tick 10 if still outside.
@@ -720,6 +720,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public boolean hit(Player me, Entity e) { return PvpProcess.this.hit(me, e); }
         public void key(Input in) { PvpProcess.this.key(in); }
     });
+    private final CombatSwing swing = new CombatSwing();
     private final CombatTools tools = new CombatTools(ctx, inv, aimer, targeting, explosives, new CombatTools.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -1777,14 +1778,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private boolean hit(Player me) {
         boolean spearAim = isSpear(me.getMainHandItem());
-        Vec3 aim = spearAim ? aimPoint(me, target) : swingPoint(me, target);
+        Vec3 aim = spearAim ? aimPoint(me, target) : swing.swingPoint(me, target, tv());
         look(aim);
         double er = exactReach(me, target);
         boolean spear = isSpear(me.getMainHandItem());
         if (spear) {
             // Piercing jab raycasts along the look vector. A click that is merely near the eyes misses
             // and, below full charge, is rejected. Do not press attack unless this ray connects.
-            if (!spearRayHits(me)) return false;
+            if (!swing.spearRayHits(me, target)) return false;
             press(ctx.minecraft().options.keyAttack);
             attacks++;
             return true;
@@ -1822,25 +1823,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     /**
-     * Where a sword or axe looks. The nearest point of the hitbox is its edge whenever we stand off-axis,
-     * and the look that arrives is a tick old: 223541 expert sat 6-8 degrees behind the edge and sent no
-     * click on 8 charged ticks. Aim at the middle of the box, led by one tick of both players' motion,
-     * and only slide toward the near edge when the middle is past reach.
-     */
-    private Vec3 swingPoint(Player me, LivingEntity t) {
-        Vec3 near = aimPoint(me, t);
-        Vec3 eye = me.getEyePosition();
-        Vec3 mid = t.getBoundingBox().getCenter();
-        Vec3 lead = tv().subtract(me.getDeltaMovement()).multiply(1, 0, 1);
-        for (double f : new double[]{1.0, 0.6, 0.3}) {
-            Vec3 p = new Vec3(Mth.lerp(f, near.x, mid.x), near.y, Mth.lerp(f, near.z, mid.z));
-            Vec3 in = t.getBoundingBox().clip(eye, p).orElse(p);
-            if (eye.distanceTo(in) <= REACH - 0.04 || eye.distanceTo(near) > REACH) return p.add(lead);
-        }
-        return near.add(lead);
-    }
-
-    /**
      * Spear kit, and only when a jab is not available.
      * A straight-down wind charge is a hop: a mace smash just outside the jab band, or a shove out of the dead zone.
      * It is not aimed past the target and it is not used to walk in.
@@ -1858,35 +1840,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("mace");
         }
         return null;
-    }
-
-    private Vec3 kineticPos;
-
-    /**
-     * Blocks/second along the look vector, from last tick's position change.
-     * getDeltaMovement() stays near 0.15 (about 3 blocks/s) while a sprint actually covers about 0.27.
-     * The server charge check uses that position delta, so the 4.6 gate never opened.
-     */
-    private double kineticAlong(Player me) {
-        Vec3 pos = me.position();
-        Vec3 delta = kineticPos == null ? Vec3.ZERO : pos.subtract(kineticPos);
-        kineticPos = pos;
-        if (delta.lengthSqr() > 1.0) delta = me.getDeltaMovement();
-        return me.getLookAngle().dot(delta) * 20.0;
-    }
-
-    /**
-     * The held spear's piercing ray hits the target inside the jab band, and the jab is fully charged.
-     * Vanilla rejects a spear attack below minimum_attack_charge (1.0) and misses anything the ray misses.
-     */
-    private boolean spearRayHits(Player me) {
-        ItemStack st = me.getMainHandItem();
-        if (!isSpear(st) || me.cannotAttackWithItem(st, 0)) return false;
-        net.minecraft.world.item.component.AttackRange range = me.entityAttackRange();
-        net.minecraft.world.phys.HitResult hit = range.getClosesetHit(me, 1.0f, e -> e == target);
-        if (!(hit instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != target) return false;
-        double along = me.getEyePosition().distanceTo(er.getLocation());
-        return along >= SPEAR_JAB_LO && along <= SPEAR_JAB_HI;
     }
 
     @Override
