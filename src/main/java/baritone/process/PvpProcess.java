@@ -957,7 +957,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // Pearl lift: a pearl thrown straight up loses speed and a wind charge thrown after it does not. The pearl
         // lands on the charge some 18 blocks up and that is where we are, with a full fall onto the mace below.
         if (mace >= 0 && wind >= 0 && macePhase == 0 && (pearlStage == 3 || pearlStage == 4 || pearlStage == 0 && pearlSlot >= 0 && pearlCool == 0
-                && maceCool == 0 && me.onGround() && los && dist > 1.0 && dist <= 7 && myHp >= 15 && !overhead && target.onGround()
+                && maceCool == 0 && me.onGround() && los && dist > 3.5 && dist <= 7 && myHp >= 15 && !overhead && target.onGround()
                 && me.getDeltaMovement().horizontalDistance() < 0.12
                 && ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), me.getEyePosition().add(0, 26, 0),
                         net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me)).getType() == net.minecraft.world.phys.HitResult.Type.MISS)) {
