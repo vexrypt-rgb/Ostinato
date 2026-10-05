@@ -298,7 +298,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             PathingCommand dive = shield.underDive(me, target, dist, los);
             if (dive != null) return dive;
-            if (phase.pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
+            if (phase.pearlStage == 0 && (blockMelee || defense.arrowIncoming(me))) {
                 // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
                 // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
                 select(me, inv.weapon(me));
@@ -659,14 +659,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return cmd;
     }
 
-    private boolean shouldBlock(Player me, double dist) {
-        return defense.arrowIncoming(me) && blockWhy(3);
-    }
-
     private String brokeNote = "";
-
-    private int blockWhy;
-    private boolean blockWhy(int w) { blockWhy = w; return true; }
 
     /**
      * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
