@@ -2460,12 +2460,28 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return Math.max(0, dmg - self * 1.4f);
     }
 
+    /** getSeenPercent for an anchor: its own block is gone when it blows, but walls between us and it still stop the rays. */
+    private static double seenThroughAnchor(Vec3 at, LivingEntity e) {
+        AABB bb = e.getBoundingBox();
+        double sx = 1.0 / ((bb.maxX - bb.minX) * 2 + 1), sy = 1.0 / ((bb.maxY - bb.minY) * 2 + 1), sz = 1.0 / ((bb.maxZ - bb.minZ) * 2 + 1);
+        if (sx < 0 || sy < 0 || sz < 0) return 1;
+        BlockPos own = BlockPos.containing(at);
+        int hit = 0, total = 0;
+        for (double x = 0; x <= 1; x += sx) for (double y = 0; y <= 1; y += sy) for (double z = 0; z <= 1; z += sz) {
+            Vec3 from = new Vec3(net.minecraft.util.Mth.lerp(x, bb.minX, bb.maxX), net.minecraft.util.Mth.lerp(y, bb.minY, bb.maxY), net.minecraft.util.Mth.lerp(z, bb.minZ, bb.maxZ));
+            BlockHitResult r = e.level().clip(new net.minecraft.world.level.ClipContext(from, at, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, e));
+            if (r.getType() == net.minecraft.world.phys.HitResult.Type.MISS || r.getBlockPos().equals(own)) hit++;
+            total++;
+        }
+        return total == 0 ? 1 : (double) hit / total;
+    }
+
     /** Vanilla end crystal (power 6) damage to {@code e} after armour. */
     private static float blast(LivingEntity e, Vec3 at, double size) {
         double d = Math.sqrt(e.distanceToSqr(at)) / size;
         if (d > 1) return 0;
         // an anchor is removed before it blows, but would block its own rays here, so take it as fully exposed
-        double impact = (1 - d) * (size == 12 ? ServerExplosion.getSeenPercent(at, e) : 1);
+        double impact = (1 - d) * (size == 12 ? ServerExplosion.getSeenPercent(at, e) : seenThroughAnchor(at, e));
         float raw = (float) ((impact * impact + impact) / 2 * 7 * size + 1);
         return CombatRules.getDamageAfterAbsorb(e, raw, e.damageSources().generic(), e.getArmorValue(), (float) e.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
     }
