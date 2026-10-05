@@ -1858,6 +1858,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (hand >= 0 && !select(me, hand)) return true;
         look(target.getEyePosition());
         use(true);
+        // a diver lands where we stand: step out from under it as well as covering up
+        if (horizontalBoxDist(me, target) < 2.5) key(Input.MOVE_BACK);
         if (blockTicks++ == 0) blocks++;
         return true;
     }
