@@ -249,7 +249,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
                 use(false);
                 eatTicks = 0;
-            } else if (!longFall && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+            } else if (!longFall && !blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
                     && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
@@ -2382,6 +2382,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         return spot != null && place(me, Items.RESPAWN_ANCHOR, spot.below());
+    }
+
+    /** A charged anchor or a crystal close enough to hurt: 27 ticks of chewing beside one is how a bite becomes a death. */
+    private boolean blastThreat(Player me) {
+        if (me.getHealth() <= 4) return false; // nothing left to lose by eating
+        Level w = ctx.world();
+        for (EndCrystal c : w.getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8))) {
+            if (blast(me, c.position(), 12) >= 6) return true;
+        }
+        BlockPos f = me.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(f.offset(-6, -3, -6), f.offset(6, 3, 6))) {
+            if (w.getBlockState(p).is(Blocks.RESPAWN_ANCHOR) && w.getBlockState(p).getValue(RespawnAnchorBlock.CHARGE) > 0
+                    && blast(me, Vec3.atCenterOf(p), 10) >= 6) return true;
+        }
+        return false;
     }
 
     /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */
