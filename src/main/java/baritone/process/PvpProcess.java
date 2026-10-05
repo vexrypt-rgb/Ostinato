@@ -63,7 +63,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private LivingEntity target;
     private final Random rng = new Random(7);
     private boolean chase;
-    private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps;
+    private int strafeDir = 1, strafeLeft, wtap, groundedJumps;
     /** The hit being watched. */
     private int probeTick, probeSince;
     private boolean critArmed;
@@ -199,7 +199,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        keepTotem(me);
+        survival.keepTotem(me);
         targeting.track(target);
         if (!recorder.active()) recorder.begin(me, target, label);
         tickDec = "-";
@@ -246,13 +246,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
             // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
             boolean roomy = eyeToBox(me, target) > 6;
-            boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (eatTicks > 0 || !pressed);
+            boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (survival.eatTicks > 0 || !pressed);
             boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
-            if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
+            if (survival.eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
                 use(false);
-                eatTicks = 0;
-            } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
-                && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+                survival.eatTicks = 0;
+            } else if (!longFall && !(survival.eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
+                && !explosives.blastThreat(me) && (!charging || critical) && (survival.eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
                     && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
@@ -260,7 +260,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     spearReleaseNext = false;
                     spearCommit = false;
                 }
-                if (eat(me)) return decide("eat");
+                if (survival.eat(me, target)) return decide("eat");
             }
 
             double dist = eyeToBox(me, target);
@@ -269,8 +269,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (phase.pearlCool > 0) phase.pearlCool--;
             tools.coolFire();
             if (spearCool > 0) spearCool--;
-            if (hp <= 6 && !canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
-                return decide("flee", flee(me, dist));
+            if (hp <= 6 && !survival.canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
+                return decide("flee", survival.flee(me, target, dist));
             }
 
             // A spear that raises its shield here never steps into the 2-4 jab band.
@@ -329,7 +329,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 shield.lastShieldTick = me.tickCount;
                 return decide("block");
             }
-            if (phase.pearlStage == 0 && eatTicks == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
+            if (phase.pearlStage == 0 && survival.eatTicks == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
                 select(me, inv.weapon(me));
                 look(target.getEyePosition());
                 use(false);
@@ -365,7 +365,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // 1907 bench: they fell 8 blocks off the platform and no path follows a drop that deep, so
             // 945 ticks went to standing at the edge. Walk off after them; with a mace the fall is a dive.
             double drop = me.getY() - target.getY();
-            if (drop > 3.5 && drop < 20 && horizontalBoxDist(me, target) < 8 && eatTicks == 0
+            if (drop > 3.5 && drop < 20 && horizontalBoxDist(me, target) < 8 && survival.eatTicks == 0
                     && (inv.slotOf(me, Items.MACE) >= 0 || me.getHealth() > drop + 4)) {
                 use(false);
                 int mace = inv.slotOf(me, Items.MACE);
@@ -382,7 +382,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (dist > DRIVE || !los) {
                 // Charge needs a sprint runway. Baritone chase from 7 blocks never reaches 4.6 blocks/s
                 // before the pierce window, so a plain spear closes that gap on foot.
-                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && eatTicks == 0 && spearUseCool == 0
+                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && survival.eatTicks == 0 && spearUseCool == 0
                         && me.getFoodData().getFoodLevel() > 6;
                 if (!spearRush) {
                     if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", bow(me));
@@ -551,7 +551,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // while use is held, after a 10-tick delay. Damage needs look.dot(movement)*20 >= 4.6.
                 // Hold use on the approach so the delay ends inside the 2-4.5 pierce window, then release.
                 if (spearUseCool > 0) spearUseCool--;
-                if (lungeLvl < 1 && los && eatTicks == 0 && me.getFoodData().getFoodLevel() > 6) {
+                if (lungeLvl < 1 && los && survival.eatTicks == 0 && me.getFoodData().getFoodLevel() > 6) {
                     double along = swing.kineticAlong(me);
                     // 062018 started use at 6.8 using only our 5.5 blocks/s. They were also closing
                     // on us, so tick 10 was at 2.14, leaving the 2-4.5 window. Lead with the
@@ -698,7 +698,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("strafe");
         } finally {
             recorder.tick(me, target, eyeToBox(me, target),
-                    targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + fleeTicks + " e" + eatTicks + " s" + me.getInventory().getSelectedSlot()
+                    targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
                             + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + clickKind,
@@ -730,13 +730,22 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand bow(Player me) { return PvpProcess.this.bow(me); }
         public void attacked() { attacks++; }
     });
+    private final CombatSurvival survival = new CombatSurvival(ctx, inv, aimer, explosives, phase, new CombatSurvival.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
+        public void gappleEaten() { gapples++; }
+    });
     private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, new CombatShield.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void use(boolean down) { PvpProcess.this.use(down); }
         public void key(Input in) { PvpProcess.this.key(in); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
-        public int eatTicks() { return eatTicks; }
+        public int eatTicks() { return survival.eatTicks; }
         public void blockStarted() { blocks++; }
     });
     private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
@@ -770,7 +779,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
     });
-    private int fleeTicks;
     private Vec3 tv() {
         return targeting.velocity(target);
     }
@@ -816,7 +824,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         PathingCommand dropped = maces.drop(me, target, los, mace, wind);
         if (dropped != null) return dropped;
-        PathingCommand stranded = pearls.strand(me, target, pearlSlot, myHp, eatTicks);
+        PathingCommand stranded = pearls.strand(me, target, pearlSlot, myHp, survival.eatTicks);
         if (stranded != null) return stranded;
         PathingCommand lifted = pearls.lift(me, target, dist, los, overhead, mace, wind, pearlSlot, myHp);
         if (pearls.handled) return lifted;
@@ -826,42 +834,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (winged != null) return winged;
         if (mace >= 0) return maces.run(me, target, dist, los, overhead, mace, wind);
         return tools.run(me, target, dist, los);
-    }
-
-    private boolean canHeal(Player me) {
-        return me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING || inv.slotOf(me, Items.GOLDEN_APPLE) >= 0
-                || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 || inv.potion(me, MobEffects.INSTANT_HEALTH) >= 0;
-    }
-
-    /** Low on health with nothing to heal: pearl away from the target, else run. */
-    private PathingCommand flee(Player me, double dist) {
-        use(false);
-        // the landing costs about 3 HP in this kit: a pearl thrown at 2 HP is a suicide (pillar perfect, tick 243)
-        if (dist < 10 && phase.pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && inv.slotOf(me, Items.ENDER_PEARL) >= 0) {
-            Vec3 away = new Vec3(me.getX() - target.getX(), 0, me.getZ() - target.getZ());
-            away = away.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : away.normalize();
-            Vec3 at = me.getEyePosition().add(away.scale(24)).add(0, 7, 0);
-            Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-            if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
-            if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
-            press(ctx.minecraft().options.keyUse);
-            phase.pearlCool = 160;
-            return decide("pearl");
-        }
-        if (dist > 16) {
-            fleeTicks = 0;
-            return decide("flee"); // clear of it: stand and regenerate
-        }
-        int blk = inv.blockSlot(me);
-        if (++fleeTicks > 40 && dist < 6 && blk >= 0 && me.getY() - target.getY() < 5) {
-            // can't shake it: tower up out of melee
-            if (!select(me, blk)) return decide("swap");
-            aimer.aim(new Rotation(me.getYRot(), 90f), true);
-            if (me.onGround()) key(Input.JUMP);
-            else if (me.getDeltaMovement().y < 0.1 && ctx.world().getBlockState(me.blockPosition().below()).isAir()) explosives.click(me, me.blockPosition().below().below());
-            return decide("pillar");
-        }
-        return decide("flee", new PathingCommand(new baritone.api.pathing.goals.GoalRunAway(18, target.blockPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
     }
 
     private double groundY = Double.NaN;
@@ -994,36 +966,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return decide("bow");
     }
 
-    private boolean eat(Player me) {
-        Item apple = me.getHealth() <= 6 && inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
-        if (inv.slotOf(me, apple) < 0) apple = Items.ENCHANTED_GOLDEN_APPLE;
-        if (inv.slotOf(me, apple) < 0) {
-            eatTicks = 0;
-            return false;
-        }
-        if (!select(me, inv.slotOf(me, apple))) return true;
-        if (me.getMainHandItem().getItem() != apple) return true;
-        // a raised offhand shield stays in use across a hotbar switch, so the apple never starts: let go first
-        if (me.isUsingItem() && me.getUseItem().getItem() != apple) {
-            use(false);
-            return true;
-        }
-        if (eatTicks++ == 0) gapples++;
-        key(Input.MOVE_BACK); // back off while chewing
-        use(true);
-        look(target.getEyePosition());
-        if (eatTicks > 36) {
-            use(false);
-            eatTicks = 0;
-        }
-        return true;
-    }
-
-    private void keepTotem(Player me) {
-        if (me.getHealth() > 8 && !explosives.fighting() || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
-        inv.toOffhand(me, Items.TOTEM_OF_UNDYING);
-    }
-
     /**
      * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
      * so the round dealt 0. Set the slot as well as clicking the key.
@@ -1098,7 +1040,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         filter = null;
         enemies.clear();
         target = null;
-        eatTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
+        survival.eatTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
         shield.axeHeld = shield.flicked = false;
         shield.swingGap = shield.unseenBlock = probeTick = 0;
         tools.reset();
