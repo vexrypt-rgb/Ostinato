@@ -20,14 +20,13 @@ import static baritone.process.CombatGeometry.*;
  * keeps its own cooldown; the process only asks {@link #run} and acts on the command it returns.
  */
 final class CombatTools {
-    /** What the process does for us: hotbar, aim, use key, the tick's decision label, the bow routine, and the attack count. */
+    /** What the process does for us: hotbar, aim, use key, the tick's decision label, and the attack count. */
     interface Hands {
         boolean select(Player me, int slot);
         void look(Vec3 at);
         void use(boolean down);
         PathingCommand decide(String d);
         PathingCommand decide(String d, PathingCommand cmd);
-        PathingCommand bow(Player me);
         void attacked();
     }
 
@@ -125,7 +124,7 @@ final class CombatTools {
                                 && ctx.world().getBlockState(firePos.above()).getBlock() != net.minecraft.world.level.block.Blocks.SOUL_FIRE
                                 && ctx.world().getBlockState(firePos.above()).getBlock() != net.minecraft.world.level.block.Blocks.FIRE) fireStage = 0;
                         if (target.isOnFire() || fireTicks > 70) { fireStage = 0; fireCool = 400; }
-                        return hands.decide("bow", hands.bow(me));
+                        return hands.decide("bow", bow(me, target));
                     }
                 }
             } else if (fireStage < 0 && (!target.onGround() || dist < 5)) {
@@ -173,5 +172,21 @@ final class CombatTools {
                 return hands.decide("trident");
             }
             return null;
+    }
+
+    PathingCommand bow(Player me, LivingEntity target) {
+        this.target = target;
+        if (!hands.select(me, inv.slotOf(me, Items.BOW))) return hands.decide("swap");
+        if (me.getMainHandItem().getItem() != Items.BOW) return hands.decide("swap");
+        // lead: arrow ~3 b/t at full draw, gravity 0.05
+        Vec3 at = arcAim(me.getEyePosition(), target.getBoundingBox().getCenter(), tv(), 3.0);
+        hands.look(at);
+        if (me.isUsingItem() && me.getTicksUsingItem() >= 21) {
+            hands.use(false);
+            hands.attacked();
+        } else {
+            hands.use(true);
+        }
+        return hands.decide("bow");
     }
 }

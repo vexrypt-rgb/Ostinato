@@ -385,7 +385,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && survival.eatTicks == 0 && spearUseCool == 0
                         && me.getFoodData().getFoodLevel() > 6;
                 if (!spearRush) {
-                    if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", bow(me));
+                    if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", tools.bow(me, target));
                     use(false);
                     // Spear chase stops in the jab band, not inside the 2-block dead zone.
                     int near = inv.spearSlot(me) >= 0 ? 3 : 2;
@@ -726,7 +726,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void use(boolean down) { PvpProcess.this.use(down); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
-        public PathingCommand bow(Player me) { return PvpProcess.this.bow(me); }
         public void attacked() { attacks++; }
     });
     private final CombatSurvival survival = new CombatSurvival(ctx, inv, aimer, explosives, phase, new CombatSurvival.Hands() {
@@ -907,21 +906,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private int blockWhy;
     private boolean blockWhy(int w) { blockWhy = w; return true; }
-
-    private PathingCommand bow(Player me) {
-        if (!select(me, inv.slotOf(me, Items.BOW))) return decide("swap");
-        if (me.getMainHandItem().getItem() != Items.BOW) return decide("swap");
-        // lead: arrow ~3 b/t at full draw, gravity 0.05
-        Vec3 at = arcAim(me.getEyePosition(), target.getBoundingBox().getCenter(), tv(), 3.0);
-        look(at);
-        if (me.isUsingItem() && me.getTicksUsingItem() >= 21) {
-            use(false);
-            attacks++;
-        } else {
-            use(true);
-        }
-        return decide("bow");
-    }
 
     /**
      * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
