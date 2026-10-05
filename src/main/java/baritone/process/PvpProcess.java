@@ -746,6 +746,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public int lastShield() { return lastShieldTick; }
         public void shielded(int tick) { lastShieldTick = tick; }
     });
+    private final CombatMace maces = new CombatMace(ctx, inv, aimer, targeting, phase, new CombatMace.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public boolean shieldDive(Player me, double dist) { return PvpProcess.this.shieldDive(me, dist); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int lastAxe() { return lastAxeTick; }
+        public void axeHit(int tick) { axeHits++; lastAxeTick = tick; }
+        public int spearCool() { return spearCool; }
+        public void spearCool(int ticks) { spearCool = ticks; }
+    });
     private int fleeTicks;
     private Vec3 tv() {
         return targeting.velocity(target);
@@ -759,8 +771,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
-    // ticks from the wind charge leaving the hand to the jump under it
-    private static final int HOP_JUMP_DELAY = Integer.getInteger("ostinato.pvp.hopJumpDelay", 1);
 
     private PathingCommand special(Player me, double dist, boolean los) {
         if (phase.maceCool > 0) phase.maceCool--;
@@ -912,226 +922,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (pearls.handled) return struck;
         PathingCommand winged = elytra.run(me, target, dist, los, overhead, mace, wind);
         if (winged != null) return winged;
-        if (mace >= 0) {
-            boolean spearKit = inv.spearSlot(me) >= 0;
-            boolean canJump = me.onGround() && !me.isInWater();
-            // Spear kit starts the smash from spearTools, and only from just outside the jab.
-            // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
-            // 002307 t1527: it stood at 6 health eating 3.6 away and the next 40 ticks went to a hop; two sword hits end it.
-            boolean finish = target.getHealth() + target.getAbsorptionAmount() <= 7 && dist < 5;
-            if (!spearKit && phase.macePhase == 0 && canJump && phase.maceCool == 0 && !overhead && !finish && dist > 1.0 && dist < 24 && los && wind >= 0) {
-                if (!select(me, wind)) return decide("swap");
-                aimer.aim(new Rotation(me.getYRot(), 90f), true);
-                phase.hopThrown = -1;
-                phase.flickLeft = 0;
-                phase.flickAge = 100;
-                phase.macePhase = 1;
-                phase.maceTicks = 0;
-            }
-            if (phase.macePhase == 1) { // hop: charge leaves straight down this tick, under the feet
-                phase.maceTicks++;
-                // Spear kit: swapping onto the mace zeroes its charge, and the hop lands at cd~0.5
-                // (fight 051702 ticks 45-48 had the fall flag and never clicked). Charge first, then
-                // throw the wind charge from the offhand so the hotbar slot never changes.
-                if (inv.spearSlot(me) >= 0) {
-                    if (!select(me, mace)) return decide("swap");
-                    if (me.getAttackStrengthScale(0f) < 0.99f) {
-                        // 05:32: standing still to charge let the bot walk into us, and the throw at dist 0.5 never fell.
-                        double hr = horizontalBoxDist(me, target);
-                        look(aimPoint(me, target));
-                        if (hr < 3.6) key(Input.MOVE_BACK);
-                        else if (hr > 4.2) key(Input.MOVE_FORWARD);
-                        if (phase.maceTicks > 50 || hr < 1.2) {
-                            phase.macePhase = 0;
-                            phase.maceCool = 40;
-                            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                        }
-                        return decide("mace");
-                    }
-                    if (horizontalBoxDist(me, target) < 3.2) {
-                        phase.macePhase = 0;
-                        phase.maceCool = 40;
-                        if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                        return decide("mace");
-                    }
-                    if (me.getOffhandItem().getItem() != Items.WIND_CHARGE) {
-                        inv.toOffhand(me, Items.WIND_CHARGE);
-                        return decide("mace");
-                    }
-                    if (me.onGround()) {
-                        key(Input.JUMP);
-                        return decide("mace");
-                    }
-                    if (aimer.throwStraightDown(me)) {
-                        phase.macePhase = 2;
-                        phase.maceTicks = 0;
-                    }
-                    return decide("mace");
-                }
-                // Do not look at the target or walk in. A 2.5 deg/tick look throws into the ground ahead.
-                if (!select(me, wind)) return decide("swap");
-                // 1740 fight ticks 249-262: jumped, threw two ticks later, and the burst met the feet a block
-                // up for +0.84 and a 7 block hop. The burst is strongest at the feet: tip down on the ground,
-                // throw, and jump as it lands so the jump adds to it.
-                aimer.aim(new Rotation(me.getYRot(), 90f), true);
-                if (phase.hopThrown < 0) {
-                    if (me.getXRot() >= 78f && me.onGround()) {
-                        press(ctx.minecraft().options.keyUse);
-                        phase.hopThrown = phase.maceTicks;
-                    } else if (phase.maceTicks > 10) {
-                        phase.macePhase = 0;
-                        phase.maceCool = 20;
-                    }
-                } else if (phase.maceTicks - phase.hopThrown >= HOP_JUMP_DELAY) {
-                    key(Input.JUMP);
-                    phase.macePhase = 2;
-                    phase.maceTicks = 0;
-                }
-                return decide("mace");
-            }
-            if (phase.macePhase == 2) { // flying: steer to the target, smash while falling
-                phase.maceTicks++;
-                // A wind hop forgives its own fall and a pearl does not: 18 blocks onto bare ground is most of a health
-                // bar. When the fall will end out of reach of them, burst a charge under the feet to break it.
-                if (phase.pearlDive && me.onGround()) phase.pearlDive = false;
-                if (phase.pearlDive && wind >= 0 && me.fallDistance > 5 && exactReach(me, target) > REACH + 2.5
-                        && !ctx.world().noCollision(me, me.getBoundingBox().expandTowards(0, -6.5, 0))) {
-                    if (!select(me, wind)) return decide("swap");
-                    if (aimer.throwStraightDown(me)) phase.pearlDive = false;
-                    return decide("windbreak");
-                }
-                // Abort a hop that is not a smash when their dive is the one that will land.
-                if (spearKit && me.fallDistance < 1.2 && shieldDive(me, dist)) {
-                    phase.macePhase = 0;
-                    phase.maceCool = 8;
-                    return decide("block");
-                }
-                phase.flickAge++;
-                if (phase.flickLeft > 0 && select(me, wind)) { // two ticks, so the server sees it
-                    phase.flickLeft--;
-                    return decide("flick");
-                }
-                if (!select(me, mace)) return decide("swap");
-                // The fall is 0.9 a tick, 15 degrees of pitch at this range, and a look set now is read
-                // from the next tick's eye. Aim from there, or hit() finds the aim 10 degrees off and does not click.
-                Vec3 lead = spearKit ? aimPoint(me, target) : aimPoint(me, target).subtract(me.getDeltaMovement());
-                look(lead);
-                // VexBot's SwordPvpController.isIncomingFallAttack raises its shield when a mace is 3 above it,
-                // inside 3.5 and falling at 0.3, and the shield blocks 5 ticks later. A dive that drops in
-                // slow and unsprinted meets it less often (4/5 at medium against 1/5 sprinting in).
-                boolean quiet = !spearKit && me.distanceTo(target) < 7;
-                // A shield covers the half-circle its holder faces and nothing behind it. 235605 t104 and 235404
-                // t591 came down 0.9 and 0.4 behind a raised shield and killed through it; 000432 t151 came down
-                // in front and did nothing. Against a shield the dive is flown to the far side of its back.
-                Vec3 facing = target.calculateViewVector(0f, target.getYHeadRot());
-                Vec3 offset = me.position().subtract(target.position()).multiply(1, 0, 1);
-                boolean theirShield = target.getOffhandItem().getItem() == Items.SHIELD || target.getMainHandItem().getItem() == Items.SHIELD;
-                boolean behind = offset.dot(facing) < -0.1;
-                boolean around = !spearKit && theirShield && me.getY() > target.getY() + 1.5;
-                // 002307 t1533-1566: it walked off eating at 0.2 a tick and the dive came down 2.8 behind where it
-                // had been. Fly to where it will be when the fall reaches its height.
-                int fallTicks = 0;
-                for (double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5; dy > 0 && fallTicks < 30; fallTicks++) {
-                    v = (v - 0.08) * 0.98;
-                    dy += v;
-                }
-                Vec3 ahead = target.position().add(tv().multiply(fallTicks, 0, fallTicks));
-                boolean moving = !spearKit && tv().horizontalDistance() > 0.1;
-                if (around || moving) {
-                    Vec3 to = (around ? ahead.subtract(facing.scale(1.6)) : ahead).subtract(me.position()).multiply(1, 0, 1);
-                    if (to.horizontalDistance() > 0.15) {
-                        float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
-                        if (Math.abs(rel) < 67.5f) key(Input.MOVE_FORWARD);
-                        else if (Math.abs(rel) > 112.5f) key(Input.MOVE_BACK);
-                        if (rel > 22.5f && rel < 157.5f) key(Input.MOVE_RIGHT);
-                        else if (rel < -22.5f && rel > -157.5f) key(Input.MOVE_LEFT);
-                        if (around || to.horizontalDistance() > 2.5) key(Input.SPRINT);
-                    }
-                } else if (!quiet) {
-                    key(Input.MOVE_FORWARD);
-                    key(Input.SPRINT);
-                } else if (!me.isSprinting() && (horizontalBoxDist(me, target) > 2.2 || me.getDeltaMovement().horizontalDistance() < 0.08)) {
-                    key(Input.MOVE_FORWARD);
-                }
-                if (!spearKit && wind >= 0 && !me.onGround() && phase.flickAge > 40) {
-                    // The cooldown restarts when the held item changes: flick off the mace so the fall ends near 0.8.
-                    int n = 0;
-                    double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5;
-                    while (dy > 0 && n < 60) {
-                        v = (v - 0.08) * 0.98;
-                        dy += v;
-                        n++;
-                    }
-                    if (n >= 14 && n <= 26 && me.getAttackStrengthScale(0f) + n / 33f >= 0.84f) {
-                        phase.flickAge = 0;
-                        phase.flickLeft = 1;
-                        select(me, wind);
-                        return decide("flick");
-                    }
-                }
-                int sp = inv.spearSlot(me), axe = inv.best(me, AXES);
-                boolean shielded = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
-                if (shielded && axe >= 0 && me.fallDistance > 1.5 && me.tickCount - lastAxeTick > 20 && exactReach(me, target) <= REACH - 0.05) {
-                    if (!select(me, axe)) return decide("swap"); // breach slam: the axe drops the shield, the mace lands on the next tick
-                    hit(me);
-                    axeHits++;
-                    lastAxeTick = me.tickCount;
-                    return decide("axe");
-                }
-                // Lunge ONLY if the held spear has minecraft:lunge 1-3. Plain spears never lunge.
-                // Vanilla impulse scales ~0.458 per level; we only jab farther out at higher levels.
-                int lungeLvl = sp >= 0 ? inv.spearLungeLevel(me.getInventory().getItem(sp)) : 0;
-                double lungeMax = 6.0 + lungeLvl * 5.0; // L1~11, L2~16, L3~21
-                if (sp >= 0 && lungeLvl >= 1 && spearCool == 0 && !me.onGround()
-                        && dist > 4 && dist < lungeMax && me.getFoodData().getFoodLevel() >= 7) {
-                    if (!select(me, sp)) return decide("swap");
-                    hit(me); // piercing jab; vanilla post_piercing_attack applies Lunge impulse by level
-                    spearCool = 45 - lungeLvl * 5;
-                    return decide("lunge");
-                }
-                // 1740 fight ticks 249-277: the swap back to the mace zeroes a 33-tick cooldown and the
-                // hop lands 28 ticks later at 0.78, so a 0.99 gate never opened. The fall bonus scales
-                // with the charge: swing on the last tick before the ground with whatever is there.
-                boolean landing = !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0));
-                float sc = me.getAttackStrengthScale(0f);
-                // 234854 mace easy defensive: it launched after our hop and the dive met it ten blocks up at 0.5 charge,
-                // dropped past and landed under its mace. A target in the air that the fall is about to pass is the
-                // same last tick as the ground.
-                // 235231 ticks 606/952: passing it just under the apex smashed for 5 with nothing fallen yet.
-                boolean passing = !spearKit && !target.onGround() && me.fallDistance >= 4 && me.getY() + me.getDeltaMovement().y * 2 < target.getY() + 0.5;
-                if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                        && (spearKit ? sc >= 0.99f : sc >= 0.6f || (landing || passing) && sc >= 0.4f) && target.hurtTime <= 0
-                        && exactReach(me, target) <= REACH - 0.05
-                        // 1745 fight tick 91: the aim was off on the landing tick, hit() did not click, and the
-                        // hop was written off as spent.
-                        && (spearKit || aimer.aimedAt(me, aimPoint(me, target), 10f)
-                        || ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult on && on.getEntity() == target)
-                        && (!around || behind || landing || !shielded)
-                        && (me.fallDistance >= 3 || landing || passing)) {
-                    // 235231 ticks 238 and 297: hit() refused the click (crosshair off its own swing point) and
-                    // the dive was closed anyway, three ticks above a target it then fell onto unarmed.
-                    boolean clicked = hit(me);
-                    if (!spearKit) look(lead);
-                    if (clicked || spearKit) {
-                        phase.macePhase = 0;
-                        phase.maceCool = 14;
-                        if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                    }
-                } else if (me.onGround() && (spearKit || phase.maceTicks > 4) || phase.maceTicks > (spearKit ? 40 : 80)) {
-                    // A hop that did not smash must not restart. Walk into the jab band first.
-                    if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                    phase.macePhase = 0;
-                    phase.maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
-                }
-                return decide("mace");
-            }
-            if (wind < 0 || phase.maceCool > 0 || dist <= 3) {
-                int alt = inv.weapon(me);
-                if (alt < 0) alt = mace;
-                if (!select(me, alt)) return decide("swap");
-            }
-            return null;
-        }
+        if (mace >= 0) return maces.run(me, target, dist, los, overhead, mace, wind);
         return tools.run(me, target, dist, los);
     }
 
