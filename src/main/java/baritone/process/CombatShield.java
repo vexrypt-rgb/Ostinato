@@ -54,6 +54,26 @@ final class CombatShield {
         this.hands = hands;
     }
 
+    /** The player respawned and tickCount restarted: every stamp taken against the old clock is void. */
+    void respawned() {
+        targetSwingTick = 0;
+        lastShieldTick = lastAxeTick = -1000;
+        axeHeld = flicked = false;
+        swingGap = unseenBlock = 0;
+    }
+
+    /** Per-tick read of the foe: has it answered our shield with a flick, and when did it last swing. Runs before the block. */
+    void observe(Player me, LivingEntity target) {
+        // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
+        if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
+                && me.getCooldowns().isOnCooldown(me.getOffhandItem())) flicked = true;
+        if (target.swinging && target.swingTime == 0) { // before the block: a held shield returns early
+            int sinceLast = me.tickCount - targetSwingTick;
+            if (sinceLast >= 6 && sinceLast <= 40) swingGap = sinceLast;
+            targetSwingTick = me.tickCount;
+        }
+    }
+
     /**
      * Between our own swings the opponent's sword is the only thing hurting us: hold the shield up while the
      * weapon recharges and drop it as the swing comes back. A raised target shield is the axe's job instead.

@@ -263,20 +263,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // the hop that makes the damage starts from the ground. A mace with wind charges hops.
             boolean maceHop = inv.slotOf(me, Items.MACE) >= 0 && inv.slotOf(me, Items.WIND_CHARGE) >= 0;
             if (me.tickCount < lastSeenTick) { // respawned between bench rounds: tickCount restarted under the old stamps
-                duelOpenUntil = shield.targetSwingTick = 0;
-                shield.lastShieldTick = shield.lastAxeTick = -1000;
-                shield.axeHeld = shield.flicked = false;
-                shield.swingGap = shield.unseenBlock = click.probeTick = 0;
+                duelOpenUntil = click.probeTick = 0;
+                shield.respawned();
             }
-            // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
-            if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
-                    && me.getCooldowns().isOnCooldown(me.getOffhandItem())) shield.flicked = true;
             lastSeenTick = me.tickCount;
-            if (target.swinging && target.swingTime == 0) { // before the block: a held shield returns early
-                int sinceLast = me.tickCount - shield.targetSwingTick;
-                if (sinceLast >= 6 && sinceLast <= 40) shield.swingGap = sinceLast;
-                shield.targetSwingTick = me.tickCount;
-            }
+            shield.observe(me, target);
             // a click that connected and left it unhurt met a shield the client was never shown:
             // remember how long after its swing that was and keep the sword out of that window
             click.settle(me, target);
