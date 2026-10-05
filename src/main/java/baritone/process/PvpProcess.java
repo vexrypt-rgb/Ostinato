@@ -50,7 +50,7 @@ import java.util.function.Predicate;
  */
 public final class PvpProcess extends BaritoneProcessHelper {
 
-    private static final double REACH = 3.0, SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, SPEAR_JAB_LO = 2.6, SPEAR_JAB_HI = 3.4, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
+    private static final double SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, SPEAR_JAB_LO = 2.6, SPEAR_JAB_HI = 3.4, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
 
     private Predicate<LivingEntity> filter;
     /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
@@ -64,8 +64,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private final Random rng = new Random(7);
     private boolean chase;
     private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps, blockTicks;
-    private boolean crystalFight;
-    private int backingOff;
     private int targetSwingTick, lastAxeTick = -1000;
     /** Learned in the fight: ticks between the opponent's swings, how long after a swing our hits bounce off it, and the hit being watched. */
     private int swingGap, unseenBlock, probeTick, probeSince;
@@ -255,7 +253,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 use(false);
                 eatTicks = 0;
             } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
-                && !blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+                && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
                     && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
@@ -345,7 +343,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
-            if (crystal(me)) {
+            if (explosives.crystal(me, target)) {
                 if (dist <= DRIVE) steer(me, dist);
                 return decide("crystal");
             }
@@ -716,6 +714,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private final CombatInventory inv = new CombatInventory(ctx);
     private final CombatDefense defense = new CombatDefense(ctx, inv);
     private final CombatAim aimer = new CombatAim(baritone, ctx, rng);
+    private final CombatExplosives explosives = new CombatExplosives(ctx, inv, aimer, new CombatExplosives.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public boolean hit(Player me, Entity e) { return PvpProcess.this.hit(me, e); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+    });
     private int pearlStage, pearlTicks;
     private boolean pearlDive, digDown;
     private int strandTicks;
@@ -1382,7 +1386,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (webCool == 0 && los && dist > 2.4 && dist < 5 && target.onGround() && inv.slotOf(me, Items.COBWEB) >= 0
                 && ctx.world().getBlockState(target.blockPosition()).isAir()) {
             webCool = 60;
-            place(me, Items.COBWEB, target.blockPosition().below());
+            explosives.place(me, Items.COBWEB, target.blockPosition().below());
             return decide("web");
         }
         if (potCool > 0) potCool--;
@@ -1424,10 +1428,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     fireStage = 0;
                     fireCool = 400;
                 } else if (fireStage == 1) {
-                    if (place(me, Items.SOUL_SAND, firePos)) fireStage = 2;
+                    if (explosives.place(me, Items.SOUL_SAND, firePos)) fireStage = 2;
                     return decide("fire");
                 } else if (fireStage == 2) {
-                    if (place(me, Items.FLINT_AND_STEEL, firePos.above())) fireStage = 3;
+                    if (explosives.place(me, Items.FLINT_AND_STEEL, firePos.above())) fireStage = 3;
                     return decide("fire");
                 } else {
                     if (!ctx.world().getBlockState(firePos.above(2)).isAir() && ctx.world().getBlockState(firePos.above(2)).getBlock() != net.minecraft.world.level.block.Blocks.FIRE
@@ -1514,7 +1518,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (!select(me, blk)) return decide("swap");
             aimer.aim(new Rotation(me.getYRot(), 90f), true);
             if (me.onGround()) key(Input.JUMP);
-            else if (me.getDeltaMovement().y < 0.1 && ctx.world().getBlockState(me.blockPosition().below()).isAir()) click(me, me.blockPosition().below().below());
+            else if (me.getDeltaMovement().y < 0.1 && ctx.world().getBlockState(me.blockPosition().below()).isAir()) explosives.click(me, me.blockPosition().below().below());
             return decide("pillar");
         }
         return decide("flee", new PathingCommand(new baritone.api.pathing.goals.GoalRunAway(18, target.blockPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
@@ -1832,7 +1836,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private void keepTotem(Player me) {
-        if (me.getHealth() > 8 && !crystalFight || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
+        if (me.getHealth() > 8 && !explosives.fighting() || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
         inv.toOffhand(me, Items.TOTEM_OF_UNDYING);
     }
 
@@ -1931,221 +1935,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (eye.distanceTo(in) <= REACH - 0.04 || eye.distanceTo(near) > REACH) return p.add(lead);
         }
         return near.add(lead);
-    }
-
-    /**
-     * Crystal PvP: break the crystal that hurts the target most, else put a crystal on obsidian where it does,
-     * else lay obsidian beside the target's feet. Anything that would hurt us more than it, or pop us, is skipped.
-     */
-    private boolean crystal(Player me) {
-        // a ray the foe's body blocks never clicks, and a stall here froze the whole fight: no swing for a while, let melee have it
-        // a swing is not progress (a refused click swings too): the foe losing health is
-        float tgHp = target.getHealth() + target.getAbsorptionAmount();
-        if (tgHp < crystalTgHp - 0.1f) crystalIdle = 0;
-        else if (crystalIdle < 400) crystalIdle++;
-        crystalTgHp = tgHp;
-        if (crystalIdle > 40 && crystalIdle < 100) {
-            crystalFight = true;
-            return false;
-        }
-        if (crystalIdle >= 100) crystalIdle = 30;
-        return crystalWork(me);
-    }
-
-    private int crystalIdle;
-    private float crystalTgHp;
-
-    private boolean crystalWork(Player me) {
-        crystalFight = inv.slotOf(me, Items.END_CRYSTAL) >= 0 || inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
-        if (anchor(me)) return true;
-        if (inv.slotOf(me, Items.END_CRYSTAL) < 0 || me.distanceTo(target) > 7) return false;
-        float myHp = me.getHealth() + me.getAbsorptionAmount();
-        EndCrystal hitIt = null;
-        float best = 0;
-        for (EndCrystal c : ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(6))) {
-            if (exactReach(me, c) > REACH) continue;
-            float score = worth(me, c.position(), myHp);
-            if (score > best) {
-                best = score;
-                hitIt = c;
-            }
-        }
-        if (hitIt == null && inv.slotOf(me, Items.OBSIDIAN) >= 0) {
-            // a crystal that would hurt us and that we won't pop: wall it off at leg height
-            EndCrystal danger = null;
-            float worst = 6;
-            for (EndCrystal c : ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(6))) {
-                float d = blast(me, c.position(), 12);
-                if (d >= worst) { worst = d; danger = c; }
-            }
-            if (danger != null && shield(me, danger.blockPosition())) return true;
-        }
-        if (hitIt != null) {
-            look(hitIt.position());
-            if (aimer.aimedAt(me, hitIt.getBoundingBox().getCenter(), 6f)) hit(me, hitIt);
-            return true;
-        }
-        Level w = ctx.world();
-        BlockPos base = null;
-        best = 0;
-        BlockPos t = target.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(t.offset(-3, -2, -3), t.offset(3, 1, 3))) {
-            if (!w.getBlockState(p).is(Blocks.OBSIDIAN) && !w.getBlockState(p).is(Blocks.BEDROCK)) continue;
-            if (!w.isEmptyBlock(p.above()) || !w.getEntities(null, new AABB(p.above())).isEmpty()) continue;
-            Vec3 at = Vec3.atBottomCenterOf(p.above());
-            if (me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5 || me.getEyePosition().distanceTo(at.add(0, 1, 0)) > REACH + 0.8) continue;
-            float score = worth(me, at, myHp);
-            if (score > best) {
-                best = score;
-                base = p.immutable();
-            }
-        }
-        if (base != null) return place(me, Items.END_CRYSTAL, base);
-        if (inv.slotOf(me, Items.OBSIDIAN) < 0) return false;
-        BlockPos floor = null;
-        best = 0;
-        for (Direction d : Direction.Plane.HORIZONTAL) {
-            for (BlockPos p : new BlockPos[]{t.relative(d), t.relative(d).below()}) {
-                if (!w.getBlockState(p).canBeReplaced() || w.getBlockState(p.below()).canBeReplaced()) continue;
-                if (!w.getEntities(null, new AABB(p)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-                float score = worth(me, Vec3.atBottomCenterOf(p.above()), myHp);
-                if (score > best) {
-                    best = score;
-                    floor = p.below();
-                }
-            }
-        }
-        return floor != null && place(me, Items.OBSIDIAN, floor);
-    }
-
-    /**
-     * Anchor PvP (overworld): blow a charged anchor that hurts the target, else charge an anchor near it with
-     * glowstone, else put an anchor down beside its feet.
-     */
-    private boolean anchor(Player me) {
-        if (inv.slotOf(me, Items.RESPAWN_ANCHOR) < 0 && inv.slotOf(me, Items.GLOWSTONE) < 0 || me.distanceTo(target) > 7) return false;
-        Level w = ctx.world();
-        float myHp = me.getHealth() + me.getAbsorptionAmount();
-        BlockPos t = target.blockPosition(), boom = null, charge = null, backOff = null;
-        float bestBoom = 0, bestCharge = 0, bestBack = 0;
-        for (BlockPos p : BlockPos.betweenClosed(t.offset(-3, -1, -3), t.offset(3, 2, 3))) {
-            if (!w.getBlockState(p).is(Blocks.RESPAWN_ANCHOR) || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-            Vec3 at = Vec3.atCenterOf(p);
-            float score = worth(me, at, myHp, 10), dmg = blast(target, at, 10);
-            boolean charged = w.getBlockState(p).getValue(RespawnAnchorBlock.CHARGE) > 0;
-            if (!charged && score > 0) {
-                // charging hurts nobody, so charge anything that would hurt the target
-                if (dmg > bestCharge) { bestCharge = dmg; charge = p.immutable(); }
-            } else if (charged && score > bestBoom) {
-                bestBoom = score;
-                boom = p.immutable();
-            } else if (score <= 0 && blast(me, at, 10) >= 8 && blast(me, at, 10) > bestBack) {
-                bestBack = blast(me, at, 10); // theirs or ours, it can go off in our face
-                backOff = p.immutable();
-            }
-        }
-        if (boom != null) {
-            int slot = -1;
-            for (int i = 0; i < 9; i++) {
-                Item it = me.getInventory().getItem(i).getItem();
-                if (it != Items.GLOWSTONE && it != Items.RESPAWN_ANCHOR) { slot = i; break; }
-            }
-            if (slot < 0) return false;
-            if (!select(me, slot)) return true;
-            return click(me, boom);
-        }
-        if (charge != null && inv.slotOf(me, Items.GLOWSTONE) >= 0) {
-            if (!select(me, inv.slotOf(me, Items.GLOWSTONE))) return true;
-            return me.getMainHandItem().getItem() == Items.GLOWSTONE && click(me, charge);
-        }
-        // a charged anchor that would hurt us: wall it off at leg height, which is where most of the blast lands
-        if (backOff != null && shield(me, backOff)) return true;
-        backingOff = backOff == null ? 0 : backingOff + 1;
-        // a charged anchor that would hurt us too much from here: step away, then blow it (unless a wall keeps us pinned)
-        if (backOff != null && backingOff < 40) {
-            look(Vec3.atCenterOf(backOff));
-            key(Input.MOVE_BACK);
-            return true;
-        }
-        if (inv.slotOf(me, Items.RESPAWN_ANCHOR) < 0 || inv.slotOf(me, Items.GLOWSTONE) < 0) return false;
-        BlockPos spot = null;
-        float best = 0;
-        // not just beside them: a target down a one-wide hole has no free side, only the rim
-        for (BlockPos q : BlockPos.betweenClosed(t.offset(-2, -1, -2), t.offset(2, 2, 2))) {
-            {
-                BlockPos p = q.immutable();
-                if (!w.getBlockState(p).canBeReplaced() || w.getBlockState(p.below()).canBeReplaced()) continue;
-                if (!w.getEntities(null, new AABB(p)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-                float score = worth(me, Vec3.atCenterOf(p), myHp, 10);
-                if (score > best) { best = score; spot = p; }
-            }
-        }
-        return spot != null && place(me, Items.RESPAWN_ANCHOR, spot.below());
-    }
-
-    /** A charged anchor or a crystal close enough to hurt: 27 ticks of chewing beside one is how a bite becomes a death. */
-    private boolean blastThreat(Player me) {
-        if (me.getHealth() <= 4) return false; // nothing left to lose by eating
-        Level w = ctx.world();
-        for (EndCrystal c : w.getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8))) {
-            if (blast(me, c.position(), 12) >= 6) return true;
-        }
-        BlockPos f = me.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(f.offset(-6, -3, -6), f.offset(6, 3, 6))) {
-            if (w.getBlockState(p).is(Blocks.RESPAWN_ANCHOR) && w.getBlockState(p).getValue(RespawnAnchorBlock.CHARGE) > 0
-                    && blast(me, Vec3.atCenterOf(p), 10) >= 6) return true;
-        }
-        return false;
-    }
-
-    /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */
-    private boolean shield(Player me, BlockPos threat) {
-        Item block = inv.slotOf(me, Items.OBSIDIAN) >= 0 ? Items.OBSIDIAN : inv.slotOf(me, Items.COBBLESTONE) >= 0 ? Items.COBBLESTONE
-                : inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? Items.RESPAWN_ANCHOR : null;
-        if (block == null) return false;
-        BlockPos feet = me.blockPosition();
-        int dx = Integer.signum(threat.getX() - feet.getX()), dz = Integer.signum(threat.getZ() - feet.getZ());
-        Level w = ctx.world();
-        for (BlockPos c : new BlockPos[]{feet.offset(dx, 0, dz), feet.offset(dx, 0, 0), feet.offset(0, 0, dz)}) {
-            if (c.equals(feet) || c.equals(threat) || !w.getBlockState(c).canBeReplaced() || w.getBlockState(c.below()).canBeReplaced()) continue;
-            if (!w.getEntities(null, new AABB(c)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(c)) > 4.5) continue;
-            return place(me, block, c.below());
-        }
-        return false;
-    }
-
-    /** Right-click the top face of a block with whatever is in hand. */
-    private boolean click(Player me, BlockPos on) {
-        Vec3 face = Vec3.atCenterOf(on).add(0, 0.5, 0);
-        look(face);
-        if (ctx.minecraft().hitResult instanceof BlockHitResult b && b.getBlockPos().equals(on)) press(ctx.minecraft().options.keyUse);
-        return true;
-    }
-
-    /** Right-click the top of {@code on} with {@code item}. */
-    private boolean place(Player me, Item item, BlockPos on) {
-        if (!select(me, inv.slotOf(me, item))) return true;
-        if (me.getMainHandItem().getItem() != item) return false;
-        return click(me, on);
-    }
-
-    /** How good a crystal blowing up at {@code at} is for us: its damage to the target minus ours, 0 if not worth it. */
-    private float worth(Player me, Vec3 at, float myHp) {
-        return worth(me, at, myHp, 12);
-    }
-
-    private float worth(Player me, Vec3 at, float myHp, double size) {
-        float dmg = blast(target, at, size), self = blast(me, at, size);
-        boolean totem = me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING;
-        if (self >= myHp - (totem ? 0 : 2) && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0;
-        // once they're low an even trade wins the race
-        if (dmg < 3 || dmg < self * (size == 10 ? (target.getHealth() + target.getAbsorptionAmount() > 10 ? 1.5f : 1) : (target.getHealth() + target.getAbsorptionAmount() <= 10 ? 0.8f : 1))) return 0;
-        if (size == 10 && self >= myHp - 4 && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0; // don't pop our own totem
-        // our own blasts were landing 7-16 on us right after a place or a boom: unless it kills them, keep our share small
-        // and weigh it heavier than the foe's (self 1.4 weight, small safe self-damage)
-        boolean kills = dmg >= target.getHealth() + target.getAbsorptionAmount();
-        if (!kills && self > (totem ? 3f : 4f)) return 0;
-        return Math.max(0, dmg - self * 1.4f);
     }
 
     /**
