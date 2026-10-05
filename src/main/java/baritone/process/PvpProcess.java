@@ -19,6 +19,7 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.utils.BaritoneProcessHelper;
+import static baritone.process.CombatInventory.*;
 import static baritone.process.CombatGeometry.*;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -49,10 +50,6 @@ import java.util.function.Predicate;
 public final class PvpProcess extends BaritoneProcessHelper {
 
     private static final double REACH = 3.0, SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, SPEAR_JAB_LO = 2.6, SPEAR_JAB_HI = 3.4, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
-    private static final Item[] SWORDS = {Items.NETHERITE_SWORD, Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD};
-    private static final Item[] AXES = {Items.NETHERITE_AXE, Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE, Items.GOLDEN_AXE, Items.WOODEN_AXE};
-    /** Plain spears (no enchant required). Order is best-first for best(). */
-    private static final Item[] SPEARS = {Items.NETHERITE_SPEAR, Items.DIAMOND_SPEAR, Items.IRON_SPEAR, Items.COPPER_SPEAR, Items.GOLDEN_SPEAR, Items.STONE_SPEAR, Items.WOODEN_SPEAR};
 
     private Predicate<LivingEntity> filter;
     /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
@@ -171,7 +168,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         float hp = me.getHealth() + me.getAbsorptionAmount();
         if (lastHealth >= 0 && hp < lastHealth) damageTaken += lastHealth - hp;
         boolean respawned = lastHealth >= 0 && lastHealth < 5 && hp > lastHealth + 8;
-        if (respawned) kitCount.clear();
+        if (respawned) inv.resetBreaks();
         lastHealth = hp;
         // Bench respawn drops the kit before VexBench's item replace lands. Do not swing naked.
         if (Integer.getInteger("ostinato.vexbench", 0) > 0 && (respawned
@@ -208,7 +205,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
         trackTarget();
         if (!recorder.active()) recorder.begin(me, target, label);
         tickDec = "-";
-        noteBreaks(me);
+        brokeNote = inv.noteBreaks(me);
+        if (!brokeNote.isEmpty()) {
+            blockTicks = 0;
+            lastShieldTick = -1000;
+            use(false);
+        }
         try {
             // 230839 axe hard safe: it ate six apples with no use flag on the client while we stood at 6 HP with
             // eight of our own, "pressed" by an opponent holding food. A main hand full of food is not swinging a weapon.
@@ -229,13 +231,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // or spear_back, never on spear_charge. A charge holds the use key on the spear, so
             // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
-            boolean charging = spearSlot(me) >= 0 && spearUseTicks > 0;
+            boolean charging = inv.spearSlot(me) >= 0 && spearUseTicks > 0;
             // 211909 medium balanced: four apples started inside its sword reach, each dropped
             // when its crit jump read as overhead, each bite costing a 6. 212743 hard aggressive: a
             // bite started at 4.9 took two more. It covers 9 blocks in the 32 ticks. Only a real dive (2 up)
             // stops a bite, and with a shield in hand a bite does not start inside its reach.
             boolean pressed = !targetEating && eyeToBox(me, target) < 9 && target.getMainHandItem().getItem() != Items.MACE
-                    && (me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem()) || slotOf(me, Items.SHIELD) >= 0);
+                    && (me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem()) || inv.slotOf(me, Items.SHIELD) >= 0);
             // 232733 axe expert safe: 76 ticks at 2.9 HP behind a shield with eight apples, taking 35 damage all fight
             // while it ate its way back to 20 four times. A slow weapon that has just swung cannot swing again
             // before most of a bite is down: that is the opening, shield or no shield.
@@ -252,8 +254,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 use(false);
                 eatTicks = 0;
             } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
-                && !blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
-                    && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
+                && !blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+                    && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
                 if (charging) {
                     use(false);
                     spearUseTicks = 0;
@@ -276,7 +278,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // A spear that raises its shield here never steps into the 2-4 jab band.
             // 1654 bench: a mace's 33-tick cooldown kept the shield up for 405 of 1800 ticks, and
             // the hop that makes the damage starts from the ground. A mace with wind charges hops.
-            boolean maceHop = slotOf(me, Items.MACE) >= 0 && slotOf(me, Items.WIND_CHARGE) >= 0;
+            boolean maceHop = inv.slotOf(me, Items.MACE) >= 0 && inv.slotOf(me, Items.WIND_CHARGE) >= 0;
             if (me.tickCount < lastSeenTick) { // respawned between bench rounds: tickCount restarted under the old stamps
                 duelOpenUntil = targetSwingTick = 0;
                 lastShieldTick = lastAxeTick = -1000;
@@ -299,10 +301,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     unseenBlock = Math.max(unseenBlock, probeSince + 1);
                 probeTick = 0;
             }
-            boolean blockMelee = spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
+            boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && meleeBlock(me, dist);
             // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
             // wings and pitch do not reset the fall distance, a wind burst under the feet does
-            int clutch = slotOf(me, Items.WIND_CHARGE);
+            int clutch = inv.slotOf(me, Items.WIND_CHARGE);
             if (clutch >= 0 && !me.onGround() && me.fallDistance > 12 && me.getDeltaMovement().y < -0.5 && groundGap(me) < 9
                     && exactReach(me, target) > REACH + 1.5 && !me.isInWater()) {
                 if (!select(me, clutch)) return decide("swap");
@@ -320,8 +322,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
                 // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
                 // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
-                select(me, weapon(me));
-                if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                select(me, inv.weapon(me));
+                if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                 look(target.getEyePosition());
                 if (blockMelee && dist > 2.4) key(Input.MOVE_FORWARD); // stay where the answer to its swing still reaches
                 use(true);
@@ -330,7 +332,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 return decide("block");
             }
             if (pearlStage == 0 && eatTicks == 0 && macePhase == 0 && foeAimed(dist)) {
-                select(me, weapon(me));
+                select(me, inv.weapon(me));
                 look(target.getEyePosition());
                 use(false);
                 dodgeRanged(me);
@@ -366,10 +368,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // 945 ticks went to standing at the edge. Walk off after them; with a mace the fall is a dive.
             double drop = me.getY() - target.getY();
             if (drop > 3.5 && drop < 20 && horizontalBoxDist(me, target) < 8 && eatTicks == 0
-                    && (slotOf(me, Items.MACE) >= 0 || me.getHealth() > drop + 4)) {
+                    && (inv.slotOf(me, Items.MACE) >= 0 || me.getHealth() > drop + 4)) {
                 use(false);
-                int mace = slotOf(me, Items.MACE);
-                select(me, mace >= 0 ? mace : weapon(me));
+                int mace = inv.slotOf(me, Items.MACE);
+                select(me, mace >= 0 ? mace : inv.weapon(me));
                 look(target.getEyePosition());
                 key(Input.MOVE_FORWARD);
                 key(Input.SPRINT);
@@ -382,20 +384,20 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (dist > DRIVE || !los) {
                 // Charge needs a sprint runway. Baritone chase from 7 blocks never reaches 4.6 blocks/s
                 // before the pierce window, so a plain spear closes that gap on foot.
-                boolean spearRush = spearSlot(me) >= 0 && los && dist < 14 && eatTicks == 0 && spearUseCool == 0
+                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && eatTicks == 0 && spearUseCool == 0
                         && me.getFoodData().getFoodLevel() > 6;
                 if (!spearRush) {
-                    if (los && dist > BOW_MIN && slotOf(me, Items.BOW) >= 0 && slotOf(me, Items.ARROW) >= 0) return decide("bow", bow(me));
+                    if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", bow(me));
                     use(false);
                     // Spear chase stops in the jab band, not inside the 2-block dead zone.
-                    int near = spearSlot(me) >= 0 ? 3 : 2;
+                    int near = inv.spearSlot(me) >= 0 ? 3 : 2;
                     return decide("chase", new PathingCommand(new GoalNear(target.blockPosition(), near), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
                 }
             }
             // A spear charge is the use key. Releasing here every tick reset the 10-tick delay.
             if (me.isUsingItem() && spearUseTicks == 0) use(false);
 
-            int spear = spearSlot(me);
+            int spear = inv.spearSlot(me);
             // Spear jabs from farther than a sword; never jab inside SPEAR_MIN (vanilla spear dead zone).
             double reach = spear >= 0 ? SPEAR_REACH : REACH;
             double er = exactReach(me, target);
@@ -454,7 +456,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Take a ready jab first; its cooldown is then spent on the back-out for the next charge.
             // If the jab has not connected in 30 ticks, stop waiting and back out anyway.
             boolean jabReady = spearCharged && me.getAttackStrengthScale(0f) >= 0.99f;
-            if (spear >= 0 && spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < 4.8
+            if (spear >= 0 && inv.spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < 4.8
                     && (!jabReady || ++spearJabWait > 30)) {
                 spearReopen = true;
                 spearJabWait = 0;
@@ -522,14 +524,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // 224436 expert adaptive: swords at t17 and t32 did nothing against a target showing no use flag.
             // A blockhitter's shield goes up with its swing, flag or no flag; the window is learned from bounced hits.
             if (duel && hiddenShield(me)) tgShield = true;
-            boolean axeTime = tgShield && inReach && me.tickCount - lastAxeTick > 8 && best(me, AXES) >= 0;
-            if (!select(me, axeTime ? best(me, AXES) : weapon(me))) return decide("swap");
+            boolean axeTime = tgShield && inReach && me.tickCount - lastAxeTick > 8 && inv.best(me, AXES) >= 0;
+            if (!select(me, axeTime ? inv.best(me, AXES) : inv.weapon(me))) return decide("swap");
             look(swingPoint(me, target));
 
             boolean targetReady = me.tickCount - targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
             // the tick the use key comes up, an attack click is still swallowed by the item in use
             boolean immune = target.hurtTime > 1 || me.tickCount - lastShieldTick < (counter ? 2 : 3)
-                    || tgShield && best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
+                    || tgShield && inv.best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
             boolean falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
             boolean canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
             boolean hurry = me.getCurrentItemAttackStrengthDelay() < 14;
@@ -545,7 +547,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
             // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
             if (spear >= 0) {
-                int lungeLvl = spearLungeLevel(me.getInventory().getItem(spear));
+                int lungeLvl = inv.spearLungeLevel(me.getInventory().getItem(spear));
                 double lungeMax = 6.0 + lungeLvl * 5.0; // L1 ~11, L2 ~16, L3 ~21
                 // Jab is 4 raw (0.96 through diamond). Charge is KineticWeaponComponent.usageTick
                 // while use is held, after a 10-tick delay. Damage needs look.dot(movement)*20 >= 4.6.
@@ -763,12 +765,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private PathingCommand special(Player me, double dist, boolean los) {
         if (maceCool > 0) maceCool--;
-        int mace = slotOf(me, Items.MACE), wind = slotOf(me, Items.WIND_CHARGE);
+        int mace = inv.slotOf(me, Items.MACE), wind = inv.slotOf(me, Items.WIND_CHARGE);
         if (windCool > 0) windCool--;
         boolean overhead = !target.onGround() && target.getY() > me.getY() + 3;
         // Spear kit still jabs. Wind is only a knock-in just outside the band, or the hop under a mace smash.
         // Far wind-charge spam and shield-holding stay off. A plain spear never lunges.
-        if (spearSlot(me) >= 0 && macePhase == 0 && pearlStage == 0) {
+        if (inv.spearSlot(me) >= 0 && macePhase == 0 && pearlStage == 0) {
             // Their mace dive is the ~9 damage in the spear logs. Shield it; do not hop into it.
             // Melee and the mace smash landed on spear_back, never on spear_charge.
             // Shielding mid-charge swaps off the spear. Dive-block only while use is not held.
@@ -803,7 +805,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // Only a real dive. Every ordinary jump matched the old test, which was 347 of 1800 ticks.
         // 1726 bench: 235 ticks of this and the 9.1 smashes landed anyway. A shield stops a smash, so a kit
         // with one blocks below and keeps the mace in hand and charged.
-        boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0;
+        boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0;
         // a shield kit still gets one charge at a diver that is high and far (the shield needs its five ticks only once the diver is close)
         boolean farDiver = hasShield && dist > 5 && target.getY() > me.getY() + 4 && tv().y < 0.1;
         if (wind >= 0 && (!hasShield || farDiver) && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
@@ -828,8 +830,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (dive) diveBlock = true;
         else if (target.onGround() || dist > 11) diveBlock = false;
         if (macePhase == 0 && (dive || diveBlock && hasShield)
-                && (me.getOffhandItem().getItem() == Items.SHIELD || slotOf(me, Items.SHIELD) >= 0)) {
-            if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                && (me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0)) {
+            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
             look(target.getEyePosition());
             use(true);
             return decide("block");
@@ -848,7 +850,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             windCool = 8;
             return decide("windfeet");
         }
-        int pearlSlot = slotOf(me, Items.ENDER_PEARL);
+        int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         // They are down a drop no path leads down. With a mace the drop is the attack: step off over them and fall on
         // it, and if the fall is going to miss, a wind charge at the feet takes the landing.
@@ -993,7 +995,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         // pearl strike: lob a pearl so it peaks above the target, pop it mid-air with a wind charge to teleport there, then drop the mace
         if (mace >= 0 && (wind >= 0 || pearlStage == 2) && macePhase == 0 && (pearlStage > 0 || pearlCool == 0 && maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
-                && slotOf(me, Items.ENDER_PEARL) >= 0 && target.onGround() && !overhead)) {
+                && inv.slotOf(me, Items.ENDER_PEARL) >= 0 && target.onGround() && !overhead)) {
             if (pearlStage == 0) {
                 float bestPitch = 0;
                 double bestErr = 1e9;
@@ -1019,7 +1021,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     pearlCool = 80;
                     return null;
                 }
-                if (!select(me, slotOf(me, Items.ENDER_PEARL))) return decide("swap");
+                if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
                 Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), eye.add(flat.scale(10)), ctx.playerRotations());
                 if (!face(r.getYaw(), bestPitch, 2.5f)) return decide("pearl");
                 press(ctx.minecraft().options.keyUse);
@@ -1077,19 +1079,19 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             return decide("pearl");
         }
-        int rocket = slotOf(me, Items.FIREWORK_ROCKET);
+        int rocket = inv.slotOf(me, Items.FIREWORK_ROCKET);
         net.minecraft.world.entity.EquipmentSlot chestSlot = net.minecraft.world.entity.EquipmentSlot.CHEST;
         Item worn = me.getItemBySlot(chestSlot).getItem();
         if (mace >= 0 && worn != Items.ELYTRA && macePhase == 0 && maceCool == 0 && me.onGround() && los && dist > 6 && dist < 40 && !overhead
-                && (rocket >= 0 || wind >= 0) && slotOf(me, Items.ELYTRA) >= 0) {
+                && (rocket >= 0 || wind >= 0) && inv.slotOf(me, Items.ELYTRA) >= 0) {
             // the wings are in the hotbar, not on the chest: put them on (the chestplate goes where they were)
             chestSaved = worn;
-            invSwap(me, 6, slotOf(me, Items.ELYTRA));
+            inv.invSwap(me, 6, inv.slotOf(me, Items.ELYTRA));
             return decide("elytra");
         }
         if (worn == Items.ELYTRA && chestSaved != null && chestSaved != Items.AIR && macePhase == 0 && me.onGround() && maceCool > 0) {
             // landed: the chestplate is worth more than the wings in a melee
-            if (slotOf(me, chestSaved) >= 0 && invSwap(me, 6, slotOf(me, chestSaved))) chestSaved = null;
+            if (inv.slotOf(me, chestSaved) >= 0 && inv.invSwap(me, 6, inv.slotOf(me, chestSaved))) chestSaved = null;
             return decide("elytra");
         }
         if (mace >= 0 && (rocket >= 0 || wind >= 0) && worn == Items.ELYTRA
@@ -1174,7 +1176,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("mace");
         }
         if (mace >= 0) {
-            boolean spearKit = spearSlot(me) >= 0;
+            boolean spearKit = inv.spearSlot(me) >= 0;
             boolean canJump = me.onGround() && !me.isInWater();
             // Spear kit starts the smash from spearTools, and only from just outside the jab.
             // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
@@ -1194,7 +1196,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // Spear kit: swapping onto the mace zeroes its charge, and the hop lands at cd~0.5
                 // (fight 051702 ticks 45-48 had the fall flag and never clicked). Charge first, then
                 // throw the wind charge from the offhand so the hotbar slot never changes.
-                if (spearSlot(me) >= 0) {
+                if (inv.spearSlot(me) >= 0) {
                     if (!select(me, mace)) return decide("swap");
                     if (me.getAttackStrengthScale(0f) < 0.99f) {
                         // 05:32: standing still to charge let the bot walk into us, and the throw at dist 0.5 never fell.
@@ -1205,18 +1207,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         if (maceTicks > 50 || hr < 1.2) {
                             macePhase = 0;
                             maceCool = 40;
-                            if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                         }
                         return decide("mace");
                     }
                     if (horizontalBoxDist(me, target) < 3.2) {
                         macePhase = 0;
                         maceCool = 40;
-                        if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                        if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                         return decide("mace");
                     }
                     if (me.getOffhandItem().getItem() != Items.WIND_CHARGE) {
-                        toOffhand(me, Items.WIND_CHARGE);
+                        inv.toOffhand(me, Items.WIND_CHARGE);
                         return decide("mace");
                     }
                     if (me.onGround()) {
@@ -1330,7 +1332,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         return decide("flick");
                     }
                 }
-                int sp = spearSlot(me), axe = best(me, AXES);
+                int sp = inv.spearSlot(me), axe = inv.best(me, AXES);
                 boolean shielded = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
                 if (shielded && axe >= 0 && me.fallDistance > 1.5 && me.tickCount - lastAxeTick > 20 && exactReach(me, target) <= REACH - 0.05) {
                     if (!select(me, axe)) return decide("swap"); // breach slam: the axe drops the shield, the mace lands on the next tick
@@ -1341,7 +1343,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 }
                 // Lunge ONLY if the held spear has minecraft:lunge 1-3. Plain spears never lunge.
                 // Vanilla impulse scales ~0.458 per level; we only jab farther out at higher levels.
-                int lungeLvl = sp >= 0 ? spearLungeLevel(me.getInventory().getItem(sp)) : 0;
+                int lungeLvl = sp >= 0 ? inv.spearLungeLevel(me.getInventory().getItem(sp)) : 0;
                 double lungeMax = 6.0 + lungeLvl * 5.0; // L1~11, L2~16, L3~21
                 if (sp >= 0 && lungeLvl >= 1 && spearCool == 0 && !me.onGround()
                         && dist > 4 && dist < lungeMax && me.getFoodData().getFoodLevel() >= 7) {
@@ -1376,18 +1378,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     if (clicked || spearKit) {
                         macePhase = 0;
                         maceCool = 14;
-                        if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                        if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                     }
                 } else if (me.onGround() && (spearKit || maceTicks > 4) || maceTicks > (spearKit ? 40 : 80)) {
                     // A hop that did not smash must not restart. Walk into the jab band first.
-                    if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+                    if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                     macePhase = 0;
                     maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
                 }
                 return decide("mace");
             }
             if (wind < 0 || maceCool > 0 || dist <= 3) {
-                int alt = weapon(me);
+                int alt = inv.weapon(me);
                 if (alt < 0) alt = mace;
                 if (!select(me, alt)) return decide("swap");
             }
@@ -1395,7 +1397,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         if (webCool > 0) webCool--;
         // a web in the target's feet slows it into our hits
-        if (webCool == 0 && los && dist > 2.4 && dist < 5 && target.onGround() && slotOf(me, Items.COBWEB) >= 0
+        if (webCool == 0 && los && dist > 2.4 && dist < 5 && target.onGround() && inv.slotOf(me, Items.COBWEB) >= 0
                 && ctx.world().getBlockState(target.blockPosition()).isAir()) {
             webCool = 60;
             place(me, Items.COBWEB, target.blockPosition().below());
@@ -1403,7 +1405,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         if (potCool > 0) potCool--;
         if (potCool == 0) {
-            int heal = potion(me, MobEffects.INSTANT_HEALTH), harm = potion(me, MobEffects.INSTANT_DAMAGE);
+            int heal = inv.potion(me, MobEffects.INSTANT_HEALTH), harm = inv.potion(me, MobEffects.INSTANT_DAMAGE);
             if (heal >= 0 && me.getHealth() <= 9) {
                 if (!select(me, heal)) return decide("swap");
                 if (!face(me.getYRot(), 90f, 2.5f)) return decide("pot");
@@ -1422,8 +1424,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         // soul sand + flint and steel + any bow: shoot through the fire to set the target alight
-        if (slotOf(me, Items.SOUL_SAND) >= 0 && slotOf(me, Items.FLINT_AND_STEEL) >= 0 && slotOf(me, Items.BOW) >= 0
-                && slotOf(me, Items.ARROW) >= 0 && los && dist > (fireStage > 0 ? 6 : 11) && dist < 22 && (fireStage > 0 || (fireCool == 0 && target.onGround() && me.onGround() && !target.isOnFire()))) {
+        if (inv.slotOf(me, Items.SOUL_SAND) >= 0 && inv.slotOf(me, Items.FLINT_AND_STEEL) >= 0 && inv.slotOf(me, Items.BOW) >= 0
+                && inv.slotOf(me, Items.ARROW) >= 0 && los && dist > (fireStage > 0 ? 6 : 11) && dist < 22 && (fireStage > 0 || (fireCool == 0 && target.onGround() && me.onGround() && !target.isOnFire()))) {
             if (fireStage == 0) {
                 Vec3 dir = new Vec3(target.getX() - me.getX(), 0, target.getZ() - me.getZ()).normalize();
                 BlockPos g = BlockPos.containing(me.getX() + dir.x * 2, me.getY() - 1, me.getZ() + dir.z * 2);
@@ -1458,10 +1460,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
         } else if (fireStage > 0) {
             fireStage = 0;
         }
-        int xb = slotOf(me, Items.CROSSBOW);
+        int xb = inv.slotOf(me, Items.CROSSBOW);
         if (xbAdvance > 0) xbAdvance--;
         // 135907 crossbow easy: shooting from 15 blocks for 1800 ticks never closed the gap. One bolt, then walk in for a while.
-        if (xb >= 0 && xbAdvance == 0 && los && dist > 5 && dist < 70 && (slotOf(me, Items.ARROW) >= 0 || net.minecraft.world.item.CrossbowItem.isCharged(me.getInventory().getItem(xb)))) {
+        if (xb >= 0 && xbAdvance == 0 && los && dist > 5 && dist < 70 && (inv.slotOf(me, Items.ARROW) >= 0 || net.minecraft.world.item.CrossbowItem.isCharged(me.getInventory().getItem(xb)))) {
             if (!select(me, xb)) return decide("swap");
             Vec3 at = arcAim(me.getEyePosition(), target.getBoundingBox().getCenter(), tv(), 3.15);
             look(at);
@@ -1485,7 +1487,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             return decide("crossbow");
         }
-        int tr = slotOf(me, Items.TRIDENT);
+        int tr = inv.slotOf(me, Items.TRIDENT);
         if (tr >= 0 && los && dist > 5 && dist < 40) {
             if (!select(me, tr)) return decide("swap");
             look(target.getEyePosition().add(0, dist * 0.04, 0));
@@ -1500,87 +1502,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return null;
     }
 
-    /** Hotbar slot of a splash potion carrying the effect, or -1. */
-    private int potion(Player me, net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect) {
-        for (int i = 0; i < 9; i++) {
-            ItemStack st = me.getInventory().getItem(i);
-            if (st.getItem() != Items.SPLASH_POTION) continue;
-            net.minecraft.world.item.alchemy.PotionContents pc = st.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
-            if (pc == null) continue;
-            for (net.minecraft.world.effect.MobEffectInstance ei : pc.getAllEffects()) if (ei.getEffect().equals(effect)) return i;
-        }
-        return -1;
-    }
-
-    /** Hotbar slot of a plain spear (unenchanted diamond_spear etc.), or -1. */
-    private int spearSlot(Player me) {
-        // 1626 bench, 17 rounds: the spear routine dealt 0-4 a round and died in 11. A plain jab
-        // is 0.96 through diamond and a smash is 4-7, so a kit with a mace and wind charges
-        // plays the mace and leaves the spear in the hotbar.
-        if (slotOf(me, Items.MACE) >= 0 && (slotOf(me, Items.WIND_CHARGE) >= 0 || me.getOffhandItem().getItem() == Items.WIND_CHARGE)) return -1;
-        int byItem = best(me, SPEARS);
-        if (byItem >= 0) return byItem;
-        for (int i = 0; i < 9; i++) {
-            ItemStack st = me.getInventory().getItem(i);
-            if (st.isEmpty()) continue;
-            // Tag covers every vanilla spear without requiring enchants or PIERCING_WEAPON
-            if (st.is(net.minecraft.tags.ItemTags.SPEARS)) return i;
-        }
-        return -1;
-    }
-
-    private static boolean isSpear(ItemStack st) {
-        if (st == null || st.isEmpty()) return false;
-        Item it = st.getItem();
-        for (Item s : SPEARS) if (it == s) return true;
-        return st.is(net.minecraft.tags.ItemTags.SPEARS);
-    }
-
-    /**
-     * Level of {@code minecraft:lunge} on a spear, else 0.
-     * Plain/unenchanted spears return 0 and must never lunge. Caps at 3.
-     */
-    private int spearLungeLevel(ItemStack st) {
-        if (!isSpear(st)) return 0;
-        net.minecraft.world.item.enchantment.ItemEnchantments enchants =
-                st.getOrDefault(net.minecraft.core.component.DataComponents.ENCHANTMENTS,
-                        net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY);
-        if (enchants.isEmpty()) return 0;
-        // Plain spears have no lunge entry. Match id string so we do not depend on ResourceLocation APIs.
-        for (var entry : enchants.entrySet()) {
-            String id = entry.getKey().unwrapKey().map(Object::toString).orElse(entry.getKey().toString());
-            if (!id.contains("lunge")) continue;
-            int lvl = entry.getIntValue();
-            return lvl < 1 ? 0 : Math.min(3, lvl);
-        }
-        return 0;
-    }
-
-    private int blockSlot(Player me) {
-        for (int i = 0; i < 9; i++) {
-            ItemStack st = me.getInventory().getItem(i);
-            if (st.getItem() instanceof net.minecraft.world.item.BlockItem bi && bi.getBlock() != net.minecraft.world.level.block.Blocks.SOUL_SAND
-                    && bi.getBlock().defaultBlockState().isSolid() && !(bi.getBlock() instanceof net.minecraft.world.level.block.FallingBlock)
-                    && bi.getBlock() != net.minecraft.world.level.block.Blocks.TNT) return i;
-        }
-        return -1;
-    }
-
     private boolean canHeal(Player me) {
-        return me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING || slotOf(me, Items.GOLDEN_APPLE) >= 0
-                || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 || potion(me, MobEffects.INSTANT_HEALTH) >= 0;
+        return me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING || inv.slotOf(me, Items.GOLDEN_APPLE) >= 0
+                || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 || inv.potion(me, MobEffects.INSTANT_HEALTH) >= 0;
     }
 
     /** Low on health with nothing to heal: pearl away from the target, else run. */
     private PathingCommand flee(Player me, double dist) {
         use(false);
         // the landing costs about 3 HP in this kit: a pearl thrown at 2 HP is a suicide (pillar perfect, tick 243)
-        if (dist < 10 && pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && slotOf(me, Items.ENDER_PEARL) >= 0) {
+        if (dist < 10 && pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && inv.slotOf(me, Items.ENDER_PEARL) >= 0) {
             Vec3 away = new Vec3(me.getX() - target.getX(), 0, me.getZ() - target.getZ());
             away = away.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : away.normalize();
             Vec3 at = me.getEyePosition().add(away.scale(24)).add(0, 7, 0);
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-            if (!select(me, slotOf(me, Items.ENDER_PEARL))) return decide("swap");
+            if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
             if (!face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
             press(ctx.minecraft().options.keyUse);
             pearlCool = 160;
@@ -1590,7 +1526,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             fleeTicks = 0;
             return decide("flee"); // clear of it: stand and regenerate
         }
-        int blk = blockSlot(me);
+        int blk = inv.blockSlot(me);
         if (++fleeTicks > 40 && dist < 6 && blk >= 0 && me.getY() - target.getY() < 5) {
             // can't shake it: tower up out of melee
             if (!select(me, blk)) return decide("swap");
@@ -1699,7 +1635,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * weapon recharges and drop it as the swing comes back. A raised target shield is the axe's job instead.
      */
     private boolean meleeBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
+        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
         // 212743 hard aggressive: every 6 and 9 landed in the air after our own jump swing.
         if (dist > 5.5 || me.isInWater() || eatTicks > 0 || macePhase != 0) return false;
         if (target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) return false; // it cannot swing mid-bite
@@ -1708,7 +1644,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // 221131 expert: VexBot's sword put our shield on cooldown with the first blocked swing, and the
         // next 60 ticks were spent standing behind a shield that was not there.
         if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) return false;
-        if (target.isBlocking() && dist <= REACH + 0.5 && best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 25) return false;
+        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 25) return false;
         if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
                 || isSpear(target.getMainHandItem())
                 || target.getMainHandItem().getItem() == Items.MACE)) return false;
@@ -1757,9 +1693,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (me.position().distanceTo(pearlFrom) > 3.5 || pearlTicks++ > 40) return null;
             pearlFrom = pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
         }
-        int pearlSlot = slotOf(me, Items.ENDER_PEARL);
+        int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
         // off: the 5 HP landing put us in the diver's path (pearlmace 12/25 with it, 16/25 without)
-        if (false && !hop && pearlStage == 0 && slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
+        if (false && !hop && pearlStage == 0 && inv.slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
             Vec3 eye = me.getEyePosition(), tp = target.getBoundingBox().getCenter(), v = tv(), need = null;
             double sum = 0, drop = 0, u = 0;
             for (int t = 1; t <= 24 && need == null; t++) {
@@ -1794,7 +1730,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (closeAbove) ticksLeft = Math.min(ticksLeft, 8); // it can commit to a dive in one tick: a drifting diver this close is not a reason to lower the shield
         if (me.getOffhandItem().getItem() != Items.SHIELD && ticksLeft > 6) { // a wind charge or totem left in the offhand: put the shield back while the diver is still high
             for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == Items.SHIELD) {
-                toOffhand(me, Items.SHIELD);
+                inv.toOffhand(me, Items.SHIELD);
                 return decide("swap");
             }
         }
@@ -1807,7 +1743,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             maceCool = 20;
         }
         if (shield && ticksLeft <= 30 && away.length() < 6) { // a shield takes ~5 ticks to count as raised
-            int hand = slotOf(me, Items.MACE);
+            int hand = inv.slotOf(me, Items.MACE);
             if (hand >= 0 && !select(me, hand)) return decide("swap");
             // face where it is now: a landing point predicted onto our own spot has no bearing, and a shield
             // only covers the front half, so a diver that ends up behind us gets through
@@ -1858,11 +1794,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // 05:32 blocked for the whole jump (507 ticks) and still took D9 with the shield up.
         // Only the last part of a real descent. While they are high, keep jabbing.
         if (tv().y >= -0.08 || target.getY() > me.getY() + 2.6) return false;
-        if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
-        if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
+        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
+        if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
         // A spear's right-click uses the spear, so the shield never reaches isBlocking() (logs: flag U, never B, D9).
-        int hand = slotOf(me, Items.MACE);
-        if (hand < 0) hand = spearSlot(me);
+        int hand = inv.slotOf(me, Items.MACE);
+        if (hand < 0) hand = inv.spearSlot(me);
         if (hand >= 0 && !select(me, hand)) return true;
         look(target.getEyePosition());
         use(true);
@@ -1874,7 +1810,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Shield as the last resort against shots: only an arrow already in flight that will really hit us. */
     private boolean shouldBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
+        if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
         AABB around = me.getBoundingBox().inflate(18);
         Vec3 chest = me.position().add(0, 1, 0);
         for (AbstractArrow a : ctx.world().getEntitiesOfClass(AbstractArrow.class, around, x -> true)) {
@@ -1911,32 +1847,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (me.onGround() && rng.nextInt(12) == 0) key(Input.JUMP);
     }
 
-    private final java.util.Map<Item, Integer> kitCount = new java.util.HashMap<>();
+    private final CombatInventory inv = new CombatInventory(ctx);
     private String brokeNote = "";
-
-    /**
-     * An item that used up its durability simply vanishes. Count the damageable combat items each tick: one fewer than
-     * last tick is a break (a trident is thrown, not broken, so it is not counted). The shield, the weapon in hand and any
-     * held use key were all keyed to the lost item, so drop them and let the next tick pick again.
-     */
-    private void noteBreaks(Player me) {
-        brokeNote = "";
-        java.util.Map<Item, Integer> now = new java.util.HashMap<>();
-        for (int i = 0; i < me.getInventory().getContainerSize(); i++) {
-            ItemStack st = me.getInventory().getItem(i);
-            if (st.isDamageableItem() && st.getItem() != Items.TRIDENT && st.getItem() != Items.ELYTRA && !st.isEmpty()) now.merge(st.getItem(), 1, Integer::sum);
-        }
-        for (java.util.Map.Entry<Item, Integer> e : kitCount.entrySet()) {
-            if (now.getOrDefault(e.getKey(), 0) < e.getValue() && me.isAlive() && me.getHealth() > 0) {
-                brokeNote += " broke:" + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.getKey()).getPath();
-                blockTicks = 0;
-                lastShieldTick = -1000;
-                use(false);
-            }
-        }
-        kitCount.clear();
-        kitCount.putAll(now);
-    }
 
     private int blockWhy;
     private boolean blockWhy(int w) { blockWhy = w; return true; }
@@ -1949,7 +1861,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private PathingCommand bow(Player me) {
-        if (!select(me, slotOf(me, Items.BOW))) return decide("swap");
+        if (!select(me, inv.slotOf(me, Items.BOW))) return decide("swap");
         if (me.getMainHandItem().getItem() != Items.BOW) return decide("swap");
         // lead: arrow ~3 b/t at full draw, gravity 0.05
         Vec3 at = arcAim(me.getEyePosition(), target.getBoundingBox().getCenter(), tv(), 3.0);
@@ -1964,13 +1876,13 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private boolean eat(Player me) {
-        Item apple = me.getHealth() <= 6 && slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
-        if (slotOf(me, apple) < 0) apple = Items.ENCHANTED_GOLDEN_APPLE;
-        if (slotOf(me, apple) < 0) {
+        Item apple = me.getHealth() <= 6 && inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
+        if (inv.slotOf(me, apple) < 0) apple = Items.ENCHANTED_GOLDEN_APPLE;
+        if (inv.slotOf(me, apple) < 0) {
             eatTicks = 0;
             return false;
         }
-        if (!select(me, slotOf(me, apple))) return true;
+        if (!select(me, inv.slotOf(me, apple))) return true;
         if (me.getMainHandItem().getItem() != apple) return true;
         // a raised offhand shield stays in use across a hotbar switch, so the apple never starts: let go first
         if (me.isUsingItem() && me.getUseItem().getItem() != apple) {
@@ -1990,45 +1902,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private void keepTotem(Player me) {
         if (me.getHealth() > 8 && !crystalFight || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
-        toOffhand(me, Items.TOTEM_OF_UNDYING);
-    }
-
-    /** Swap an inventory item into the offhand (button 40 = offhand swap). */
-    private void toOffhand(Player me, Item item) {
-        int slot = -1;
-        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) { slot = i; break; }
-        if (slot < 0) return;
-        int menuSlot = slot < 9 ? 36 + slot : slot;
-        invSwap(me, menuSlot, 40);
-    }
-
-    /** Hotbar slot of the item, pulling it into the hotbar (slot 8) if it's only in the main inventory. */
-    private int slotOf(Player me, Item item) {
-        for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
-        for (int i = 9; i < 36; i++) {
-            if (me.getInventory().getItem(i).getItem() == item) {
-                return invSwap(me, i, 8) ? 8 : -1;
-            }
-        }
-        return -1;
-    }
-
-    private int best(Player me, Item[] tiers) {
-        for (Item it : tiers) {
-            for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == it) return i;
-        }
-        return -1;
-    }
-
-    /** Crit play wants damage per swing: a sword, else an axe. */
-    private int weapon(Player me) {
-        int s = best(me, SWORDS);
-        if (s >= 0) return s;
-        int a = best(me, AXES);
-        if (a >= 0) return a;
-        int sp = spearSlot(me); // spear bench kit has no sword or axe
-        if (sp >= 0) return sp;
-        return slotOf(me, Items.MACE);
+        inv.toOffhand(me, Items.TOTEM_OF_UNDYING);
     }
 
     /**
@@ -2124,24 +1998,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return false;
     }
 
-    private int invTick = -99;
-
-    /** A swap through the inventory screen: opened on one tick, clicked on a later one, then closed. */
-    private boolean invSwap(Player me, int menuSlot, int button) {
-        net.minecraft.client.Minecraft mc = ctx.minecraft();
-        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
-            if (mc.screen == null) {
-                mc.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(me));
-                invTick = me.tickCount;
-            }
-            return false;
-        }
-        if (me.tickCount <= invTick) return false;
-        ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, button, ClickType.SWAP, me);
-        mc.setScreen(null);
-        return true;
-    }
-
     private void key(Input in) {
         baritone.getInputOverrideHandler().setInputForceState(in, true);
     }
@@ -2233,9 +2089,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private float crystalTgHp;
 
     private boolean crystalWork(Player me) {
-        crystalFight = slotOf(me, Items.END_CRYSTAL) >= 0 || slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
+        crystalFight = inv.slotOf(me, Items.END_CRYSTAL) >= 0 || inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
         if (anchor(me)) return true;
-        if (slotOf(me, Items.END_CRYSTAL) < 0 || me.distanceTo(target) > 7) return false;
+        if (inv.slotOf(me, Items.END_CRYSTAL) < 0 || me.distanceTo(target) > 7) return false;
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         EndCrystal hitIt = null;
         float best = 0;
@@ -2247,7 +2103,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 hitIt = c;
             }
         }
-        if (hitIt == null && slotOf(me, Items.OBSIDIAN) >= 0) {
+        if (hitIt == null && inv.slotOf(me, Items.OBSIDIAN) >= 0) {
             // a crystal that would hurt us and that we won't pop: wall it off at leg height
             EndCrystal danger = null;
             float worst = 6;
@@ -2278,7 +2134,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         if (base != null) return place(me, Items.END_CRYSTAL, base);
-        if (slotOf(me, Items.OBSIDIAN) < 0) return false;
+        if (inv.slotOf(me, Items.OBSIDIAN) < 0) return false;
         BlockPos floor = null;
         best = 0;
         for (Direction d : Direction.Plane.HORIZONTAL) {
@@ -2300,7 +2156,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * glowstone, else put an anchor down beside its feet.
      */
     private boolean anchor(Player me) {
-        if (slotOf(me, Items.RESPAWN_ANCHOR) < 0 && slotOf(me, Items.GLOWSTONE) < 0 || me.distanceTo(target) > 7) return false;
+        if (inv.slotOf(me, Items.RESPAWN_ANCHOR) < 0 && inv.slotOf(me, Items.GLOWSTONE) < 0 || me.distanceTo(target) > 7) return false;
         Level w = ctx.world();
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         BlockPos t = target.blockPosition(), boom = null, charge = null, backOff = null;
@@ -2331,8 +2187,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (!select(me, slot)) return true;
             return click(me, boom);
         }
-        if (charge != null && slotOf(me, Items.GLOWSTONE) >= 0) {
-            if (!select(me, slotOf(me, Items.GLOWSTONE))) return true;
+        if (charge != null && inv.slotOf(me, Items.GLOWSTONE) >= 0) {
+            if (!select(me, inv.slotOf(me, Items.GLOWSTONE))) return true;
             return me.getMainHandItem().getItem() == Items.GLOWSTONE && click(me, charge);
         }
         // a charged anchor that would hurt us: wall it off at leg height, which is where most of the blast lands
@@ -2344,7 +2200,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             key(Input.MOVE_BACK);
             return true;
         }
-        if (slotOf(me, Items.RESPAWN_ANCHOR) < 0 || slotOf(me, Items.GLOWSTONE) < 0) return false;
+        if (inv.slotOf(me, Items.RESPAWN_ANCHOR) < 0 || inv.slotOf(me, Items.GLOWSTONE) < 0) return false;
         BlockPos spot = null;
         float best = 0;
         // not just beside them: a target down a one-wide hole has no free side, only the rim
@@ -2377,8 +2233,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */
     private boolean shield(Player me, BlockPos threat) {
-        Item block = slotOf(me, Items.OBSIDIAN) >= 0 ? Items.OBSIDIAN : slotOf(me, Items.COBBLESTONE) >= 0 ? Items.COBBLESTONE
-                : slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? Items.RESPAWN_ANCHOR : null;
+        Item block = inv.slotOf(me, Items.OBSIDIAN) >= 0 ? Items.OBSIDIAN : inv.slotOf(me, Items.COBBLESTONE) >= 0 ? Items.COBBLESTONE
+                : inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? Items.RESPAWN_ANCHOR : null;
         if (block == null) return false;
         BlockPos feet = me.blockPosition();
         int dx = Integer.signum(threat.getX() - feet.getX()), dz = Integer.signum(threat.getZ() - feet.getZ());
@@ -2401,7 +2257,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Right-click the top of {@code on} with {@code item}. */
     private boolean place(Player me, Item item, BlockPos on) {
-        if (!select(me, slotOf(me, item))) return true;
+        if (!select(me, inv.slotOf(me, item))) return true;
         if (me.getMainHandItem().getItem() != item) return false;
         return click(me, on);
     }
@@ -2484,7 +2340,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         axeHeld = flicked = false;
         swingGap = unseenBlock = probeTick = 0;
         xbAdvance = 0;
-        kitCount.clear();
+        inv.resetBreaks();
         lastShieldTick = lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
