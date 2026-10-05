@@ -351,7 +351,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (!los && dist <= 3) { // right there but walled off (a crawl gap under our feet, a hole): dig through
                 BlockHitResult wall = ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), target.getEyePosition(),
                         net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me));
-                if (wall.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                // obsidian and anchors take minutes by hand: the bench sat 1800 ticks left-clicking one
+                if (wall.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                        && ctx.world().getBlockState(wall.getBlockPos()).getDestroySpeed(ctx.world(), wall.getBlockPos()) < 10) {
                     look(wall.getLocation());
                     key(Input.CLICK_LEFT); // hold the attack key on the wall
                     return decide("dig");
