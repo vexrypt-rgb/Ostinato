@@ -131,7 +131,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     /** Drops the enemy list when we die/respawn or are teleported (a pearl of ours doesn't count). */
     private void checkEnemyReset(Player me) {
         if (enemies.isEmpty()) return;
-        if (pearlStage > 0 || me.getMainHandItem().is(Items.ENDER_PEARL)) pearlGrace = 60;
+        if (phase.pearlStage > 0 || me.getMainHandItem().is(Items.ENDER_PEARL)) pearlGrace = 60;
         else if (pearlGrace > 0) pearlGrace--;
         boolean reset = me != enemiesOwner || !me.isAlive() || me.level() != enemiesLevel
             || (pearlGrace == 0 && enemiesPos != null && me.position().distanceToSqr(enemiesPos) > 100);
@@ -192,7 +192,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             spearUseTicks = 0;
             spearReleaseNext = false;
         }
-        if (target != null && me.tickCount % 5 == 0 && macePhase == 0) target = targeting.retarget(me, target);
+        if (target != null && me.tickCount % 5 == 0 && phase.macePhase == 0) target = targeting.retarget(me, target);
         baritone.getInputOverrideHandler().clearAllKeys();
         if (target == null) {
             if (prevTarget != null && prevTarget.isDeadOrDying()) recorder.markWin();
@@ -267,7 +267,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             double dist = eyeToBox(me, target);
             boolean los = me.hasLineOfSight(target);
 
-            if (pearlCool > 0) pearlCool--;
+            if (phase.pearlCool > 0) phase.pearlCool--;
             tools.coolFire();
             if (spearCool > 0) spearCool--;
             if (hp <= 6 && !canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
@@ -310,7 +310,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 aimer.throwStraightDown(me);
                 return decide("clutch");
             }
-            if (macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
+            if (phase.macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
                     && groundGap(me) < 4 + 12 * Math.min(1.0, -me.getDeltaMovement().y / 1.5)) {
                 // the dive is over (missed, blocked, or called off) and the wings are still pointed at the ground
                 aimer.aim(new Rotation(me.getYRot(), -25f), true);
@@ -318,7 +318,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
             PathingCommand dive = underDive(me, dist, los);
             if (dive != null) return dive;
-            if (pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
+            if (phase.pearlStage == 0 && (blockMelee || shouldBlock(me, dist))) {
                 // the use key must not start a bow or food in the main hand: the shield only rises when the main hand has no use action
                 // (062608 bow expert: blocked arrows at 10 blocks with the bow in hand, drew it instead, took 4.76 a shot)
                 select(me, inv.weapon(me));
@@ -330,7 +330,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 lastShieldTick = me.tickCount;
                 return decide("block");
             }
-            if (pearlStage == 0 && eatTicks == 0 && macePhase == 0 && defense.foeAimed(target, dist)) {
+            if (phase.pearlStage == 0 && eatTicks == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
                 select(me, inv.weapon(me));
                 look(target.getEyePosition());
                 use(false);
@@ -375,8 +375,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 key(Input.MOVE_FORWARD);
                 key(Input.SPRINT);
                 if (!me.onGround() && mace >= 0) {
-                    macePhase = 2;
-                    maceTicks = 5;
+                    phase.macePhase = 2;
+                    phase.maceTicks = 5;
                 }
                 return decide("drop");
             }
@@ -699,7 +699,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             return decide("strafe");
         } finally {
             recorder.tick(me, target, eyeToBox(me, target),
-                    targeting.others(me, target) + " m" + macePhase + " p" + pearlStage + " f" + fleeTicks + " e" + eatTicks + " s" + me.getInventory().getSelectedSlot()
+                    targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + fleeTicks + " e" + eatTicks + " s" + me.getInventory().getSelectedSlot()
                             + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + clickKind,
@@ -720,6 +720,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public boolean hit(Player me, Entity e) { return PvpProcess.this.hit(me, e); }
         public void key(Input in) { PvpProcess.this.key(in); }
     });
+    private final CombatPhase phase = new CombatPhase();
     private final CombatSwing swing = new CombatSwing();
     private final CombatTools tools = new CombatTools(ctx, inv, aimer, targeting, explosives, new CombatTools.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
@@ -730,20 +731,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand bow(Player me) { return PvpProcess.this.bow(me); }
         public void attacked() { attacks++; }
     });
-    private int pearlStage, pearlTicks;
-    private boolean pearlDive, digDown;
-    private int strandTicks;
-    private float liftYaw, liftPitch;
-    private boolean liftSet;
-    private Vec3 pearlFrom, pearlLast;
     private int fleeTicks;
     private Vec3 tv() {
         return targeting.velocity(target);
     }
 
-    private Item chestSaved;
-    private boolean boosted;
-    private int pearlCool, spearCool, spearBand, windCool, macePhase, maceTicks, maceCool;
+    private int spearCool, spearBand;
     /** Ticks the spear use-key has been held this pass, and ticks to wait before another pass. */
     private int spearUseTicks, spearUseCool;
     private double spearHrPrev = -1, spearClose;
@@ -751,21 +744,17 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
-    private boolean diveBlock;
-    private int hopThrown;
     // ticks from the wind charge leaving the hand to the jump under it
     private static final int HOP_JUMP_DELAY = Integer.getInteger("ostinato.pvp.hopJumpDelay", 1);
-    private int flickLeft, flickAge;
-    private int feetCool, feetTicks;
 
     private PathingCommand special(Player me, double dist, boolean los) {
-        if (maceCool > 0) maceCool--;
+        if (phase.maceCool > 0) phase.maceCool--;
         int mace = inv.slotOf(me, Items.MACE), wind = inv.slotOf(me, Items.WIND_CHARGE);
-        if (windCool > 0) windCool--;
+        if (phase.windCool > 0) phase.windCool--;
         boolean overhead = !target.onGround() && target.getY() > me.getY() + 3;
         // Spear kit still jabs. Wind is only a knock-in just outside the band, or the hop under a mace smash.
         // Far wind-charge spam and shield-holding stay off. A plain spear never lunges.
-        if (inv.spearSlot(me) >= 0 && macePhase == 0 && pearlStage == 0) {
+        if (inv.spearSlot(me) >= 0 && phase.macePhase == 0 && phase.pearlStage == 0) {
             // Their mace dive is the ~9 damage in the spear logs. Shield it; do not hop into it.
             // Melee and the mace smash landed on spear_back, never on spear_charge.
             // Shielding mid-charge swaps off the spear. Dive-block only while use is not held.
@@ -781,7 +770,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // a mace carrier above us is the lethal one: the knock from its wind charge is not, and the shield needs the ticks
         boolean diverAbove = target.getMainHandItem().getItem() == Items.MACE && !target.onGround() && target.getY() > me.getY() + 2
                 && me.getOffhandItem().getItem() == Items.SHIELD;
-        if (wind >= 0 && macePhase == 0 && windCool == 0 && !diverAbove) {
+        if (wind >= 0 && phase.macePhase == 0 && phase.windCool == 0 && !diverAbove) {
             for (net.minecraft.world.entity.projectile.Projectile pr : ctx.world().getEntitiesOfClass(net.minecraft.world.entity.projectile.Projectile.class,
                     me.getBoundingBox().inflate(14), e -> e.getOwner() != me && !e.onGround() && e.getDeltaMovement().lengthSqr() > 0.09)) {
                 Vec3 v = pr.getDeltaMovement(), rel = me.getEyePosition().subtract(pr.position());
@@ -792,7 +781,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 if (!select(me, wind)) return decide("swap");
                 if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("deflect");
                 press(ctx.minecraft().options.keyUse);
-                windCool = 8;
+                phase.windCool = 8;
                 return decide("deflect");
             }
         }
@@ -803,14 +792,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0;
         // a shield kit still gets one charge at a diver that is high and far (the shield needs its five ticks only once the diver is close)
         boolean farDiver = hasShield && dist > 5 && target.getY() > me.getY() + 4 && tv().y < 0.1;
-        if (wind >= 0 && (!hasShield || farDiver) && macePhase == 0 && windCool == 0 && !target.onGround() && dist < 12 && dist > 2
+        if (wind >= 0 && (!hasShield || farDiver) && phase.macePhase == 0 && phase.windCool == 0 && !target.onGround() && dist < 12 && dist > 2
                 && target.getY() > me.getY() + 2) {
             Vec3 at = target.getBoundingBox().getCenter().add(tv().scale(dist / 1.5));
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
             if (!select(me, wind)) return decide("swap");
             if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("wind");
             press(ctx.minecraft().options.keyUse);
-            windCool = 12;
+            phase.windCool = 12;
             return decide("wind");
         }
         // a diver still coming (no charge, or too close to counter): block the smash with the shield
@@ -822,9 +811,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // reported velocity is already negative at the top, and a shield needs five ticks before the smash
         double diveVy = Math.min(tv().y, target.getDeltaMovement().y);
         boolean dive = !target.onGround() && dist < 11 && (diveVy < -0.3 && target.getY() > me.getY() + 1 || diveVy < 0.1 && target.getY() > me.getY() + 3);
-        if (dive) diveBlock = true;
-        else if (target.onGround() || dist > 11) diveBlock = false;
-        if (macePhase == 0 && (dive || diveBlock && hasShield)
+        if (dive) phase.diveBlock = true;
+        else if (target.onGround() || dist > 11) phase.diveBlock = false;
+        if (phase.macePhase == 0 && (dive || phase.diveBlock && hasShield)
                 && (me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0)) {
             if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
             look(target.getEyePosition());
@@ -833,16 +822,16 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         // A wind charge at the feet of an opponent standing behind its shield or eating throws it off the
         // spot and into the air, where the hop that follows finds it.
-        if (feetCool > 0) feetCool--;
-        if (wind >= 0 && macePhase == 0 && pearlStage == 0 && feetCool == 0 && windCool == 0 && me.onGround() && target.onGround() && los
+        if (phase.feetCool > 0) phase.feetCool--;
+        if (wind >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && phase.feetCool == 0 && phase.windCool == 0 && me.onGround() && target.onGround() && los
                 && dist > 2.5 && dist < 10 && (target.isBlocking() || target.isUsingItem())) {
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), target.position().add(0, 0.1, 0), ctx.playerRotations());
             if (!select(me, wind)) return decide("swap");
-            if (!aimer.face(r.getYaw(), r.getPitch(), 3f) && ++feetTicks < 15) return decide("windfeet");
-            if (feetTicks < 15) press(ctx.minecraft().options.keyUse);
-            feetTicks = 0;
-            feetCool = 80;
-            windCool = 8;
+            if (!aimer.face(r.getYaw(), r.getPitch(), 3f) && ++phase.feetTicks < 15) return decide("windfeet");
+            if (phase.feetTicks < 15) press(ctx.minecraft().options.keyUse);
+            phase.feetTicks = 0;
+            phase.feetCool = 80;
+            phase.windCool = 8;
             return decide("windfeet");
         }
         int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
@@ -851,25 +840,25 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // it, and if the fall is going to miss, a wind charge at the feet takes the landing.
         double below = me.getY() - target.getY();
         double gap = me.position().subtract(target.position()).horizontalDistance();
-        if (below <= 6 || macePhase != 0) digDown = false;
-        if (mace >= 0 && wind >= 0 && macePhase == 0 && pearlStage == 0 && below > 6 && (target.onGround() || digDown)
+        if (below <= 6 || phase.macePhase != 0) phase.digDown = false;
+        if (mace >= 0 && wind >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && below > 6 && (target.onGround() || phase.digDown)
                 && gap < (los ? 2 + below * 0.15 : 12)) {
             if (!me.onGround() && me.getDeltaMovement().y < 0) {
-                macePhase = 2;
-                maceTicks = 0;
-                pearlDive = true;
+                phase.macePhase = 2;
+                phase.maceTicks = 0;
+                phase.pearlDive = true;
                 return decide("drop");
             }
-            if ((!los || digDown) && me.onGround()) {
+            if ((!los || phase.digDown) && me.onGround()) {
                 // The floor we stand on is what separates us. Walk over them and dig down through it: the hole drops
                 // us on them from above, which is the mace's whole attack.
-                if (gap > 3.5 && !digDown) { // once the hole is started it stays: they pace about and the fall steers
+                if (gap > 3.5 && !phase.digDown) { // once the hole is started it stays: they pace about and the fall steers
                     if (!select(me, mace)) return decide("swap");
                     look(target.position());
                     key(Input.MOVE_FORWARD);
                     return decide("drop");
                 }
-                digDown = true;
+                phase.digDown = true;
                 // A hole we cut beside our feet is no use until we step into it: walk to the open column with ordinary
                 // movement keys and a smoothed look, like a player stepping off an edge.
                 net.minecraft.core.BlockPos feet = me.blockPosition();
@@ -902,15 +891,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         // Stranded below: they are well above and nothing walkable leads up. A pearl that lands on solid ground at their
         // level carries us there, so look for a throw whose flight ends on a top face up there and take it.
-        if (pearlSlot >= 0 && macePhase == 0 && pearlStage == 0 && eatTicks == 0 && me.onGround() && myHp >= 10
+        if (pearlSlot >= 0 && phase.macePhase == 0 && phase.pearlStage == 0 && eatTicks == 0 && me.onGround() && myHp >= 10
                 && target.getY() - me.getY() >= 8) {
-            strandTicks++;
+            phase.strandTicks++;
         } else {
-            strandTicks = 0;
-            liftSet = false;
+            phase.strandTicks = 0;
+            phase.liftSet = false;
         }
-        if (strandTicks > 60 && pearlCool == 0) {
-            if (!liftSet) {
+        if (phase.strandTicks > 60 && phase.pearlCool == 0) {
+            if (!phase.liftSet) {
                 Vec3 eye = me.getEyePosition();
                 double bestScore = 1e9;
                 for (float yaw = -180; yaw < 180; yaw += 12) {
@@ -927,8 +916,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                                     double score = Math.hypot(hit.getLocation().x - target.getX(), hit.getLocation().z - target.getZ());
                                     if (score < bestScore) {
                                         bestScore = score;
-                                        liftYaw = yaw;
-                                        liftPitch = pitch;
+                                        phase.liftYaw = yaw;
+                                        phase.liftPitch = pitch;
                                     }
                                 }
                                 break;
@@ -940,58 +929,58 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     }
                 }
                 if (bestScore > 20) {
-                    pearlCool = 200;
-                    strandTicks = 0;
+                    phase.pearlCool = 200;
+                    phase.strandTicks = 0;
                 } else {
-                    liftSet = true;
+                    phase.liftSet = true;
                 }
             }
-            if (liftSet) {
+            if (phase.liftSet) {
                 if (!select(me, pearlSlot)) return decide("swap");
-                if (!aimer.face(liftYaw, liftPitch, 2.0f)) return decide("pearl");
+                if (!aimer.face(phase.liftYaw, phase.liftPitch, 2.0f)) return decide("pearl");
                 press(ctx.minecraft().options.keyUse);
-                pearlCool = 300;
-                strandTicks = 0;
-                liftSet = false;
+                phase.pearlCool = 300;
+                phase.strandTicks = 0;
+                phase.liftSet = false;
                 return decide("pearl");
             }
         }
         // Pearl lift: a pearl thrown straight up loses speed and a wind charge thrown after it does not. The pearl
         // lands on the charge some 18 blocks up and that is where we are, with a full fall onto the mace below.
-        if (mace >= 0 && wind >= 0 && macePhase == 0 && (pearlStage == 3 || pearlStage == 4 || pearlStage == 0 && pearlSlot >= 0 && pearlCool == 0
-                && maceCool == 0 && me.onGround() && los && dist > 3.5 && dist <= 7 && myHp >= 15 && !overhead && target.onGround()
+        if (mace >= 0 && wind >= 0 && phase.macePhase == 0 && (phase.pearlStage == 3 || phase.pearlStage == 4 || phase.pearlStage == 0 && pearlSlot >= 0 && phase.pearlCool == 0
+                && phase.maceCool == 0 && me.onGround() && los && dist > 3.5 && dist <= 7 && myHp >= 15 && !overhead && target.onGround()
                 && me.getDeltaMovement().horizontalDistance() < 0.12
                 && ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), me.getEyePosition().add(0, 26, 0),
                         net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me)).getType() == net.minecraft.world.phys.HitResult.Type.MISS)) {
-            pearlTicks++;
-            if (pearlStage == 0) {
-                pearlStage = 3;
-                pearlTicks = 0;
-                pearlFrom = me.position();
+            phase.pearlTicks++;
+            if (phase.pearlStage == 0) {
+                phase.pearlStage = 3;
+                phase.pearlTicks = 0;
+                phase.pearlFrom = me.position();
             }
-            if (pearlTicks > 30 || me.position().distanceTo(pearlFrom) > 0.4 || pearlStage == 3 && overhead) { // shoved off the line: the two no longer meet
-                boolean thrown = pearlStage == 4;
-                pearlStage = thrown ? 2 : 0;
-                pearlCool = thrown ? 0 : 60;
-                pearlTicks = 0;
+            if (phase.pearlTicks > 30 || me.position().distanceTo(phase.pearlFrom) > 0.4 || phase.pearlStage == 3 && overhead) { // shoved off the line: the two no longer meet
+                boolean thrown = phase.pearlStage == 4;
+                phase.pearlStage = thrown ? 2 : 0;
+                phase.pearlCool = thrown ? 0 : 60;
+                phase.pearlTicks = 0;
                 return thrown ? decide("pearl") : null;
             }
-            if (!select(me, pearlStage == 3 ? pearlSlot : wind)) return decide("swap");
+            if (!select(me, phase.pearlStage == 3 ? pearlSlot : wind)) return decide("swap");
             // both leave on the same rotation, so whatever the pitch is short of 90 they still share a line
             if (!aimer.face(me.getYRot(), -90f, 1.0f)) return decide("pearl");
             press(ctx.minecraft().options.keyUse);
-            if (pearlStage == 3) {
-                pearlStage = 4;
+            if (phase.pearlStage == 3) {
+                phase.pearlStage = 4;
             } else {
-                pearlStage = 2;
-                pearlTicks = 0;
+                phase.pearlStage = 2;
+                phase.pearlTicks = 0;
             }
             return decide("pearl");
         }
         // pearl strike: lob a pearl so it peaks above the target, pop it mid-air with a wind charge to teleport there, then drop the mace
-        if (mace >= 0 && (wind >= 0 || pearlStage == 2) && macePhase == 0 && (pearlStage > 0 || pearlCool == 0 && maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
+        if (mace >= 0 && (wind >= 0 || phase.pearlStage == 2) && phase.macePhase == 0 && (phase.pearlStage > 0 || phase.pearlCool == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
                 && inv.slotOf(me, Items.ENDER_PEARL) >= 0 && target.onGround() && !overhead)) {
-            if (pearlStage == 0) {
+            if (phase.pearlStage == 0) {
                 float bestPitch = 0;
                 double bestErr = 1e9;
                 Vec3 eye = me.getEyePosition();
@@ -1013,27 +1002,27 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     }
                 }
                 if (bestErr > 2.0) {
-                    pearlCool = 80;
+                    phase.pearlCool = 80;
                     return null;
                 }
                 if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
                 Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), eye.add(flat.scale(10)), ctx.playerRotations());
                 if (!aimer.face(r.getYaw(), bestPitch, 2.5f)) return decide("pearl");
                 press(ctx.minecraft().options.keyUse);
-                pearlStage = 1;
-                pearlTicks = 0;
-                pearlFrom = me.position();
+                phase.pearlStage = 1;
+                phase.pearlTicks = 0;
+                phase.pearlFrom = me.position();
                 return decide("pearl");
             }
-            pearlTicks++;
-            if (pearlStage == 1) {
+            phase.pearlTicks++;
+            if (phase.pearlStage == 1) {
                 net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl pearl = null;
                 for (net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl e : ctx.world().getEntitiesOfClass(net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl.class, me.getBoundingBox().inflate(60), x -> x.getOwner() == me)) pearl = e;
-                if (pearl != null) pearlLast = pearl.position();
-                if (pearl == null || pearlTicks > 90 || dist < 4) {
+                if (pearl != null) phase.pearlLast = pearl.position();
+                if (pearl == null || phase.pearlTicks > 90 || dist < 4) {
                    
-                    pearlStage = 0;
-                    pearlCool = pearl == null && pearlTicks <= 3 ? 0 : 120;
+                    phase.pearlStage = 0;
+                    phase.pearlCool = pearl == null && phase.pearlTicks <= 3 ? 0 : 120;
                     return null;
                 }
                 if (!select(me, wind)) return decide("swap");
@@ -1056,67 +1045,67 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), pp, ctx.playerRotations());
                     if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
                     press(ctx.minecraft().options.keyUse);
-                    pearlStage = 2;
-                    pearlTicks = 0;
+                    phase.pearlStage = 2;
+                    phase.pearlTicks = 0;
                 }
                 return decide("pearl");
             }
             // stage 2: wait for the teleport, then fall on it
-            if (me.position().distanceTo(pearlFrom) > 3.5) {
-                pearlStage = 0;
-                pearlCool = 200;
-                macePhase = 2;
-                maceTicks = 0;
-                pearlDive = true;
-            } else if (pearlTicks > 40) {
-                pearlStage = 0;
-                pearlCool = 200;
+            if (me.position().distanceTo(phase.pearlFrom) > 3.5) {
+                phase.pearlStage = 0;
+                phase.pearlCool = 200;
+                phase.macePhase = 2;
+                phase.maceTicks = 0;
+                phase.pearlDive = true;
+            } else if (phase.pearlTicks > 40) {
+                phase.pearlStage = 0;
+                phase.pearlCool = 200;
             }
             return decide("pearl");
         }
         int rocket = inv.slotOf(me, Items.FIREWORK_ROCKET);
         net.minecraft.world.entity.EquipmentSlot chestSlot = net.minecraft.world.entity.EquipmentSlot.CHEST;
         Item worn = me.getItemBySlot(chestSlot).getItem();
-        if (mace >= 0 && worn != Items.ELYTRA && macePhase == 0 && maceCool == 0 && me.onGround() && los && dist > 6 && dist < 40 && !overhead
+        if (mace >= 0 && worn != Items.ELYTRA && phase.macePhase == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 6 && dist < 40 && !overhead
                 && (rocket >= 0 || wind >= 0) && inv.slotOf(me, Items.ELYTRA) >= 0) {
             // the wings are in the hotbar, not on the chest: put them on (the chestplate goes where they were)
-            chestSaved = worn;
+            phase.chestSaved = worn;
             inv.invSwap(me, 6, inv.slotOf(me, Items.ELYTRA));
             return decide("elytra");
         }
-        if (worn == Items.ELYTRA && chestSaved != null && chestSaved != Items.AIR && macePhase == 0 && me.onGround() && maceCool > 0) {
+        if (worn == Items.ELYTRA && phase.chestSaved != null && phase.chestSaved != Items.AIR && phase.macePhase == 0 && me.onGround() && phase.maceCool > 0) {
             // landed: the chestplate is worth more than the wings in a melee
-            if (inv.slotOf(me, chestSaved) >= 0 && inv.invSwap(me, 6, inv.slotOf(me, chestSaved))) chestSaved = null;
+            if (inv.slotOf(me, phase.chestSaved) >= 0 && inv.invSwap(me, 6, inv.slotOf(me, phase.chestSaved))) phase.chestSaved = null;
             return decide("elytra");
         }
         if (mace >= 0 && (rocket >= 0 || wind >= 0) && worn == Items.ELYTRA
-                && (macePhase >= 5 || macePhase == 0 && me.onGround() && maceCool == 0 && !overhead && tv().y > -0.3 && dist > 3 && dist < 40 && los)) {
+                && (phase.macePhase >= 5 || phase.macePhase == 0 && me.onGround() && phase.maceCool == 0 && !overhead && tv().y > -0.3 && dist > 3 && dist < 40 && los)) {
             // elytra mace: take off, rocket up above the target, dive and smash
-            maceTicks++;
-            if (macePhase == 0) {
+            phase.maceTicks++;
+            if (phase.macePhase == 0) {
                 key(Input.JUMP);
-                boosted = false;
-                macePhase = 5;
-                maceTicks = 0;
+                phase.boosted = false;
+                phase.macePhase = 5;
+                phase.maceTicks = 0;
                 return decide("elytra");
             }
             Vec3 tp = aimPoint(me, target);
-            if (macePhase == 5) { // rising: boost with a wind charge, then press jump in the air to open the wings
+            if (phase.macePhase == 5) { // rising: boost with a wind charge, then press jump in the air to open the wings
                 if (me.isFallFlying()) {
-                    macePhase = 6;
-                    maceTicks = 0;
-                } else if (rocket < 0 && !boosted && maceTicks >= 2 && wind >= 0) {
+                    phase.macePhase = 6;
+                    phase.maceTicks = 0;
+                } else if (rocket < 0 && !phase.boosted && phase.maceTicks >= 2 && wind >= 0) {
                     if (!select(me, wind)) return decide("swap");
-                    if (aimer.throwStraightDown(me)) boosted = true;
-                } else if (me.getDeltaMovement().y < 0 && !me.onGround() && (rocket >= 0 || boosted)) {
-                    if (maceTicks % 2 == 0) key(Input.JUMP);
-                } else if (maceTicks > 40) {
-                    macePhase = 0;
-                    maceCool = 40;
+                    if (aimer.throwStraightDown(me)) phase.boosted = true;
+                } else if (me.getDeltaMovement().y < 0 && !me.onGround() && (rocket >= 0 || phase.boosted)) {
+                    if (phase.maceTicks % 2 == 0) key(Input.JUMP);
+                } else if (phase.maceTicks > 40) {
+                    phase.macePhase = 0;
+                    phase.maceCool = 40;
                 }
                 return decide("elytra");
             }
-            // macePhase 6: gliding
+            // phase.macePhase 6: gliding
             // a diver coming down on us from above wins any trade in the air, and it needs only ~6 ticks from a hover to land:
             // under a mace carrier, take the shield up before it commits. The shield checks the facing with its height
             // included, so face the bearing level, not the carrier overhead.
@@ -1134,7 +1123,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 lastShieldTick = me.tickCount;
                 return decide("block");
             }
-            boolean climbing = rocket >= 0 && me.getY() < target.getY() + 14 && maceTicks < 70;
+            boolean climbing = rocket >= 0 && me.getY() < target.getY() + 14 && phase.maceTicks < 70;
             Vec3 aim = climbing ? new Vec3(tp.x, me.getEyeY() + 30, tp.z).add(tp.subtract(me.position()).multiply(0.0, 0, 0)) : tp;
             if (climbing) {
                 Vec3 flat = new Vec3(tp.x - me.getX(), 0, tp.z - me.getZ());
@@ -1151,22 +1140,22 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (!climbing && !flare && r.getPitch() < -35f && speed < 1.3) r = new Rotation(r.getYaw(), groundGap(me) > 25 ? 25f : -5f);
             if (flare) r = new Rotation(r.getYaw(), -20f);
             aimer.aim(r, true);
-            if (climbing && speed < 1.2 && maceTicks % 12 == 3) {
+            if (climbing && speed < 1.2 && phase.maceTicks % 12 == 3) {
                 if (!select(me, rocket)) return decide("swap");
                 press(ctx.minecraft().options.keyUse);
             } else if (!climbing) {
                 if (!select(me, mace)) return decide("swap");
                 if (exactReach(me, target) <= REACH - 0.05) {
                     hit(me);
-                    macePhase = 0;
-                    maceCool = 10;
+                    phase.macePhase = 0;
+                    phase.maceCool = 10;
                 }
             } else {
                 if (!select(me, mace)) return decide("swap");
             }
-            if (me.onGround() || !me.isFallFlying() && maceTicks > 6 || maceTicks > 200) {
-                macePhase = 0;
-                maceCool = 40;
+            if (me.onGround() || !me.isFallFlying() && phase.maceTicks > 6 || phase.maceTicks > 200) {
+                phase.macePhase = 0;
+                phase.maceCool = 40;
             }
             return decide("mace");
         }
@@ -1177,17 +1166,17 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
             // 002307 t1527: it stood at 6 health eating 3.6 away and the next 40 ticks went to a hop; two sword hits end it.
             boolean finish = target.getHealth() + target.getAbsorptionAmount() <= 7 && dist < 5;
-            if (!spearKit && macePhase == 0 && canJump && maceCool == 0 && !overhead && !finish && dist > 1.0 && dist < 24 && los && wind >= 0) {
+            if (!spearKit && phase.macePhase == 0 && canJump && phase.maceCool == 0 && !overhead && !finish && dist > 1.0 && dist < 24 && los && wind >= 0) {
                 if (!select(me, wind)) return decide("swap");
                 aimer.aim(new Rotation(me.getYRot(), 90f), true);
-                hopThrown = -1;
-                flickLeft = 0;
-                flickAge = 100;
-                macePhase = 1;
-                maceTicks = 0;
+                phase.hopThrown = -1;
+                phase.flickLeft = 0;
+                phase.flickAge = 100;
+                phase.macePhase = 1;
+                phase.maceTicks = 0;
             }
-            if (macePhase == 1) { // hop: charge leaves straight down this tick, under the feet
-                maceTicks++;
+            if (phase.macePhase == 1) { // hop: charge leaves straight down this tick, under the feet
+                phase.maceTicks++;
                 // Spear kit: swapping onto the mace zeroes its charge, and the hop lands at cd~0.5
                 // (fight 051702 ticks 45-48 had the fall flag and never clicked). Charge first, then
                 // throw the wind charge from the offhand so the hotbar slot never changes.
@@ -1199,16 +1188,16 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         look(aimPoint(me, target));
                         if (hr < 3.6) key(Input.MOVE_BACK);
                         else if (hr > 4.2) key(Input.MOVE_FORWARD);
-                        if (maceTicks > 50 || hr < 1.2) {
-                            macePhase = 0;
-                            maceCool = 40;
+                        if (phase.maceTicks > 50 || hr < 1.2) {
+                            phase.macePhase = 0;
+                            phase.maceCool = 40;
                             if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                         }
                         return decide("mace");
                     }
                     if (horizontalBoxDist(me, target) < 3.2) {
-                        macePhase = 0;
-                        maceCool = 40;
+                        phase.macePhase = 0;
+                        phase.maceCool = 40;
                         if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                         return decide("mace");
                     }
@@ -1221,8 +1210,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         return decide("mace");
                     }
                     if (aimer.throwStraightDown(me)) {
-                        macePhase = 2;
-                        maceTicks = 0;
+                        phase.macePhase = 2;
+                        phase.maceTicks = 0;
                     }
                     return decide("mace");
                 }
@@ -1232,41 +1221,41 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 // up for +0.84 and a 7 block hop. The burst is strongest at the feet: tip down on the ground,
                 // throw, and jump as it lands so the jump adds to it.
                 aimer.aim(new Rotation(me.getYRot(), 90f), true);
-                if (hopThrown < 0) {
+                if (phase.hopThrown < 0) {
                     if (me.getXRot() >= 78f && me.onGround()) {
                         press(ctx.minecraft().options.keyUse);
-                        hopThrown = maceTicks;
-                    } else if (maceTicks > 10) {
-                        macePhase = 0;
-                        maceCool = 20;
+                        phase.hopThrown = phase.maceTicks;
+                    } else if (phase.maceTicks > 10) {
+                        phase.macePhase = 0;
+                        phase.maceCool = 20;
                     }
-                } else if (maceTicks - hopThrown >= HOP_JUMP_DELAY) {
+                } else if (phase.maceTicks - phase.hopThrown >= HOP_JUMP_DELAY) {
                     key(Input.JUMP);
-                    macePhase = 2;
-                    maceTicks = 0;
+                    phase.macePhase = 2;
+                    phase.maceTicks = 0;
                 }
                 return decide("mace");
             }
-            if (macePhase == 2) { // flying: steer to the target, smash while falling
-                maceTicks++;
+            if (phase.macePhase == 2) { // flying: steer to the target, smash while falling
+                phase.maceTicks++;
                 // A wind hop forgives its own fall and a pearl does not: 18 blocks onto bare ground is most of a health
                 // bar. When the fall will end out of reach of them, burst a charge under the feet to break it.
-                if (pearlDive && me.onGround()) pearlDive = false;
-                if (pearlDive && wind >= 0 && me.fallDistance > 5 && exactReach(me, target) > REACH + 2.5
+                if (phase.pearlDive && me.onGround()) phase.pearlDive = false;
+                if (phase.pearlDive && wind >= 0 && me.fallDistance > 5 && exactReach(me, target) > REACH + 2.5
                         && !ctx.world().noCollision(me, me.getBoundingBox().expandTowards(0, -6.5, 0))) {
                     if (!select(me, wind)) return decide("swap");
-                    if (aimer.throwStraightDown(me)) pearlDive = false;
+                    if (aimer.throwStraightDown(me)) phase.pearlDive = false;
                     return decide("windbreak");
                 }
                 // Abort a hop that is not a smash when their dive is the one that will land.
                 if (spearKit && me.fallDistance < 1.2 && shieldDive(me, dist)) {
-                    macePhase = 0;
-                    maceCool = 8;
+                    phase.macePhase = 0;
+                    phase.maceCool = 8;
                     return decide("block");
                 }
-                flickAge++;
-                if (flickLeft > 0 && select(me, wind)) { // two ticks, so the server sees it
-                    flickLeft--;
+                phase.flickAge++;
+                if (phase.flickLeft > 0 && select(me, wind)) { // two ticks, so the server sees it
+                    phase.flickLeft--;
                     return decide("flick");
                 }
                 if (!select(me, mace)) return decide("swap");
@@ -1311,7 +1300,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 } else if (!me.isSprinting() && (horizontalBoxDist(me, target) > 2.2 || me.getDeltaMovement().horizontalDistance() < 0.08)) {
                     key(Input.MOVE_FORWARD);
                 }
-                if (!spearKit && wind >= 0 && !me.onGround() && flickAge > 40) {
+                if (!spearKit && wind >= 0 && !me.onGround() && phase.flickAge > 40) {
                     // The cooldown restarts when the held item changes: flick off the mace so the fall ends near 0.8.
                     int n = 0;
                     double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5;
@@ -1321,8 +1310,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                         n++;
                     }
                     if (n >= 14 && n <= 26 && me.getAttackStrengthScale(0f) + n / 33f >= 0.84f) {
-                        flickAge = 0;
-                        flickLeft = 1;
+                        phase.flickAge = 0;
+                        phase.flickLeft = 1;
                         select(me, wind);
                         return decide("flick");
                     }
@@ -1371,19 +1360,19 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     boolean clicked = hit(me);
                     if (!spearKit) look(lead);
                     if (clicked || spearKit) {
-                        macePhase = 0;
-                        maceCool = 14;
+                        phase.macePhase = 0;
+                        phase.maceCool = 14;
                         if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                     }
-                } else if (me.onGround() && (spearKit || maceTicks > 4) || maceTicks > (spearKit ? 40 : 80)) {
+                } else if (me.onGround() && (spearKit || phase.maceTicks > 4) || phase.maceTicks > (spearKit ? 40 : 80)) {
                     // A hop that did not smash must not restart. Walk into the jab band first.
                     if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-                    macePhase = 0;
-                    maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
+                    phase.macePhase = 0;
+                    phase.maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
                 }
                 return decide("mace");
             }
-            if (wind < 0 || maceCool > 0 || dist <= 3) {
+            if (wind < 0 || phase.maceCool > 0 || dist <= 3) {
                 int alt = inv.weapon(me);
                 if (alt < 0) alt = mace;
                 if (!select(me, alt)) return decide("swap");
@@ -1402,7 +1391,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private PathingCommand flee(Player me, double dist) {
         use(false);
         // the landing costs about 3 HP in this kit: a pearl thrown at 2 HP is a suicide (pillar perfect, tick 243)
-        if (dist < 10 && pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && inv.slotOf(me, Items.ENDER_PEARL) >= 0) {
+        if (dist < 10 && phase.pearlCool == 0 && me.getHealth() + me.getAbsorptionAmount() > 3.5f && inv.slotOf(me, Items.ENDER_PEARL) >= 0) {
             Vec3 away = new Vec3(me.getX() - target.getX(), 0, me.getZ() - target.getZ());
             away = away.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : away.normalize();
             Vec3 at = me.getEyePosition().add(away.scale(24)).add(0, 7, 0);
@@ -1410,7 +1399,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
             if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
             press(ctx.minecraft().options.keyUse);
-            pearlCool = 160;
+            phase.pearlCool = 160;
             return decide("pearl");
         }
         if (dist > 16) {
@@ -1528,7 +1517,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private boolean meleeBlock(Player me, double dist) {
         if (me.getOffhandItem().getItem() != Items.SHIELD && inv.slotOf(me, Items.SHIELD) < 0) return false;
         // 212743 hard aggressive: every 6 and 9 landed in the air after our own jump swing.
-        if (dist > 5.5 || me.isInWater() || eatTicks > 0 || macePhase != 0) return false;
+        if (dist > 5.5 || me.isInWater() || eatTicks > 0 || phase.macePhase != 0) return false;
         if (target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) return false; // it cannot swing mid-bite
 
         counter = false;
@@ -1571,7 +1560,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * falling after them with the mace; failing that, be somewhere else when they arrive.
      */
     private PathingCommand underDive(Player me, double dist, boolean los) {
-        boolean hop = macePhase == 2; // our own smash is in the air: a diver coming down on it is a trade we lose
+        boolean hop = phase.macePhase == 2; // our own smash is in the air: a diver coming down on it is a trade we lose
         // dropping a raised shield in the diver's last two ticks (it is within 4 blocks) is what killed us twice: hold it until the diver is level
         boolean raised = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD && target.getY() > me.getY() - 0.5;
         double hzUp = Math.hypot(target.getX() - me.getX(), target.getZ() - me.getZ());
@@ -1579,14 +1568,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean closeAbove = hzUp < 4 && target.getY() - me.getY() < 9 && target.getMainHandItem().getItem() == Items.MACE
                 && me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
         double vy = Math.min(tv().y, targeting.rawY());
-        if (macePhase != 0 && !hop || pearlStage != 0 && pearlStage != 2 || eatTicks > 0 || target.onGround() || pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised && !(me.getDeltaMovement().y < -0.3 && groundGap(me) < 20)) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
-        if (pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
-            if (me.position().distanceTo(pearlFrom) > 3.5 || pearlTicks++ > 40) return null;
-            pearlFrom = pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
+        if (phase.macePhase != 0 && !hop || phase.pearlStage != 0 && phase.pearlStage != 2 || eatTicks > 0 || target.onGround() || phase.pearlStage == 0 && vy > (hzUp < 4 ? -0.3 : -0.6) && !closeAbove || target.getY() < me.getY() + (raised ? 0 : 4) || !me.onGround() && !hop && !raised && !(me.getDeltaMovement().y < -0.3 && groundGap(me) < 20)) return null; // a wind charge popping us off the ground just before the smash is not the end of the block
+        if (phase.pearlStage == 2) { // a pearl is already out: keep moving until it lands us somewhere
+            if (me.position().distanceTo(phase.pearlFrom) > 3.5 || phase.pearlTicks++ > 40) return null;
+            phase.pearlFrom = phase.pearlFrom.add(me.getDeltaMovement().multiply(1, 0, 1));
         }
         int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
         // off: the 5 HP landing put us in the diver's path (pearlmace 12/25 with it, 16/25 without)
-        if (false && !hop && pearlStage == 0 && inv.slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
+        if (false && !hop && phase.pearlStage == 0 && inv.slotOf(me, Items.MACE) >= 0 && pearlSlot >= 0 && phase.pearlCool == 0 && los && dist < 25 && me.getHealth() + me.getAbsorptionAmount() >= 12) {
             Vec3 eye = me.getEyePosition(), tp = target.getBoundingBox().getCenter(), v = tv(), need = null;
             double sum = 0, drop = 0, u = 0;
             for (int t = 1; t <= 24 && need == null; t++) {
@@ -1605,9 +1594,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 Rotation r = RotationUtils.calcRotationFromVec3d(eye, eye.add(need), ctx.playerRotations());
                 if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
                 press(ctx.minecraft().options.keyUse);
-                pearlStage = 2;
-                pearlTicks = 0;
-                pearlFrom = me.position();
+                phase.pearlStage = 2;
+                phase.pearlTicks = 0;
+                phase.pearlFrom = me.position();
                 return decide("pearl");
             }
         }
@@ -1630,8 +1619,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean held = me.isUsingItem() && me.getUseItem().getItem() == Items.SHIELD;
         if (hop) {
             if (!shield || ticksLeft > 20 || away.length() > 5) return null;
-            macePhase = 0;
-            maceCool = 20;
+            phase.macePhase = 0;
+            phase.maceCool = 20;
         }
         if (shield && ticksLeft <= 30 && away.length() < 6) { // a shield takes ~5 ticks to count as raised
             int hand = inv.slotOf(me, Items.MACE);
@@ -1831,12 +1820,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
         double hr = horizontalBoxDist(me, target);
         // A hop only just outside the jab, and not again for 15s. Repeating it kept the fight
         // out of the band (easy/medium timed out with one swing). Farther than 4: walk in.
-        if (mace >= 0 && wind >= 0 && maceCool == 0 && me.onGround() && !me.isInWater() && los
+        if (mace >= 0 && wind >= 0 && phase.maceCool == 0 && me.onGround() && !me.isInWater() && los
                 && target.onGround() && hr > SPEAR_JAB_HI && hr <= 4.0 && target.getY() <= me.getY() + 1.5) {
             // Phase 1 charges the mace on the ground, then throws. Do not swap to the wind charge here.
-            macePhase = 1;
-            maceTicks = 0;
-            maceCool = 300;
+            phase.macePhase = 1;
+            phase.maceTicks = 0;
+            phase.maceCool = 300;
             return decide("mace");
         }
         return null;
