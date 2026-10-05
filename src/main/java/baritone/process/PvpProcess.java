@@ -2243,6 +2243,20 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * else lay obsidian beside the target's feet. Anything that would hurt us more than it, or pop us, is skipped.
      */
     private boolean crystal(Player me) {
+        // a ray the foe's body blocks never clicks, and a stall here froze the whole fight: no swing for a while, let melee have it
+        if (me.swinging) crystalIdle = 0;
+        else if (crystalIdle < 200) crystalIdle++;
+        if (crystalIdle > 25 && crystalIdle < 60) {
+            crystalFight = true;
+            return false;
+        }
+        if (crystalIdle >= 60) crystalIdle = 0;
+        return crystalWork(me);
+    }
+
+    private int crystalIdle;
+
+    private boolean crystalWork(Player me) {
         crystalFight = slotOf(me, Items.END_CRYSTAL) >= 0 || slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
         if (anchor(me)) return true;
         if (slotOf(me, Items.END_CRYSTAL) < 0 || me.distanceTo(target) > 7) return false;
