@@ -9,6 +9,7 @@ import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import static baritone.process.CombatAim.press;
+import static baritone.process.CombatGeometry.*;
 
 /**
  * The wind charge as a defensive and disruptive tool: thrown onto an incoming projectile's path, onto an airborne
@@ -22,17 +23,33 @@ final class CombatWind {
     }
 
     private final IPlayerContext ctx;
+    private final CombatInventory inv;
     private final CombatAim aimer;
     private final CombatTargeting targeting;
     private final CombatPhase phase;
     private final Hands hands;
 
-    CombatWind(IPlayerContext ctx, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, Hands hands) {
+    CombatWind(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, Hands hands) {
         this.ctx = ctx;
+        this.inv = inv;
         this.aimer = aimer;
         this.targeting = targeting;
         this.phase = phase;
         this.hands = hands;
+    }
+
+    /** Knocked high, or the foe got away below: a wind burst under the feet is the only thing that resets the fall. Null when not falling. */
+    PathingCommand clutch(Player me, LivingEntity target) {
+        // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
+        // wings and pitch do not reset the fall distance, a wind burst under the feet does
+        int clutch = inv.slotOf(me, Items.WIND_CHARGE);
+        if (clutch >= 0 && !me.onGround() && me.fallDistance > 12 && me.getDeltaMovement().y < -0.5 && groundGap(me) < 9
+                && exactReach(me, target) > REACH + 1.5 && !me.isInWater()) {
+            if (!hands.select(me, clutch)) return hands.decide("swap");
+            aimer.throwStraightDown(me);
+            return hands.decide("clutch");
+        }
+        return null;
     }
 
     /** Knock an arrow, trident, fireball or potion off its line to us. */

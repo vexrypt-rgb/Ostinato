@@ -49,6 +49,17 @@ final class CombatElytra {
         this.hands = hands;
     }
 
+    /** The dive is over and the wings still point at the ground: pull the nose up. Null when not diving into the ground. */
+    PathingCommand flare(Player me) {
+        if (phase.macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
+                && groundGap(me) < 4 + 12 * Math.min(1.0, -me.getDeltaMovement().y / 1.5)) {
+            // the dive is over (missed, blocked, or called off) and the wings are still pointed at the ground
+            aimer.aim(new Rotation(me.getYRot(), -25f), true);
+            return hands.decide("flare");
+        }
+        return null;
+    }
+
     /** One tick of the wings play; null when the kit or the moment doesn't call for it. */
     PathingCommand run(Player me, LivingEntity target, double dist, boolean los, boolean overhead, int mace, int wind) {
         int rocket = inv.slotOf(me, Items.FIREWORK_ROCKET);

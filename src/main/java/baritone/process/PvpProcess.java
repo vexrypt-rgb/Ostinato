@@ -244,21 +244,10 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // remember how long after its swing that was and keep the sword out of that window
             click.settle(me, target);
             boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && shield.meleeBlock(me, target, dist);
-            // a fall that no smash is going to cushion (knocked high, or the target got away below) ends in fall damage:
-            // wings and pitch do not reset the fall distance, a wind burst under the feet does
-            int clutch = inv.slotOf(me, Items.WIND_CHARGE);
-            if (clutch >= 0 && !me.onGround() && me.fallDistance > 12 && me.getDeltaMovement().y < -0.5 && groundGap(me) < 9
-                    && exactReach(me, target) > REACH + 1.5 && !me.isInWater()) {
-                if (!select(me, clutch)) return decide("swap");
-                aimer.throwStraightDown(me);
-                return decide("clutch");
-            }
-            if (phase.macePhase < 5 && me.isFallFlying() && me.getDeltaMovement().y < -0.4
-                    && groundGap(me) < 4 + 12 * Math.min(1.0, -me.getDeltaMovement().y / 1.5)) {
-                // the dive is over (missed, blocked, or called off) and the wings are still pointed at the ground
-                aimer.aim(new Rotation(me.getYRot(), -25f), true);
-                return decide("flare");
-            }
+            PathingCommand clutched = winds.clutch(me, target);
+            if (clutched != null) return clutched;
+            PathingCommand flared = elytra.flare(me);
+            if (flared != null) return flared;
             PathingCommand dive = shield.underDive(me, target, dist, los);
             if (dive != null) return dive;
             if (phase.pearlStage == 0 && (blockMelee || defense.arrowIncoming(me))) {
@@ -505,7 +494,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public int spearCool() { return spears.spearCool; }
         public void spearCool(int ticks) { spears.spearCool = ticks; }
     });
-    private final CombatWind winds = new CombatWind(ctx, aimer, targeting, phase, new CombatWind.Hands() {
+    private final CombatWind winds = new CombatWind(ctx, inv, aimer, targeting, phase, new CombatWind.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
     });
