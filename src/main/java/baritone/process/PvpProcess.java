@@ -731,8 +731,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand bow(Player me) { return PvpProcess.this.bow(me); }
         public void attacked() { attacks++; }
     });
-    private final CombatPearl pearls = new CombatPearl(ctx, aimer, phase, new CombatPearl.Hands() {
+    private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
     });
     private int fleeTicks;
@@ -897,92 +898,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (stranded != null) return stranded;
         PathingCommand lifted = pearls.lift(me, target, dist, los, overhead, mace, wind, pearlSlot, myHp);
         if (pearls.handled) return lifted;
-        // pearl strike: lob a pearl so it peaks above the target, pop it mid-air with a wind charge to teleport there, then drop the mace
-        if (mace >= 0 && (wind >= 0 || phase.pearlStage == 2) && phase.macePhase == 0 && (phase.pearlStage > 0 || phase.pearlCool == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
-                && inv.slotOf(me, Items.ENDER_PEARL) >= 0 && target.onGround() && !overhead)) {
-            if (phase.pearlStage == 0) {
-                float bestPitch = 0;
-                double bestErr = 1e9;
-                Vec3 eye = me.getEyePosition();
-                Vec3 flat = new Vec3(target.getX() - me.getX(), 0, target.getZ() - me.getZ()).normalize();
-                for (float pitch = -80; pitch <= -25; pitch += 1.5f) {
-                    double pr = Math.toRadians(pitch);
-                    Vec3 v = new Vec3(flat.x * Math.cos(pr), -Math.sin(pr), flat.z * Math.cos(pr)).scale(1.5);
-                    Vec3 p = eye;
-                    for (int t = 0; t < 80; t++) {
-                        p = p.add(v);
-                        v = v.scale(0.99).add(0, -0.03, 0);
-                        Vec3 tp = target.position().add(tv().scale(t + 1));
-                        double h = Math.hypot(p.x - tp.x, p.z - tp.z);
-                        if (p.y > target.getY() + 5 && p.y < target.getY() + 14 && h < bestErr) {
-                            bestErr = h;
-                            bestPitch = pitch;
-                        }
-                        if (p.y < eye.y - 2 && v.y < 0) break;
-                    }
-                }
-                if (bestErr > 2.0) {
-                    phase.pearlCool = 80;
-                    return null;
-                }
-                if (!select(me, inv.slotOf(me, Items.ENDER_PEARL))) return decide("swap");
-                Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), eye.add(flat.scale(10)), ctx.playerRotations());
-                if (!aimer.face(r.getYaw(), bestPitch, 2.5f)) return decide("pearl");
-                press(ctx.minecraft().options.keyUse);
-                phase.pearlStage = 1;
-                phase.pearlTicks = 0;
-                phase.pearlFrom = me.position();
-                return decide("pearl");
-            }
-            phase.pearlTicks++;
-            if (phase.pearlStage == 1) {
-                net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl pearl = null;
-                for (net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl e : ctx.world().getEntitiesOfClass(net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl.class, me.getBoundingBox().inflate(60), x -> x.getOwner() == me)) pearl = e;
-                if (pearl != null) phase.pearlLast = pearl.position();
-                if (pearl == null || phase.pearlTicks > 90 || dist < 4) {
-                   
-                    phase.pearlStage = 0;
-                    phase.pearlCool = pearl == null && phase.pearlTicks <= 3 ? 0 : 120;
-                    return null;
-                }
-                if (!select(me, wind)) return decide("swap");
-                Vec3 pv = pearl.getDeltaMovement();
-                Vec3 pp = pearl.position(), vv = pv;
-                int n = 1;
-                boolean ok = false;
-                for (; n < 80; n++) { // first tick the pearl is over the target, high enough
-                    pp = pp.add(vv);
-                    vv = vv.scale(0.99).add(0, -0.03, 0);
-                    Vec3 tpn = target.position().add(tv().scale(n));
-                    if (Math.hypot(pp.x - tpn.x, pp.z - tpn.z) < 1.3 && pp.y > tpn.y + 4) {
-                        ok = true;
-                        break;
-                    }
-                    if (pp.y < me.getY() - 3) break;
-                }
-                look(pearl.position());
-                if (ok && pp.distanceTo(me.getEyePosition()) / 1.5 >= n - 1) { // the charge needs about as long to arrive as the pearl does
-                    Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), pp, ctx.playerRotations());
-                    if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return decide("pearl");
-                    press(ctx.minecraft().options.keyUse);
-                    phase.pearlStage = 2;
-                    phase.pearlTicks = 0;
-                }
-                return decide("pearl");
-            }
-            // stage 2: wait for the teleport, then fall on it
-            if (me.position().distanceTo(phase.pearlFrom) > 3.5) {
-                phase.pearlStage = 0;
-                phase.pearlCool = 200;
-                phase.macePhase = 2;
-                phase.maceTicks = 0;
-                phase.pearlDive = true;
-            } else if (phase.pearlTicks > 40) {
-                phase.pearlStage = 0;
-                phase.pearlCool = 200;
-            }
-            return decide("pearl");
-        }
+        PathingCommand struck = pearls.strike(me, target, dist, los, overhead, mace, wind);
+        if (pearls.handled) return struck;
         int rocket = inv.slotOf(me, Items.FIREWORK_ROCKET);
         net.minecraft.world.entity.EquipmentSlot chestSlot = net.minecraft.world.entity.EquipmentSlot.CHEST;
         Item worn = me.getItemBySlot(chestSlot).getItem();
