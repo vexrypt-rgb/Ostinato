@@ -331,4 +331,24 @@ final class CombatMace {
         }
         return null;
     }
+
+    /**
+     * Spear kit, and only when a jab is not available.
+     * A straight-down wind charge is a hop: a mace smash just outside the jab band, or a shove out of the dead zone.
+     * It is not aimed past the target and it is not used to walk in.
+     */
+    PathingCommand spearTools(Player me, LivingEntity target, boolean los, int wind, int mace) {
+        double hr = horizontalBoxDist(me, target);
+        // A hop only just outside the jab, and not again for 15s. Repeating it kept the fight
+        // out of the band (easy/medium timed out with one swing). Farther than 4: walk in.
+        if (mace >= 0 && wind >= 0 && phase.maceCool == 0 && me.onGround() && !me.isInWater() && los
+                && target.onGround() && hr > SPEAR_JAB_HI && hr <= 4.0 && target.getY() <= me.getY() + 1.5) {
+            // Phase 1 charges the mace on the ground, then throws. Do not swap to the wind charge here.
+            phase.macePhase = 1;
+            phase.maceTicks = 0;
+            phase.maceCool = 300;
+            return hands.decide("mace");
+        }
+        return null;
+    }
 }

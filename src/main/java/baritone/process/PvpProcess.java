@@ -799,7 +799,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // Do not hop in the middle of a charge approach. The hop was the whole fight and use never started.
             boolean foeEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
             PathingCommand tool = spearUseTicks == 0 && !spearReopen && !spearCommit && !foeEating && !(spearUseCool == 0 && horizontalBoxDist(me, target) > 4.6)
-                    ? spearTools(me, dist, los, wind, mace) : null;
+                    ? maces.spearTools(me, target, los, wind, mace) : null;
             if (tool != null) return tool;
             return null;
         }
@@ -808,24 +808,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0;
         PathingCommand dived = winds.diver(me, target, dist, wind, hasShield);
         if (dived != null) return dived;
-        // a diver still coming (no charge, or too close to counter): block the smash with the shield
-        // 1822 fight ticks 505-508: block, jump, block as the diver came inside one block of our height,
-        // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
-        // 000432 ticks 443-452: the diver topped out nine blocks up at 443, passed -0.3 at 448 and landed its mace
-        // at 452, on the shield's fifth tick. From three blocks up the turn at the top is already the dive.
-        // the smoothed position velocity still reads the climb for four ticks after the diver has turned over: its own
-        // reported velocity is already negative at the top, and a shield needs five ticks before the smash
-        double diveVy = Math.min(tv().y, target.getDeltaMovement().y);
-        boolean dive = !target.onGround() && dist < 11 && (diveVy < -0.3 && target.getY() > me.getY() + 1 || diveVy < 0.1 && target.getY() > me.getY() + 3);
-        if (dive) phase.diveBlock = true;
-        else if (target.onGround() || dist > 11) phase.diveBlock = false;
-        if (phase.macePhase == 0 && (dive || phase.diveBlock && hasShield)
-                && (me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0)) {
-            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
-            look(target.getEyePosition());
-            use(true);
-            return decide("block");
-        }
+        PathingCommand covered = shield.diveCover(me, target, dist, hasShield);
+        if (covered != null) return covered;
         PathingCommand feet = winds.feet(me, target, dist, los, wind);
         if (feet != null) return feet;
         int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
@@ -1106,26 +1090,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private void look(Vec3 at) {
         aimer.look(at, target == null ? 0 : tv().horizontalDistance());
-    }
-
-    /**
-     * Spear kit, and only when a jab is not available.
-     * A straight-down wind charge is a hop: a mace smash just outside the jab band, or a shove out of the dead zone.
-     * It is not aimed past the target and it is not used to walk in.
-     */
-    private PathingCommand spearTools(Player me, double dist, boolean los, int wind, int mace) {
-        double hr = horizontalBoxDist(me, target);
-        // A hop only just outside the jab, and not again for 15s. Repeating it kept the fight
-        // out of the band (easy/medium timed out with one swing). Farther than 4: walk in.
-        if (mace >= 0 && wind >= 0 && phase.maceCool == 0 && me.onGround() && !me.isInWater() && los
-                && target.onGround() && hr > SPEAR_JAB_HI && hr <= 4.0 && target.getY() <= me.getY() + 1.5) {
-            // Phase 1 charges the mace on the ground, then throws. Do not swap to the wind charge here.
-            phase.macePhase = 1;
-            phase.maceTicks = 0;
-            phase.maceCool = 300;
-            return decide("mace");
-        }
-        return null;
     }
 
     @Override

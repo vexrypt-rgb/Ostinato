@@ -211,4 +211,27 @@ final class CombatShield {
         if (blockTicks++ == 0) hands.blockStarted();
         return true;
     }
+
+    /** A mace diver still coming that we cannot wind-counter: raise the shield and keep it up until the dive lands. */
+    PathingCommand diveCover(Player me, LivingEntity target, double dist, boolean hasShield) {
+        // a diver still coming (no charge, or too close to counter): block the smash with the shield
+        // 1822 fight ticks 505-508: block, jump, block as the diver came inside one block of our height,
+        // and a shield needs five unbroken ticks. Once a dive is seen the shield stays up until it lands.
+        // 000432 ticks 443-452: the diver topped out nine blocks up at 443, passed -0.3 at 448 and landed its mace
+        // at 452, on the shield's fifth tick. From three blocks up the turn at the top is already the dive.
+        // the smoothed position velocity still reads the climb for four ticks after the diver has turned over: its own
+        // reported velocity is already negative at the top, and a shield needs five ticks before the smash
+        double diveVy = Math.min(targeting.velocity(target).y, target.getDeltaMovement().y);
+        boolean dive = !target.onGround() && dist < 11 && (diveVy < -0.3 && target.getY() > me.getY() + 1 || diveVy < 0.1 && target.getY() > me.getY() + 3);
+        if (dive) phase.diveBlock = true;
+        else if (target.onGround() || dist > 11) phase.diveBlock = false;
+        if (phase.macePhase == 0 && (dive || phase.diveBlock && hasShield)
+                && (me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0)) {
+            if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
+            hands.look(target.getEyePosition());
+            hands.use(true);
+            return hands.decide("block");
+        }
+        return null;
+    }
 }
