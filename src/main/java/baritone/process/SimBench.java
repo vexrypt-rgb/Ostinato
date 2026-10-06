@@ -60,7 +60,8 @@ public final class SimBench implements AbstractGameEventListener {
     private final List<Course> courses = new ArrayList<>();
     private final List<String> rows = new ArrayList<>();
     private int index = -1, wait = 100, ticks, grace;
-    private boolean done, running, started;
+    private boolean done, running, started, warmup;
+    private int pathTick;
     private boolean oldExperimental, oldTrace, oldPlace, oldBreak;
 
     private SimBench(Baritone baritone, String kinds) {
@@ -82,6 +83,11 @@ public final class SimBench implements AbstractGameEventListener {
             List<Course> c = new ArrayList<>();
             for (ChainTemplates.Template t : ChainTemplates.ALL) c.add(chain(t));
             courses.addAll(spread(filter(c, only), limit));
+        }
+        if (!courses.isEmpty()) {
+            // the first search in a fresh JVM is slow (cold code); a bot on a one block ladder slides off meanwhile
+            courses.add(0, courses.get(0));
+            warmup = true;
         }
     }
 
@@ -230,6 +236,7 @@ public final class SimBench implements AbstractGameEventListener {
                 run(String.format(Locale.ROOT, "tp @a %.2f %.2f %.2f -90 0", c.sx, c.sy, c.sz));
                 baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(c.gx, c.gy, c.gz));
                 ticks = 0;
+                pathTick = -1;
             }
             return;
         }
@@ -239,10 +246,11 @@ public final class SimBench implements AbstractGameEventListener {
         BlockPos feet = baritone.getPlayerContext().playerFeet();
         boolean there = feet.getX() == c.gx && feet.getY() == c.gy && feet.getZ() == c.gz
                 && (c.ladderGoal ? me.onClimbable() : me.onGround());
+        if (pathTick < 0 && baritone.getPathingBehavior().isPathing()) pathTick = ticks;
         if (ticks == 30) {
             StringBuilder sb = new StringBuilder();
             baritone.getPathingBehavior().getPath().ifPresent(path -> path.movements().forEach(m -> sb.append(m.getClass().getSimpleName()).append(' ').append(m.getDest()).append("; ")));
-            log("path " + courses.get(index).label + ": " + (sb.length() == 0 ? "none" : sb));
+            log("path " + courses.get(index).label + " (first pathing tick " + pathTick + "): " + (sb.length() == 0 ? "none" : sb));
         }
         String why = there ? "ok" : me.getY() < OY - 8 ? "fell" : ticks >= TIMEOUT ? "timeout"
                 : ticks > 100 && !baritone.getPathingBehavior().isPathing() ? "nopath" : null;
@@ -251,7 +259,11 @@ public final class SimBench implements AbstractGameEventListener {
         }
         if (why != null) {
             grace = 0;
-            record(c, why);
+            if (warmup && index == 0) {
+                log("warm-up " + c.label + ": " + why + " after " + ticks + " ticks (not counted)");
+            } else {
+                record(c, why);
+            }
             baritone.getPathingControlManager().cancelEverything();
             running = false;
             wait = 5;
