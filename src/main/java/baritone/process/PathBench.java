@@ -137,6 +137,8 @@ public final class PathBench implements AbstractGameEventListener {
 
     private void finish() {
         done = true;
+        // the trench is cut into the shared vexflat save: put the layer back so later fight benches don't walk into the void
+        run("fill -5 " + padY + " -60 40 " + padY + " 60 grass_block");
         try {
             Path dir = Paths.get("pvpbench");
             Files.createDirectories(dir);
