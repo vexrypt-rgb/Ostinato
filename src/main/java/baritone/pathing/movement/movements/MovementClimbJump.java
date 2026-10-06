@@ -110,7 +110,7 @@ public class MovementClimbJump extends Movement {
     private JumpSearch js;
     private PlayerSim real;
     private boolean running, landed;
-    private int settle, waited;
+    private int settle, waited, hug;
     private int replans, replanCooldown;
 
     private MovementClimbJump(IBaritone baritone, BetterBlockPos src, ClimbTemplates.Template t, int frame) {
@@ -375,7 +375,15 @@ public class MovementClimbJump extends Movement {
                     }
                     return state;
                 }
-                if (Math.abs(m.y) > 0.03 && waited++ < 20) {
+                // the templates assume the box is pressed against the ladder's plate and at rest: close up on it,
+                // then let the sneak settle the speed before planning from there
+                int[] wv = ClimbTemplates.wallVector(t.wall);
+                double off = (p.x - (src.x + 0.5)) * wv[0] + (p.z - (src.z + 0.5)) * wv[1];
+                if (off < -0.03 && hug++ < 12) {
+                    state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-wv[0], wv[1])), ctx.playerRotations().getPitch()), true));
+                    return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SNEAK, true);
+                }
+                if ((Math.abs(m.y) > 0.03 || Math.abs(m.x) + Math.abs(m.z) > 0.02) && waited++ < 20) {
                     return state.setInput(Input.SNEAK, true);
                 }
                 if (!js.search(real, true) && !js.search(real, false)) {
