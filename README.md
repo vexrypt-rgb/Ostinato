@@ -107,6 +107,14 @@ Beyond upstream Baritone, Ostinato adds:
     `experimentalJumpBias` times as much, block placement at most `experimentalBlockPlacementPenalty`,
     and falls that hurt are taken when nothing protects you and you stay above `experimentalMinHealth`.
     Turning it off hands your own settings back.
+- **Checking the simulation** (`kinematicTrace`, off by default): while a jump, climb jump or chain flies,
+  every tick compares the real player with `PlayerSim`'s prediction and logs `SIMTRACE` lines (per-tick
+  rows in `simtrace/simtrace.csv`, one summary per movement in `simtrace/summary.csv`): the one-tick
+  prediction error, how far the whole jump drifts open loop, mismatches on being grounded, and how far
+  the real look lags the commanded yaw. `-Dostinato.simbench=jump,climb,chain` (or `all`; also
+  `-Dostinato.simbench.limit=N`, `-Dostinato.simbench.exit=true`) builds a course in the sky for each
+  template in a superflat singleplayer world, flies it, and writes `simbench/simbench.csv` plus a
+  `SIMBENCH SUMMARY` per kind: landed count and the median/p90 worst one-tick error.
 - **Pitfall avoidance** (`pitfallAvoidance`, on by default): the pathfinder
   never stands on sand, gravel or concrete powder resting on a block without
   collision (air, an open fence gate, a sign…), since it can drop out from

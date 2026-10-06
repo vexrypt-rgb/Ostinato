@@ -17,7 +17,9 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.Baritone;
 import baritone.api.IBaritone;
+import baritone.pathing.kinematic.SimTrace;
 import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Rotation;
@@ -236,6 +238,30 @@ public class MovementJump extends Movement {
 
     @Override
     public MovementState updateState(MovementState state) {
+        MovementState s = update0(state);
+        if (trace != null && s.getStatus() != MovementStatus.RUNNING) {
+            trace.finish(s.getStatus() == MovementStatus.SUCCESS);
+            trace = null;
+        }
+        return s;
+    }
+
+    private SimTrace trace;
+
+    /** With kinematicTrace on, compare the sim with the real player for this tick (see {@link SimTrace}). */
+    private void trace(float yaw, int in, boolean jump) {
+        if (!Baritone.settings().kinematicTrace.value || !running) {
+            return;
+        }
+        SimTrace.files = true;
+        if (trace == null) {
+            trace = new SimTrace("jump " + t.a + "," + t.dy + "," + t.b + " runUp=" + t.runUp, new ClientWorld(ctx));
+        }
+        trace.observe(real, ctx.player().getYRot());
+        trace.commit(real, yaw, in, in > 0, jump);
+    }
+
+    private MovementState update0(MovementState state) {
         super.updateState(state);
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
@@ -318,6 +344,7 @@ public class MovementJump extends Movement {
         }
         int in = js.input(js.plan, js.jumped, js.airTicks);
         boolean jump = js.jump(js.plan, real, js.jumped);
+        trace(js.yaw(js.plan, js.jumped, js.airTicks), in, jump);
         state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, js.jumped, js.airTicks), ctx.playerRotations().getPitch()), true));
         state.setInput(Input.MOVE_FORWARD, in > 0);
         state.setInput(Input.MOVE_BACK, in < 0);

@@ -301,5 +301,6 @@
  "experimentalJumpBias": "Multiplier on jump cost while experimentalMovement is on. Below 1 makes the jumpy route look cheaper than the equivalent walk.",
  "experimentalBlockPlacementPenalty": "While experimentalMovement is on, the block placement penalty is the lower of blockPlacementPenalty and this.",
  "experimentalMinHealth": "While experimentalMovement is on, a fall that hurts is allowed only if it leaves you at least this much health (half hearts, plus absorption).",
- "fallDamageCost": "Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on."
+ "fallDamageCost": "Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on.",
+ "kinematicTrace": "Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and simtrace/simtrace.csv, simtrace/summary.csv): how far off the prediction is one tick ahead, and how far a whole jump drifts."
 }
