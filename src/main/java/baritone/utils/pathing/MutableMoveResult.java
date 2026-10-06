@@ -32,6 +32,8 @@ public final class MutableMoveResult {
     public double cost;
     /** Half hearts this fall takes off us on purpose (experimentalMovement), 0 for everything free or protected. */
     public double damage;
+    /** This fall is only survivable by clutching a ladder or vine into the column, see MovementDescend.dynamicFallCost. */
+    public boolean clutch;
 
     public MutableMoveResult() {
         reset();
@@ -43,5 +45,6 @@ public final class MutableMoveResult {
         z = 0;
         cost = ActionCosts.COST_INF;
         damage = 0;
+        clutch = false;
     }
 }

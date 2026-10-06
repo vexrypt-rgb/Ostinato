@@ -34,6 +34,7 @@ import baritone.utils.pathing.MutableMoveResult;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -260,7 +261,21 @@ public class MovementDescend extends Movement {
                 res.cost = tentativeCost;
                 return false;
             }
-            if (reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1) {
+            boolean bucketOk = reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1;
+            double clutch = reachedMinimum ? clutchCost(context, destX, destZ, effectiveStartHeight, newY + 1) : COST_INF;
+            if (clutch < COST_INF) {
+                clutch += WALK_OFF_BLOCK_COST + frontBreak + costSoFar;
+            }
+            if (clutch < COST_INF && !(bucketOk && tentativeCost + context.placeBucketCost() <= clutch)) {
+                // the bucket wins ties, it doesn't care about timing
+                res.x = destX;
+                res.y = newY + 1;
+                res.z = destZ;
+                res.cost = clutch;
+                res.clutch = true;
+                return false;
+            }
+            if (bucketOk) {
                 res.x = destX;
                 res.y = newY + 1;// this is the block we're falling onto, so dest is +1
                 res.z = destZ;
@@ -278,6 +293,44 @@ public class MovementDescend extends Movement {
             hurtingFall(context, destX, destZ, newY, unprotectedFallHeight - 1, tentativeCost, ontoBlock, res);
             return false;
         }
+    }
+
+    /**
+     * A ladder or vine in one of the last few cells before the floor, placed against whatever wall is beside the column.
+     * All the timing is in {@link LadderClutch}, we just say which cells have a wall. COST_INF if it can't be done.
+     */
+    private static double clutchCost(CalculationContext context, int destX, int destZ, int startY, int landY) {
+        if (!context.hasClutchItem || context.placeBucketCost() >= COST_INF || !context.bsi.worldBorder.canPlaceAt(destX, destZ)) {
+            return COST_INF;
+        }
+        int mask = 0;
+        for (int k = 0; k < LadderClutch.CELLS && landY + k < startY; k++) {
+            // the clutch item goes in this cell, so it has to be somewhere altoclef lets us place
+            if (!context.get(destX, landY + k, destZ).isAir() || context.isPossiblyProtected(destX, landY + k, destZ)) {
+                continue;
+            }
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                int x = destX + side.getStepX();
+                int z = destZ + side.getStepZ();
+                if (clutchWall(context.get(x, landY + k, z)) && MovementHelper.canPlaceAgainst(context.bsi, x, landY + k, z)) {
+                    mask |= 1 << k;
+                    break;
+                }
+            }
+        }
+        LadderClutch.Plan plan = mask == 0 ? null : LadderClutch.plan(startY - landY, mask, context.blockReach);
+        if (plan == null) {
+            return COST_INF;
+        }
+        // a ladder comes back off the wall after we land (MovementFall.pickUpLadder), mining it and waiting on the drop is about a second
+        return plan.ticks() + context.placeBucketCost() + (context.clutchPicksUp ? LADDER_PICKUP_COST : 0);
+    }
+
+    static final double LADDER_PICKUP_COST = 20;
+
+    /** canPlaceAgainst lets leaves through, and a ladder can't hang off those (no sturdy face). */
+    static boolean clutchWall(BlockState wall) {
+        return !wall.is(net.minecraft.tags.BlockTags.LEAVES);
     }
 
     /**

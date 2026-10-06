@@ -81,6 +81,11 @@ public class CalculationContext {
     public final boolean allowNeos;
     public final boolean allowClimbJumps;
     public final boolean allowMomentumJumps;
+    /** A ladder or vine on the hotbar and allowLadderClutch on, see MovementDescend.dynamicFallCost. */
+    public final boolean hasClutchItem;
+    /** The clutch item is a ladder (vines win if both are there) and pickupLadders is on, so a clutch also costs the pickup. */
+    public final boolean clutchPicksUp;
+    public final float blockReach;
     public final boolean experimental;
     public final double experimentalMinHealth;
     public final double fallDamageCost;
@@ -141,6 +146,10 @@ public class CalculationContext {
         this.allowNeos = ExperimentalMovement.allowNeos();
         this.allowClimbJumps = ExperimentalMovement.allowClimbJumps();
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
+        net.minecraft.world.item.Item clutchItem = Baritone.settings().allowLadderClutch.value ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
+        this.hasClutchItem = clutchItem != null;
+        this.clutchPicksUp = clutchItem == net.minecraft.world.item.Items.LADDER && Baritone.settings().pickupLadders.value;
+        this.blockReach = Baritone.settings().blockReachDistance.value;
         this.experimental = ExperimentalMovement.on();
         this.experimentalMinHealth = Baritone.settings().experimentalMinHealth.value;
         this.fallDamageCost = Baritone.settings().fallDamageCost.value;
