@@ -291,7 +291,9 @@ public final class VexBench implements AbstractGameEventListener {
         clearHostiles();
         run("kill @a[name=!" + meName + "]", "kill @e[type=item]");
         // explosive kits blast holes in the single ground layer; relay it so no round fights over the last one's craters
-        run("fill -40 " + (padY - 1) + " -40 40 " + (padY - 1) + " 40 bedrock", "fill -40 " + padY + " -40 40 " + padY + " 40 grass_block");
+        run("fill -40 " + (padY - 1) + " -40 40 " + (padY - 1) + " 40 bedrock", "fill -40 " + padY + " -40 40 " + padY + " 40 grass_block",
+                // obsidian bases and fire left by crystal/anchor/fire kits stall the next opponent's placement logic
+                "fill -40 " + (padY + 1) + " -40 40 " + (padY + 4) + " 40 air");
         if (first) { // sweep away platforms left in the save by earlier benches
             for (int y = padY + 1; y < padY + 120; y += 4) run("fill -40 " + y + " -40 40 " + (y + 3) + " 40 air");
         }
