@@ -42,7 +42,7 @@ final class CombatClick {
     }
 
     /** Left-click only if the crosshair is on the entity, as the mouse button would. */
-    boolean hit(Player me, Entity e) {
+    boolean clickOn(Player me, Entity e) {
         if (!(mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != e) return false;
         press(mc.options.keyAttack);
         return true;
@@ -67,7 +67,7 @@ final class CombatClick {
         // being on the entity is what a click needs; the angle only guards a swing on level ground.
         boolean onIt = me.fallDistance > 1.5 && mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult on && on.getEntity() == target;
         if (!onIt && !aimer.aimedAt(me, aim, 10f)) { clickKind = 'a'; return false; } // must be looking at the target
-        if (hit(me, target)) {
+        if (clickOn(me, target)) {
             hands.attacked();
             clickKind = 'E';
             if (!me.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)) {

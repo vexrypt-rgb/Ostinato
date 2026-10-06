@@ -538,7 +538,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Turn the view toward the angles with the smoothed look; true once it already points there within tol degrees. */
     /** Every PvP look goes out as a bounded, mouse-stepped move; see LookBehavior.human(). */
-    private boolean hit(Player me, Entity e) { return click.hit(me, e); }
+    private boolean hit(Player me, Entity e) { return click.clickOn(me, e); }
 
     private boolean hit(Player me) { return click.hit(me, target); }
 
