@@ -811,6 +811,13 @@ public final class Settings {
     public final Setting<Boolean> frameLook = new Setting<>(true);
 
     /**
+     * Every look Baritone makes (walking, mining, placing) turns the camera like a mouse: bounded speed, overshoot,
+     * tremor, mouse-count steps. PvP always does this. Off by default because path following and bridging were tuned
+     * against exact, instant rotations; not applied while elytra flying.
+     */
+    public final Setting<Boolean> humanLookEverywhere = new Setting<>(false);
+
+    /**
      * Same as {@link #smoothLook} but for elytra flying.
      */
     public final Setting<Boolean> elytraSmoothLook = new Setting<>(false);

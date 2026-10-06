@@ -65,6 +65,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void updateTarget(Rotation rotation, boolean blockInteract) {
+        if (Baritone.settings().humanLookEverywhere.value && !ctx.player().isFallFlying()) this.human = true;
         // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
         this.target = new Target(rotation, this.human ? Target.Mode.CLIENT : Target.Mode.resolve(ctx, blockInteract));
     }
