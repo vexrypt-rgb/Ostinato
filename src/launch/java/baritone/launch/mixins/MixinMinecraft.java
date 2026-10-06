@@ -63,7 +63,7 @@ public class MixinMinecraft {
     /** Title-screen ticks do not reach VexBench. Open the existing vexflat save, never a new world. */
     @Inject(method = "tick", at = @At("HEAD"))
     private void ostinato$openBenchWorld(CallbackInfo ci) {
-        if (Integer.getInteger("ostinato.vexbench", 0) <= 0 || this.ostinato$openedVexflat) return;
+        if (Integer.getInteger("ostinato.vexbench", 0) <= 0 && Integer.getInteger("ostinato.pathbench", 0) <= 0 || this.ostinato$openedVexflat) return;
         Minecraft mc = (Minecraft) (Object) this;
         if (this.player != null || mc.getSingleplayerServer() != null) return;
         if (!(mc.screen instanceof net.minecraft.client.gui.screens.TitleScreen)) {
@@ -73,6 +73,7 @@ public class MixinMinecraft {
         }
         this.ostinato$openedVexflat = true;
         System.out.println("VEXBENCH opening vexflat");
+        System.out.println("PATHBENCH opening vexflat");
         mc.createWorldOpenFlows().openWorld("vexflat", () -> {});
     }
 
