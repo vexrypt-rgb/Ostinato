@@ -8,6 +8,9 @@ import baritone.pathing.kinematic.ChainTemplates;
 import baritone.pathing.kinematic.ClimbTemplates;
 import baritone.pathing.kinematic.JumpTemplates;
 import baritone.pathing.kinematic.SimTrace;
+import baritone.pathing.movement.movements.MovementChainJump;
+import baritone.pathing.movement.movements.MovementClimbJump;
+import baritone.pathing.movement.movements.MovementJump;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -55,7 +58,7 @@ public final class SimBench implements AbstractGameEventListener {
     private final Baritone baritone;
     private final List<Course> courses = new ArrayList<>();
     private final List<String> rows = new ArrayList<>();
-    private int index = -1, wait = 100, ticks;
+    private int index = -1, wait = 100, ticks, grace;
     private boolean done, running, started;
     private boolean oldExperimental, oldTrace, oldPlace, oldBreak;
 
@@ -63,26 +66,35 @@ public final class SimBench implements AbstractGameEventListener {
         this.baritone = baritone;
         int limit = Integer.getInteger("ostinato.simbench.limit", Integer.MAX_VALUE);
         boolean all = kinds.contains("all");
+        String only = System.getProperty("ostinato.simbench.filter", "");
         if (all || kinds.contains("jump")) {
             List<Course> c = new ArrayList<>();
             for (JumpTemplates.Template t : JumpTemplates.ALL) c.add(jump(t));
-            courses.addAll(spread(c, limit));
+            courses.addAll(spread(filter(c, only), limit));
         }
         if (all || kinds.contains("climb")) {
             List<Course> c = new ArrayList<>();
             for (ClimbTemplates.Template t : ClimbTemplates.ALL) c.add(climb(t));
-            courses.addAll(spread(c, limit));
+            courses.addAll(spread(filter(c, only), limit));
         }
         if (all || kinds.contains("chain")) {
             List<Course> c = new ArrayList<>();
             for (ChainTemplates.Template t : ChainTemplates.ALL) c.add(chain(t));
-            courses.addAll(spread(c, limit));
+            courses.addAll(spread(filter(c, only), limit));
         }
     }
 
     public static void install(Baritone baritone) {
         String kinds = System.getProperty("ostinato.simbench", "");
         if (!kinds.isEmpty()) baritone.getGameEventHandler().registerEventListener(new SimBench(baritone, kinds));
+    }
+
+    /** -Dostinato.simbench.filter=text keeps the courses whose label contains it (commas are semicolons in labels). */
+    private static List<Course> filter(List<Course> all, String only) {
+        if (only.isEmpty()) return all;
+        List<Course> out = new ArrayList<>();
+        for (Course c : all) if (c.label.contains(only)) out.add(c);
+        return out;
     }
 
     private static List<Course> spread(List<Course> all, int limit) {
@@ -201,6 +213,9 @@ public final class SimBench implements AbstractGameEventListener {
                     return;
                 }
                 Course c = courses.get(index);
+                MovementJump.forgetFailures();
+                MovementClimbJump.forgetFailures();
+                MovementChainJump.forgetFailures();
                 run(c.cmds.toArray(new String[0]));
                 run(String.format(Locale.ROOT, "tp @a %.2f %.2f %.2f -90 0", c.sx, c.sy, c.sz));
                 wait = 40; // let the blocks reach the client and the bot settle
@@ -209,6 +224,8 @@ public final class SimBench implements AbstractGameEventListener {
             } else if (ticks < 0) {
                 SimTrace.last = null;
                 Course c = courses.get(index);
+                // a bot hanging on a one block ladder slides off it while the course settles: put it back right before it starts
+                run(String.format(Locale.ROOT, "tp @a %.2f %.2f %.2f -90 0", c.sx, c.sy, c.sz));
                 baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(c.gx, c.gy, c.gz));
                 ticks = 0;
             }
@@ -220,9 +237,18 @@ public final class SimBench implements AbstractGameEventListener {
         BlockPos feet = baritone.getPlayerContext().playerFeet();
         boolean there = feet.getX() == c.gx && feet.getY() == c.gy && feet.getZ() == c.gz
                 && (c.ladderGoal ? me.onClimbable() : me.onGround());
+        if (ticks == 30) {
+            StringBuilder sb = new StringBuilder();
+            baritone.getPathingBehavior().getPath().ifPresent(path -> path.movements().forEach(m -> sb.append(m.getClass().getSimpleName()).append(' ').append(m.getDest()).append("; ")));
+            log("path " + courses.get(index).label + ": " + (sb.length() == 0 ? "none" : sb));
+        }
         String why = there ? "ok" : me.getY() < OY - 8 ? "fell" : ticks >= TIMEOUT ? "timeout"
                 : ticks > 100 && !baritone.getPathingBehavior().isPathing() ? "nopath" : null;
+        if (why != null && why.equals("ok") && SimTrace.last == null && grace++ < 40) {
+            return; // landed; the movement reports its trace a tick or two later
+        }
         if (why != null) {
+            grace = 0;
             record(c, why);
             baritone.getPathingControlManager().cancelEverything();
             running = false;
