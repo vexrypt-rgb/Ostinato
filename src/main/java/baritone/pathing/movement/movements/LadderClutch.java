@@ -15,6 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Ported from Soprano (https://github.com/AverWasTaken/soprano), 1.21.4 branch, LGPL-3.0.
 package baritone.pathing.movement.movements;
 
 import java.util.concurrent.ConcurrentHashMap;

@@ -88,7 +88,9 @@ Beyond upstream Baritone, Ostinato adds:
   while staying on it. Anything it cannot model (breaking, placing, water,
   most of parkour) goes back to Baritone. Experimental; benchmarked with
   TenorClef's PathBench.
-- **Soprano-style movement tech, found by simulation.** Where Soprano hand-codes each jump, Ostinato
+- **Soprano-style movement tech, found by simulation.** These features and their design come from
+  [Soprano](https://github.com/AverWasTaken/soprano) (AverWasTaken's Baritone fork); credit for the ideas
+  is theirs, and the ladder clutch is ported from their code. Where Soprano hand-codes each jump, Ostinato
   searches vanilla player physics offline and ships the answers as templates, flown with the same
   search at run time (`baritone.pathing.kinematic`). The simulated player now handles ladders and
   vines, so these exist on top of the neo and momentum jumps already there:

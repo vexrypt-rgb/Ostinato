@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
+ * Idea (jump pairs through a one block pad) from Soprano's momentum jumps, https://github.com/AverWasTaken/soprano.
  * Two jumps through a one block pad from {@link ChainTemplates}: land on the pad with momentum and jump again without
  * stopping, for gaps no single jump makes. Planned by checking the swept cells and the three blocks stood on, flown with
  * one {@link JumpSearch} per jump against the real world, the second one found from wherever the first actually landed.

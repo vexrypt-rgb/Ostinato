@@ -49,6 +49,7 @@ import java.util.Set;
  * cells and that the ladder is stuck to the wall the template was found for; flown with {@link JumpSearch} against the
  * real world, like {@link MovementJump}.
  * <p>
+ * Idea (ladder and vine jumps) from Soprano's ClimbJump, https://github.com/AverWasTaken/soprano; this version is found by simulation.
  * You can't start sprinting while you hang on to something, so a leap is short; a grab can have a run-up.
  */
 public class MovementClimbJump extends Movement {

@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
+ * Idea from Soprano (https://github.com/AverWasTaken/soprano), whose ClimbJump does this by hand.
  * Jumps onto and off ladders and vines, found offline with {@link JumpSearch} in an empty world and stored in
  * {@link ClimbTemplateData}, the way {@link JumpTemplates} does for plain jumps. Frame: approach (or leap) along +a from
  * the origin, lateral +b, feet y 0.
