@@ -85,6 +85,8 @@ public class CalculationContext {
     public final boolean hasClutchItem;
     /** The clutch item is a ladder (vines win if both are there) and pickupLadders is on, so a clutch also costs the pickup. */
     public final boolean clutchPicksUp;
+    /** The clutch item is a ladder (a vine can go on any wall, a ladder needs us to be about 0.6 off it). */
+    public final boolean clutchIsLadder;
     public final float blockReach;
     public final boolean experimental;
     public final double experimentalMinHealth;
@@ -148,6 +150,7 @@ public class CalculationContext {
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
         net.minecraft.world.item.Item clutchItem = Baritone.settings().allowLadderClutch.value ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
+        this.clutchIsLadder = clutchItem == net.minecraft.world.item.Items.LADDER;
         this.clutchPicksUp = clutchItem == net.minecraft.world.item.Items.LADDER && Baritone.settings().pickupLadders.value;
         this.blockReach = Baritone.settings().blockReachDistance.value;
         this.experimental = ExperimentalMovement.on();

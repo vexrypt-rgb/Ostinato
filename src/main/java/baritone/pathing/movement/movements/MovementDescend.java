@@ -265,7 +265,7 @@ public class MovementDescend extends Movement {
                 return false;
             }
             boolean bucketOk = reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1;
-            double clutch = reachedMinimum ? clutchCost(context, destX, destZ, effectiveStartHeight, newY + 1) : COST_INF;
+            double clutch = reachedMinimum ? clutchCost(context, x, z, destX, destZ, effectiveStartHeight, newY + 1) : COST_INF;
             if (clutch < COST_INF) {
                 clutch += WALK_OFF_BLOCK_COST + frontBreak + costSoFar;
             }
@@ -302,7 +302,7 @@ public class MovementDescend extends Movement {
      * A ladder or vine in one of the last few cells before the floor, placed against whatever wall is beside the column.
      * All the timing is in {@link LadderClutch}, we just say which cells have a wall. COST_INF if it can't be done.
      */
-    private static double clutchCost(CalculationContext context, int destX, int destZ, int startY, int landY) {
+    private static double clutchCost(CalculationContext context, int srcX, int srcZ, int destX, int destZ, int startY, int landY) {
         if (!context.hasClutchItem || context.placeBucketCost() >= COST_INF || !context.bsi.worldBorder.canPlaceAt(destX, destZ)) {
             return COST_INF;
         }
@@ -313,6 +313,9 @@ public class MovementDescend extends Movement {
                 continue;
             }
             for (Direction side : Direction.Plane.HORIZONTAL) {
+                if (context.clutchIsLadder && inLine(side, destX - srcX, destZ - srcZ)) {
+                    continue; // we walk off towards this wall and keep the speed, we'd be pinned against it and a ladder doesn't fit
+                }
                 int x = destX + side.getStepX();
                 int z = destZ + side.getStepZ();
                 if (clutchWall(context.get(x, landY + k, z)) && MovementHelper.canPlaceAgainst(context.bsi, x, landY + k, z)) {
@@ -330,6 +333,11 @@ public class MovementDescend extends Movement {
     }
 
     static final double LADDER_PICKUP_COST = 20;
+
+    /** Is this wall the one we are walking towards? Measured in the real game: walking off pins us against it, so a ladder is never placed there. */
+    private static boolean inLine(Direction side, int dx, int dz) {
+        return side.getStepX() != 0 && side.getStepX() == Integer.signum(dx) || side.getStepZ() != 0 && side.getStepZ() == Integer.signum(dz);
+    }
 
     /** canPlaceAgainst lets leaves through, and a ladder can't hang off those (no sturdy face). */
     static boolean clutchWall(BlockState wall) {
