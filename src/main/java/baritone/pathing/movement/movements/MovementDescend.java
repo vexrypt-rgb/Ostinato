@@ -108,6 +108,9 @@ public class MovementDescend extends Movement {
         if (MovementHelper.isClimbable(fromDown)) {
             return;
         }
+        if (MovementHelper.isClimbable(context.get(x, y, z).getBlock())) {
+            return; // walking off a ladder just falls past the block: the ClimbJump leap is the way down
+        }
 
         // A
         //SA
