@@ -49,6 +49,9 @@ public final class KinematicController {
     private static final double BUMP = 0.6; // ~2 sprint ticks: grazing a wall also drops sprint, so clean lines should win
     /** Hand back to Baritone this far before the end of the drivable stretch. */
     private static final double HANDBACK = 1.2;
+    /** Before a bridging or breaking movement: hand back earlier and stop sprinting so the momentum is gone at the edge. */
+    private static final double PLACE_HANDBACK = 2.2;
+    private static final double PLACE_BRAKE = 4.5;
     /** Rollout bound: falls, hazards and climbing off the path are checked separately, so plans may cut corners wider. */
     private static final double WIDE = 1.1;
 
@@ -64,6 +67,7 @@ public final class KinematicController {
     /** Ticks left walking straight back onto the path line after the hitbox caught a corner beside it. */
     private int recenter, recenters;
     private boolean longJump; // the driven stretch holds a 3 or 4 block gap
+    private boolean endsAtPlace; // the stretch stops at a movement that breaks or places, which needs the player slow at the edge
     /** Ticks the controller has driven the player, so callers can verify the backend is in use. */
     public static volatile long drivenTicks;
 
@@ -109,7 +113,7 @@ public final class KinematicController {
         double[] here = project(real.x, real.z);
         double end = line.get(line.size() - 1)[3];
         // at the end of the whole path drive onto the goal block instead of handing back early
-        double handback = lastMove == path.movements().size() - 1 ? 0.3 : HANDBACK;
+        double handback = lastMove == path.movements().size() - 1 ? 0.3 : endsAtPlace ? PLACE_HANDBACK : HANDBACK;
         if (here[1] > WIDE + 0.2 || end - here[0] < handback) {
             return -1;
         }
@@ -179,7 +183,7 @@ public final class KinematicController {
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
         baritone.getInputOverrideHandler().clearAllKeys();
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
-        baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, true);
+        baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, !(endsAtPlace && end - here[0] < PLACE_BRAKE));
         baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, bestJump);
         return newPos;
     }
@@ -312,6 +316,7 @@ public final class KinematicController {
         BetterBlockPos src = moves.get(pathPosition).getSrc();
         add(src);
         int i = pathPosition;
+        endsAtPlace = false;
         for (; i < moves.size() && i < pathPosition + MAX_LOOKAHEAD_MOVES; i++) {
             IMovement mv = moves.get(i);
             if (!drivable(mv)) {
@@ -326,6 +331,7 @@ public final class KinematicController {
                 movement.toPlace(bsi);
             }
             if (!movement.toBreakCached.isEmpty() || !movement.toPlaceCached.isEmpty()) {
+                endsAtPlace = true;
                 break;
             }
             add(mv.getDest());

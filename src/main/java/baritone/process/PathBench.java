@@ -115,12 +115,14 @@ public final class PathBench implements AbstractGameEventListener {
                 // the save is one grass layer on the void: restore it, then cut the trench (wide enough that going around is not an option)
                 "fill -5 " + (padY - 1) + " -60 40 " + (padY - 1) + " 60 bedrock",
                 "fill -5 " + padY + " -60 40 " + padY + " 60 grass_block",
-                "fill -5 " + (padY + 1) + " -60 40 " + (padY + 6) + " 60 air",
+                "fill -5 " + (padY + 1) + " -60 40 " + (padY + 4) + " 60 air",
                 gap > 0 ? "fill 10 " + (padY - 1) + " -60 " + (10 + gap - 1) + " " + padY + " 60 air" : "say walk",
                 "give " + name + " cobblestone 64",
                 "tp " + name + " 0 " + stand + " 0 -90 0");
         var s = baritone.settings();
         s.humanLookEverywhere.value = human;
+        s.kinematicTravel.value = Boolean.getBoolean("ostinato.path.kinematic");
+        s.physicsTravel.value = Boolean.getBoolean("ostinato.path.physics");
         s.allowBreak.value = false;
         s.allowPlace.value = kind.equals("bridge");
         s.allowParkour.value = kind.equals("parkour");
