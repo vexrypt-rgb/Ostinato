@@ -57,6 +57,9 @@ public class MovementParkour extends Movement {
         this.ascend = ascend;
     }
 
+    /** Test hook: SimBench turns plain parkour off so the template movements are what gets exercised. */
+    public static volatile boolean disabled;
+
     public static MovementParkour cost(CalculationContext context, BetterBlockPos src, Direction direction) {
         MutableMoveResult res = new MutableMoveResult();
         cost(context, src.x, src.y, src.z, direction, res);
@@ -65,7 +68,7 @@ public class MovementParkour extends Movement {
     }
 
     public static void cost(CalculationContext context, int x, int y, int z, Direction dir, MutableMoveResult res) {
-        if (!context.allowParkour) {
+        if (!context.allowParkour || disabled) {
             return;
         }
         if (!context.allowJumpAtBuildLimit && y >= context.world.getMaxY()) {

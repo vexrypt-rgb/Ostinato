@@ -9,6 +9,7 @@ import baritone.pathing.kinematic.ClimbTemplates;
 import baritone.pathing.kinematic.JumpTemplates;
 import baritone.pathing.kinematic.SimTrace;
 import baritone.pathing.movement.movements.MovementChainJump;
+import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementClimbJump;
 import baritone.pathing.movement.movements.MovementJump;
 import net.minecraft.client.Minecraft;
@@ -216,6 +217,7 @@ public final class SimBench implements AbstractGameEventListener {
                 MovementJump.forgetFailures();
                 MovementClimbJump.forgetFailures();
                 MovementChainJump.forgetFailures();
+                MovementParkour.disabled = c.kind.equals("chain"); // plain parkour would pre-empt the chain on short gaps
                 run(c.cmds.toArray(new String[0]));
                 run(String.format(Locale.ROOT, "tp @a %.2f %.2f %.2f -90 0", c.sx, c.sy, c.sz));
                 wait = 40; // let the blocks reach the client and the bot settle
@@ -266,6 +268,7 @@ public final class SimBench implements AbstractGameEventListener {
 
     private void finish() {
         done = true;
+        MovementParkour.disabled = false;
         Baritone.settings().experimentalMovement.value = oldExperimental;
         Baritone.settings().kinematicTrace.value = oldTrace;
         Baritone.settings().allowPlace.value = oldPlace;
