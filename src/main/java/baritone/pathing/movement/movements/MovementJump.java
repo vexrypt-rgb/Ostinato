@@ -87,6 +87,11 @@ public class MovementJump extends Movement {
     /** Jumps (src, dest) that failed live, and when they may be tried again; stops a replan loop onto the same jump. */
     private static final java.util.Map<Long, Long> FAILED = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** Forget which jumps failed (benches reuse the same coordinates for every course). */
+    public static void forgetFailures() {
+        FAILED.clear();
+    }
+
     private static long failKey(int x, int y, int z, int dx, int dy, int dz) {
         return BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz);
     }

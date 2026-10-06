@@ -96,6 +96,11 @@ public class MovementClimbJump extends Movement {
     private static final java.util.Map<Long, Long> FAILED = new java.util.concurrent.ConcurrentHashMap<>();
     private static final ThreadLocal<Cache> CACHE = ThreadLocal.withInitial(Cache::new);
 
+    /** Forget which jumps failed (benches reuse the same coordinates for every course). */
+    public static void forgetFailures() {
+        FAILED.clear();
+    }
+
     private static long failKey(int x, int y, int z, int dx, int dy, int dz) {
         return BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz);
     }
@@ -105,7 +110,7 @@ public class MovementClimbJump extends Movement {
     private JumpSearch js;
     private PlayerSim real;
     private boolean running, landed;
-    private int settle, waited;
+    private int settle, waited, hug, nudges;
     private int replans, replanCooldown;
 
     private MovementClimbJump(IBaritone baritone, BetterBlockPos src, ClimbTemplates.Template t, int frame) {
@@ -307,7 +312,7 @@ public class MovementClimbJump extends Movement {
             trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder" : ""), new ClientWorld(ctx));
         }
         trace.observe(real, ctx.player().getYRot());
-        trace.commit(real, yaw, in, in > 0 && t.mode != ClimbTemplates.LEAP, jump);
+        trace.commit(real, yaw, in, in > 0, jump);
     }
 
     private MovementState update0(MovementState state) {
@@ -370,7 +375,15 @@ public class MovementClimbJump extends Movement {
                     }
                     return state;
                 }
-                if (Math.abs(m.y) > 0.03 && waited++ < 20) {
+                // the templates assume the box is pressed against the ladder's plate and at rest: close up on it,
+                // then let the sneak settle the speed before planning from there
+                int[] wv = ClimbTemplates.wallVector(t.wall);
+                double off = (p.x - (src.x + 0.5)) * wv[0] + (p.z - (src.z + 0.5)) * wv[1];
+                if (off < -0.03 && hug++ < 12) {
+                    state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-wv[0], wv[1])), ctx.playerRotations().getPitch()), true));
+                    return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SNEAK, true);
+                }
+                if ((Math.abs(m.y) > 0.03 || Math.abs(m.x) + Math.abs(m.z) > 0.02) && waited++ < 20) {
                     return state.setInput(Input.SNEAK, true);
                 }
                 if (!js.search(real, true) && !js.search(real, false)) {
@@ -398,6 +411,11 @@ public class MovementClimbJump extends Movement {
                     return state; // no plan from this momentum: come to a stop first
                 }
                 if (still && !js.search(real, true) && !js.search(real, false)) {
+                    if (dx * dx + dz * dz > 0.03 * 0.03 && nudges++ < 30) {
+                        // the templates only tolerate a few hundredths of start error: creep onto the exact spot and retry
+                        state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-dx, dz)), ctx.playerRotations().getPitch()), true));
+                        return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SNEAK, true);
+                    }
                     fail("no climb jump from here");
                     return state.setStatus(MovementStatus.UNREACHABLE);
                 }
@@ -420,7 +438,7 @@ public class MovementClimbJump extends Movement {
         state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, js.jumped, js.airTicks), ctx.playerRotations().getPitch()), true));
         state.setInput(Input.MOVE_FORWARD, in > 0);
         state.setInput(Input.MOVE_BACK, in < 0);
-        state.setInput(Input.SPRINT, in > 0 && !leap);
+        state.setInput(Input.SPRINT, in > 0);
         state.setInput(Input.JUMP, jump);
         if (!js.jumped && jump && real.x * js.dirX + real.z * js.dirZ >= js.edge + JumpSearch.EDGE[js.plan[2]]) {
             js.jumped = true;

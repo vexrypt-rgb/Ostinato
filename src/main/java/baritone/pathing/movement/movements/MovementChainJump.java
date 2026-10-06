@@ -88,6 +88,11 @@ public class MovementChainJump extends Movement {
     private static final java.util.Map<Long, Long> FAILED = new java.util.concurrent.ConcurrentHashMap<>();
     private static final ThreadLocal<Cache> CACHE = ThreadLocal.withInitial(Cache::new);
 
+    /** Forget which jumps failed (benches reuse the same coordinates for every course). */
+    public static void forgetFailures() {
+        FAILED.clear();
+    }
+
     private static long failKey(int x, int y, int z, int dx, int dy, int dz) {
         return BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz);
     }

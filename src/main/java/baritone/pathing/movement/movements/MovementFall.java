@@ -580,7 +580,7 @@ public class MovementFall extends Movement {
         List<Direction> out = new ArrayList<>(4);
         for (Direction side : Direction.Plane.HORIZONTAL) {
             BlockPos wall = cell.relative(side);
-            if (MovementHelper.canPlaceAgainst(bsi, wall) && MovementDescend.clutchWall(bsi.get0(wall)) && (!roomy || gap(cell, side, pos) >= LadderClutch.LADDER_CLEARANCE + 0.02)) {
+            if (MovementHelper.canPlaceAgainst(bsi, wall) && MovementDescend.clutchWall(bsi.get0(wall)) && (!roomy || gap(cell, side, pos) >= LadderClutch.LADDER_CLEARANCE + 0.01)) {
                 out.add(side);
             }
         }
