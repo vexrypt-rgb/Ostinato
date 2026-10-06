@@ -49,6 +49,8 @@ public final class JumpSearch {
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
     public int ticks;
     public double miss;
+    /** Filled by {@link #run} in {@link #carry} mode: speed along the approach direction at the landing tick. */
+    public double landSpeed;
 
     private final PlayerSim sim;
 
@@ -139,6 +141,7 @@ public final class JumpSearch {
                     }
                     ticks = t + 1;
                     miss = Math.max(Math.abs(sim.x - (destX + 0.5)), Math.abs(sim.z - (destZ + 0.5)));
+                    landSpeed = sim.vx * dirX + sim.vz * dirZ;
                     return true;
                 }
                 settle = 0;
@@ -193,7 +196,8 @@ public final class JumpSearch {
                     if (!run(start, p, jumped, airTicks, null)) {
                         continue;
                     }
-                    double score = miss + 0.004 * ticks;
+                    // a chain's first jump must land with speed left for the second one, whatever it costs in centring
+                    double score = carry ? -landSpeed + 0.004 * ticks : miss + 0.004 * ticks;
                     if (score < bestScore) {
                         bestScore = score;
                         best = p.clone();
