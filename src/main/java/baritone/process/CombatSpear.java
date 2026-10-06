@@ -100,18 +100,11 @@ final class CombatSpear {
         ItemStack spearStack = spear >= 0 ? me.getInventory().getItem(spear) : ItemStack.EMPTY;
         boolean spearCharged = spear >= 0 && !me.cannotAttackWithItem(spearStack, 0);
         double slide = Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z);
-        // 05:32 easy: jabs with slide 0.04-0.06 missed; the one at slide 0.02 landed. Stay stopped.
-        // 062727: one pierce, then jabs at 3 blocks and a mace hop. The 4 damage was healed.
-        // Back to the charge runway before the next pass. Do not jab during that back-out.
-        // 070413 never left the jab band (spear_back only to horiz 3.06, then a jab and a mace hop
-        // at along 4.20). 070505's only charge started use at box-distance ~9.9, after along had
-        // been >= 4.6 since ~12. The reopen handoff at hr 4.55 was still facing away: t52 along
-        // 5.60 was the wrong direction (at10 under 2.4) and spear_run died by t56, along 3.29.
-        // Sprint out to where that window can see a real approach, face them, then run. Do not
-        // stop at 4.55 and do not dump into jabs at 8. Do not eat.
-        // 074115: H4.29 stuck (14.00 to 9.71). They held a golden apple t61-t99 while we
-        // sprinted away, and t100 finished it at 10.71 plus 4 absorption. Later hits ate the
-        // absorption, not the kill. Do not back off while that eat is in progress.
+        // Jabs only land when nearly stopped (slide 0.04-0.06 missed, 0.02 landed).
+        // After a jab, back out to the charge runway before the next pass; no jabbing during the back-out.
+        // The reopen must carry on to where the charge window sees a real approach (past hr 4.55: handing
+        // off there left us facing away), face them, then run. Do not stop early or dump into jabs at 8.
+        // While they eat, stay in: backing off let a golden apple finish and absorb the later hits.
         if (targetEating && spear >= 0 && spearUseTicks == 0) {
             spearReopen = false;
             spearFacing = false;
@@ -133,9 +126,8 @@ final class CombatSpear {
         if (spear >= 0 && spearReopen) {
             if (spearUseCool > 0) spearUseCool--;
             hands.use(false);
-            // 072935 full charge: use at hr 6.18 along 4.69, pierce tick t120 hr 2.98 along 5.64.
-            // The run that made it started at hr 7.52. 8.3 is above the chase plateau, so the
-            // reset kept going and the next charge was 92 ticks later. Face them at 7.4.
+            // Face them at hr 7.4: a full charge started from about 7.5, and 8.3 is above the chase
+            // plateau, so waiting for it kept the reset going and delayed the next charge by ~90 ticks.
             if (hr >= p.faceHr) spearFacing = true;
             if (!los || ++spearReopenTicks > p.reopenTicks) {
                 spearReopen = false;
@@ -190,9 +182,8 @@ final class CombatSpear {
         if (spearUseCool > 0) spearUseCool--;
         if (lungeLvl < 1 && los && hands.eatTicks() == 0 && me.getFoodData().getFoodLevel() > 6) {
             double along = swing.kineticAlong(me);
-            // 062018 started use at 6.8 using only our 5.5 blocks/s. They were also closing
-            // on us, so tick 10 was at 2.14, leaving the 2-4.5 window. Lead with the
-            // observed distance drop. Do not release at tick 10 if still outside.
+            // Lead with the observed distance drop, not just our own speed: a closing foe put tick 10
+            // inside 2.1, outside the 2-4.5 window. Do not release at tick 10 if still outside.
             double step = Math.max(along / 20.0, spearClose);
             double at10 = hr - step * 10.0;
             if (spearUseTicks > 0) {
