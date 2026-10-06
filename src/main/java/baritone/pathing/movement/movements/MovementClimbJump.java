@@ -312,7 +312,7 @@ public class MovementClimbJump extends Movement {
             trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder" : ""), new ClientWorld(ctx));
         }
         trace.observe(real, ctx.player().getYRot());
-        trace.commit(real, yaw, in, in > 0 && t.mode != ClimbTemplates.LEAP, jump);
+        trace.commit(real, yaw, in, in > 0, jump);
     }
 
     private MovementState update0(MovementState state) {
@@ -425,7 +425,7 @@ public class MovementClimbJump extends Movement {
         state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, js.jumped, js.airTicks), ctx.playerRotations().getPitch()), true));
         state.setInput(Input.MOVE_FORWARD, in > 0);
         state.setInput(Input.MOVE_BACK, in < 0);
-        state.setInput(Input.SPRINT, in > 0 && !leap);
+        state.setInput(Input.SPRINT, in > 0);
         state.setInput(Input.JUMP, jump);
         if (!js.jumped && jump && real.x * js.dirX + real.z * js.dirZ >= js.edge + JumpSearch.EDGE[js.plan[2]]) {
             js.jumped = true;
