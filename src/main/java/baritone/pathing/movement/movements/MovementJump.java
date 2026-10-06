@@ -136,6 +136,9 @@ public class MovementJump extends Movement {
             }
             templates:
             for (JumpTemplates.Template t : JumpTemplates.ALL) {
+                if (t.neo && !context.allowNeos || t.runUp > 0 && !t.neo && !context.allowMomentumJumps) {
+                    continue;
+                }
                 int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
                 if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz)) {
                     continue;
@@ -154,7 +157,7 @@ public class MovementJump extends Movement {
                         continue templates;
                     }
                 }
-                double cost = t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty;
+                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
                 int ddx = dx, ddy = y + t.dy, ddz = dz;
                 // one option per landing block (the cheapest): the planner only has a fixed number of jump slots
                 int same = -1;

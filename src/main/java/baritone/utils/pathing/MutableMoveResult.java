@@ -30,6 +30,8 @@ public final class MutableMoveResult {
     public int y;
     public int z;
     public double cost;
+    /** Half hearts this fall takes off us on purpose (experimentalMovement), 0 for everything free or protected. */
+    public double damage;
 
     public MutableMoveResult() {
         reset();
@@ -40,5 +42,6 @@ public final class MutableMoveResult {
         y = 0;
         z = 0;
         cost = ActionCosts.COST_INF;
+        damage = 0;
     }
 }

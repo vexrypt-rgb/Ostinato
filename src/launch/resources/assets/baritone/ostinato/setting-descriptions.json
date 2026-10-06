@@ -291,5 +291,15 @@
  "guiKeybind": "Key that opens the Ostinato settings screen in game, polled every client tick while no screen is open. Takes a key name such as RCONTROL, RSHIFT, F8, K or NONE to disable, and can be rebound in the screen itself.",
  "renderPathHud": "Show the Ostinato path status card (goal, progress, ETA, mover, process) on the HUD while pathing. Hidden while the debug screen (F3) is open.",
  "pathHudAnchor": "Where the path status card sits on screen: RIGHT, LEFT, TOP_RIGHT or TOP_LEFT.",
- "guiAccentColor": "Accent color of the Ostinato settings screen and path status card."
+ "guiAccentColor": "Accent color of the Ostinato settings screen and path status card.",
+ "allowNeos": "Allow neo jumps: swing round the end of a wall one to three blocks thick. Needs allowParkour.",
+ "allowMomentumJumps": "Allow jumps that need a run-up and bunny hops for speed: 4 block flat gaps and long drops. Needs allowParkour.",
+ "allowClimbJumps": "Jump onto ladders and vines across a gap, and off them again, instead of walking round. Needs allowParkour.",
+ "allowLadderClutch": "Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it. Needs a ladder or vine on the hotbar.",
+ "pickupLadders": "After a ladder clutch, break the ladder and pick it back up so one ladder can save you more than once.",
+ "experimentalMovement": "Move like a speedrunner: parkour, neos, momentum and climb jumps, diagonals and kinematicTravel behave as if on, jumps get cheaper, and falls that hurt are allowed down to experimentalMinHealth. Your own settings are left alone.",
+ "experimentalJumpBias": "Multiplier on jump cost while experimentalMovement is on. Below 1 makes the jumpy route look cheaper than the equivalent walk.",
+ "experimentalBlockPlacementPenalty": "While experimentalMovement is on, the block placement penalty is the lower of blockPlacementPenalty and this.",
+ "experimentalMinHealth": "While experimentalMovement is on, a fall that hurts is allowed only if it leaves you at least this much health (half hearts, plus absorption).",
+ "fallDamageCost": "Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on."
 }

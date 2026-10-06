@@ -18,6 +18,7 @@
 package baritone.pathing.movement.movements;
 
 import baritone.Baritone;
+import baritone.utils.ExperimentalMovement;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
@@ -274,8 +275,32 @@ public class MovementDescend extends Movement {
                 res.cost = tentativeCost + (boatThere ? context.boardBoatFallCost() : context.boatFallCost());
                 return true;
             }
+            hurtingFall(context, destX, destZ, newY, unprotectedFallHeight - 1, tentativeCost, ontoBlock, res);
             return false;
         }
+    }
+
+    /**
+     * The last resort under experimentalMovement: no bucket, no boat, so eat the fall if we can afford the hearts.
+     * Everything that protects us gets its say first, a fall that hurts never beats one that doesn't.
+     */
+    private static void hurtingFall(CalculationContext context, int destX, int destZ, int newY, int blocks, double tentativeCost, BlockState onto, MutableMoveResult res) {
+        if (!context.experimental || blocks > ExperimentalMovement.MAX_HURT_FALL) {
+            return;
+        }
+        int damage = ExperimentalMovement.fallDamage(blocks);
+        if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
+            return;
+        }
+        // canWalkOn lets some of these through (we can sneak on magma, that is not the same as landing on it)
+        if (MovementHelper.avoidWalkingInto(onto) || onto.is(Blocks.MAGMA_BLOCK) || MovementHelper.isLava(context.get(destX, newY + 1, destZ))) {
+            return;
+        }
+        res.x = destX;
+        res.y = newY + 1;
+        res.z = destZ;
+        res.cost = tentativeCost + damage * context.fallDamageCost;
+        res.damage = damage;
     }
 
     @Override
