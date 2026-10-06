@@ -48,6 +48,8 @@ public class MovementParkour extends Movement {
 
     private final Direction direction;
     private final int dist;
+    /** Backed up a block for the 4 block gap's run-up. */
+    private boolean ranUp;
     private final boolean ascend;
 
     private MovementParkour(IBaritone baritone, BetterBlockPos src, int dist, Direction dir, boolean ascend) {
@@ -331,6 +333,25 @@ public class MovementParkour extends Movement {
             state.setInput(Input.SNEAK, true);
         }
 
+        if (dist == 5 && !ascend && !ranUp) {
+            // a 4 block gap needs a run-up of two blocks at full sprint: standing (or crawling) on the take-off block,
+            // back up to the start of whatever run-up there is first
+            BetterBlockPos back = src.relative(direction, -1), back2 = src.relative(direction, -2);
+            boolean two = MovementHelper.canWalkOn(ctx, back2.below()) && MovementHelper.fullyPassable(ctx, back2) && MovementHelper.fullyPassable(ctx, back2.above());
+            BetterBlockPos from = two ? back2 : back;
+            double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
+            double along = (ctx.player().position().x - (from.x + 0.5)) * direction.getStepX() + (ctx.player().position().z - (from.z + 0.5)) * direction.getStepZ();
+            if (along <= -0.3 || v > 0.1 || ctx.player().position().y > src.y + 0.1 || !ctx.playerFeet().equals(src) && !ctx.playerFeet().equals(back) && !ctx.playerFeet().equals(from)) {
+                ranUp = true;
+            } else {
+                // keep facing the landing and walk backwards, so there is no turn to lag behind
+                state.setInput(Input.SPRINT, false);
+                MovementHelper.moveTowards(ctx, state, dest);
+                state.setInput(Input.MOVE_FORWARD, false);
+                state.setInput(Input.MOVE_BACK, true);
+                return state;
+            }
+        }
         MovementHelper.moveTowards(ctx, state, dest);
         if (!ctx.player().onGround() && ctx.player().position().y > src.y + 0.1 && BlockStateInterface.getBlock(ctx, dest) != Blocks.LADDER) {
             // mid-air: stop pushing once coasting alone reaches the landing centre, so narrow tops (bars, fence posts) are not overshot
