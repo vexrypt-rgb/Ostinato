@@ -970,6 +970,78 @@ public enum Moves {
         public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
             MovementSlime.cost(context, x, y, z, 3, result);
         }
+    },
+
+    CLIMB_JUMP_0(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 0);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 0, result);
+        }
+    },
+
+    CLIMB_JUMP_1(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 1, result);
+        }
+    },
+
+    CLIMB_JUMP_2(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 2, result);
+        }
+    },
+
+    CLIMB_JUMP_3(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 3);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 3, result);
+        }
+    },
+
+    CLIMB_JUMP_4(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 4);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 4, result);
+        }
+    },
+
+    CLIMB_JUMP_5(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementClimbJump.cost(context, src, 5);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementClimbJump.cost(context, x, y, z, 5, result);
+        }
     };
 
     public final boolean dynamicXZ;
