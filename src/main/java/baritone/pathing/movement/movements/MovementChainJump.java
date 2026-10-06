@@ -22,9 +22,9 @@ import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
+import baritone.pathing.kinematic.ChainTemplates;
 import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.kinematic.JumpSearch;
-import baritone.pathing.kinematic.JumpTemplates;
 import baritone.pathing.kinematic.PlayerSim;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -39,17 +39,18 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * A parkour jump from {@link JumpTemplates}: diagonal, knight's-move, down-and-across, 4-block flat, 3-block up and
- * neo jumps round the end of a wall. Planned by checking the template's swept cells, flown with {@link JumpSearch}
- * against the real world so the controls match the ones the jump was found with.
+ * Idea (jump pairs through a one block pad) from Soprano's momentum jumps, https://github.com/AverWasTaken/soprano.
+ * Two jumps through a one block pad from {@link ChainTemplates}: land on the pad with momentum and jump again without
+ * stopping, for gaps no single jump makes. Planned by checking the swept cells and the three blocks stood on, flown with
+ * one {@link JumpSearch} per jump against the real world, the second one found from wherever the first actually landed.
  */
-public class MovementJump extends Movement {
+public class MovementChainJump extends Movement {
 
-    /** Moves slots; slot k takes the k-th feasible jump from a node. */
-    public static final int SLOTS = 24;
+    /** Moves slots; slot k takes the k-th feasible chain from a node. */
+    public static final int SLOTS = 4;
 
     private static final BetterBlockPos[] EMPTY = new BetterBlockPos[]{};
-    /** Approach (ux, uz) and lateral (lx, lz) of the 8 frames: 4 directions, lateral side either way. */
+    /** Approach (ux, uz), lateral (lx, lz) and mirror side of the 8 frames. */
     private static final int[][] FRAMES = new int[8][];
 
     static {
@@ -61,12 +62,12 @@ public class MovementJump extends Movement {
     }
 
     private static final class Option {
-        final JumpTemplates.Template t;
+        final ChainTemplates.Template t;
         final int frame;
         final double cost;
         final int x, y, z;
 
-        Option(JumpTemplates.Template t, int frame, double cost, int x, int y, int z) {
+        Option(ChainTemplates.Template t, int frame, double cost, int x, int y, int z) {
             this.t = t;
             this.frame = frame;
             this.cost = cost;
@@ -82,33 +83,27 @@ public class MovementJump extends Movement {
         final List<Option> options = new ArrayList<>();
     }
 
-    /** Jumps (src, dest) that failed live, and when they may be tried again; stops a replan loop onto the same jump. */
     private static final java.util.Map<Long, Long> FAILED = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final ThreadLocal<Cache> CACHE = ThreadLocal.withInitial(Cache::new);
 
     private static long failKey(int x, int y, int z, int dx, int dy, int dz) {
         return BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz);
     }
 
-    private MovementState fail(MovementState state, String why) {
-        FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis() + 30_000);
-        logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.player().position() + "); avoiding this jump for 30s");
-        return state.setStatus(MovementStatus.UNREACHABLE);
-    }
-
-    private static final ThreadLocal<Cache> CACHE = ThreadLocal.withInitial(Cache::new);
-
-    private final JumpTemplates.Template t;
+    private final ChainTemplates.Template t;
     private final int[] f;
+    private final BetterBlockPos pad;
     private JumpSearch js;
     private PlayerSim real;
-    private boolean running, landed;
+    private boolean running, landed, second;
     private int settle;
     private int replans, replanCooldown;
 
-    private MovementJump(IBaritone baritone, BetterBlockPos src, JumpTemplates.Template t, int frame) {
-        super(baritone, src, at(src, FRAMES[frame], t.a, t.dy, t.b), EMPTY, at(src, FRAMES[frame], t.a, t.dy - 1, t.b));
+    private MovementChainJump(IBaritone baritone, BetterBlockPos src, ChainTemplates.Template t, int frame) {
+        super(baritone, src, at(src, FRAMES[frame], t.a, t.dy, t.b), EMPTY);
         this.t = t;
         this.f = FRAMES[frame];
+        this.pad = at(src, f, t.padA, t.padDy, 0);
     }
 
     private static BetterBlockPos at(BetterBlockPos src, int[] f, int a, int y, int b) {
@@ -125,25 +120,19 @@ public class MovementJump extends Movement {
         c.y = y;
         c.z = z;
         c.options.clear();
-        if (!context.allowParkour) {
+        if (!context.allowParkour || !context.allowMomentumJumps || !context.canSprint) {
             return c.options;
         }
         for (int i = 0; i < FRAMES.length; i++) {
             int[] f = FRAMES[i];
-            // straight ahead is walkable: nothing to jump over
-            if (MovementHelper.canWalkOn(context, x + f[0], y - 1, z + f[1]) && MovementHelper.fullyPassable(context, x + f[0], y, z + f[1])) {
-                continue;
-            }
             templates:
-            for (JumpTemplates.Template t : JumpTemplates.ALL) {
-                if (t.neo && !context.allowNeos || t.runUp > 0 && !t.neo && !context.allowMomentumJumps) {
+            for (ChainTemplates.Template t : ChainTemplates.ALL) {
+                int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3], dy = y + t.dy;
+                int px = x + t.padA * f[0], pz = z + t.padA * f[1], py = y + t.padDy;
+                if (!MovementHelper.canWalkOn(context, dx, dy - 1, dz) || !MovementHelper.canWalkOn(context, px, py - 1, pz)) {
                     continue;
                 }
-                int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
-                if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz)) {
-                    continue;
-                }
-                Long until = FAILED.get(failKey(x, y, z, dx, y + t.dy, dz));
+                Long until = FAILED.get(failKey(x, y, z, dx, dy, dz));
                 if (until != null && until > System.currentTimeMillis()) {
                     continue;
                 }
@@ -157,18 +146,16 @@ public class MovementJump extends Movement {
                         continue templates;
                     }
                 }
-                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
-                int ddx = dx, ddy = y + t.dy, ddz = dz;
-                // one option per landing block (the cheapest): the planner only has a fixed number of jump slots
+                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + 2 * context.jumpPenalty) * context.jumpBias;
                 int same = -1;
                 for (int k = 0; k < c.options.size() && same < 0; k++) {
                     Option o = c.options.get(k);
-                    if (o.x == ddx && o.y == ddy && o.z == ddz) same = k;
+                    if (o.x == dx && o.y == dy && o.z == dz) same = k;
                 }
                 if (same < 0) {
-                    c.options.add(new Option(t, i, cost, ddx, ddy, ddz));
+                    c.options.add(new Option(t, i, cost, dx, dy, dz));
                 } else if (cost < c.options.get(same).cost) {
-                    c.options.set(same, new Option(t, i, cost, ddx, ddy, ddz));
+                    c.options.set(same, new Option(t, i, cost, dx, dy, dz));
                 }
             }
         }
@@ -181,19 +168,18 @@ public class MovementJump extends Movement {
             return;
         }
         Option op = o.get(slot);
-        int[] f = FRAMES[op.frame];
-        res.x = x + op.t.a * f[0] + op.t.b * f[2];
-        res.y = y + op.t.dy;
-        res.z = z + op.t.a * f[1] + op.t.b * f[3];
+        res.x = op.x;
+        res.y = op.y;
+        res.z = op.z;
         res.cost = op.cost;
     }
 
-    public static MovementJump cost(CalculationContext context, BetterBlockPos src, int slot) {
+    public static MovementChainJump cost(CalculationContext context, BetterBlockPos src, int slot) {
         List<Option> o = options(context, src.x, src.y, src.z);
         if (slot >= o.size()) {
             return null;
         }
-        return new MovementJump(context.getBaritone(), src, o.get(slot).t, o.get(slot).frame);
+        return new MovementChainJump(context.getBaritone(), src, o.get(slot).t, o.get(slot).frame);
     }
 
     @Override
@@ -216,6 +202,7 @@ public class MovementJump extends Movement {
         for (int r = 0; r <= t.runUp; r++) {
             set.add(at(src, f, -r, 0, 0));
         }
+        set.add(pad);
         set.add(dest);
         return set;
     }
@@ -223,6 +210,12 @@ public class MovementJump extends Movement {
     @Override
     public boolean safeToCancel(MovementState state) {
         return state.getStatus() != MovementStatus.RUNNING || !running;
+    }
+
+    private MovementState fail(MovementState state, String why) {
+        FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis() + 30_000);
+        logDebug(why + " (" + src + " -> " + pad + " -> " + dest + ", at " + ctx.player().position() + "); avoiding this chain for 30s");
+        return state.setStatus(MovementStatus.UNREACHABLE);
     }
 
     /** World x/z of frame point (a, b), block (0, 0) being src. */
@@ -234,6 +227,20 @@ public class MovementJump extends Movement {
         return src.z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
     }
 
+    private JumpSearch search(ClientWorld world, BetterBlockPos from, BetterBlockPos to, int[] plan) {
+        JumpSearch s = new JumpSearch(world);
+        s.dirX = f[0];
+        s.dirZ = f[1];
+        s.edge = (from.x + 0.5 + 0.5 * f[0]) * f[0] + (from.z + 0.5 + 0.5 * f[1]) * f[1];
+        s.destX = to.x;
+        s.destY = to.y;
+        s.destZ = to.z;
+        s.side = f[4];
+        s.carry = to == pad;
+        System.arraycopy(plan, 0, s.plan, 0, JumpSearch.DIMS);
+        return s;
+    }
+
     @Override
     public MovementState updateState(MovementState state) {
         super.updateState(state);
@@ -241,21 +248,13 @@ public class MovementJump extends Movement {
             return state;
         }
         Vec3 p = ctx.player().position();
-        if (p.y < Math.min(src.y, dest.y) - 0.6) {
-            return state.setStatus(MovementStatus.UNREACHABLE);
+        if (p.y < Math.min(src.y, Math.min(pad.y, dest.y)) - 0.6) {
+            return fail(state, "fell off");
         }
         if (js == null) {
             ClientWorld world = new ClientWorld(ctx);
-            js = new JumpSearch(world);
+            js = search(world, src, pad, t.plan1);
             real = new PlayerSim(world);
-            js.dirX = f[0];
-            js.dirZ = f[1];
-            js.edge = (src.x + 0.5 + 0.5 * f[0]) * f[0] + (src.z + 0.5 + 0.5 * f[1]) * f[1];
-            js.destX = dest.x;
-            js.destY = dest.y;
-            js.destZ = dest.z;
-            js.side = f[4];
-            System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
         Vec3 m = ctx.player().getDeltaMovement();
         real.x = p.x;
@@ -269,7 +268,6 @@ public class MovementJump extends Movement {
         real.collidedH = ctx.player().horizontalCollision;
         if (landed) {
             // let the landing settle, then step to the middle for the next movement
-            // (a neo lands hanging over the side, feet outside dest: step in once the landing has settled)
             settle++;
             if (ctx.playerFeet().equals(dest) && (settle > 3 || Math.abs(m.x) + Math.abs(m.z) < 0.03)) {
                 return state.setStatus(MovementStatus.SUCCESS);
@@ -299,22 +297,33 @@ public class MovementJump extends Movement {
                 return state; // no plan from this momentum: come to a stop first
             }
             if (still && !js.search(real, true) && !js.search(real, false)) {
-                return fail(state, "no jump from here");
+                return fail(state, "no chain from here");
             }
             running = true;
-            // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
-            // position first, or it replays the jump from a stale spot inside the wall and rubber-bands us back
             ctx.player().connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(p.x, p.y, p.z, true, false));
         } else if (replanCooldown > 0) {
             replanCooldown--;
         } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {
-            // drifted off the plan: replan around it, else fly it anyway. A full search is expensive, so if the player
-            // keeps diverging (it isn't following the inputs) give up and let the path replan instead of searching every tick.
-            if (++replans > 4) {
-                return fail(state, "jump keeps diverging from plan: v=" + m + " sprint=" + real.sprinting + " ground=" + real.onGround);
+            if (++replans > 6) {
+                return fail(state, "chain keeps diverging from plan: v=" + m + " sprint=" + real.sprinting + " ground=" + real.onGround);
             }
-            js.search(real, true);
+            if (!js.search(real, true) && second && !js.search(real, false)) {
+                return fail(state, "no second jump from the pad");
+            }
             replanCooldown = 3;
+        }
+        if (!second && js.jumped && js.airTicks > 1 && real.onGround) {
+            if (!ctx.playerFeet().equals(pad)) {
+                return fail(state, "missed the pad");
+            }
+            // on the pad with the speed the first jump left us: find the second from here and carry straight on
+            second = true;
+            js = search(new ClientWorld(ctx), pad, dest, t.plan2);
+            if (!js.search(real, true) && !js.search(real, false)) {
+                return fail(state, "no second jump from the pad");
+            }
+            replans = 0;
+            replanCooldown = 0;
         }
         int in = js.input(js.plan, js.jumped, js.airTicks);
         boolean jump = js.jump(js.plan, real, js.jumped);
@@ -328,7 +337,7 @@ public class MovementJump extends Movement {
             js.airTicks = 0;
         } else if (js.jumped) {
             js.airTicks++;
-            if (js.airTicks > 1 && real.onGround) {
+            if (second && js.airTicks > 1 && real.onGround) {
                 landed = true;
                 state.setInput(Input.MOVE_FORWARD, false);
                 state.setInput(Input.MOVE_BACK, false);

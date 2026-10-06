@@ -55,7 +55,9 @@ public final class SettingCategorizer {
         put(m, RENDER, "yLevelBoxSize", "fadePath", "cachedChunksOpacity");
         put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "randomLooking", "randomLooking113",
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "physicsTravel",
-                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed");
+                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed",
+                "allowNeos", "allowLadderClutch", "pickupLadders", "experimentalMovement", "experimentalJumpBias",
+                "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
         put(m, PATHING, "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
