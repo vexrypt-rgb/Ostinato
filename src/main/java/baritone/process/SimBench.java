@@ -60,6 +60,7 @@ public final class SimBench implements AbstractGameEventListener {
     private final List<Course> courses = new ArrayList<>();
     private final List<String> rows = new ArrayList<>();
     private int index = -1, wait = 100, ticks, grace;
+    private boolean arrived;
     private boolean done, running, started, warmup;
     private int pathTick;
     private boolean oldExperimental, oldTrace, oldPlace, oldBreak;
@@ -234,8 +235,13 @@ public final class SimBench implements AbstractGameEventListener {
                 Course c = courses.get(index);
                 // a bot hanging on a one block ladder slides off it while the course settles: put it back right before it starts
                 run(String.format(Locale.ROOT, "tp @a %.2f %.2f %.2f -90 0", c.sx, c.sy, c.sz));
+                // the previous course's movement can fail while the world is rebuilt under it: that is not this course's failure
+                MovementJump.forgetFailures();
+                MovementClimbJump.forgetFailures();
+                MovementChainJump.forgetFailures();
                 baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(c.gx, c.gy, c.gz));
                 ticks = 0;
+                arrived = false;
                 pathTick = -1;
             }
             return;
@@ -246,19 +252,21 @@ public final class SimBench implements AbstractGameEventListener {
         BlockPos feet = baritone.getPlayerContext().playerFeet();
         boolean there = feet.getX() == c.gx && feet.getY() == c.gy && feet.getZ() == c.gz
                 && (c.ladderGoal ? me.onClimbable() : me.onGround());
+        if (there) arrived = true; // a hang on a ladder does not last while the trace is awaited: the first arrival counts
         if (pathTick < 0 && baritone.getPathingBehavior().isPathing()) pathTick = ticks;
         if (ticks == 30) {
             StringBuilder sb = new StringBuilder();
             baritone.getPathingBehavior().getPath().ifPresent(path -> path.movements().forEach(m -> sb.append(m.getClass().getSimpleName()).append(' ').append(m.getDest()).append("; ")));
             log("path " + courses.get(index).label + " (first pathing tick " + pathTick + "): " + (sb.length() == 0 ? "none" : sb));
         }
-        String why = there ? "ok" : me.getY() < OY - 8 ? "fell" : ticks >= TIMEOUT ? "timeout"
+        String why = arrived ? "ok" : me.getY() < OY - 8 ? "fell" : ticks >= TIMEOUT ? "timeout"
                 : ticks > 100 && !baritone.getPathingBehavior().isPathing() ? "nopath" : null;
         if (why != null && why.equals("ok") && SimTrace.last == null && grace++ < 40) {
             return; // landed; the movement reports its trace a tick or two later
         }
         if (why != null) {
             grace = 0;
+            arrived = false;
             if (warmup && index == 0) {
                 log("warm-up " + c.label + ": " + why + " after " + ticks + " ticks (not counted)");
             } else {

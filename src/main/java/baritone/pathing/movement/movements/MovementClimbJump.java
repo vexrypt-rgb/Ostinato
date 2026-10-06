@@ -110,7 +110,7 @@ public class MovementClimbJump extends Movement {
     private JumpSearch js;
     private PlayerSim real;
     private boolean running, landed;
-    private int settle, waited, hug;
+    private int settle, waited, hug, nudges;
     private int replans, replanCooldown;
 
     private MovementClimbJump(IBaritone baritone, BetterBlockPos src, ClimbTemplates.Template t, int frame) {
@@ -411,6 +411,11 @@ public class MovementClimbJump extends Movement {
                     return state; // no plan from this momentum: come to a stop first
                 }
                 if (still && !js.search(real, true) && !js.search(real, false)) {
+                    if (dx * dx + dz * dz > 0.03 * 0.03 && nudges++ < 30) {
+                        // the templates only tolerate a few hundredths of start error: creep onto the exact spot and retry
+                        state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-dx, dz)), ctx.playerRotations().getPitch()), true));
+                        return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SNEAK, true);
+                    }
                     fail("no climb jump from here");
                     return state.setStatus(MovementStatus.UNREACHABLE);
                 }
