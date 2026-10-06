@@ -106,15 +106,17 @@ public final class PathBench implements AbstractGameEventListener {
                 }
             }
         }
+        if (padY <= me.level().getMinY()) padY = me.level().getMinY() + 1; // same floor as VexBench: grass on a bedrock row
         int stand = padY + 1;
         String name = me.getGameProfile().name();
         int gap = kind.equals("bridge") ? 8 : kind.equals("parkour") ? 3 : 0;
         run("gamerule spawn_mobs false", "gamerule keep_inventory true", "gamerule advance_time false", "time set day", "difficulty peaceful",
                 "gamemode survival " + name, "clear " + name,
                 // the save is one grass layer on the void: restore it, then cut the trench (wide enough that going around is not an option)
+                "fill -5 " + (padY - 1) + " -60 40 " + (padY - 1) + " 60 bedrock",
                 "fill -5 " + padY + " -60 40 " + padY + " 60 grass_block",
                 "fill -5 " + (padY + 1) + " -60 40 " + (padY + 6) + " 60 air",
-                gap > 0 ? "fill 10 " + padY + " -60 " + (10 + gap - 1) + " " + padY + " 60 air" : "say walk",
+                gap > 0 ? "fill 10 " + (padY - 1) + " -60 " + (10 + gap - 1) + " " + padY + " 60 air" : "say walk",
                 "give " + name + " cobblestone 64",
                 "tp " + name + " 0 " + stand + " 0 -90 0");
         var s = baritone.settings();
@@ -138,7 +140,7 @@ public final class PathBench implements AbstractGameEventListener {
     private void finish() {
         done = true;
         // the trench is cut into the shared vexflat save: put the layer back so later fight benches don't walk into the void
-        run("fill -5 " + padY + " -60 40 " + padY + " 60 grass_block");
+        run("fill -5 " + (padY - 1) + " -60 40 " + (padY - 1) + " 60 bedrock", "fill -5 " + padY + " -60 40 " + padY + " 60 grass_block");
         try {
             Path dir = Paths.get("pvpbench");
             Files.createDirectories(dir);
