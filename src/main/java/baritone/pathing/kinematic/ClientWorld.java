@@ -70,4 +70,10 @@ public final class ClientWorld implements PlayerSim.World {
         pos.set(x, y, z);
         return ctx.world().getBlockState(pos).getBlock() == Blocks.SLIME_BLOCK;
     }
+
+    @Override
+    public boolean climbable(int x, int y, int z) {
+        pos.set(x, y, z);
+        return ctx.world().getBlockState(pos).is(net.minecraft.tags.BlockTags.CLIMBABLE);
+    }
 }
