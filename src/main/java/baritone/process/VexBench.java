@@ -287,6 +287,8 @@ public final class VexBench implements AbstractGameEventListener {
         String meName = me.getGameProfile().name();
         clearHostiles();
         run("kill @a[name=!" + meName + "]", "kill @e[type=item]");
+        // explosive kits blast holes in the single ground layer; relay it so no round fights over the last one's craters
+        run("fill -40 " + padY + " -40 40 " + padY + " 40 grass_block");
         if (first) { // sweep away platforms left in the save by earlier benches
             for (int y = padY + 1; y < padY + 120; y += 4) run("fill -40 " + y + " -40 40 " + (y + 3) + " 40 air");
         }
