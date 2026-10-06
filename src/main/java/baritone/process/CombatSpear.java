@@ -40,8 +40,10 @@ final class CombatSpear {
     private final CombatAim aimer;
     private final CombatSwing swing;
     private final Hands hands;
+    private final CombatPolicy.Spear p;
 
-    CombatSpear(CombatInventory inv, CombatAim aimer, CombatSwing swing, Hands hands) {
+    CombatSpear(CombatInventory inv, CombatAim aimer, CombatSwing swing, CombatPolicy.Spear p, Hands hands) {
+        this.p = p;
         this.inv = inv;
         this.aimer = aimer;
         this.swing = swing;
@@ -119,12 +121,12 @@ final class CombatSpear {
         // Take a ready jab first; its cooldown is then spent on the back-out for the next charge.
         // If the jab has not connected in 30 ticks, stop waiting and back out anyway.
         boolean jabReady = spearCharged && me.getAttackStrengthScale(0f) >= 0.99f;
-        if (spear >= 0 && inv.spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < 4.8
-                && (!jabReady || ++spearJabWait > 30)) {
+        if (spear >= 0 && inv.spearLungeLevel(spearStack) < 1 && spearUseTicks == 0 && !spearCommit && !spearReopen && !targetEating && los && hr < p.jabBand
+                && (!jabReady || ++spearJabWait > p.jabWaitTicks)) {
             spearReopen = true;
             spearJabWait = 0;
         }
-        if (spearCommit && spearUseTicks == 0 && (++spearCommitTicks > 36 || hr < 3.2)) {
+        if (spearCommit && spearUseTicks == 0 && (++spearCommitTicks > p.commitTicks || hr < p.commitHr)) {
             spearCommit = false;
             spearCommitTicks = 0;
         }
@@ -134,8 +136,8 @@ final class CombatSpear {
             // 072935 full charge: use at hr 6.18 along 4.69, pierce tick t120 hr 2.98 along 5.64.
             // The run that made it started at hr 7.52. 8.3 is above the chase plateau, so the
             // reset kept going and the next charge was 92 ticks later. Face them at 7.4.
-            if (hr >= 7.4) spearFacing = true;
-            if (!los || ++spearReopenTicks > 70) {
+            if (hr >= p.faceHr) spearFacing = true;
+            if (!los || ++spearReopenTicks > p.reopenTicks) {
                 spearReopen = false;
                 spearReopenTicks = 0;
                 spearFacing = false;
@@ -144,7 +146,7 @@ final class CombatSpear {
                 Vec3 aim = aimPoint(me, target);
                 hands.look(aim);
                 spearFaceTicks++;
-                if (aimer.aimedAt(me, aim, 25f) || spearFaceTicks > 3 && aimer.aimedAt(me, aim, 50f)) {
+                if (aimer.aimedAt(me, aim, p.faceTol) || spearFaceTicks > 3 && aimer.aimedAt(me, aim, p.faceTolLate)) {
                     spearReopen = false;
                     spearReopenTicks = 0;
                     spearFacing = false;
@@ -164,7 +166,7 @@ final class CombatSpear {
                 return hands.decide("spear_back");
             }
         }
-        if (spear >= 0 && !spearCommit && spearUseTicks == 0 && spearBand == 0 && los && spearCharged && inReach && slide < 0.03 && target.hurtTime <= 0
+        if (spear >= 0 && !spearCommit && spearUseTicks == 0 && spearBand == 0 && los && spearCharged && inReach && slide < p.jabSlide && target.hurtTime <= 0
                 && me.getAttackStrengthScale(0f) >= 0.99f) {
             if (!hands.select(me, spear)) return hands.decide("swap");
             Vec3 aim = aimPoint(me, target);
@@ -194,12 +196,12 @@ final class CombatSpear {
             double step = Math.max(along / 20.0, spearClose);
             double at10 = hr - step * 10.0;
             if (spearUseTicks > 0) {
-                boolean pierce = spearUseTicks >= 11 && along >= 4.6 && hr > 2.05 && hr <= 4.5;
-                boolean failed = along < 4.2 || hr <= 2.0 || hr > 16 || spearUseTicks >= 200;
+                boolean pierce = spearUseTicks >= p.minUseTicks && along >= p.chargeAlong && hr > p.pierceLo && hr <= p.pierceHi;
+                boolean failed = along < p.failAlong || hr <= 2.0 || hr > p.failHr || spearUseTicks >= p.maxUseTicks;
                 if (spearReleaseNext || failed) {
                     hands.use(false);
                     hands.note(String.format("spear rel n=%d hr=%.2f along=%.2f win=%s %s | start hr=%.2f along=%.2f close=%.3f at10=%.2f | tv=%.3f me=%.3f",
-                            spearUseTicks, hr, along, hr > 2.05 && hr <= 4.5 ? "in" : "out", spearReleaseNext ? "pierce" : "fail",
+                            spearUseTicks, hr, along, hr > p.pierceLo && hr <= p.pierceHi ? "in" : "out", spearReleaseNext ? "pierce" : "fail",
                             passHr, passAlong, passClose, passAt10,
                             Math.hypot(target.getDeltaMovement().x, target.getDeltaMovement().z), Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z)));
                     if (spearReleaseNext) {
@@ -213,7 +215,7 @@ final class CombatSpear {
                     }
                     spearUseTicks = 0;
                     spearReleaseNext = false;
-                    spearUseCool = 8;
+                    spearUseCool = p.useCool;
                 } else {
                     if (!hands.select(me, spear)) return hands.decide("swap");
                     hands.look(aimPoint(me, target));
@@ -224,7 +226,7 @@ final class CombatSpear {
                     if (pierce) spearReleaseNext = true;
                     return hands.decide("spear_charge");
                 }
-            } else if (spearUseCool == 0 && along >= 4.6 && hr > 4.55 && hr < 14 && at10 <= 4.4 && at10 >= 2.4) {
+            } else if (spearUseCool == 0 && along >= p.chargeAlong && hr > p.startHrMin && hr < p.startHrMax && at10 <= p.at10Hi && at10 >= p.at10Lo) {
                 if (!hands.select(me, spear)) return hands.decide("swap");
                 hands.look(aimPoint(me, target));
                 hands.key(Input.MOVE_FORWARD);
@@ -237,7 +239,7 @@ final class CombatSpear {
                 passClose = spearClose;
                 passAt10 = at10;
                 return hands.decide("spear_charge");
-            } else if (spearUseCool == 0 && hr > 4.6 && hr < 14 && (along < 4.6 || at10 > 4.4)) {
+            } else if (spearUseCool == 0 && hr > 4.6 && hr < p.startHrMax && (along < p.chargeAlong || at10 > p.at10Hi)) {
                 if (!hands.select(me, spear)) return hands.decide("swap");
                 hands.look(aimPoint(me, target));
                 hands.key(Input.MOVE_FORWARD);

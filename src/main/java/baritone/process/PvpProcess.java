@@ -367,7 +367,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void crit() { crits++; }
         public void sprintHit() { sprintHits++; }
     });
-    private final CombatSpear spears = new CombatSpear(inv, aimer, swing, new CombatSpear.Hands() {
+    private final CombatPolicy policy = new CombatPolicy();
+    private final CombatSpear spears = new CombatSpear(inv, aimer, swing, policy.spear, new CombatSpear.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void use(boolean down) { PvpProcess.this.use(down); }
