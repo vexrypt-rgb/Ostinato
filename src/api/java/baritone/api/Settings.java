@@ -1960,6 +1960,12 @@ public final class Settings {
     public final Setting<Boolean> kinematicTravel = new Setting<>(false);
 
     /**
+     * Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and
+     * simtrace/simtrace.csv, simtrace/summary.csv): how far off the prediction is one tick ahead, and how far a whole jump drifts.
+     */
+    public final Setting<Boolean> kinematicTrace = new Setting<>(false);
+
+    /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.
      * Codes: M01 kinematic stuck, M02 off path, M03 movement timeout, M04 movement failed.
      */
