@@ -50,7 +50,7 @@ import java.util.function.Predicate;
  */
 public final class PvpProcess extends BaritoneProcessHelper {
 
-    private static final double DRIVE = 7, BOW_MIN = 10, CHASE = 48;
+    private static final double CHASE = 48;
 
     private Predicate<LivingEntity> filter;
     /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
@@ -263,47 +263,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 if ("-".equals(tickDec)) tickDec = "special";
                 return sp;
             }
-            if (!los && dist <= 3) { // right there but walled off (a crawl gap under our feet, a hole): dig through
-                BlockHitResult wall = ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), target.getEyePosition(),
-                        net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me));
-                // obsidian and anchors take minutes by hand: the bench sat 1800 ticks left-clicking one
-                if (wall.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
-                        && ctx.world().getBlockState(wall.getBlockPos()).getDestroySpeed(ctx.world(), wall.getBlockPos()) < 10) {
-                    look(wall.getLocation());
-                    key(Input.CLICK_LEFT); // hold the attack key on the wall
-                    return decide("dig");
-                }
-            }
-            // 1907 bench: they fell 8 blocks off the platform and no path follows a drop that deep, so
-            // 945 ticks went to standing at the edge. Walk off after them; with a mace the fall is a dive.
-            double drop = me.getY() - target.getY();
-            if (drop > 3.5 && drop < 20 && horizontalBoxDist(me, target) < 8 && survival.eatTicks == 0
-                    && (inv.slotOf(me, Items.MACE) >= 0 || me.getHealth() > drop + 4)) {
-                use(false);
-                int mace = inv.slotOf(me, Items.MACE);
-                select(me, mace >= 0 ? mace : inv.weapon(me));
-                look(target.getEyePosition());
-                key(Input.MOVE_FORWARD);
-                key(Input.SPRINT);
-                if (!me.onGround() && mace >= 0) {
-                    phase.macePhase = 2;
-                    phase.maceTicks = 5;
-                }
-                return decide("drop");
-            }
-            if (dist > DRIVE || !los) {
-                // Charge needs a sprint runway. Baritone chase from 7 blocks never reaches 4.6 blocks/s
-                // before the pierce window, so a plain spear closes that gap on foot.
-                boolean spearRush = inv.spearSlot(me) >= 0 && los && dist < 14 && survival.eatTicks == 0 && spears.spearUseCool == 0
-                        && me.getFoodData().getFoodLevel() > 6;
-                if (!spearRush) {
-                    if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return decide("bow", tools.bow(me, target));
-                    use(false);
-                    // Spear chase stops in the jab band, not inside the 2-block dead zone.
-                    int near = inv.spearSlot(me) >= 0 ? 3 : 2;
-                    return decide("chase", new PathingCommand(new GoalNear(target.blockPosition(), near), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
-                }
-            }
+            PathingCommand closing = approach.close(me, target, dist, los, spears.spearUseCool);
+            if (closing != null) return closing;
             // A spear charge is the use key. Releasing here every tick reset the 10-tick delay.
             if (me.isUsingItem() && spears.spearUseTicks == 0) use(false);
 
@@ -319,60 +280,17 @@ public final class PvpProcess extends BaritoneProcessHelper {
             boolean inReach = spear >= 0
                     ? (hr >= SPEAR_JAB_LO && hr <= SPEAR_JAB_HI)
                     : (er <= reach - 0.05);
-            // a shield being raised blocks before isBlocking() shows it; only swap in reach, since any swap drains the charge
-            boolean shieldUp = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
-            float cd = me.getAttackStrengthScale(0.5f);
             boolean meFalling = !me.onGround() && me.getDeltaMovement().y < -0.05;
             boolean targetFalling = !target.onGround() && tv().y < -0.05;
             PathingCommand jabbed = spears.jab(me, target, los, spear, hr, targetEating, inReach, meFalling, targetFalling);
             if (jabbed != null) return jabbed;
 
-            // a disabled shield stays "raised" for its 5s cooldown; don't keep throwing uncharged axe swings at it
-            // only a shield past its 5-tick warm-up is disabled by the axe; a swing into the raise is a wasted cooldown
-            // VexBot's shield blocks from its first tick (no warm-up), so the use flag is the shield
-            boolean tgShield = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
-            if (tgShield && me.tickCount - shield.lastAxeTick >= 4) shield.axeHeld = false; // it is back up: that swing did not disable it
-            // the axe drew blood: there was no shield in its way, so none is on cooldown either
-            if (shield.axeHeld && me.tickCount - shield.lastAxeTick <= 3 && target.hurtTime >= 8) shield.axeHeld = false;
-            boolean duel = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && target.getOffhandItem().getItem() == Items.SHIELD;
-            // 224436 expert adaptive: swords at t17 and t32 did nothing against a target showing no use flag.
-            // A blockhitter's shield goes up with its swing, flag or no flag; the window is learned from bounced hits.
-            if (duel && shield.hiddenShield(me, target)) tgShield = true;
-            boolean axeTime = tgShield && inReach && me.tickCount - shield.lastAxeTick > 8 && inv.best(me, AXES) >= 0;
-            if (!select(me, axeTime ? inv.best(me, AXES) : inv.weapon(me))) return decide("swap");
-            look(swing.swingPoint(me, target, tv()));
-
-            boolean targetReady = me.tickCount - shield.targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
-            // the tick the use key comes up, an attack click is still swallowed by the item in use
-            boolean immune = target.hurtTime > 1 || me.tickCount - shield.lastShieldTick < (shield.counter ? 2 : 3)
-                    || tgShield && inv.best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
-            boolean falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
-            boolean canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
-            boolean hurry = me.getCurrentItemAttackStrengthDelay() < 14;
-            // 233514 axe expert adaptive: it ate from 4 HP back to 20 under plain 3.84s swung on the run, and an apple
-            // is worth 8. A target chewing in reach is not going anywhere: it gets the crit like any other.
-            boolean run = chase && (hurry || !targetEating);
-            // Same fight, t544: jumped fully charged and hung in the air for the fall while its axe, due, landed first.
-            // With its next swing due inside the jump, the charged swing goes now.
-            int swingAge = me.tickCount - shield.targetSwingTick;
-            boolean rushed = !hurry && !targetEating && cd >= 0.95f
-                    && swingAge >= (shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20) - 6;
+            PathingCommand ready = melee.prepare(me, target, inReach, chase, targetEating);
+            if (ready != null) return ready;
 
             // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
             // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
             if (spear >= 0) return spears.pass(me, target, dist, los, spear, hr, er, targetEating);
-            melee.inReach = inReach;
-            melee.chase = chase;
-            melee.duel = duel;
-            melee.canJump = canJump;
-            melee.axeTime = axeTime;
-            melee.targetReady = targetReady;
-            melee.falling = falling;
-            melee.rushed = rushed;
-            melee.immune = immune;
-            melee.run = run;
-            melee.hurry = hurry;
-            melee.cd = cd;
             return melee.exchange(me, target, dist);
         } finally {
             recorder.tick(me, target, eyeToBox(me, target),
@@ -430,9 +348,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void attacked() { attacks++; }
     });
-    private final CombatMelee melee = new CombatMelee(inv, targeting, shield, movement, new CombatMelee.Hands() {
+    private final CombatMelee melee = new CombatMelee(inv, swing, targeting, shield, movement, new CombatMelee.Hands() {
         public void key(Input in) { PvpProcess.this.key(in); }
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public void axeHit() { axeHits++; }
         public void crit() { crits++; }
@@ -445,6 +365,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void key(Input in) { PvpProcess.this.key(in); }
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int eatTicks() { return survival.eatTicks; }
+    });
+    private final CombatApproach approach = new CombatApproach(ctx, inv, tools, phase, new CombatApproach.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
         public int eatTicks() { return survival.eatTicks; }
     });
     private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {

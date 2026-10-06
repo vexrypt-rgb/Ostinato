@@ -17,6 +17,7 @@ import net.minecraft.world.phys.Vec3;
  * damage. Pure functions of the entities and positions passed in, shared by every combat mechanic.
  */
 final class CombatGeometry {
+    static final double DRIVE = 7, BOW_MIN = 10;
     static final double REACH = 3.0, SPEAR_REACH = 4.0, SPEAR_MIN = 2.0, SPEAR_JAB_LO = 2.6, SPEAR_JAB_HI = 3.4;
 
     private CombatGeometry() {}
