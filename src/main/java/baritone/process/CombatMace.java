@@ -42,9 +42,11 @@ final class CombatMace {
     private final CombatAim aimer;
     private final CombatTargeting targeting;
     private final CombatPhase phase;
+    private final CombatPolicy.Mace p;
     private final Hands hands;
 
-    CombatMace(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, Hands hands) {
+    CombatMace(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, CombatPolicy.Mace p, Hands hands) {
+        this.p = p;
         this.ctx = ctx;
         this.inv = inv;
         this.aimer = aimer;
@@ -204,7 +206,7 @@ final class CombatMace {
                     dy += v;
                     n++;
                 }
-                if (n >= 14 && n <= 26 && me.getAttackStrengthScale(0f) + n / 33f >= 0.84f) {
+                if (n >= p.flickLo && n <= p.flickHi && me.getAttackStrengthScale(0f) + n / 33f >= p.flickCharge) {
                     phase.flickAge = 0;
                     phase.flickLeft = 1;
                     hands.select(me, wind);
@@ -241,7 +243,7 @@ final class CombatMace {
             // 235231 ticks 606/952: passing it just under the apex smashed for 5 with nothing fallen yet.
             boolean passing = !spearKit && !target.onGround() && me.fallDistance >= 4 && me.getY() + me.getDeltaMovement().y * 2 < target.getY() + 0.5;
             if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                    && (spearKit ? sc >= 0.99f : sc >= 0.6f || (landing || passing) && sc >= 0.4f) && target.hurtTime <= 0
+                    && (spearKit ? sc >= 0.99f : sc >= p.smashCharge || (landing || passing) && sc >= p.landingCharge) && target.hurtTime <= 0
                     && exactReach(me, target) <= REACH - 0.05
                     // 1745 fight tick 91: the aim was off on the landing tick, hands.hit() did not click, and the
                     // hop was written off as spent.
@@ -255,14 +257,14 @@ final class CombatMace {
                 if (!spearKit) hands.look(lead);
                 if (clicked || spearKit) {
                     phase.macePhase = 0;
-                    phase.maceCool = 14;
+                    phase.maceCool = p.hitCool;
                     if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                 }
             } else if (me.onGround() && (spearKit || phase.maceTicks > 4) || phase.maceTicks > (spearKit ? 40 : 80)) {
                 // A hop that did not smash must not restart. Walk into the jab band first.
                 if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                 phase.macePhase = 0;
-                phase.maceCool = spearKit ? 300 : 20; // 300 after every missed hop left 8 smashes in a 90s round
+                phase.maceCool = spearKit ? 300 : p.missCool; // 300 after every missed hop left 8 smashes in a 90s round
             }
             return hands.decide("mace");
         }

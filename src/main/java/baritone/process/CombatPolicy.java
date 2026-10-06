@@ -9,6 +9,8 @@ package baritone.process;
  */
 final class CombatPolicy {
     final Spear spear = new Spear();
+    final Shield shield = new Shield();
+    final Mace mace = new Mace();
 
     /** Spear: when to jab, when to start a charge, and the window in which a released charge pierces. */
     static final class Spear {
@@ -45,6 +47,36 @@ final class CombatPolicy {
         final int maxUseTicks = (int) param("spear.maxUseTicks", 200, 50, 400);
         /** Ticks to wait after a charge before another. */
         final int useCool = (int) param("spear.useCool", 8, 0, 40);
+    }
+
+    /** Shield: when to raise it against a sword and how long to hold it. */
+    static final class Shield {
+        /** Raised and holding: lower once our own swing charge is back above this (or the foe's swing is not due). */
+        final float holdCharge = (float) param("shield.holdCharge", 0.78, 0.5, 0.95);
+        /** Lowered: raise once our swing charge is under this (or the foe's swing is due). */
+        final float raiseCharge = (float) param("shield.raiseCharge", 0.45, 0.2, 0.7);
+        /** A raise is held at most this many ticks. */
+        final int holdMaxTicks = (int) param("shield.holdMaxTicks", 40, 10, 100);
+        /** Their swing gap assumed until one is observed (a sword recharges in 12.5 ticks). */
+        final int defaultGap = (int) param("shield.defaultGap", 13, 8, 25);
+        /** A swing counts as due from gap - dueEarly to gap + dueLate ticks after the last, inside dueDist blocks. */
+        final int dueEarly = (int) param("shield.dueEarly", 6, 0, 12);
+        final int dueLate = (int) param("shield.dueLate", 10, 2, 20);
+        final double dueDist = param("shield.dueDist", 4.5, 3.0, 6.0);
+    }
+
+    /** Mace: the swing charge a smash needs and the cooldowns after a hop. */
+    static final class Mace {
+        /** Charge needed to swing during a dive, and the lower one when landing or passing the target. */
+        final float smashCharge = (float) param("mace.smashCharge", 0.6, 0.3, 0.99);
+        final float landingCharge = (float) param("mace.landingCharge", 0.4, 0.2, 0.9);
+        /** Ticks to wait after a smash and after a hop that missed. */
+        final int hitCool = (int) param("mace.hitCool", 14, 0, 60);
+        final int missCool = (int) param("mace.missCool", 20, 0, 100);
+        /** Wind-charge flick: fall time (ticks) window and the combined charge that makes it worth it. */
+        final int flickLo = (int) param("mace.flickLo", 14, 8, 20);
+        final int flickHi = (int) param("mace.flickHi", 26, 20, 40);
+        final float flickCharge = (float) param("mace.flickCharge", 0.84, 0.5, 1.0);
     }
 
     private static double param(String name, double def, double min, double max) {

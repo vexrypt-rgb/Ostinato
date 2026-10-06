@@ -42,10 +42,12 @@ final class CombatShield {
     private final CombatTargeting targeting;
     private final CombatDefense defense;
     private final CombatPhase phase;
+    private final CombatPolicy.Shield p;
     private final Hands hands;
     private LivingEntity target; // set on each entry point; the routines below read the fight's target from it
 
-    CombatShield(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatDefense defense, CombatPhase phase, Hands hands) {
+    CombatShield(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatDefense defense, CombatPhase phase, CombatPolicy.Shield p, Hands hands) {
+        this.p = p;
         this.ctx = ctx;
         this.inv = inv;
         this.aimer = aimer;
@@ -138,10 +140,10 @@ final class CombatShield {
         // 224436 expert adaptive: the shield came down at 0.78 charge, six ticks before each of its swings.
         // Its next swing is due one observed swing gap after the last: be behind a warmed-up shield for it, then answer.
         int since = me.tickCount - targetSwingTick;
-        int gap = swingGap > 0 ? swingGap : 13; // a sword recharges in 12.5 ticks
-        boolean due = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && since >= gap - 6 && since < gap + 10 && dist < 4.5;
+        int gap = swingGap > 0 ? swingGap : p.defaultGap; // a sword recharges in 12.5 ticks
+        boolean due = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && since >= gap - p.dueEarly && since < gap + p.dueLate && dist < p.dueDist;
         // raise early enough for the shield's warm-up, hold until the swing is nearly ready
-        return holding ? (cd < 0.78f || due) && blockTicks < 40 : (cd < 0.45f || due) && since > 2;
+        return holding ? (cd < p.holdCharge || due) && blockTicks < p.holdMaxTicks : (cd < p.raiseCharge || due) && since > 2;
     }
 
     /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */

@@ -343,7 +343,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void gappleEaten() { gapples++; }
         public void abortCharge() { spears.abortCharge(); }
     });
-    private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, new CombatShield.Hands() {
+    private final CombatPolicy policy = new CombatPolicy();
+    private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, policy.shield, new CombatShield.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void use(boolean down) { PvpProcess.this.use(down); }
@@ -367,7 +368,6 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void crit() { crits++; }
         public void sprintHit() { sprintHits++; }
     });
-    private final CombatPolicy policy = new CombatPolicy();
     private final CombatSpear spears = new CombatSpear(inv, aimer, swing, policy.spear, new CombatSpear.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -402,7 +402,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public int lastShield() { return shield.lastShieldTick; }
         public void shielded(int tick) { shield.lastShieldTick = tick; }
     });
-    private final CombatMace maces = new CombatMace(ctx, inv, aimer, targeting, phase, new CombatMace.Hands() {
+    private final CombatMace maces = new CombatMace(ctx, inv, aimer, targeting, phase, policy.mace, new CombatMace.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void key(Input in) { PvpProcess.this.key(in); }
