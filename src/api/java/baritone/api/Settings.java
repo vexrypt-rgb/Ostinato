@@ -806,9 +806,9 @@ public final class Settings {
 
     /**
      * Prototype: between ticks the view keeps moving toward the last aim goal in mouse-count steps, one per rendered
-     * frame, instead of arriving in one jump at the tick. Only used by the PvP look.
+     * frame, instead of arriving in one jump at the tick. Only used by the PvP look. On by default.
      */
-    public final Setting<Boolean> frameLook = new Setting<>(false);
+    public final Setting<Boolean> frameLook = new Setting<>(true);
 
     /**
      * Same as {@link #smoothLook} but for elytra flying.
