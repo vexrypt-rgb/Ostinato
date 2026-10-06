@@ -21,6 +21,7 @@ import java.util.zip.GZIPOutputStream;
  * <pre>
  * #fight  header: label, version, both loadouts
  * t | me: x,y,z,vx,vy,vz,yaw,pitch,hp,abs,gnd,item,flags | tg: same | dist | cd=0.00..1.00 | dec=token | state | events
+ * @t ...   opponent events and per-pass features, one line per change (see {@link PvpOpponent}); #opp is their summary
  * #end    result, ticks, damage dealt/taken, attacks
  * </pre>
  * Column 0 is the fight-local tick and is never dropped. {@code cd} is {@code getAttackStrengthScale(0)}.
@@ -38,6 +39,7 @@ public final class PvpRecorder {
     private net.minecraft.world.item.Item lastOff;
     private String targetName;
     private boolean targetDied;
+    private PvpOpponent opp;
 
     public void markWin() {
         targetDied = true;
@@ -60,6 +62,7 @@ public final class PvpRecorder {
             targetDied = false;
             lastTargetHp = target.getHealth() + target.getAbsorptionAmount();
             lastMyHp = me.getHealth() + me.getAbsorptionAmount();
+            opp = new PvpOpponent(this::quiet);
             line("#fight v2 label=" + label + " target=" + targetName);
             line("#me " + gear(me));
             line("#tg " + gear(target));
@@ -102,6 +105,7 @@ public final class PvpRecorder {
             lastOff = off.getItem();
             if (off.isDamageableItem() && off.getDamageValue() != lastOffDmg) ev.append("dur").append(off.getMaxDamage() - off.getDamageValue());
             lastOffDmg = off.getDamageValue();
+            if (opp != null) opp.observe(ticks, me, target, myHp < lastMyHp - 0.01f);
             lastMyHp = myHp;
             lastTargetHp = tHp;
             float cd = me.getAttackStrengthScale(0.0f);
@@ -119,6 +123,7 @@ public final class PvpRecorder {
             // a respawn (health snapping back from near zero) means the fight was lost even if the death screen never ticked
             boolean died = me.isDeadOrDying() || me.getHealth() <= 0 || lastMyHp < 5 && me.getHealth() + me.getAbsorptionAmount() > lastMyHp + 8;
             String result = died ? "death" : targetDied ? "win" : reason;
+            if (opp != null) line(opp.summary());
             line("#end result=" + result + " ticks=" + ticks + " dealt=" + f(dealt) + " taken=" + f(taken) + " attacks=" + attacks + " hits=" + hits);
             out.close();
             System.out.println("PvpRecorder: " + file + " (" + result + ", " + ticks + " ticks)");
@@ -126,6 +131,19 @@ public final class PvpRecorder {
             System.out.println("PvpRecorder: " + e);
         }
         out = null;
+    }
+
+    /** A derived-feature line (for example one spear pass), written as {@code @tick text} among the opponent events. */
+    public void note(String s) {
+        if (out != null) quiet("@" + ticks + " " + s);
+    }
+
+    private void quiet(String s) {
+        try {
+            line(s);
+        } catch (java.io.IOException e) {
+            out = null;
+        }
     }
 
     private void line(String s) throws java.io.IOException {

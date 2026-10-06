@@ -366,6 +366,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
         public int eatTicks() { return survival.eatTicks; }
+        public void note(String line) { recorder.note(line); }
     });
     private final CombatApproach approach = new CombatApproach(ctx, inv, tools, phase, new CombatApproach.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }

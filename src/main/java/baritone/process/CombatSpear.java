@@ -23,6 +23,8 @@ final class CombatSpear {
         boolean hit(Player me);
         PathingCommand decide(String d);
         int eatTicks();
+        /** A derived-feature line for the fight log. */
+        void note(String line);
     }
 
     int spearCool, spearBand;
@@ -30,6 +32,8 @@ final class CombatSpear {
     int spearUseTicks, spearUseCool;
     double spearHrPrev = -1, spearClose;
     boolean spearReleaseNext, spearReopen, spearFacing, spearCommit;
+    /** What the pass looked like when its charge began, for the release line. */
+    private double passHr, passAlong, passClose, passAt10;
     int spearReopenTicks, spearFaceTicks, spearCommitTicks, spearJabWait;
 
     private final CombatInventory inv;
@@ -194,6 +198,10 @@ final class CombatSpear {
                 boolean failed = along < 4.2 || hr <= 2.0 || hr > 16 || spearUseTicks >= 200;
                 if (spearReleaseNext || failed) {
                     hands.use(false);
+                    hands.note(String.format("spear rel n=%d hr=%.2f along=%.2f win=%s %s | start hr=%.2f along=%.2f close=%.3f at10=%.2f | tv=%.3f me=%.3f",
+                            spearUseTicks, hr, along, hr > 2.05 && hr <= 4.5 ? "in" : "out", spearReleaseNext ? "pierce" : "fail",
+                            passHr, passAlong, passClose, passAt10,
+                            Math.hypot(target.getDeltaMovement().x, target.getDeltaMovement().z), Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z)));
                     if (spearReleaseNext) {
                         spearCommit = false;
                         spearFacing = false;
@@ -224,6 +232,10 @@ final class CombatSpear {
                 hands.use(true);
                 spearUseTicks = 1;
                 spearReleaseNext = false;
+                passHr = hr;
+                passAlong = along;
+                passClose = spearClose;
+                passAt10 = at10;
                 return hands.decide("spear_charge");
             } else if (spearUseCool == 0 && hr > 4.6 && hr < 14 && (along < 4.6 || at10 > 4.4)) {
                 if (!hands.select(me, spear)) return hands.decide("swap");
