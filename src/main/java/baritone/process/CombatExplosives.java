@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -217,6 +218,30 @@ final class CombatExplosives {
                     && blast(me, Vec3.atCenterOf(p), 10) >= 6) return true;
         }
         return false;
+    }
+
+    /**
+     * An explosive next to our feet that we did not set up: a primed TNT, a charged anchor or a crystal that would hurt.
+     * Null if none, or while a crystal or anchor fight of our own is on (staging those needs the proximity).
+     */
+    Vec3 hazard(Player me) {
+        if (crystalFight) return null;
+        Level w = ctx.world();
+        Vec3 feet = me.position();
+        Vec3 worst = null;
+        double best = 3.2;
+        for (Entity e : w.getEntitiesOfClass(Entity.class, me.getBoundingBox().inflate(3.2))) {
+            boolean bomb = e instanceof PrimedTnt || e instanceof EndCrystal && blast(me, e.position(), 12) >= 4;
+            double d = e.position().distanceTo(feet);
+            if (bomb && d < best) { best = d; worst = e.position(); }
+        }
+        BlockPos f = me.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(f.offset(-3, -2, -3), f.offset(3, 2, 3))) {
+            var st = w.getBlockState(p);
+            double d = Vec3.atCenterOf(p).distanceTo(feet);
+            if (d < best && st.is(Blocks.RESPAWN_ANCHOR) && st.getValue(RespawnAnchorBlock.CHARGE) > 0 && blast(me, Vec3.atCenterOf(p), 10) >= 4) { best = d; worst = Vec3.atCenterOf(p); }
+        }
+        return worst;
     }
 
     /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */

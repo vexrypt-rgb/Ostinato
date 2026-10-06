@@ -258,6 +258,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 if (dist <= DRIVE) movement.steer(me, target, dist, chase, melee.critArmed);
                 return decide("crystal");
             }
+            Vec3 bomb = explosives.hazard(me);
+            if (bomb != null) { // never stand beside a live explosive: run straight away from it
+                Vec3 away = me.position().subtract(bomb).multiply(1, 0, 1);
+                if (away.lengthSqr() < 1.0e-4) away = me.position().subtract(target.position()).multiply(1, 0, 1);
+                look(me.getEyePosition().add(away.normalize().scale(5)));
+                key(Input.MOVE_FORWARD);
+                key(Input.SPRINT);
+                return decide("clear");
+            }
             PathingCommand sp = special(me, dist, los);
             if (sp != null) {
                 if ("-".equals(tickDec)) tickDec = "special";
