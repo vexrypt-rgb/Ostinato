@@ -37,6 +37,11 @@ public final class JumpSearch {
      * settles on the ground. Start a leap off a ladder with {@link #jumped} set and {@link #noJump}.
      */
     public boolean grab;
+    /**
+     * Done at the landing tick, on the block (destX, destY, destZ), with {@link #sim()} left in the landing state instead
+     * of settling: the first half of a chain, whose second jump starts from that momentum.
+     */
+    public boolean carry;
     /** Plan indices into the grids above, and the jumped/air-tick state carried between real ticks. */
     public final int[] plan = new int[DIMS];
     public boolean jumped;
@@ -127,6 +132,14 @@ public final class JumpSearch {
                 }
                 if (Math.abs(sim.y - destY) > 0.01) {
                     return false; // came down somewhere else first
+                }
+                if (carry) {
+                    if (PlayerSim.floor(sim.x) != destX || PlayerSim.floor(sim.z) != destZ) {
+                        return false;
+                    }
+                    ticks = t + 1;
+                    miss = Math.max(Math.abs(sim.x - (destX + 0.5)), Math.abs(sim.z - (destZ + 0.5)));
+                    return true;
                 }
                 settle = 0;
             }

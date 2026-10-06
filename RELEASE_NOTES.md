@@ -23,6 +23,9 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
   schematic into one region per member (`strips`, `grid`, or bottom-up `layers`); every member builds
   only its own region. See `docs/REGION_BUILD.md`.
 - **Kinematic travel, parkour and swimming** improvements, pitfall avoidance.
+- **Soprano-style movement** found by simulation: ladder and vine jumps (`allowClimbJumps`), chained
+  jumps through a pad, ladder clutch (`allowLadderClutch`, `pickupLadders`) and the
+  `experimentalMovement` preset. Not yet tried in a live game.
 - **26.3** support (unobfuscated Minecraft), merged from upstream Baritone 26.2.
 
 ## Notes
