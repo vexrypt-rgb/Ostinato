@@ -164,7 +164,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean respawned = lastHealth >= 0 && lastHealth < 5 && hp > lastHealth + 8;
         if (respawned) inv.resetBreaks();
         lastHealth = hp;
-        // Bench respawn drops the kit before VexBench's item replace lands. Do not swing naked.
+        // Bench respawn drops the kit before the kit is re-equipped. Do not swing naked.
         if (Integer.getInteger("ostinato.vexbench", 0) > 0 && (respawned
                 || me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty())) {
             if (recorder.active()) recorder.end(me, respawned ? "death" : "lost");

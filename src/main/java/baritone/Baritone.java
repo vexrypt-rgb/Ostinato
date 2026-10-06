@@ -34,7 +34,6 @@ import baritone.selection.SelectionManager;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.GuiClick;
 import baritone.utils.InputOverrideHandler;
-import baritone.process.VexBench;
 import baritone.utils.PathingControlManager;
 import baritone.utils.player.BaritonePlayerContext;
 import net.minecraft.client.Minecraft;
@@ -131,8 +130,6 @@ public class Baritone implements IBaritone {
             this.elytraProcess           = this.registerProcess(ElytraProcess::create);
             this.registerProcess(BackfillProcess::new);
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
-            VexBench.install(this);
-            PathBench.install(this);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
         }
