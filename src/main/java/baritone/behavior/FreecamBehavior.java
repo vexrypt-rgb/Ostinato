@@ -292,7 +292,16 @@ public final class FreecamBehavior extends Behavior implements Helper {
         // Entity#move does collision, step-up, the soul sand/honey speed factor, cobweb slowdown and slime bounce
         camera.setDeltaMovement(mx, my, mz);
         double y0 = camera.getY();
+        stuckInBlocks();
         camera.move(MoverType.SELF, camera.getDeltaMovement());
+        // The camera is never ticked by the level, so the landing effects Entity#move leaves to it are ours:
+        // slime bounces (unless sneaking), anything else stops the fall; a ceiling stops the rise.
+        if (camera.verticalCollisionBelow) {
+            camera.level().getBlockState(camera.getOnPos()).getBlock().updateEntityMovementAfterFallOn(camera.level(), camera);
+        } else if (camera.verticalCollision) {
+            Vec3 d = camera.getDeltaMovement();
+            camera.setDeltaMovement(d.x, 0, d.z);
+        }
         m = camera.getDeltaMovement();
         mx = m.x;
         my = m.y;
@@ -318,6 +327,19 @@ public final class FreecamBehavior extends Behavior implements Helper {
         } else {
             double friction = camera.onGround() ? slip * 0.91 : 0.91;
             camera.setDeltaMovement(mx * friction, (my - 0.08) * 0.98, mz * friction);
+        }
+    }
+
+    /** Cobwebs and sweet berry bushes slow the camera down, as Block#entityInside does for a ticked entity. */
+    private void stuckInBlocks() {
+        AABB box = camera.getBoundingBox().deflate(1.0E-7);
+        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            net.minecraft.world.level.block.state.BlockState st = camera.level().getBlockState(pos);
+            if (st.is(net.minecraft.world.level.block.Blocks.COBWEB)) {
+                camera.makeStuckInBlock(st, new Vec3(0.25, 0.05, 0.25));
+            } else if (st.is(net.minecraft.world.level.block.Blocks.SWEET_BERRY_BUSH)) {
+                camera.makeStuckInBlock(st, new Vec3(0.8, 0.75, 0.8));
+            }
         }
     }
 
