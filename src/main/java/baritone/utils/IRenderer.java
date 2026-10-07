@@ -190,6 +190,38 @@ public interface IRenderer {
         bufferBuilder.addVertex(pose, x2, y2, z2).setColor(color[0], color[1], color[2], color[3]).setNormal(pose, nx, ny, nz).setLineWidth(lineWidth);
     }
 
+    /** Emits geometry at a given line width; run once per glow layer by {@link #glow}. */
+    interface GlowPass {
+        void emit(float lineWidth);
+    }
+
+    /**
+     * Runs {@code pass} as a soft pulsing glow (wide faint layer, mid layer, whitened core) in the current colour, or
+     * once as plain lines when {@code fancyRender} is off. The current colour is restored afterwards.
+     */
+    static void glow(float lineWidth, GlowPass pass) {
+        if (!settings.fancyRender.value) {
+            pass.emit(lineWidth);
+            return;
+        }
+        final float r = color[0], g = color[1], b = color[2], a = color[3];
+        final float breathe = 0.85F + 0.15F * (float) Math.sin((System.nanoTime() / 1.0E9D) % 10000.0D * 3.0D);
+        final float[] widthMul = {5.0F, 2.6F, 1.0F};
+        final float[] alphaMul = {0.9F, 1.6F, 2.5F};
+        for (int i = 0; i < 3; i++) {
+            float white = i == 2 ? 0.55F : 0.0F;
+            color[0] = r * (1.0F - white) + white;
+            color[1] = g * (1.0F - white) + white;
+            color[2] = b * (1.0F - white) + white;
+            color[3] = Math.min(1.0F, a * alphaMul[i] * breathe);
+            pass.emit(lineWidth * widthMul[i]);
+        }
+        color[0] = r;
+        color[1] = g;
+        color[2] = b;
+        color[3] = a;
+    }
+
     static void emitAABB(BufferBuilder bufferBuilder, PoseStack stack, AABB aabb, float lineWidth) {
         AABB toDraw = aabb.move(-renderManager.renderPosX(), -renderManager.renderPosY(), -renderManager.renderPosZ());
 

@@ -43,4 +43,9 @@ public final class BsiWorld implements PlayerSim.World {
     public boolean bouncy(int x, int y, int z) {
         return bsi.get0(x, y, z).getBlock() == Blocks.SLIME_BLOCK;
     }
+
+    @Override
+    public boolean water(int x, int y, int z) {
+        return bsi.get0(x, y, z).getFluidState().is(net.minecraft.tags.FluidTags.WATER);
+    }
 }

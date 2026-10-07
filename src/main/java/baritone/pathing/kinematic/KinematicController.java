@@ -7,7 +7,10 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
+import baritone.behavior.LookBehavior;
 import baritone.pathing.movement.Movement;
+import baritone.pathing.movement.MovementHelper;
+import baritone.utils.InputOverrideHandler;
 import baritone.pathing.movement.movements.MovementAscend;
 import baritone.pathing.movement.movements.MovementDescend;
 import baritone.pathing.movement.movements.MovementDiagonal;
@@ -16,6 +19,7 @@ import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementTraverse;
 import baritone.utils.BlockStateInterface;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
@@ -27,6 +31,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Drives plain walking stretches of a Baritone path with physics look-ahead instead of the per-movement
@@ -66,6 +71,14 @@ public final class KinematicController {
     private int stuckTicks, cooldown;
     /** Ticks left walking straight back onto the path line after the hitbox caught a corner beside it. */
     private int recenter, recenters;
+    /** Head steering: the camera is a simulated hand, so rollouts model where it will really point. */
+    /** Air strafe the rollouts apply for their first ticks while airborne: +1 A, -1 D. */
+    private int rolloutStrafe;
+    private boolean head;
+    private float camYaw, camVel0;
+    private double wander;
+    private final Random rng = new Random();
+    private int lastDrivenTick = -10;
     private boolean longJump; // the driven stretch holds a 3 or 4 block gap
     private boolean endsAtPlace; // the stretch stops at a movement that breaks or places, which needs the player slow at the edge
     /** Ticks the controller has driven the player, so callers can verify the backend is in use. */
@@ -91,7 +104,8 @@ public final class KinematicController {
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
         if (!Baritone.settings().kinematicTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
-                || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+                || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
+                || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
             return -1;
         }
         if (cooldown > 0) {
@@ -112,11 +126,11 @@ public final class KinematicController {
 
         double[] here = project(real.x, real.z);
         double end = line.get(line.size() - 1)[3];
-        // at the end of the whole path drive onto the goal block instead of handing back early
-        double handback = lastMove == path.movements().size() - 1 ? 0.3 : endsAtPlace ? PLACE_HANDBACK : HANDBACK;
-        if (here[1] > WIDE + 0.2 || end - here[0] < handback) {
+        double handback = endsAtPlace ? PLACE_HANDBACK : HANDBACK;
+        if (here[1] > WIDE + 0.2) {
             return -1;
         }
+        boolean arriving = end - here[0] < handback;
         double moved = (real.x - lastX) * (real.x - lastX) + (real.z - lastZ) * (real.z - lastZ);
         lastX = real.x;
         lastZ = real.z;
@@ -149,6 +163,15 @@ public final class KinematicController {
             baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, along || here[1] > 0.05);
             return newPos;
         }
+        if (arriving) {
+            return arrive(baritone, newPos, line.get(line.size() - 1));
+        }
+        head = Baritone.settings().headSteering.value;
+        camYaw = ctx.player().getYRot();
+        camVel0 = baritone.getLookBehavior().yawVelocity();
+        // a slow drift of the aim point off the line, as a hand wanders; none where precision matters
+        double maxWander = longJump || endsAtPlace ? 0 : Baritone.settings().pathWander.value;
+        wander = Math.max(-maxWander, Math.min(maxWander, wander * 0.97 + rng.nextGaussian() * 0.15 * maxWander));
 
         float best = Float.NaN;
         boolean bestShort = false;
@@ -157,6 +180,9 @@ public final class KinematicController {
         for (int delay : longJump ? DELAYS : JUMP_OR_NOT) {
             for (float off : delay <= 0 ? YAW_OFFSETS : NO_OFFSET) {
                 double score = rollout(off, delay, false, here[0]);
+                if (score > bestScore + 1e-6 && !holdsWithMargin(off, delay, here[0])) {
+                    score = -1e9; // the real jump leaves a little later or shorter than the sim's: a barely-landing plan is out
+                }
                 if (score > bestScore + 1e-6) {
                     bestScore = score;
                     best = off;
@@ -176,15 +202,60 @@ public final class KinematicController {
             }
         }
         boolean bestJump = bestDelay == 0 && real.onGround;
-        if (bestScore <= here[0] + 0.05) {
-            return -1; // nothing makes progress safely; Baritone knows how to recover
+        int strafe = 0;
+        if (!real.onGround && bestScore > here[0] + 0.05) {
+            // micro adjustment in the air, as a player taps A or D: the camera is slow, a strafe acts next tick
+            double base = bestScore;
+            for (int st = -1; st <= 1; st += 2) {
+                rolloutStrafe = st;
+                double sc = rollout(best, bestDelay, bestShort, here[0]);
+                if (sc > base + 0.08 && holdsWithMargin(best, bestDelay, here[0])) {
+                    base = sc;
+                    strafe = st;
+                }
+            }
+            rolloutStrafe = 0;
         }
+        boolean committed = !real.onGround && ctx.player().tickCount - lastDrivenTick <= 1;
+        if (bestScore <= here[0] + 0.05) {
+            if (!committed) {
+                return -1; // nothing makes progress safely; Baritone knows how to recover
+            }
+            best = 0; // mid-air with no plan left: keep steering at the line rather than hand over in flight
+            bestShort = false;
+        }
+        lastDrivenTick = ctx.player().tickCount;
         float yaw = aim(real.x, real.z, here[0], bestShort) + best;
-        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
+        if (head) {
+            baritone.getLookBehavior().human();
+            baritone.getLookBehavior().updateTarget(new Rotation(yaw, 6f + (float) (wander * 8)), true);
+        } else {
+            baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
+        }
         baritone.getInputOverrideHandler().clearAllKeys();
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
         baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, !(endsAtPlace && end - here[0] < PLACE_BRAKE));
         baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, bestJump);
+        baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_LEFT, strafe > 0);
+        baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_RIGHT, strafe < 0);
+        return newPos;
+    }
+
+    /** Stretch end: ease onto the last point (slow, no sprint) so the next movement starts from rest. */
+    private int arrive(Baritone baritone, int newPos, double[] to) {
+        double dx = to[0] - real.x, dz = to[2] - real.z;
+        double d = Math.hypot(dx, dz);
+        double speed = Math.hypot(real.vx, real.vz);
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        baritone.getLookBehavior().human();
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
+        double want = Math.min(0.22, 0.04 + d * 0.3);
+        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        in.clearAllKeys();
+        float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot()));
+        in.setInputForceState(Input.MOVE_FORWARD, speed < want && diff < 60 && d > 0.12);
+        in.setInputForceState(Input.MOVE_BACK, speed > want + 0.07 && d < 1.0);
+        in.setInputForceState(Input.JUMP, real.onGround && to[1] > real.y + 0.1 && d < 1.3);
         return newPos;
     }
 
@@ -199,11 +270,19 @@ public final class KinematicController {
         boolean wasBumping = real.collidedH;
         double end = line.get(line.size() - 1)[3];
         int lookahead = longJump ? LOOKAHEAD : HORIZON;
+        float cam = camYaw, camVel = camVel0;
+        float[] vel = new float[1];
         for (int t = 0; t < lookahead; t++) {
             float off = t < 4 ? yawOffset : 0;
             // off long gaps a jump plan jumps once, now; toward one it keeps hopping to carry the speed over
             boolean jump = delay != NEVER && sim.onGround && (longJump ? ground++ >= delay : t == 0);
-            sim.tick(aim(sim.x, sim.z, s, shortAim && t < 4) + off, true, true, jump);
+            float want = aim(sim.x, sim.z, s, shortAim && t < 4) + off;
+            if (head) {
+                cam = LookBehavior.modelYawStep(cam, camVel, want, vel);
+                camVel = vel[0];
+                want = cam;
+            }
+            sim.tick(want, 1, !sim.onGround && t < 4 ? rolloutStrafe : 0, true, jump);
             if (sim.collidedH && !wasBumping && t < HORIZON) {
                 bumps++; // grazing a wall or trunk cancels sprint (and the sprint-jump boost) in vanilla
             }
@@ -214,7 +293,7 @@ public final class KinematicController {
             }
             s = Math.max(s, pr[0]);
             if (Double.isNaN(score) && s >= end - 0.3) {
-                return s + (HORIZON - t) * 0.3 - BUMP * bumps; // reached the end early
+                return settles(cam, camVel, s) ? s + (HORIZON - t) * 0.3 - BUMP * bumps : -1e9; // reached the end early
             }
             if (t == HORIZON - 1) {
                 // keep a little credit for speed along the path so it prefers carrying momentum
@@ -224,16 +303,42 @@ public final class KinematicController {
                 return score; // on the path with no jump pending: nothing later in this plan can fall in
             }
         }
-        // still airborne: make sure the last jump lands on the path rather than in a gap
+        return settles(cam, camVel, s) ? score : -1e9;
+    }
+
+    /** Still airborne at the end of the horizon: make sure the last jump lands on the path rather than in a gap. */
+    private boolean settles(float cam, float camVel, double s) {
+        float[] vel = new float[1];
         for (int t = 0; t < 14 && !sim.onGround; t++) {
-            sim.tick(aim(sim.x, sim.z, s, false), true, true, false);
+            float want = aim(sim.x, sim.z, s, false);
+            if (head) {
+                cam = LookBehavior.modelYawStep(cam, camVel, want, vel);
+                camVel = vel[0];
+                want = cam;
+            }
+            sim.tick(want, true, true, false);
             double[] pr = project(sim.x, sim.z);
             if (pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
-                return -1e9;
+                return false;
             }
             s = Math.max(s, pr[0]);
         }
-        return sim.onGround ? score : -1e9;
+        return sim.onGround;
+    }
+
+    /** A long jump must still land if it leaves a quarter block late: no barely-landing plans. */
+    private boolean holdsWithMargin(float off, int delay, double s0) {
+        double hs = Math.hypot(real.vx, real.vz);
+        if (!longJump || !real.onGround || hs < 0.01) {
+            return true;
+        }
+        double x = real.x, z = real.z;
+        real.x -= real.vx / hs * 0.25;
+        real.z -= real.vz / hs * 0.25;
+        double r = rollout(off, delay, false, s0);
+        real.x = x;
+        real.z = z;
+        return r > -1e8;
     }
 
     /**
@@ -285,6 +390,10 @@ public final class KinematicController {
     // Lava, fire, magma or cactus under or inside the player box. TenorClef s320t: a rollout inside the 0.55
     // corridor carried the player into lava beside the path while building a bucket portal.
     private boolean hazard(double x, double y, double z) {
+        return hazard(ctx, x, y, z);
+    }
+
+    static boolean hazard(IPlayerContext ctx, double x, double y, double z) {
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (double dx = -0.3; dx <= 0.31; dx += 0.6) {
             for (double dz = -0.3; dz <= 0.31; dz += 0.6) {
@@ -303,6 +412,14 @@ public final class KinematicController {
 
     private float aim(double x, double z, double s, boolean shortAim) {
         double[] tgt = pointAt(s + (shortAim ? 0.4 : 1.6));
+        if (wander != 0 && !shortAim) {
+            double[] a = pointAt(s), b = pointAt(s + 1.0);
+            double dx = b[0] - a[0], dz = b[2] - a[2], len = Math.hypot(dx, dz);
+            double fade = Math.min(1.0, Math.max(0.0, (line.get(line.size() - 1)[3] - s - 1.0) / 2.0)); // true to the line at its end
+            if (len > 1e-6) {
+                tgt = new double[]{tgt[0] - dz / len * wander * fade, tgt[1], tgt[2] + dx / len * wander * fade};
+            }
+        }
         return (float) Math.toDegrees(Math.atan2(-(tgt[0] - x), tgt[2] - z));
     }
 
@@ -320,10 +437,20 @@ public final class KinematicController {
         for (; i < moves.size() && i < pathPosition + MAX_LOOKAHEAD_MOVES; i++) {
             IMovement mv = moves.get(i);
             if (!drivable(mv)) {
+                // an extension is laid at the edge: arrive there slowly
+                endsAtPlace |= mv instanceof MovementParkour && ((MovementParkour) mv).extensions() > 0;
                 break;
             }
             Movement movement = (Movement) mv;
             if (movement.toBreakCached == null || movement.toPlaceCached == null) {
+                if (bsi == null) {
+                    bsi = new BlockStateInterface(ctx);
+                }
+                movement.toBreak(bsi);
+                movement.toPlace(bsi);
+            }
+            if (!movement.toBreakCached.isEmpty() && movement.toPlaceCached.isEmpty() && minedOut(movement)) {
+                movement.resetBlockCache(); // everything it had to break is gone: it is a plain walk now
                 if (bsi == null) {
                     bsi = new BlockStateInterface(ctx);
                 }
@@ -342,7 +469,16 @@ public final class KinematicController {
             IMovement mv = moves.get(k);
             longJump |= mv instanceof MovementParkour && mv.getSrc().distSqr(mv.getDest()) >= 16;
         }
-        return line.size() >= 3;
+        return line.size() >= 2;
+    }
+
+    private boolean minedOut(Movement movement) {
+        for (net.minecraft.core.BlockPos b : movement.toBreakCached) {
+            if (!MovementHelper.canWalkThrough(ctx, new BetterBlockPos(b))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean drivable(IMovement mv) {
@@ -350,6 +486,9 @@ public final class KinematicController {
             return mv.getDest().y - mv.getSrc().y <= 1;
         }
         if (mv instanceof MovementParkour) {
+            if (((MovementParkour) mv).extensions() > 0) {
+                return false; // the extension is laid by ExtensionController / the movement itself
+            }
             // flat 2+ block gaps; a sprint jump overshoots a 1 block gap, Baritone walks that one
             int d = Math.abs(mv.getDest().x - mv.getSrc().x) + Math.abs(mv.getDest().z - mv.getSrc().z);
             return mv.getDest().y == mv.getSrc().y && d >= 3;

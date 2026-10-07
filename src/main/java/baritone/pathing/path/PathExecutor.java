@@ -28,7 +28,16 @@ import baritone.api.utils.*;
 import baritone.api.utils.input.Input;
 import baritone.behavior.PathingBehavior;
 import baritone.pathing.calc.AbstractNodeCostSearch;
+import baritone.pathing.kinematic.BoatFallController;
+import baritone.pathing.kinematic.ClutchController;
+import baritone.pathing.kinematic.ExtensionController;
+import baritone.pathing.kinematic.FallController;
 import baritone.pathing.kinematic.KinematicController;
+import baritone.pathing.kinematic.LadderController;
+import baritone.pathing.kinematic.MineController;
+import baritone.pathing.kinematic.PillarController;
+import baritone.pathing.kinematic.SwimController;
+import baritone.pathing.kinematic.TakeoffController;
 import baritone.pathing.physics.PhysicsTravel;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -77,10 +86,19 @@ public class PathExecutor implements IPathExecutor, Helper {
     private final PathingBehavior behavior;
     private final IPlayerContext ctx;
     private final KinematicController kinematic;
+    private final FallController fall;
+    private final SwimController swim;
+    private final ClutchController clutch;
+    private final LadderController ladder;
+    private final MineController mine;
+    private final PillarController pillar;
+    private final ExtensionController extension;
+    private final TakeoffController takeoff;
+    private final BoatFallController boatFall;
     private final PhysicsTravel physics;
 
     /** Which mover drove the player on the last tick; read-only status for the HUD. */
-    public enum Driver { BARITONE, KINEMATIC, PHYSICS }
+    public enum Driver { BARITONE, KINEMATIC, PHYSICS, SWIM, CLUTCH, LADDER, MINE, FALL, PILLAR, EXTEND, BOAT }
 
     private volatile Driver lastDriver = Driver.BARITONE;
 
@@ -90,6 +108,15 @@ public class PathExecutor implements IPathExecutor, Helper {
         this.behavior = behavior;
         this.ctx = behavior.ctx;
         this.kinematic = new KinematicController(ctx);
+        this.fall = new FallController(ctx);
+        this.swim = new SwimController(ctx);
+        this.clutch = new ClutchController(ctx);
+        this.ladder = new LadderController(ctx);
+        this.mine = new MineController(ctx);
+        this.pillar = new PillarController(ctx);
+        this.extension = new ExtensionController(ctx);
+        this.takeoff = new TakeoffController(ctx);
+        this.boatFall = new BoatFallController(ctx);
         this.physics = new PhysicsTravel(ctx);
         this.path = path;
         this.pathPosition = 0;
@@ -116,6 +143,27 @@ public class PathExecutor implements IPathExecutor, Helper {
 
     private int tickDepth;
 
+    /**
+     * The inventory has nothing to place and one of the next few movements lays a block (a bridge, an extension
+     * jump, a pillar): the path is dead. Cancelling replans it, and the planner then sees there are no blocks.
+     */
+    private boolean outOfBlocks() {
+        if (!Baritone.settings().allowPlace.value || behavior.baritone.getInventoryBehavior().hasGenericThrowaway()) {
+            return false;
+        }
+        BlockStateInterface bsi = new BlockStateInterface(ctx);
+        for (int i = pathPosition; i < Math.min(path.length() - 1, pathPosition + 4); i++) {
+            Movement m = (Movement) path.movements().get(i);
+            m.resetBlockCache();
+            if (!m.toPlace(bsi).isEmpty() || m instanceof MovementParkour pk && pk.extensions() > 0
+                    || m instanceof MovementPillar && !MovementHelper.isClimbable(bsi.get0(m.getSrc()).getBlock())
+                    && !MovementHelper.isWater(bsi.get0(m.getSrc()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean tickOnce() {
         if (pathPosition == path.length() - 1) {
             pathPosition++;
@@ -124,12 +172,71 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true; // stop bugging me, I'm done
         }
         Movement movement = (Movement) path.movements().get(pathPosition);
+        if (outOfBlocks()) {
+            logDebug("No blocks left to place, the way ahead needs them: replanning without placement");
+            cancel();
+            return false;
+        }
         int driven = physics.tick(behavior.baritone, path, pathPosition);
         lastDriver = driven >= 0 ? Driver.PHYSICS : Driver.BARITONE;
         if (driven < 0) {
             driven = kinematic.tick(behavior.baritone, path, pathPosition);
             if (driven >= 0) {
                 lastDriver = Driver.KINEMATIC;
+            }
+        }
+        if (driven < 0) {
+            driven = fall.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.FALL;
+            }
+        }
+        if (driven < 0) {
+            driven = swim.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.SWIM;
+            }
+        }
+        if (driven < 0) {
+            driven = clutch.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.CLUTCH;
+            }
+        }
+        if (driven < 0) {
+            driven = ladder.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.LADDER;
+            }
+        }
+        if (driven < 0) {
+            driven = mine.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.MINE;
+            }
+        }
+        if (driven < 0) {
+            driven = pillar.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.PILLAR;
+            }
+        }
+        if (driven < 0) {
+            driven = extension.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.EXTEND;
+            }
+        }
+        if (driven < 0) {
+            driven = takeoff.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.EXTEND;
+            }
+        }
+        if (driven < 0) {
+            driven = boatFall.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.BOAT;
             }
         }
         if (driven >= 0) {

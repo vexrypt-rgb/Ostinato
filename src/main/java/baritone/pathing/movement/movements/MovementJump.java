@@ -105,6 +105,30 @@ public class MovementJump extends Movement {
     private int settle;
     private int replans, replanCooldown;
 
+    public int[] frame() {
+        return f;
+    }
+
+    public int runUp() {
+        return t.runUp;
+    }
+
+    public double lateral() {
+        return t.lateral;
+    }
+
+    public int[] plan() {
+        return t.plan;
+    }
+
+    public void markFailed() {
+        FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis() + 30_000);
+    }
+
+    public double[] point(double a, double b) {
+        return new double[]{wx(a, b), wz(a, b)};
+    }
+
     private MovementJump(IBaritone baritone, BetterBlockPos src, JumpTemplates.Template t, int frame) {
         super(baritone, src, at(src, FRAMES[frame], t.a, t.dy, t.b), EMPTY, at(src, FRAMES[frame], t.a, t.dy - 1, t.b));
         this.t = t;

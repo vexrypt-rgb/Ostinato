@@ -80,7 +80,7 @@ fallback as a configuration issue.
 
 Beyond upstream Baritone, Ostinato adds:
 
-- **Kinematic travel** (`#set kinematicTravel true`, off by default): plain
+- **Kinematic travel** (`#set kinematicTravel false` to disable, on by default): plain
   walking stretches of a path (traverse, diagonal, 1-block ascend, drops up to
   3 blocks) are driven by a per-tick physics look-ahead. The controller
   simulates a set of yaw and jump choices with a copy of vanilla player

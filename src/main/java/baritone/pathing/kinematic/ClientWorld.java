@@ -70,4 +70,10 @@ public final class ClientWorld implements PlayerSim.World {
         pos.set(x, y, z);
         return ctx.world().getBlockState(pos).getBlock() == Blocks.SLIME_BLOCK;
     }
+
+    @Override
+    public boolean water(int x, int y, int z) {
+        pos.set(x, y, z);
+        return ctx.world().getBlockState(pos).getFluidState().is(net.minecraft.tags.FluidTags.WATER);
+    }
 }

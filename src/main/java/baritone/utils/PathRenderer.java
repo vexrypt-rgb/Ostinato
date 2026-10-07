@@ -40,6 +40,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -110,21 +111,37 @@ public final class PathRenderer implements IRenderer {
         // Render the current path, if there is one
         if (current != null && current.getPath() != null) {
             int renderBegin = Math.max(current.getPosition() - 3, 0);
-            drawPath(event.getModelViewStack(), current.getPath().positions(), renderBegin, settings.colorCurrentPath.value, settings.fadePath.value, 10, 20);
+            if (settings.fancyPath.value) {
+                drawFancyPath(event.getModelViewStack(), current.getPath().positions(), renderBegin, settings.colorCurrentPath.value);
+            } else {
+                drawPath(event.getModelViewStack(), current.getPath().positions(), renderBegin, settings.colorCurrentPath.value, settings.fadePath.value, 10, 20);
+            }
         }
 
         if (next != null && next.getPath() != null) {
-            drawPath(event.getModelViewStack(), next.getPath().positions(), 0, settings.colorNextPath.value, settings.fadePath.value, 10, 20);
+            if (settings.fancyPath.value) {
+                drawFancyPath(event.getModelViewStack(), next.getPath().positions(), 0, settings.colorNextPath.value);
+            } else {
+                drawPath(event.getModelViewStack(), next.getPath().positions(), 0, settings.colorNextPath.value, settings.fadePath.value, 10, 20);
+            }
         }
 
         // If there is a path calculation currently running, render the path calculation process
         behavior.getInProgress().ifPresent(currentlyRunning -> {
             currentlyRunning.bestPathSoFar().ifPresent(p -> {
-                drawPath(event.getModelViewStack(), p.positions(), 0, settings.colorBestPathSoFar.value, settings.fadePath.value, 10, 20);
+                if (settings.fancyRender.value) {
+                    drawFancyPath(event.getModelViewStack(), p.positions(), 0, settings.colorBestPathSoFar.value);
+                } else {
+                    drawPath(event.getModelViewStack(), p.positions(), 0, settings.colorBestPathSoFar.value, settings.fadePath.value, 10, 20);
+                }
             });
 
             currentlyRunning.pathToMostRecentNodeConsidered().ifPresent(mr -> {
-                drawPath(event.getModelViewStack(), mr.positions(), 0, settings.colorMostRecentConsidered.value, settings.fadePath.value, 10, 20);
+                if (settings.fancyRender.value) {
+                    drawFancyPath(event.getModelViewStack(), mr.positions(), 0, settings.colorMostRecentConsidered.value);
+                } else {
+                    drawPath(event.getModelViewStack(), mr.positions(), 0, settings.colorMostRecentConsidered.value, settings.fadePath.value, 10, 20);
+                }
                 drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), Collections.singletonList(mr.getDest()), settings.colorMostRecentConsidered.value);
             });
         });
@@ -175,6 +192,147 @@ public final class PathRenderer implements IRenderer {
         IRenderer.endLines(bufferBuilder, settings.renderPathIgnoreDepth.value);
     }
 
+    private static final int FX_MAX_NODES = 110;
+    private static final int FX_STEPS = 6;
+    private static final double FX_LIFT = 0.14D;
+    private static final double FX_FADE_START = 45.0D;
+    private static final double FX_FADE_END = 85.0D;
+    private static final double FX_CHEVRON_SPACING = 1.6D;
+
+    /**
+     * The path as a light trail: a Catmull-Rom curve through the nodes, drawn as a wide soft glow, a mid band and a
+     * thin hot core. Hue drifts along the trail and bright pulses run toward the goal; the trail tapers and fades with
+     * distance, and chevrons slide along it in the direction of travel.
+     */
+    public static void drawFancyPath(PoseStack stack, List<BetterBlockPos> positions, int startIndex, Color color) {
+        final int n = Math.min(positions.size() - startIndex, FX_MAX_NODES);
+        if (n < 2) {
+            return;
+        }
+        final double[] cx = new double[n], cy = new double[n], cz = new double[n];
+        for (int i = 0; i < n; i++) {
+            BetterBlockPos p = positions.get(startIndex + i);
+            cx[i] = p.x + 0.5D;
+            cy[i] = p.y + FX_LIFT;
+            cz[i] = p.z + 0.5D;
+        }
+
+        final int total = (n - 1) * FX_STEPS + 1;
+        final double[] sx = new double[total], sy = new double[total], sz = new double[total], arc = new double[total];
+        for (int i = 0, k = 0; i < n - 1; i++) {
+            int a = Math.max(i - 1, 0), d = Math.min(i + 2, n - 1);
+            for (int j = 0; j < FX_STEPS; j++, k++) {
+                double t = (double) j / FX_STEPS;
+                sx[k] = catmullRom(cx[a], cx[i], cx[i + 1], cx[d], t);
+                sz[k] = catmullRom(cz[a], cz[i], cz[i + 1], cz[d], t);
+                // heights ease between nodes: a spline would overshoot on stairs
+                sy[k] = cy[i] + (cy[i + 1] - cy[i]) * (t * t * (3 - 2 * t));
+            }
+        }
+        sx[total - 1] = cx[n - 1];
+        sy[total - 1] = cy[n - 1];
+        sz[total - 1] = cz[n - 1];
+        for (int k = 1; k < total; k++) {
+            arc[k] = arc[k - 1] + Math.sqrt(sq(sx[k] - sx[k - 1]) + sq(sy[k] - sy[k - 1]) + sq(sz[k] - sz[k - 1]));
+        }
+
+        final double time = (System.nanoTime() / 1.0E9D) % 10000.0D;
+        final float baseHue = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null)[0];
+        final float width = settings.pathRenderLineWidthPixels.value;
+        final double vpX = posX(), vpY = posY(), vpZ = posZ();
+        final double[] bandWidth = {7.0D, 3.6D, 1.4D};
+        final float[] bandAlpha = {0.22F, 0.50F, 1.0F};
+
+        final BufferBuilder bb = IRenderer.startLines(color);
+        final PoseStack.Pose pose = stack.last();
+        final float[] c0 = new float[4], c1 = new float[4];
+        for (int band = 0; band < 3; band++) {
+            for (int k = 0; k < total - 1; k++) {
+                double dx = sx[k + 1] - sx[k], dy = sy[k + 1] - sy[k], dz = sz[k + 1] - sz[k];
+                double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (len < 1.0E-6D) {
+                    continue;
+                }
+                float nx = (float) (dx / len), ny = (float) (dy / len), nz = (float) (dz / len);
+                fxColor(c0, baseHue, arc[k], time, band, bandAlpha[band]);
+                fxColor(c1, baseHue, arc[k + 1], time, band, bandAlpha[band]);
+                float w0 = (float) (width * bandWidth[band] * fxTaper(arc[k]) * (band == 2 ? 1.0D + 0.8D * fxPulse(arc[k], time) : 1.0D));
+                float w1 = (float) (width * bandWidth[band] * fxTaper(arc[k + 1]) * (band == 2 ? 1.0D + 0.8D * fxPulse(arc[k + 1], time) : 1.0D));
+                bb.addVertex(pose, (float) (sx[k] - vpX), (float) (sy[k] - vpY), (float) (sz[k] - vpZ)).setColor(c0[0], c0[1], c0[2], c0[3]).setNormal(pose, nx, ny, nz).setLineWidth(w0);
+                bb.addVertex(pose, (float) (sx[k + 1] - vpX), (float) (sy[k + 1] - vpY), (float) (sz[k + 1] - vpZ)).setColor(c1[0], c1[1], c1[2], c1[3]).setNormal(pose, nx, ny, nz).setLineWidth(w1);
+            }
+        }
+
+        // chevrons, scrolling toward the goal
+        double nextChevron = (time * 1.3D) % FX_CHEVRON_SPACING;
+        for (int k = 0; k < total - 1 && nextChevron < arc[total - 1]; k++) {
+            while (nextChevron <= arc[k + 1] && nextChevron >= arc[k]) {
+                double seg = arc[k + 1] - arc[k];
+                double f = seg < 1.0E-6D ? 0.0D : (nextChevron - arc[k]) / seg;
+                double dx = sx[k + 1] - sx[k], dz = sz[k + 1] - sz[k];
+                double flat = Math.sqrt(dx * dx + dz * dz);
+                if (flat > 1.0E-4D) {
+                    dx /= flat;
+                    dz /= flat;
+                    double px = sx[k] + (sx[k + 1] - sx[k]) * f + dx * 0.16D, py = sy[k] + (sy[k + 1] - sy[k]) * f + 0.02D, pz = sz[k] + (sz[k + 1] - sz[k]) * f + dz * 0.16D;
+                    double bx = px - dx * 0.34D, bz = pz - dz * 0.34D;
+                    float[] c = new float[4];
+                    fxColor(c, baseHue, nextChevron, time, 2, 0.9F);
+                    float w = (float) (width * 0.55D * fxTaper(nextChevron));
+                    emitChevronArm(bb, pose, bx - dz * 0.24D - vpX, py - vpY, bz + dx * 0.24D - vpZ, px - vpX, py - vpY, pz - vpZ, c, w);
+                    emitChevronArm(bb, pose, px - vpX, py - vpY, pz - vpZ, bx + dz * 0.24D - vpX, py - vpY, bz - dx * 0.24D - vpZ, c, w);
+                }
+                nextChevron += FX_CHEVRON_SPACING;
+            }
+        }
+        IRenderer.endLines(bb, settings.renderPathIgnoreDepth.value);
+    }
+
+    private static void emitChevronArm(BufferBuilder bb, PoseStack.Pose pose, double x1, double y1, double z1, double x2, double y2, double z2, float[] c, float w) {
+        double dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+        double inv = 1.0D / Math.max(1.0E-6D, Math.sqrt(dx * dx + dy * dy + dz * dz));
+        float nx = (float) (dx * inv), ny = (float) (dy * inv), nz = (float) (dz * inv);
+        bb.addVertex(pose, (float) x1, (float) y1, (float) z1).setColor(c[0], c[1], c[2], c[3] * 0.35F).setNormal(pose, nx, ny, nz).setLineWidth(w);
+        bb.addVertex(pose, (float) x2, (float) y2, (float) z2).setColor(c[0], c[1], c[2], c[3]).setNormal(pose, nx, ny, nz).setLineWidth(w);
+    }
+
+    /** Colour of the trail at {@code s} blocks along it: hue drifts with a slow wave, the core goes white-hot on pulses. */
+    private static void fxColor(float[] out, float baseHue, double s, double time, int band, float alpha) {
+        float hue = baseHue + 0.17F * (0.5F + 0.5F * (float) Math.sin(s * 0.21D - time * 1.5D));
+        float pulse = (float) fxPulse(s, time);
+        int rgb = Color.HSBtoRGB(hue, 0.82F - 0.35F * pulse * (band + 1) / 3.0F, 1.0F);
+        float white = band == 2 ? 0.30F + 0.55F * pulse : 0.10F * pulse;
+        out[0] = ((rgb >> 16 & 255) / 255.0F) * (1.0F - white) + white;
+        out[1] = ((rgb >> 8 & 255) / 255.0F) * (1.0F - white) + white;
+        out[2] = ((rgb & 255) / 255.0F) * (1.0F - white) + white;
+        float fade = (float) (smooth(s / 2.5D) * (1.0D - smooth((s - FX_FADE_START) / (FX_FADE_END - FX_FADE_START))));
+        out[3] = Math.min(1.0F, alpha * fade * (band < 2 ? 1.0F + 0.8F * pulse : 1.0F));
+    }
+
+    /** 0..1 travelling pulse that moves toward larger arc length (the goal). */
+    private static double fxPulse(double s, double time) {
+        double w = 0.5D + 0.5D * Math.sin(s * 0.75D - time * 5.0D);
+        w *= w;
+        return w * w * w;
+    }
+
+    private static double fxTaper(double s) {
+        return 1.0D - 0.55D * smooth(s / FX_FADE_END);
+    }
+
+    private static double smooth(double x) {
+        x = Math.max(0.0D, Math.min(1.0D, x));
+        return x * x * (3.0D - 2.0D * x);
+    }
+
+    private static double sq(double x) {
+        return x * x;
+    }
+
+    private static double catmullRom(double p0, double p1, double p2, double p3, double t) {
+        return 0.5D * ((2.0D * p1) + (-p0 + p2) * t + (2.0D * p0 - 5.0D * p1 + 4.0D * p2 - p3) * t * t + (-p0 + 3.0D * p1 - 3.0D * p2 + p3) * t * t * t);
+    }
+
     private static void emitPathLine(BufferBuilder bufferBuilder, PoseStack stack, double x1, double y1, double z1, double x2, double y2, double z2, double offset) {
         final double extraOffset = offset + 0.03D;
 
@@ -213,12 +371,17 @@ public final class PathRenderer implements IRenderer {
         //BlockPos blockpos = movingObjectPositionIn.getBlockPos();
         BlockStateInterface bsi = new BlockStateInterface(BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext()); // TODO this assumes same dimension between primary baritone and render view? is this safe?
 
+        final List<AABB> boxes = new ArrayList<>();
         positions.forEach(pos -> {
             BlockState state = bsi.get0(pos);
             VoxelShape shape = state.getShape(player.level(), pos);
             AABB toDraw = shape.isEmpty() ? Shapes.block().bounds() : shape.bounds();
-            toDraw = toDraw.move(pos);
-            IRenderer.emitAABB(bufferBuilder, stack, toDraw, .002D, settings.pathRenderLineWidthPixels.value);
+            boxes.add(toDraw.move(pos));
+        });
+        IRenderer.glow(settings.pathRenderLineWidthPixels.value, width -> {
+            for (AABB box : boxes) {
+                IRenderer.emitAABB(bufferBuilder, stack, box, .002D, width);
+            }
         });
 
         IRenderer.endLines(bufferBuilder, settings.renderSelectionBoxesIgnoreDepth.value);
@@ -314,16 +477,19 @@ public final class PathRenderer implements IRenderer {
             bufferBuilder = IRenderer.startLines(colorIn);
         }
 
-        renderHorizontalQuad(bufferBuilder, stack, minX, maxX, minZ, maxZ, y1, settings.goalRenderLineWidthPixels.value);
-        renderHorizontalQuad(bufferBuilder, stack, minX, maxX, minZ, maxZ, y2, settings.goalRenderLineWidthPixels.value);
+        final BufferBuilder bb = bufferBuilder;
+        IRenderer.glow(settings.goalRenderLineWidthPixels.value, width -> {
+            renderHorizontalQuad(bb, stack, minX, maxX, minZ, maxZ, y1, width);
+            renderHorizontalQuad(bb, stack, minX, maxX, minZ, maxZ, y2, width);
 
-        for (double y = minY; y < maxY; y += 16) {
-            double max = Math.min(maxY, y + 16);
-            IRenderer.emitLine(bufferBuilder, stack, minX, y, minZ, minX, max, minZ, 0.0, 1.0, 0.0, settings.goalRenderLineWidthPixels.value);
-            IRenderer.emitLine(bufferBuilder, stack, maxX, y, minZ, maxX, max, minZ, 0.0, 1.0, 0.0, settings.goalRenderLineWidthPixels.value);
-            IRenderer.emitLine(bufferBuilder, stack, maxX, y, maxZ, maxX, max, maxZ, 0.0, 1.0, 0.0, settings.goalRenderLineWidthPixels.value);
-            IRenderer.emitLine(bufferBuilder, stack, minX, y, maxZ, minX, max, maxZ, 0.0, 1.0, 0.0, settings.goalRenderLineWidthPixels.value);
-        }
+            for (double y = minY; y < maxY; y += 16) {
+                double max = Math.min(maxY, y + 16);
+                IRenderer.emitLine(bb, stack, minX, y, minZ, minX, max, minZ, 0.0, 1.0, 0.0, width);
+                IRenderer.emitLine(bb, stack, maxX, y, minZ, maxX, max, minZ, 0.0, 1.0, 0.0, width);
+                IRenderer.emitLine(bb, stack, maxX, y, maxZ, maxX, max, maxZ, 0.0, 1.0, 0.0, width);
+                IRenderer.emitLine(bb, stack, minX, y, maxZ, minX, max, maxZ, 0.0, 1.0, 0.0, width);
+            }
+        });
 
         if (setupRender) {
             IRenderer.endLines(bufferBuilder, settings.renderGoalIgnoreDepth.value);

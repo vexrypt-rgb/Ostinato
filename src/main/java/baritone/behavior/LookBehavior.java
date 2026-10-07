@@ -129,6 +129,23 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     private float velYaw, velPitch;
     private final java.util.Random handNoise = new java.util.Random();
 
+    /** Yaw speed of the simulated hand, degrees per tick, for predicting where the camera will be. */
+    public float yawVelocity() {
+        return velYaw;
+    }
+
+    /** One tick of the hand's yaw (the same model as {@link #humanStep}), for rollouts: returns the new camera yaw, speed in outVel[0]. */
+    public static float modelYawStep(float cam, float vel, float target, float[] outVel) {
+        float dy = net.minecraft.util.Mth.wrapDegrees(target - cam);
+        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float acc = 12f + Math.abs(dy) * 0.5f;
+        float out = vel + net.minecraft.util.Mth.clamp(want - vel, -acc, acc);
+        if (Math.abs(dy) <= 1.5f) out = dy;
+        if (Math.abs(dy) > 25f) out += vel * 0.12f;
+        outVel[0] = out;
+        return cam + out;
+    }
+
     /**
      * A hand does not jump to its target: the speed ramps up (limited acceleration), the move closes most of
      * the gap each tick (so a long flick still lands in a few ticks), carries a little momentum past the
