@@ -159,7 +159,7 @@ public final class PvpRecorder {
         StringBuilder fl = new StringBuilder();
         if (e.isBlocking()) fl.append('B');
         if (e.isUsingItem()) fl.append('U');
-        if (e.swinging) fl.append('S');
+        if (e.isSwinging()) fl.append('S');
         if (e.isSprinting()) fl.append('P');
         if (e.fallDistance > 1.5) fl.append('F');
         if (e.isInWater()) fl.append('W');

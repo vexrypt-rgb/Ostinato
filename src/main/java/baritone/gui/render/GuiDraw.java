@@ -20,7 +20,7 @@ package baritone.gui.render;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -28,7 +28,7 @@ import java.util.List;
 
 /**
  * Every draw call of the Ostinato GUI goes through here, and only vanilla facilities are used: coloured
- * quads through GuiGraphics.drawSpecial, the vanilla font, item icons and GL scissor. Rounded corners are stepped fills
+ * quads through GuiGraphicsExtractor.drawSpecial, the vanilla font, item icons and GL scissor. Rounded corners are stepped fills
  * at screen-pixel resolution (no textures, no anti-aliasing). Coordinates are GUI units and may be fractional.
  */
 public final class GuiDraw {
@@ -74,16 +74,16 @@ public final class GuiDraw {
 
     // ---------------------------------------------------------------- quads
 
-    /** Last GuiGraphics handed to a draw call; item icons and scissor use it. */
-    private static GuiGraphics cur;
+    /** Last GuiGraphicsExtractor handed to a draw call; item icons and scissor use it. */
+    private static GuiGraphicsExtractor cur;
 
-    private static void quads(GuiGraphics g, Runnable q) {
+    private static void quads(GuiGraphicsExtractor g, Runnable q) {
         cur = g;
         q.run();
     }
 
     /** Fractional-coordinate fill: the pose matrix carries the sub-pixel placement. */
-    private static void quad(GuiGraphics g, float x1, float y1, float x2, float y2, int tl, int tr, int br, int bl) {
+    private static void quad(GuiGraphicsExtractor g, float x1, float y1, float x2, float y2, int tl, int tr, int br, int bl) {
         if (x2 <= x1 || y2 <= y1) {
             return;
         }
@@ -118,24 +118,24 @@ public final class GuiDraw {
         g.pose().popMatrix();
     }
 
-    public static void rect(GuiGraphics ms, float x1, float y1, float x2, float y2, int argb) {
+    public static void rect(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, int argb) {
         gradient(ms, x1, y1, x2, y2, argb, argb, argb, argb);
     }
 
-    public static void gradV(GuiGraphics ms, float x1, float y1, float x2, float y2, int top, int bottom) {
+    public static void gradV(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, int top, int bottom) {
         gradient(ms, x1, y1, x2, y2, top, top, bottom, bottom);
     }
 
-    public static void gradH(GuiGraphics ms, float x1, float y1, float x2, float y2, int left, int right) {
+    public static void gradH(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, int left, int right) {
         gradient(ms, x1, y1, x2, y2, left, right, right, left);
     }
 
-    private static void gradient(GuiGraphics ms, float x1, float y1, float x2, float y2, int tl, int tr, int br, int bl) {
+    private static void gradient(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, int tl, int tr, int br, int bl) {
         quads(ms, () -> quad(ms, x1, y1, x2, y2, tl, tr, br, bl));
     }
 
     /** Rounded rectangle, solid. */
-    public static void round(GuiGraphics ms, float x1, float y1, float x2, float y2, float r, int argb) {
+    public static void round(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, float r, int argb) {
         round(ms, x1, y1, x2, y2, r, argb, argb);
     }
 
@@ -143,7 +143,7 @@ public final class GuiDraw {
      * Rounded rectangle with a vertical gradient. Corners are cut per screen-pixel row, so they stay crisp at
      * any GUI scale.
      */
-    public static void round(GuiGraphics ms, float x1, float y1, float x2, float y2, float r, int top, int bottom) {
+    public static void round(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, float r, int top, int bottom) {
         if (x2 <= x1 || y2 <= y1) {
             return;
         }
@@ -169,17 +169,17 @@ public final class GuiDraw {
     }
 
     /** 1-screen-pixel-ish border (half a GUI unit) around a filled rounded rect. */
-    public static void roundBorder(GuiGraphics ms, float x1, float y1, float x2, float y2, float r, int border, int top, int bottom) {
+    public static void roundBorder(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, float r, int border, int top, int bottom) {
         round(ms, x1, y1, x2, y2, r, border);
         round(ms, x1 + 0.5f, y1 + 0.5f, x2 - 0.5f, y2 - 0.5f, Math.max(0, r - 0.5f), top, bottom);
     }
 
-    public static void roundBorder(GuiGraphics ms, float x1, float y1, float x2, float y2, float r, int border, int fill) {
+    public static void roundBorder(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, float r, int border, int fill) {
         roundBorder(ms, x1, y1, x2, y2, r, border, fill, fill);
     }
 
     /** Soft drop shadow from stacked low-alpha rounded rects. */
-    public static void shadow(GuiGraphics ms, float x1, float y1, float x2, float y2, float r, int size, int maxAlpha) {
+    public static void shadow(GuiGraphicsExtractor ms, float x1, float y1, float x2, float y2, float r, int size, int maxAlpha) {
         for (int i = size; i > 0; i--) {
             float f = 1f - i / (float) (size + 1);
             int a = Math.round(maxAlpha * f * f / 2.2f);
@@ -187,7 +187,7 @@ public final class GuiDraw {
         }
     }
 
-    public static void icon(GuiGraphics ms, String[] rows, float x, float y, int argb, float k) {
+    public static void icon(GuiGraphicsExtractor ms, String[] rows, float x, float y, int argb, float k) {
         quads(ms, () -> {
         for (int j = 0; j < rows.length; j++) {
             String row = rows[j];
@@ -213,11 +213,11 @@ public final class GuiDraw {
     }
 
     /** Draws text; returns its width in GUI units. */
-    public static float text(GuiGraphics ms, String s, float x, float y, int argb, boolean shadow) {
+    public static float text(GuiGraphicsExtractor ms, String s, float x, float y, int argb, boolean shadow) {
         return text(ms, s, x, y, 1f, argb, shadow, false);
     }
 
-    public static float text(GuiGraphics ms, String s, float x, float y, float k, int argb, boolean shadow, boolean bold) {
+    public static float text(GuiGraphicsExtractor ms, String s, float x, float y, float k, int argb, boolean shadow, boolean bold) {
         int c = withAlpha(argb);
         String str = bold ? BOLD + s : s;
         if (((c >>> 24) & 0xFF) >= 6) { // the font renders alpha < 4 as opaque
@@ -227,14 +227,14 @@ public final class GuiDraw {
             if (k != 1f) {
                 ms.pose().scale(k, k);
             }
-            ms.drawString(font(), str, 0, 0, c, shadow);
+            ms.text(font(), str, 0, 0, c, shadow);
             ms.pose().popMatrix();
         }
         return font().width(str) * k;
     }
 
     /** Per-character colours (used for the gradient logo). */
-    public static float textColors(GuiGraphics ms, String s, float x, float y, float k, boolean bold, int[] colors, boolean shadow) {
+    public static float textColors(GuiGraphicsExtractor ms, String s, float x, float y, float k, boolean bold, int[] colors, boolean shadow) {
         float cx = x;
         for (int i = 0; i < s.length(); i++) {
             String ch = String.valueOf(s.charAt(i));
@@ -285,12 +285,12 @@ public final class GuiDraw {
         cur.pose().pushMatrix();
         cur.pose().translate(x, y);
         cur.pose().scale(size / 16f, size / 16f);
-        cur.renderItem(stack, 0, 0);
+        cur.item(stack, 0, 0);
         cur.pose().popMatrix();
     }
 
     /** Clip to a GUI-space rectangle. */
-    private static GuiGraphics scissorOwner;
+    private static GuiGraphicsExtractor scissorOwner;
     private static int scissorDepth;
 
     public static void scissor(float x1, float y1, float x2, float y2) {
@@ -304,7 +304,7 @@ public final class GuiDraw {
         }
     }
 
-    /** GuiGraphics throws on an unbalanced pop, where GL scissor was forgiving; only pop what we pushed. */
+    /** GuiGraphicsExtractor throws on an unbalanced pop, where GL scissor was forgiving; only pop what we pushed. */
     public static void endScissor() {
         if (cur != null && cur == scissorOwner && scissorDepth > 0) {
             scissorDepth--;

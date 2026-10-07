@@ -17,45 +17,13 @@
 
 package baritone.launch.mixins;
 
-import baritone.Baritone;
-import baritone.behavior.FreecamBehavior;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.state.CameraRenderState;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+/**
+ * 26.x draws entities through the submit/collector pipeline, so the 1.21.x ghost tint constant no longer
+ * exists; freecamGhostOpacity is not applied on this version.
+ */
 @Mixin(LivingEntityRenderer.class)
 public class MixinLivingEntityRenderer {
-
-    @Unique
-    private boolean baritone$ghost;
-
-    @Inject(
-            method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/CameraRenderState;)V",
-            at = @At("HEAD")
-    )
-    private void markGhost(LivingEntityRenderState state, PoseStack pose, SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo ci) {
-        baritone$ghost = FreecamBehavior.activeCamera() != null && state == FreecamBehavior.ghostState;
-    }
-
-    // Vanilla draws invisible-but-seen bodies at a fixed 15% alpha; the freecam ghost uses freecamGhostOpacity.
-    @ModifyConstant(
-            method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/CameraRenderState;)V",
-            constant = @Constant(intValue = 654311423)
-    )
-    private int ghostTint(int tint) {
-        if (!baritone$ghost) {
-            return tint;
-        }
-        float a = Math.max(0f, Math.min(1f, Baritone.settings().freecamGhostOpacity.value));
-        return (Math.round(a * 255) << 24) | 0xFFFFFF;
-    }
 }

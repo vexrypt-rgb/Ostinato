@@ -18,6 +18,7 @@
 
 package baritone.gui.screen;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.utils.BetterBlockPos;
@@ -32,9 +33,8 @@ import baritone.gui.tasks.TaskList;
 import baritone.gui.tasks.TaskRunner;
 import baritone.gui.tasks.TaskStep;
 import baritone.gui.tasks.game.TaskService;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 import java.util.Locale;
@@ -125,7 +125,7 @@ final class TasksPanel {
 
     // ------------------------------------------------------------------ draw
 
-    void draw(GuiGraphics ms, int mx, int my, int accent, long now) {
+    void draw(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         TaskList l = list();
         TaskRunner r = runner();
         float tw = GuiDraw.text(ms, "Tasks", px0, top + 9, 1f, Theme.TEXT, true, true);
@@ -184,7 +184,7 @@ final class TasksPanel {
         }
     }
 
-    private void drawControlBar(GuiGraphics ms, int mx, int my, int accent, long now) {
+    private void drawControlBar(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         TaskRunner r = runner();
         float cb0 = top + 26;
         GuiDraw.round(ms, px0, cb0, px1, cb0 + 20, 3, 0x0AFFFFFF);
@@ -262,7 +262,7 @@ final class TasksPanel {
         return s < 60 ? s + "s" : (s / 60) + "m " + String.format(Locale.ROOT, "%02ds", s % 60);
     }
 
-    private float barButton(GuiGraphics ms, String label, String[] icon, float x, float cb0, boolean enabled, boolean danger, int mx, int my) {
+    private float barButton(GuiGraphicsExtractor ms, String label, String[] icon, float x, float cb0, boolean enabled, boolean danger, int mx, int my) {
         float w = GuiDraw.width(label) + 25;
         boolean h = enabled && OstinatoScreen.in(mx, my, x, cb0 + 3, x + w, cb0 + 17);
         int col;
@@ -278,7 +278,7 @@ final class TasksPanel {
         return x + w;
     }
 
-    private float smallButton(GuiGraphics ms, String label, float xr, float y, int mx, int my, int textColor) {
+    private float smallButton(GuiGraphicsExtractor ms, String label, float xr, float y, int mx, int my, int textColor) {
         float w = GuiDraw.width(label) + 16, x0 = xr - w;
         boolean h = OstinatoScreen.in(mx, my, x0, y, xr, y + 14);
         GuiDraw.roundBorder(ms, x0, y, xr, y + 14, 3, h ? 0xFF3E4860 : Theme.FIELD_BORDER, h ? 0xFF1C2230 : 0xFF161B25);
@@ -312,7 +312,7 @@ final class TasksPanel {
         return px1 - 14 - 4 * 13;
     }
 
-    private void drawRow(GuiGraphics ms, int i, float ry, int mx, int my, int accent, long now) {
+    private void drawRow(GuiGraphicsExtractor ms, int i, float ry, int mx, int my, int accent, long now) {
         TaskStep s = list().get(i);
         TaskRunner r = runner();
         TaskRunner.StepStatus st = r.list() == null ? TaskRunner.StepStatus.PENDING : r.status(i);
@@ -420,7 +420,7 @@ final class TasksPanel {
         }
     }
 
-    private void drawDropdown(GuiGraphics ms, int mx, int my, int accent, float lx0, float lx1) {
+    private void drawDropdown(GuiGraphicsExtractor ms, int mx, int my, int accent, float lx0, float lx1) {
         List<String> names = svc.files().list();
         int n = Math.min(10, names.size());
         float y0 = top + 21, h = Math.max(1, n) * 12 + 4;
@@ -760,15 +760,15 @@ final class TasksPanel {
 
     /** Keys while a field of this panel is focused. */
     boolean keyPressed(int key) {
-        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+        if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
             commit();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == InputConstants.KEY_ESCAPE) {
             cancelEdit();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_TAB && editStep >= 0 && editStep < list().size()) {
+        if (key == InputConstants.KEY_TAB && editStep >= 0 && editStep < list().size()) {
             // next editable field in the row (wraps to the next row)
             int step = editStep;
             String k = editKey;

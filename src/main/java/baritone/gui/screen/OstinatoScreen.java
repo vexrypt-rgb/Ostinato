@@ -18,6 +18,7 @@
 
 package baritone.gui.screen;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.Settings;
@@ -30,14 +31,13 @@ import baritone.gui.model.*;
 import baritone.gui.render.GuiDraw;
 import baritone.gui.render.Icons;
 import baritone.gui.tasks.game.TaskService;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.util.StringUtil;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.awt.Color;
 import java.util.*;
@@ -464,7 +464,7 @@ public final class OstinatoScreen extends Screen {
     // ------------------------------------------------------------------ render
 
     @Override
-    public void render(GuiGraphics ms, int mouseX, int mouseY, float partialTicks) {
+    public void extractRenderState(GuiGraphicsExtractor ms, int mouseX, int mouseY, float partialTicks) {
         layout();
         float a = open.target(1f).get();
         GuiDraw.alpha = a;
@@ -476,7 +476,7 @@ public final class OstinatoScreen extends Screen {
         }
     }
 
-    private void draw(GuiGraphics ms, int mx, int my) {
+    private void draw(GuiGraphicsExtractor ms, int mx, int my) {
         int accent = Theme.accent();
         long now = System.currentTimeMillis();
         GuiDraw.gradV(ms, 0, 0, width, height, 0x8C07090D, 0xB407090D);
@@ -499,7 +499,7 @@ public final class OstinatoScreen extends Screen {
         }
     }
 
-    private void drawHeader(GuiGraphics ms, int mx, int my, int accent, long now) {
+    private void drawHeader(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
         float lw = GuiDraw.textColors(ms, "Ostinato", x0 + 28, y0 + 9, 1.5f, true, Theme.logoColors(accent, 8), true);
         String chip = "Baritone 1.16.1";
@@ -531,7 +531,7 @@ public final class OstinatoScreen extends Screen {
     }
 
     /** Text with caret / selection, scrolled so the caret stays visible. */
-    void drawInput(GuiGraphics ms, TextInput in, float x, float y, float maxW, boolean focused, int accent, long now) {
+    void drawInput(GuiGraphicsExtractor ms, TextInput in, float x, float y, float maxW, boolean focused, int accent, long now) {
         String t = in.get();
         String before = t.substring(0, in.caret());
         int start = 0;
@@ -558,7 +558,7 @@ public final class OstinatoScreen extends Screen {
         return t;
     }
 
-    private void drawSidebar(GuiGraphics ms, int mx, int my, int accent) {
+    private void drawSidebar(GuiGraphicsExtractor ms, int mx, int my, int accent) {
         GuiDraw.rect(ms, x0 + 0.5f, hb + 1, sbx1, fy, 0x70080A0F);
         GuiDraw.rect(ms, sbx1, hb + 1, sbx1 + 1, fy, 0x12FFFFFF);
         GuiDraw.scissor(x0, hb + 1, sbx1, fy);
@@ -621,7 +621,7 @@ public final class OstinatoScreen extends Screen {
         return n;
     }
 
-    private float sideItem(GuiGraphics ms, float iy, String label, int count, ItemStack icon, boolean sel, Anim hov,
+    private float sideItem(GuiGraphicsExtractor ms, float iy, String label, int count, ItemStack icon, boolean sel, Anim hov,
                            int mx, int my, int accent, boolean special, boolean live) {
         float ix0 = x0 + 6, ix1 = sbx1 - 6, h = sideH;
         float hv = hov.target(in(mx, my, ix0, iy, ix1, iy + h)).get();
@@ -679,7 +679,7 @@ public final class OstinatoScreen extends Screen {
 
     private int dropScroll;
 
-    private void drawDropdown(GuiGraphics ms, int mx, int my, int accent) {
+    private void drawDropdown(GuiGraphicsExtractor ms, int mx, int my, int accent) {
         if (dropdown == null) {
             return;
         }
@@ -719,7 +719,7 @@ public final class OstinatoScreen extends Screen {
         return in(mx, my, cx - controlWidth(e.kind), cyc - 7, cx, cyc + 7);
     }
 
-    private Entry drawContent(GuiGraphics ms, int mx, int my, int accent, long now) {
+    private Entry drawContent(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         if (showTasks()) {
             tasks.layout(px0, px1, hb, fy);
             tasks.draw(ms, mx, my, accent, now);
@@ -787,7 +787,7 @@ public final class OstinatoScreen extends Screen {
         return hov;
     }
 
-    private void drawRow(GuiGraphics ms, Entry e, float ry, boolean hov, int mx, int my, int accent, long now, boolean searching) {
+    private void drawRow(GuiGraphicsExtractor ms, Entry e, float ry, boolean hov, int mx, int my, int accent, long now, boolean searching) {
         float hv = e.hover.target(hov).get();
         boolean mod = isModified(e);
         float rb = ry + ROW_H - 2;
@@ -889,7 +889,7 @@ public final class OstinatoScreen extends Screen {
         }
     }
 
-    private void valueBox(GuiGraphics ms, float bx0, float cyc, float bx1, String v, int mx, int my) {
+    private void valueBox(GuiGraphicsExtractor ms, float bx0, float cyc, float bx1, String v, int mx, int my) {
         boolean h = in(mx, my, bx0, cyc - 7, bx1, cyc + 7);
         GuiDraw.roundBorder(ms, bx0, cyc - 7, bx1, cyc + 7, 3, h ? 0xFF3E4860 : Theme.FIELD_BORDER, Theme.FIELD);
         String s = GuiDraw.trim(v, bx1 - bx0 - 8, 1f);
@@ -910,14 +910,14 @@ public final class OstinatoScreen extends Screen {
         return String.valueOf(v);
     }
 
-    private float badge(GuiGraphics ms, float bx, float ry, String label, int col, int bg) {
+    private float badge(GuiGraphicsExtractor ms, float bx, float ry, String label, int col, int bg) {
         float w = GuiDraw.width(label, 0.5f, false) + 6;
         GuiDraw.round(ms, bx, ry + 4.5f, bx + w, ry + 11.5f, 1.5f, bg);
         GuiDraw.text(ms, label, bx + 3, ry + 6, 0.5f, col, false, false);
         return bx + w + 3;
     }
 
-    private void drawFooter(GuiGraphics ms, int mx, int my, int accent, long now) {
+    private void drawFooter(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         GuiDraw.rect(ms, x0 + 1, fy, x1 - 1, fy + 1, 0x12FFFFFF);
         float ty = fy + 9;
         float fx = x0 + 12;
@@ -987,7 +987,7 @@ public final class OstinatoScreen extends Screen {
         return GuiDraw.width(label, 0.5f, false) + GuiDraw.width(k, 0.5f, false) + 6 + 3 + 8;
     }
 
-    private float hint(GuiGraphics ms, float bxr, String k, String label) {
+    private float hint(GuiGraphicsExtractor ms, float bxr, String k, String label) {
         float lw = GuiDraw.width(label, 0.5f, false), kw = GuiDraw.width(k, 0.5f, false) + 6;
         bxr -= lw;
         GuiDraw.text(ms, label, bxr, fy + 10, 0.5f, Theme.DIM, false, false);
@@ -997,7 +997,7 @@ public final class OstinatoScreen extends Screen {
         return bxr - 8;
     }
 
-    private float button(GuiGraphics ms, String label, float xr, boolean primary, int mx, int my, int accent) {
+    private float button(GuiGraphicsExtractor ms, String label, float xr, boolean primary, int mx, int my, int accent) {
         float w = GuiDraw.width(label) + 16, bx0 = xr - w;
         boolean h = in(mx, my, bx0, fy + 5, xr, fy + 19);
         if (primary) {
@@ -1011,7 +1011,7 @@ public final class OstinatoScreen extends Screen {
         return bx0;
     }
 
-    private void drawTooltip(GuiGraphics ms, Entry e, int mx, int my, int accent) {
+    private void drawTooltip(GuiGraphicsExtractor ms, Entry e, int mx, int my, int accent) {
         float tw = 200;
         List<String> lines = GuiDraw.wrap(e.doc.isEmpty() ? "No description." : e.doc, tw - 16, 1f);
         if (lines.size() > 8) {
@@ -1056,7 +1056,7 @@ public final class OstinatoScreen extends Screen {
         ms.pose().popMatrix();
     }
 
-    private float kv(GuiGraphics ms, String k, String v, float x, float y, int col) {
+    private float kv(GuiGraphicsExtractor ms, String k, String v, float x, float y, int col) {
         float kw = GuiDraw.text(ms, k, x, y + 1, 0.5f, Theme.DIM, false, false);
         return x + kw + 4 + GuiDraw.text(ms, v, x + kw + 4, y, col, false);
     }
@@ -1390,12 +1390,12 @@ public final class OstinatoScreen extends Screen {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent ev) {
         int key = ev.key();
         curKey = ev;
-        if (dropdown != null && key == GLFW.GLFW_KEY_ESCAPE) {
+        if (dropdown != null && key == InputConstants.KEY_ESCAPE) {
             dropdown = null;
             return true;
         }
         if (capturing != null) {
-            if (key != GLFW.GLFW_KEY_ESCAPE) {
+            if (key != InputConstants.KEY_ESCAPE) {
                 setRaw(capturing, KeyNames.name(key));
                 flash("Settings screen key is now " + KeyNames.name(key), accentOrMuted());
             }
@@ -1405,27 +1405,27 @@ public final class OstinatoScreen extends Screen {
         if (tasks.editing()) {
             return tasks.keyPressed(key);
         }
-        if (showTasks() && key == GLFW.GLFW_KEY_S && Keys.ctrl()) {
+        if (showTasks() && key == InputConstants.KEY_S && Keys.ctrl()) {
             tasks.save();
             return true;
         }
         if (editing != null) {
-            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 commitEditor();
-            } else if (key == GLFW.GLFW_KEY_ESCAPE) {
+            } else if (key == InputConstants.KEY_ESCAPE) {
                 cancelEditor();
             } else {
                 editKey(editor, key);
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_F && Keys.ctrl()) {
+        if (key == InputConstants.KEY_F && Keys.ctrl()) {
             searchFocused = true;
             search.selectAll();
             return true;
         }
         if (searchFocused) {
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 if (!search.isEmpty()) {
                     search.set("");
                     rebuild();
@@ -1434,7 +1434,7 @@ public final class OstinatoScreen extends Screen {
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER || key == GLFW.GLFW_KEY_TAB) {
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER || key == InputConstants.KEY_TAB) {
                 searchFocused = false;
                 return true;
             }
@@ -1446,18 +1446,18 @@ public final class OstinatoScreen extends Screen {
                 return true;
             }
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE || key == KeyNames.parse(settings.guiKeybind.value)) {
+        if (key == InputConstants.KEY_ESCAPE || key == KeyNames.parse(settings.guiKeybind.value)) {
             onClose();
             return true;
         }
         float page = listBottom - ry0 - ROW_H;
         switch (key) {
-            case GLFW.GLFW_KEY_PAGE_DOWN: scrollTarget = Math.min(maxScroll(), scrollTarget + page); return true;
-            case GLFW.GLFW_KEY_PAGE_UP: scrollTarget = Math.max(0, scrollTarget - page); return true;
-            case GLFW.GLFW_KEY_DOWN: scrollTarget = Math.min(maxScroll(), scrollTarget + ROW_H); return true;
-            case GLFW.GLFW_KEY_UP: scrollTarget = Math.max(0, scrollTarget - ROW_H); return true;
-            case GLFW.GLFW_KEY_HOME: scrollTarget = 0; return true;
-            case GLFW.GLFW_KEY_END: scrollTarget = maxScroll(); return true;
+            case InputConstants.KEY_PAGEDOWN: scrollTarget = Math.min(maxScroll(), scrollTarget + page); return true;
+            case InputConstants.KEY_PAGEUP: scrollTarget = Math.max(0, scrollTarget - page); return true;
+            case InputConstants.KEY_DOWN: scrollTarget = Math.min(maxScroll(), scrollTarget + ROW_H); return true;
+            case InputConstants.KEY_UP: scrollTarget = Math.max(0, scrollTarget - ROW_H); return true;
+            case InputConstants.KEY_HOME: scrollTarget = 0; return true;
+            case InputConstants.KEY_END: scrollTarget = maxScroll(); return true;
             default: return super.keyPressed(curKey);
         }
     }
@@ -1470,20 +1470,20 @@ public final class OstinatoScreen extends Screen {
 
     /** Shared editing keys for the search box and inline editors; true if handled. */
     boolean editKey(TextInput in, int key) {
-        if (Keys.ctrl() && key == GLFW.GLFW_KEY_A) {
+        if (Keys.ctrl() && key == InputConstants.KEY_A) {
             in.selectAll();
-        } else if (Keys.ctrl() && key == GLFW.GLFW_KEY_V) {
+        } else if (Keys.ctrl() && key == InputConstants.KEY_V) {
             in.insert(minecraft.keyboardHandler.getClipboard());
-        } else if (Keys.ctrl() && key == GLFW.GLFW_KEY_C) {
+        } else if (Keys.ctrl() && key == InputConstants.KEY_C) {
             minecraft.keyboardHandler.setClipboard(in.get());
         } else {
             switch (key) {
-                case GLFW.GLFW_KEY_BACKSPACE: in.backspace(); break;
-                case GLFW.GLFW_KEY_DELETE: in.delete(); break;
-                case GLFW.GLFW_KEY_LEFT: in.left(); break;
-                case GLFW.GLFW_KEY_RIGHT: in.right(); break;
-                case GLFW.GLFW_KEY_HOME: in.home(); break;
-                case GLFW.GLFW_KEY_END: in.end(); break;
+                case InputConstants.KEY_BACKSPACE: in.backspace(); break;
+                case InputConstants.KEY_DELETE: in.delete(); break;
+                case InputConstants.KEY_LEFT: in.left(); break;
+                case InputConstants.KEY_RIGHT: in.right(); break;
+                case InputConstants.KEY_HOME: in.home(); break;
+                case InputConstants.KEY_END: in.end(); break;
                 default: return false;
             }
         }

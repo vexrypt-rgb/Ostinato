@@ -28,19 +28,20 @@ import baritone.api.command.manager.ICommandManager;
 import baritone.api.event.events.ChatEvent;
 import baritone.api.event.events.TabCompleteEvent;
 import baritone.api.utils.Helper;
+import baritone.api.utils.Pair;
 import baritone.api.utils.SettingsUtil;
 import baritone.behavior.Behavior;
 import baritone.command.argument.ArgConsumer;
 import baritone.command.argument.CommandArguments;
 import baritone.command.manager.CommandManager;
+import com.mojang.blaze3d.Blaze3D;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Tuple;
-import net.minecraft.util.Util;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
@@ -66,7 +67,7 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
             event.cancel();
             String commandStr = msg.substring(forceRun ? FORCE_COMMAND_PREFIX.length() : prefix.length());
             if (!runCommand(commandStr) && !commandStr.trim().isEmpty()) {
-                new CommandNotFoundException(CommandManager.expand(commandStr).getA()).handle(null, null);
+                new CommandNotFoundException(CommandManager.expand(commandStr).first()).handle(null, null);
             }
         } else if ((settings.chatControl.value || settings.chatControlAnyway.value) && runCommand(msg)) {
             event.cancel();
@@ -96,17 +97,17 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
             return false;
         } else if (msg.trim().equalsIgnoreCase("orderpizza")) {
             try {
-                Util.getPlatform().openUri("https://www.dominos.com/en/pages/order/");
+                Blaze3D.openUri(URI.create("https://www.dominos.com/en/pages/order/"));
             } catch (Exception ignored) {}
             return false;
         }
         if (msg.isEmpty()) {
             return this.runCommand("help");
         }
-        Tuple<String, List<ICommandArgument>> pair = CommandManager.expand(msg);
-        String command = pair.getA();
-        String rest = msg.substring(pair.getA().length());
-        ArgConsumer argc = new ArgConsumer(this.manager, pair.getB());
+        Pair<String, List<ICommandArgument>> pair = CommandManager.expand(msg);
+        String command = pair.first();
+        String rest = msg.substring(pair.first().length());
+        ArgConsumer argc = new ArgConsumer(this.manager, pair.second());
         if (!argc.hasAny()) {
             Settings.Setting setting = settings.byLowerName.get(command.toLowerCase(Locale.US));
             if (setting != null) {
@@ -123,7 +124,7 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
                 if (setting.isJavaOnly()) {
                     continue;
                 }
-                if (setting.getName().equalsIgnoreCase(pair.getA())) {
+                if (setting.getName().equalsIgnoreCase(pair.first())) {
                     logRanCommand(command, rest);
                     try {
                         this.manager.execute(String.format("set %s %s", setting.getName(), argc.getString()));
@@ -134,7 +135,7 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
         }
 
         // If the command exists, then handle echoing the input
-        if (this.manager.getCommand(pair.getA()) != null) {
+        if (this.manager.getCommand(pair.first()) != null) {
             logRanCommand(command, rest);
         }
 

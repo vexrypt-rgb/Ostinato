@@ -109,7 +109,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         lastFrameNanos = now;
         net.minecraft.client.player.LocalPlayer p = ctx.player();
         if (frameGoal == null || p == null || ticks <= 0) return;
-        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().screen != null) {
+        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) {
             frameGoal = null;
             return;
         }

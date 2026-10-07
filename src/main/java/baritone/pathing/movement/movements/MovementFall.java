@@ -340,7 +340,7 @@ public class MovementFall extends Movement {
         if (boat != null) {
             state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(boat.getX(), boat.getY() + 0.3, boat.getZ()), ctx.playerRotations()), true));
             if (boatTicks % 4 == 3) {
-                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.player(), boat, InteractionHand.MAIN_HAND);
+                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.player(), boat, new net.minecraft.world.phys.EntityHitResult(boat), InteractionHand.MAIN_HAND);
                 if (boatTicks % 40 == 3) logDebug("boat fall: board " + r + " riding=" + ctx.player().getVehicle());
             }
             return state;

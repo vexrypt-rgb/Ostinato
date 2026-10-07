@@ -2,7 +2,7 @@ package baritone.process;
 
 import baritone.api.utils.IPlayerContext;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -155,16 +155,16 @@ final class CombatInventory {
     /** A swap through the inventory screen: opened on one tick, clicked on a later one, then closed. */
     boolean invSwap(Player me, int menuSlot, int button) {
         net.minecraft.client.Minecraft mc = ctx.minecraft();
-        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
-            if (mc.screen == null) {
-                mc.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(me));
+        if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
+            if (mc.gui.screen() == null) {
+                mc.gui.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(me));
                 invTick = me.tickCount;
             }
             return false;
         }
         if (me.tickCount <= invTick) return false;
-        ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, button, ClickType.SWAP, me);
-        mc.setScreen(null);
+        ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, button, ContainerInput.SWAP, me);
+        mc.gui.setScreen(null);
         return true;
     }
 }

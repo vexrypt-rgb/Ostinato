@@ -24,7 +24,7 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -58,7 +58,7 @@ public final class BoatUtil {
             for (int j = 0; j < 9; j++) {
                 if (inv.get(j).isEmpty()) { hb = j; break; }
             }
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, hb, ClickType.SWAP, ctx.player());
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, hb, ContainerInput.SWAP, ctx.player());
             borrowed = new int[]{i, hb};
             return hb;
         }
@@ -69,7 +69,7 @@ public final class BoatUtil {
     public static void restore(IPlayerContext ctx) {
         if (borrowed == null || ctx.player() == null) return;
         if (!(ctx.player().getInventory().getNonEquipmentItems().get(borrowed[1]).getItem() instanceof BoatItem)) {
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, borrowed[0], borrowed[1], ClickType.SWAP, ctx.player());
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, borrowed[0], borrowed[1], ContainerInput.SWAP, ctx.player());
         }
         borrowed = null;
     }

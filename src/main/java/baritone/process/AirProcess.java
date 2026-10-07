@@ -377,7 +377,7 @@ public final class AirProcess extends BaritoneProcessHelper {
             breakStarted = true;
         }
         ctx.playerController().onPlayerDamageBlock(top, Direction.UP);
-        ctx.player().swing(InteractionHand.MAIN_HAND);
+        ctx.player().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         return pause;
     }
 

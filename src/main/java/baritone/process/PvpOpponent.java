@@ -77,7 +77,7 @@ final class PvpOpponent {
         }
         using = use;
 
-        boolean sw = tg.swinging;
+        boolean sw = tg.isSwinging();
         if (sw && !swinging) {
             swings++;
             int gap = tick - lastSwing;
