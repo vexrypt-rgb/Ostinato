@@ -26,6 +26,7 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 - **Soprano-style movement** (ideas from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken; ladder clutch ported from it) found by simulation: ladder and vine jumps (`allowClimbJumps`), chained
   jumps through a pad, ladder clutch (`allowLadderClutch`, `pickupLadders`) and the
   `experimentalMovement` preset. Not yet tried in a live game.
+- **Minecraft 26.3 now carries the full Ostinato feature set** (GUI, PvP, kinematic travel, boats, freecam, swarm). Not yet played in a world; `freecamGhostOpacity` has no effect there.
 - **Freecam physics** (1.21.4 and 1.21.11; 1.16.1 already had it): the freecam camera now moves like a player: ice and slime slipperiness, slime bounce, soul sand, cobwebs, ladders and vines, swimming in water and lava, and a 0.6 step-up.
 - **Per-version overlay system** (`versions/<mc>/`, `scripts/use-version.sh`): one base tree with a small set of
   files overridden per Minecraft version, with a CI matrix that builds each one.
