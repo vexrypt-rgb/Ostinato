@@ -386,7 +386,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         return (facing == playerFacing) == open;
     }
 
-    static boolean avoidWalkingInto(BlockState state) {
+    public static boolean avoidWalkingInto(BlockState state) {
         Block block = state.getBlock();
         return !state.getFluidState().isEmpty()
                 || (block == Blocks.MAGMA_BLOCK && !Baritone.settings().allowWalkOnMagmaBlocks.value)

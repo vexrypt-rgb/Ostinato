@@ -132,6 +132,7 @@ public class Baritone implements IBaritone {
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
+            baritone.process.SimBench.install(this);
         }
 
         this.worldProvider = new WorldProvider(this);

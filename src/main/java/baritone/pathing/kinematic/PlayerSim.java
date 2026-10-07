@@ -5,8 +5,8 @@ import java.util.List;
 
 /**
  * Allocation-light copy of vanilla 1.16 player movement (LivingEntity.travel + Entity.move) for
- * look-ahead search. Covers walking, sprinting, jumping, step-up and block collision, plus still water via
- * {@link #tickWater}; no lava, currents, ladders, sneaking or potion effects.
+ * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision, ladders/vines and still water via
+ * {@link #tickWater}; no lava, currents, sneaking or potion effects.
  */
 public final class PlayerSim {
 
@@ -25,11 +25,17 @@ public final class PlayerSim {
         default boolean water(int x, int y, int z) {
             return false;
         }
+
+        /** Ladder, vine or anything else the player can hang on to. */
+        default boolean climbable(int x, int y, int z) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
     public static final double HEIGHT = 1.8f;
     public static final double STEP = 0.6;
+    private static final double CLIMB_LIMIT = 0.15, CLIMB_SPEED = 0.2;
 
     public double x, y, z, vx, vy, vz;
     public boolean onGround, sprinting, collidedH, swimming;
@@ -102,7 +108,15 @@ public final class PlayerSim {
             vx += fx * cos - fz * sin;
             vz += fz * cos + fx * sin;
         }
+        if (climbable()) { // LivingEntity.handleOnClimbableSpeed
+            vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
+            vz = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vz));
+            vy = Math.max(vy, -CLIMB_LIMIT);
+        }
         move(vx, vy, vz);
+        if ((collidedH || jump) && climbable()) {
+            vy = CLIMB_SPEED; // pressing into the wall or holding jump climbs
+        }
         vy = (vy - 0.08) * 0.98;
         vx *= slip;
         vz *= slip;
@@ -160,6 +174,11 @@ public final class PlayerSim {
                 vy = 0.3;
             }
         }
+    }
+
+    /** Whether the cell the player's feet are in can be hung on to. */
+    public boolean climbable() {
+        return world.climbable(floor(x), floor(y), floor(z));
     }
 
     private void move(double dx, double dy, double dz) {

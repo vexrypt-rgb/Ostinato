@@ -1,5 +1,6 @@
 package baritone.pathing.kinematic;
 
+import baritone.utils.ExperimentalMovement;
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -103,7 +104,7 @@ public final class KinematicController {
     }
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
-        if (!Baritone.settings().kinematicTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
+        if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
                 || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
                 || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
             return -1;

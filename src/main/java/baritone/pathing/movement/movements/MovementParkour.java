@@ -58,6 +58,8 @@ public class MovementParkour extends Movement {
 
     private final Direction direction;
     private final int dist;
+    /** Backed up a block for the 4 block gap's run-up. */
+    private boolean ranUp;
     private final boolean ascend;
     /** Blocks laid in front of the edge before the jump: one turns a 5 block gap into a 4 block one, two a 6 block gap. */
     private final int ext;
@@ -78,6 +80,9 @@ public class MovementParkour extends Movement {
         return ext;
     }
 
+    /** Test hook: SimBench turns plain parkour off so the template movements are what gets exercised. */
+    public static volatile boolean disabled;
+
     public static MovementParkour cost(CalculationContext context, BetterBlockPos src, Direction direction) {
         MutableMoveResult res = new MutableMoveResult();
         cost(context, src.x, src.y, src.z, direction, res);
@@ -86,7 +91,7 @@ public class MovementParkour extends Movement {
     }
 
     public static void cost(CalculationContext context, int x, int y, int z, Direction dir, MutableMoveResult res) {
-        if (!context.allowParkour) {
+        if (!context.allowParkour || disabled) {
             return;
         }
         if (!context.allowJumpAtBuildLimit && y >= context.world.getMaxY()) {
@@ -433,6 +438,25 @@ public class MovementParkour extends Movement {
             backed = true;
         }
 
+        if (dist == 5 && !ascend && !ranUp) {
+            // a 4 block gap needs a run-up of two blocks at full sprint: standing (or crawling) on the take-off block,
+            // back up to the start of whatever run-up there is first
+            BetterBlockPos back = src.relative(direction, -1), back2 = src.relative(direction, -2);
+            boolean two = MovementHelper.canWalkOn(ctx, back2.below()) && MovementHelper.fullyPassable(ctx, back2) && MovementHelper.fullyPassable(ctx, back2.above());
+            BetterBlockPos runFrom = two ? back2 : back;
+            double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
+            double along = (ctx.player().position().x - (runFrom.x + 0.5)) * direction.getStepX() + (ctx.player().position().z - (runFrom.z + 0.5)) * direction.getStepZ();
+            if (along <= -0.3 || v > 0.1 || ctx.player().position().y > src.y + 0.1 || !ctx.playerFeet().equals(src) && !ctx.playerFeet().equals(back) && !ctx.playerFeet().equals(runFrom)) {
+                ranUp = true;
+            } else {
+                // keep facing the landing and walk backwards, so there is no turn to lag behind
+                state.setInput(Input.SPRINT, false);
+                MovementHelper.moveTowards(ctx, state, dest);
+                state.setInput(Input.MOVE_FORWARD, false);
+                state.setInput(Input.MOVE_BACK, true);
+                return state;
+            }
+        }
         MovementHelper.moveTowards(ctx, state, dest);
         if (!ctx.player().onGround() && ctx.player().position().y > src.y + 0.1 && BlockStateInterface.getBlock(ctx, dest) != Blocks.LADDER) {
             // mid-air: stop pushing once coasting alone reaches the landing centre, so narrow tops (bars, fence posts) are not overshot

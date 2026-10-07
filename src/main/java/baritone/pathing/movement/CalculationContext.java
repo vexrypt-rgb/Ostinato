@@ -18,6 +18,7 @@
 package baritone.pathing.movement;
 
 import baritone.Baritone;
+import baritone.utils.ExperimentalMovement;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
@@ -77,6 +78,23 @@ public class CalculationContext {
     public final boolean allowJumpAtBuildLimit;
     public final boolean allowParkourAscend;
     public final boolean allowParkourFourGap;
+    public final boolean allowNeos;
+    public final boolean allowClimbJumps;
+    public final boolean allowMomentumJumps;
+    /** A ladder or vine on the hotbar and allowLadderClutch on, see MovementDescend.dynamicFallCost. */
+    public final boolean hasClutchItem;
+    /** The clutch item is a ladder (vines win if both are there) and pickupLadders is on, so a clutch also costs the pickup. */
+    public final boolean clutchPicksUp;
+    /** The clutch item is a ladder (a vine can go on any wall, a ladder needs us to be about 0.6 off it). */
+    public final boolean clutchIsLadder;
+    public final float blockReach;
+    public final boolean experimental;
+    public final double experimentalMinHealth;
+    public final double fallDamageCost;
+    /** 1 unless experimentalMovement wants jumps to look a bit cheaper. */
+    public final double jumpBias;
+    /** Health plus absorption when the context was made, for falls that hurt. */
+    public final double health;
     public final boolean assumeWalkOnWater;
     public boolean allowFallIntoLava;
     public final int frostWalker;
@@ -118,15 +136,28 @@ public class CalculationContext {
                 ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
         this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
         this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
-        this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
+        this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
         this.allowBreak = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowBreak.value;
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
-        this.allowParkour = Baritone.settings().allowParkour.value;
+        this.allowParkour = ExperimentalMovement.allowParkour();
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
-        this.allowParkourAscend = Baritone.settings().allowParkourAscend.value;
+        this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
         // only the kinematic controller can build the hop speed a 4 block gap needs
-        this.allowParkourFourGap = Baritone.settings().kinematicTravel.value;
+        this.allowParkourFourGap = ExperimentalMovement.kinematicTravel();
+        this.allowNeos = ExperimentalMovement.allowNeos();
+        this.allowClimbJumps = ExperimentalMovement.allowClimbJumps();
+        this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
+        net.minecraft.world.item.Item clutchItem = Baritone.settings().allowLadderClutch.value ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
+        this.hasClutchItem = clutchItem != null;
+        this.clutchIsLadder = clutchItem == net.minecraft.world.item.Items.LADDER;
+        this.clutchPicksUp = clutchItem == net.minecraft.world.item.Items.LADDER && Baritone.settings().pickupLadders.value;
+        this.blockReach = Baritone.settings().blockReachDistance.value;
+        this.experimental = ExperimentalMovement.on();
+        this.experimentalMinHealth = Baritone.settings().experimentalMinHealth.value;
+        this.fallDamageCost = Baritone.settings().fallDamageCost.value;
+        this.jumpBias = ExperimentalMovement.jumpBias();
+        this.health = player.getHealth() + player.getAbsorptionAmount();
         this.assumeWalkOnWater = Baritone.settings().assumeWalkOnWater.value;
         this.allowFallIntoLava = false; // Super secret internal setting for ElytraBehavior
         // todo: technically there can now be datapack enchants that replace blocks with any other at any range
@@ -143,8 +174,8 @@ public class CalculationContext {
             }
         }
         this.frostWalker = frostWalkerLevel;
-        this.allowDiagonalDescend = Baritone.settings().allowDiagonalDescend.value;
-        this.allowDiagonalAscend = Baritone.settings().allowDiagonalAscend.value;
+        this.allowDiagonalDescend = ExperimentalMovement.allowDiagonalDescend();
+        this.allowDiagonalAscend = ExperimentalMovement.allowDiagonalAscend();
         this.allowDownward = Baritone.settings().allowDownward.value;
         this.minFallHeight = 3; // Minimum fall height used by MovementFall
         this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;

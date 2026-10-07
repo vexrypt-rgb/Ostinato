@@ -19,7 +19,7 @@ public final class JumpSearch {
     public static final int[] BRAKE = {0, 1};
     public static final int DIMS = 7;
 
-    private static final int MAX_GROUND = 40, MAX_AIR = 40, SETTLE = 8;
+    private static final int MAX_GROUND = 40, MAX_AIR = 40, SETTLE = 8, HANG = 3;
 
     /** Frame of one jump: approach unit vector (dx, dz), front edge coordinate along it, and the landing block. */
     public double dirX, dirZ, edge;
@@ -32,6 +32,16 @@ public final class JumpSearch {
     public boolean anyDest;
     /** Never press jump: walk off the edge (onto a slime pad right below it). */
     public boolean noJump;
+    /**
+     * The destination is a ladder or vine cell: the jump is done when the player hangs on to it, rather than when it
+     * settles on the ground. Start a leap off a ladder with {@link #jumped} set and {@link #noJump}.
+     */
+    public boolean grab;
+    /**
+     * Done at the landing tick, on the block (destX, destY, destZ), with {@link #sim()} left in the landing state instead
+     * of settling: the first half of a chain, whose second jump starts from that momentum.
+     */
+    public boolean carry;
     /** Plan indices into the grids above, and the jumped/air-tick state carried between real ticks. */
     public final int[] plan = new int[DIMS];
     public boolean jumped;
@@ -39,6 +49,8 @@ public final class JumpSearch {
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
     public int ticks;
     public double miss;
+    /** Filled by {@link #run} in {@link #carry} mode: speed along the approach direction at the landing tick. */
+    public double landSpeed;
 
     private final PlayerSim sim;
 
@@ -104,6 +116,10 @@ public final class JumpSearch {
             if (sim.y < floor) {
                 return false;
             }
+            if (grab && jumped && air >= 1 && PlayerSim.floor(sim.x) == destX && PlayerSim.floor(sim.y) == destY
+                    && PlayerSim.floor(sim.z) == destZ && sim.climbable()) {
+                return holds(t + 1, sweep);
+            }
             if (sim.onGround && sim.vy > 0.1) {
                 bounced = true;
             }
@@ -119,6 +135,15 @@ public final class JumpSearch {
                 if (Math.abs(sim.y - destY) > 0.01) {
                     return false; // came down somewhere else first
                 }
+                if (carry) {
+                    if (PlayerSim.floor(sim.x) != destX || PlayerSim.floor(sim.z) != destZ) {
+                        return false;
+                    }
+                    ticks = t + 1;
+                    miss = Math.max(Math.abs(sim.x - (destX + 0.5)), Math.abs(sim.z - (destZ + 0.5)));
+                    landSpeed = sim.vx * dirX + sim.vz * dirZ;
+                    return true;
+                }
                 settle = 0;
             }
             if (settle >= 0 && settle++ >= SETTLE) {
@@ -132,6 +157,22 @@ public final class JumpSearch {
             }
         }
         return false;
+    }
+
+    /** The hang on to a ladder has to last: let go of everything and check the cell still holds us for a few ticks. */
+    private boolean holds(int tick, CellSink sweep) {
+        for (int k = 0; k < HANG; k++) {
+            sim.tick(0, 0, false, false);
+            if (sweep != null) {
+                sweep.box(sim.x, sim.y, sim.z);
+            }
+            if (!sim.climbable()) {
+                return false;
+            }
+        }
+        ticks = tick;
+        miss = 0;
+        return true;
     }
 
     /**
@@ -155,7 +196,8 @@ public final class JumpSearch {
                     if (!run(start, p, jumped, airTicks, null)) {
                         continue;
                     }
-                    double score = miss + 0.004 * ticks;
+                    // a chain's first jump must land with speed left for the second one, whatever it costs in centring
+                    double score = carry ? -landSpeed + 0.004 * ticks : miss + 0.004 * ticks;
                     if (score < bestScore) {
                         bestScore = score;
                         best = p.clone();

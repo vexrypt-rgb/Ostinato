@@ -29,6 +29,9 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
   player to mark an enemy, and anyone who hits the bot while in freecam is added. Mobs are included only
   with `enemyMobs` (off by default). The list clears on death or a non-pearl teleport.
 - **Kinematic travel, parkour and swimming** improvements, pitfall avoidance.
+- **Soprano-style movement** (ideas from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken; ladder clutch ported from it) found by simulation: ladder and vine jumps (`allowClimbJumps`), chained
+  jumps through a pad, ladder clutch (`allowLadderClutch`, `pickupLadders`) and the
+  `experimentalMovement` preset. Not yet tried in a live game.
 - **26.3** support (unobfuscated Minecraft), merged from upstream Baritone 26.2.
 
 ## Notes
