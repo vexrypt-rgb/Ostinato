@@ -26,6 +26,10 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 - **Soprano-style movement** (ideas from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken; ladder clutch ported from it) found by simulation: ladder and vine jumps (`allowClimbJumps`), chained
   jumps through a pad, ladder clutch (`allowLadderClutch`, `pickupLadders`) and the
   `experimentalMovement` preset. Not yet tried in a live game.
+- **Per-version overlay system** (`versions/<mc>/`, `scripts/use-version.sh`): one base tree with a small set of
+  files overridden per Minecraft version, with a CI matrix that builds each one.
+- **Kinematic driving** now flies standing jumps and plain parkour itself (takeoff search), finishes each
+  stretch end on its own, and swims along the surface with a breathing latch and bank hop-out.
 - **26.3** support (unobfuscated Minecraft), merged from upstream Baritone 26.2.
 
 ## Notes
