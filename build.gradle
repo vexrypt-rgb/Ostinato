@@ -94,9 +94,13 @@ allprojects {
         version rootProject.minecraft_version
 
         mappings {
-            intermediary()
+            if (rootProject.use_intermediary.toBoolean()) {
+                intermediary()
+            }
             mojmap()
-            parchment(rootProject.minecraft_version, "2025.12.20")
+            if (!rootProject.parchment_version.isEmpty()) {
+                parchment(rootProject.minecraft_version, rootProject.parchment_version)
+            }
         }
     }
 
