@@ -94,6 +94,7 @@ public final class SwarmControl {
     private SwarmBuild build;
     private long ignored;
     private long sendFailures;
+    private final Map<String, Consumer<SwarmMessage>> extraHandlers = new HashMap<>();
 
     /**
      * @param linkSummary one line describing the transport (queue, drops), or {@code null}
@@ -109,6 +110,21 @@ public final class SwarmControl {
     }
 
     public SwarmEndpoint endpoint() { return endpoint; }
+
+    public SwarmRoster roster() { return roster; }
+
+    /**
+     * Route messages of {@code type} to {@code handler} after authentication and replay checks. Lets a host
+     * (for example TenorClef objectives) add its own sealed message types without a second transport. Built-in
+     * types ({@code PING}, {@code PONG}, build messages) cannot be overridden.
+     */
+    public synchronized void registerHandler(String type, Consumer<SwarmMessage> handler) {
+        if (PING.equals(type) || PONG.equals(type) || SwarmBuild.BUILD.equals(type)
+                || SwarmBuild.STAT.equals(type) || SwarmBuild.STOP.equals(type)) {
+            throw new IllegalArgumentException("reserved swarm message type " + type);
+        }
+        extraHandlers.put(type, handler);
+    }
 
     /** Enable coordinated region builds, handing orders to {@code builder}. */
     public synchronized SwarmBuild enableBuild(SwarmBuild.RegionBuilder builder) {
@@ -216,7 +232,14 @@ public final class SwarmControl {
                         + (p.rttMs >= 0 && sent != null ? ", " + p.rttMs + " ms" : ""));
                 break;
             default:
-                if (build == null || !build.handle(m)) {
+                Consumer<SwarmMessage> extra = extraHandlers.get(m.type());
+                if (extra != null) {
+                    try {
+                        extra.accept(m);
+                    } catch (RuntimeException e) {
+                        log.accept("swarm: handler for " + m.type() + " failed: " + e.getMessage());
+                    }
+                } else if (build == null || !build.handle(m)) {
                     ignored++;
                 }
         }
