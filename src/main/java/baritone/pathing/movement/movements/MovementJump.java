@@ -17,6 +17,7 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.pathing.kinematic.SimTrace;
@@ -359,7 +360,7 @@ public class MovementJump extends Movement {
             running = true;
             // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
             // position first, or it replays the jump from a stale spot inside the wall and rubber-bands us back
-            ctx.player().connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(p.x, p.y, p.z, true, false));
+            PositionSync.sync(ctx.player());
         } else if (replanCooldown > 0) {
             replanCooldown--;
         } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {

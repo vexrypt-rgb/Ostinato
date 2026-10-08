@@ -1,5 +1,6 @@
 package baritone.pathing.kinematic;
 
+import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -195,7 +196,7 @@ public final class TakeoffController {
                 return -1; // no takeoff from here
             }
             running = true;
-            ctx.player().connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(p.x, p.y, p.z, true, false));
+            PositionSync.sync(ctx.player());
         } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {
             js.search(real, true); // drifted off the plan: look for a nearby one, else fly it anyway
         }
