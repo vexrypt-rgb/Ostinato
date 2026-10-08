@@ -174,7 +174,13 @@ public class MovementPillar extends Movement {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
 
-            MovementHelper.moveTowards(ctx, state, dest);
+            // dest is straight above us: re-aiming at it every tick makes the yaw flip back and forth. Only steer
+            // when we have drifted off the ladder's column.
+            double ox = ctx.player().position().x - (dest.getX() + 0.5);
+            double oz = ctx.player().position().z - (dest.getZ() + 0.5);
+            if (ox * ox + oz * oz > 0.25 * 0.25) {
+                MovementHelper.moveTowards(ctx, state, dest);
+            }
             state.setInput(Input.JUMP, true);
             return state;
         } else {

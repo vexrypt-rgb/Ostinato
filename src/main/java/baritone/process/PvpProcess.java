@@ -571,7 +571,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         filter = null;
         enemies.clear();
         target = null;
-        survival.eatTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
+        survival.eatTicks = survival.foodTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
         shield.axeHeld = shield.flicked = false;
         shield.swingGap = shield.unseenBlock = click.probeTick = 0;
         tools.reset();
