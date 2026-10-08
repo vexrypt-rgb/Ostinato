@@ -14,6 +14,19 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 1.21.11 | `1.21.11` | 21 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## New in v1.18.0
+
+- **Add-on messages on the swarm link**: `SwarmControl.registerHandler(type, handler)` lets another mod send
+  its own message types over the same sealed, signed link and roster. [TenorClef](https://github.com/vexrypt-rgb/TenorClef)'s
+  swarm (`@swarm`) now rides it instead of a separate transport. See `docs/guides/swarm-and-region-builds.md`.
+- **User guides** (`docs/guides/`): getting started, commands, settings, movement, combat and clutch, mining and
+  building, GUI/freecam/tasks, and swarm and region builds.
+- **Combat**: the bot eats during a fight, wall clutch is calmer, and the ladder pillar is steadier.
+- **Movement**: forced keys are released when a path finishes or fails; freecam applies landing and
+  stuck-block effects.
+- Live-tested over the swarm link with three clients: assignment, reassignment after a worker dies, cancel,
+  `#swarm build` placing blocks, and signed (S2S) mode. The 1.16.1 and 26.3 builds of the hook compile but have not been run in a client.
+
 ## Highlights
 
 - **Swarm link** (`#swarm`): sealed, signed chat messages between bots in a roster group (sigil S2S,
@@ -22,6 +35,11 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 - **Coordinated region builds** (`#swarm build <group> <file> [x y z]`): the group lead splits a
   schematic into one region per member (`strips`, `grid`, or bottom-up `layers`); every member builds
   only its own region. See `docs/REGION_BUILD.md`.
+- **PvP** (`#pvp <name|players|hostiles>`): crits, W-taps, shield/axe play, bow, crossbow, cobwebs, potions,
+  crystals, anchors, TNT carts, and every mace style, plus multi-opponent retargeting and automatic fight
+  recording (`pvplogs/`, read with `tools/pvplog.py`).
+- **Freecam enemy list**: toggle freecam with `freecamKey` (F8), middle-click a player to mark an enemy; anyone who
+  hits the bot in freecam is added. Mobs only with `enemyMobs`.
 - **Kinematic travel, parkour and swimming** improvements, pitfall avoidance.
 - **Soprano-style movement** (ideas from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken; ladder clutch ported from it) found by simulation: ladder and vine jumps (`allowClimbJumps`), chained
   jumps through a pad, ladder clutch (`allowLadderClutch`, `pickupLadders`) and the
