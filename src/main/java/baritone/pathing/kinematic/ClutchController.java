@@ -37,7 +37,10 @@ import java.util.List;
  */
 public final class ClutchController {
 
+    private static final boolean TRACE = Boolean.getBoolean("baritone.clutchTrace");
     private static final int MAX_MOVES = 10;
+    /** How far from the takeoff a block still to be laid may be counted on as a landing: a sprint jump covers about four. */
+    private static final double OVERLAY_RADIUS = Double.parseDouble(System.getProperty("baritone.clutchOverlay", "2.0"));
     private static final double REACH = 4.2;
     private static final double MAX_REL = 70; // degrees between look and travel that W plus a strafe key can still sprint
     private static final double[] FACE_OFFSETS = {0, -0.3, 0.3};
@@ -121,10 +124,15 @@ public final class ClutchController {
 
         retreat = 0;
         // where to go: the first destination that is not already underfoot
+        // (and one that is ahead along the route: in flight the cell just flown over is farther than 0.8 too, and
+        // steering back at it swings the camera round)
         BetterBlockPos carrot = null;
+        BetterBlockPos end = stretch.get(stretch.size() - 1).getDest();
+        BetterBlockPos begin = stretch.get(0).getSrc();
+        double rx = end.x - begin.x, rz = end.z - begin.z;
         for (Movement m : stretch) {
             BetterBlockPos d = m.getDest();
-            if (Math.hypot(d.x + 0.5 - px, d.z + 0.5 - pz) > 0.8) {
+            if (Math.hypot(d.x + 0.5 - px, d.z + 0.5 - pz) > 0.8 && ((d.x + 0.5 - px) * rx + (d.z + 0.5 - pz) * rz > 0 || rx == 0 && rz == 0)) {
                 carrot = d;
                 break;
             }
@@ -189,6 +197,11 @@ public final class ClutchController {
         in.setInputForceState(Input.SPRINT, w);
         in.setInputForceState(Input.JUMP, jump);
         in.setInputForceState(Input.CLICK_RIGHT, clicking);
+        if (TRACE) {
+            System.out.printf("CLUTCHTRACE x=%.2f y=%.2f z=%.2f g=%b v=%.3f yaw=%.0f pit=%.0f travel=%.0f keys=%s%s%s%s%s click=%b aim=%b placed=%d%n",
+                    px, py, pz, grounded, speed, lookYaw, lookPitch, travel, w ? "W" : "", s ? "S" : "", a ? "A" : "", d ? "D" : "",
+                    jump ? "J" : "", clicking, aim != null, placed);
+        }
         return pos;
     }
 
@@ -202,6 +215,7 @@ public final class ClutchController {
         return false;
     }
 
+    private Aim lastAim;
     private PlayerSim sim;
     private ClientWorld client;
     private double simX, simZ;
@@ -253,7 +267,7 @@ public final class ClutchController {
                     client.collect(minX, minY, minZ, maxX, maxY, maxZ, out);
                     for (BlockPos c : useOverlay ? needs : List.<BlockPos>of()) {
                         if (c.getX() + 1 > minX && c.getX() < maxX && c.getY() + 1 > minY && c.getY() < maxY && c.getZ() + 1 > minZ && c.getZ() < maxZ
-                                && Math.hypot(c.getX() + 0.5 - simX, c.getZ() + 0.5 - simZ) <= 2.0 && wallBacked(c)) {
+                                && Math.hypot(c.getX() + 0.5 - simX, c.getZ() + 0.5 - simZ) <= OVERLAY_RADIUS && wallBacked(c)) {
                             out.add(new double[]{c.getX(), c.getY(), c.getZ(), c.getX() + 1, c.getY() + 1, c.getZ() + 1});
                         }
                     }
@@ -361,11 +375,13 @@ public final class ClutchController {
     private static final class Aim {
         final Rotation rot;
         final BlockPos target, against;
+        final Vec3 point;
 
-        Aim(Rotation rot, BlockPos target, BlockPos against) {
+        Aim(Rotation rot, BlockPos target, BlockPos against, Vec3 point) {
             this.rot = rot;
             this.target = target;
             this.against = against;
+            this.point = point;
         }
     }
 
@@ -387,6 +403,23 @@ public final class ClutchController {
             if (land != null) {
                 order = new ArrayList<>(needs);
                 order.sort(java.util.Comparator.comparingDouble(c -> Math.hypot(c.getX() + 0.5 - land[0], c.getZ() + 0.5 - land[1])));
+            }
+        }
+        // keep the look that was working: a fresh pick every tick swings the camera about and the click, which reads the
+        // look the player really has, never lands on the face it was meant for
+        if (lastAim != null && needs.contains(lastAim.target) && !body.intersects(new AABB(lastAim.target))
+                && eye.distanceToSqr(Vec3.atCenterOf(lastAim.target)) <= REACH * REACH
+                && (lastAim.target.getX() + 0.5 - px) * tx + (lastAim.target.getZ() + 0.5 - pz) * tz >= -0.5) {
+            Direction face = null;
+            for (Direction dir : Direction.values()) {
+                if (lastAim.target.relative(dir).equals(lastAim.against)) face = dir.getOpposite();
+            }
+            Rotation again = RotationUtils.calcRotationFromVec3d(eye, lastAim.point, ctx.playerRotations());
+            HitResult res = RayTraceUtils.rayTraceTowards(player, again, REACH);
+            if (face != null && Math.abs(wrap(travel - again.getYaw())) < MAX_REL && res instanceof BlockHitResult h && h.getType() == HitResult.Type.BLOCK
+                    && h.getBlockPos().equals(lastAim.against) && h.getDirection() == face) {
+                lastAim = new Aim(again, lastAim.target, lastAim.against, lastAim.point);
+                return lastAim;
             }
         }
         for (BlockPos target : order) {
@@ -423,12 +456,13 @@ public final class ClutchController {
                         if (res instanceof BlockHitResult h && h.getType() == HitResult.Type.BLOCK
                                 && h.getBlockPos().equals(against) && h.getDirection() == face) {
                             bestRel = rel;
-                            best = new Aim(rot, target, against);
+                            best = new Aim(rot, target, against, pt);
                         }
                     }
                 }
             }
             if (best != null) {
+                lastAim = best;
                 return best;
             }
         }

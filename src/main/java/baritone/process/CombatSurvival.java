@@ -91,7 +91,55 @@ final class CombatSurvival {
             }
             if (eat(me, target)) return hands.decide("eat");
         }
+        // ordinary food: a hungry bar stops regeneration and the sprint, so top it up when the foe gives room
+        boolean peckish = me.getFoodData().getFoodLevel() <= 14;
+        if (foodTicks > 0 || peckish && !charging && !longFall && !explosives.blastThreat(me) && (safe || eyeToBox(me, target) > 6 || targetEating) && !(eyeToBox(me, target) < 4 && !targetEating)) {
+            int slot = foodSlot(me);
+            if (slot >= 0 && me.getFoodData().getFoodLevel() < 20 && bite(me, target, slot)) return hands.decide("eat");
+            foodTicks = 0;
+        }
         return null;
+    }
+
+    int foodTicks;
+
+    /** An ordinary edible item (not a golden apple, not one that hurts), pulled into the hotbar. Best saturation first. */
+    private int foodSlot(Player me) {
+        int best = -1;
+        float bestScore = -1;
+        for (int i = 0; i < 36; i++) {
+            var st = me.getInventory().getItem(i);
+            var food = st.get(net.minecraft.core.component.DataComponents.FOOD);
+            if (food == null) continue;
+            Item it = st.getItem();
+            if (it == Items.GOLDEN_APPLE || it == Items.ENCHANTED_GOLDEN_APPLE || it == Items.ROTTEN_FLESH || it == Items.SPIDER_EYE
+                    || it == Items.PUFFERFISH || it == Items.POISONOUS_POTATO || it == Items.CHORUS_FRUIT || it == Items.SUSPICIOUS_STEW) continue;
+            float score = food.nutrition() + food.saturation();
+            if (score > bestScore) {
+                bestScore = score;
+                best = i;
+            }
+        }
+        if (best < 0) return -1;
+        if (best < 9) return best;
+        return inv.slotOf(me, me.getInventory().getItem(best).getItem());
+    }
+
+    private boolean bite(Player me, LivingEntity target, int slot) {
+        this.target = target;
+        if (!hands.select(me, slot)) return true;
+        if (me.isUsingItem() && me.getUseItem() != me.getMainHandItem()) {
+            hands.use(false);
+            return true;
+        }
+        hands.key(Input.MOVE_BACK);
+        hands.use(true);
+        hands.look(target.getEyePosition());
+        if (++foodTicks > 40) {
+            hands.use(false);
+            foodTicks = 0;
+        }
+        return true;
     }
 
     /** Low on health with nothing to heal: pearl away from the target, else run. */
