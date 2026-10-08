@@ -10,6 +10,16 @@ inventory, and schematic processes to make it happen. Multi-bot coordination
 (`#swarm`) uses the [SIGIL](https://github.com/vexrypt-rgb/sigil) wire format
 for sealed whispers.
 
+## User guides
+
+Step-by-step guides for every feature, written from the source:
+
+- [Guide index](docs/guides/README.md)
+- [Getting started](docs/guides/getting-started.md) · [Command reference](docs/guides/commands.md) · [Settings](docs/guides/settings.md)
+- [Movement and travel](docs/guides/movement.md) · [Combat, clutch and survival](docs/guides/combat-and-clutch.md)
+- [Mining, building and farming](docs/guides/mining-and-building.md) · [Swarm and region builds](docs/guides/swarm-and-region-builds.md)
+- [Screen, freecam and task lists](docs/guides/gui-freecam-tasks.md)
+
 ## Compatibility
 
 `gradle.properties` on this branch is the source of truth for the Minecraft
