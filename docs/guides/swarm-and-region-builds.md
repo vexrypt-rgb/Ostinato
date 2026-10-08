@@ -1,7 +1,10 @@
 # Swarm and region builds (`#swarm`)
 
-This is Ostinato's own swarm, for **signed region builds**. TenorClef's `@swarm` (leader/worker objectives) is a
-different system: [see that guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/guides/swarm-and-fleet.md).
+This is Ostinato's swarm link: a sealed, signed, roster-authenticated channel between your bots, plus **signed
+region builds** on top of it. TenorClef's `@swarm` (leader/worker objectives such as "gather 64 logs") is not a
+separate network: it rides this same link as message type `TCS`, through `SwarmControl.registerHandler`. See
+[that guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/guides/swarm-and-fleet.md), or the Swarm tab
+in TenorClef's menu.
 
 ## Setup
 1. Set `swarmEnabled true` (default off).
@@ -37,6 +40,11 @@ lead builds its own region too.
 
 `layers` is enforced: band `i+1` is sent only when band `i` reports done. An order with no answer after 60 s is
 resent once. Members accept orders and stops only from the roster lead.
+
+## Add-on messages
+`SwarmControl.registerHandler(type, handler)` lets another mod register a message type. Its messages get the
+same sealing, signature, replay and rate-limit checks as Ostinato's own, and arrive as (sender, group, body).
+Builds without this method cannot host TenorClef swarms.
 
 ## Limits
 Blocks at a region edge that need a neighbour's block as support may wait until that neighbour is built. See
