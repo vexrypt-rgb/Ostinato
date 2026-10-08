@@ -153,6 +153,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             safeToCancel = current.onTick();
             if (current.failed() || current.finished()) {
                 current = null;
+                // The last tick's forced keys (e.g. the kinematic controller's MOVE_FORWARD) would otherwise outlive
+                // the path: inControl() stays true while any key is forced, so W would stay held with nothing driving.
+                baritone.getInputOverrideHandler().clearAllKeys();
                 if (goal == null || goal.isInGoal(ctx.playerFeet())) {
                     logDebug("All done. At " + goal);
                     queuePathEvent(PathEvent.AT_GOAL);
