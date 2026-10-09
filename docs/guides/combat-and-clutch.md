@@ -4,7 +4,7 @@
 | Command | Effect |
 | --- | --- |
 | `#pvp <name>` | fight that player or entity |
-| `#pvp players` / `#pvp hostiles` | fight any nearby player / hostile mob |
+| `#pvp players` | fight any nearby player |
 | `#pvp stats` | show combat statistics |
 | `#pvp enemies` | list marked enemies |
 | `#pvp clear` | clear marked enemies and stop |
@@ -13,6 +13,22 @@ The fight process does the following (from `PvpProcess`): critical hits, W-taps,
 strafing, axe against shields, shield against bows, a bow at range, golden apples, and an offhand totem.
 Enemies can also be marked with the middle mouse button in [freecam](gui-freecam-tasks.md). TenorClef's
 `@pvp` runs this same process.
+
+## `#pve` (mobs)
+Mobs are fought by their own process, `PveProcess`, not the duel logic used for players. `#pvp hostiles` now
+just starts it.
+| Command | Effect |
+| --- | --- |
+| `#pve` / `#pve hostiles` | fight every hostile mob in range |
+| `#pve <mob id>` | fight one kind, e.g. `#pve zombie` |
+| `#pve stats` | kills, hits, damage taken, shield blocks, meals |
+| `#pve clear` | stop |
+
+Each mob is classified from its vanilla class (`MobProfile`): melee mobs are hit on a full charge with a short
+back-off, creepers are kept at distance and avoided while fusing, shooters (skeletons, strays, pillagers,
+drowned, blazes, ghasts) are charged at sprint speed with a weave, and heavy hitters are met with the shield.
+It will not eat in the open while something is shooting at it, gives up on mobs it cannot reach (burrowed
+silverfish), and runs from wardens, ravagers, guardians, evokers and the bosses.
 
 ## Survival layer (`CombatSurvival`)
 While fighting, the bot will: pop a totem, eat a golden apple, eat other food when it is safe to, and flee or

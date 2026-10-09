@@ -216,7 +216,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private void markAttackers(LocalPlayer p) {
         net.minecraft.world.entity.LivingEntity by = p.getLastHurtByMob();
         if (by != null && by != p && markable(by) && p.tickCount - p.getLastHurtByMobTimestamp() < 5
-                && ((Baritone) baritone).getPvpProcess().addEnemy(by)) {
+                && (by instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(by) : ((Baritone) baritone).getPveProcess().addEnemy(by))) {
             logDirect(by.getName().getString() + " attacked the bot: added to enemies");
         }
     }
@@ -417,7 +417,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private void markEnemy() {
         Entity hit = entityUnderCrosshair();
         if (hit instanceof net.minecraft.world.entity.LivingEntity pl && markable(pl)) {
-            if (((Baritone) baritone).getPvpProcess().addEnemy(pl)) {
+            if ((pl instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(pl) : ((Baritone) baritone).getPveProcess().addEnemy(pl))) {
                 logDirect("Enemy added: " + pl.getName().getString());
             } else {
                 logDirect(pl.getName().getString() + " is already an enemy");
