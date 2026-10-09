@@ -51,3 +51,14 @@ chunks), `repack` (re-cache nearby chunks), `reloadall`, `saveall` (world cache)
 
 `set` forms: `set list [page]`, `set modified [page]`, `set <setting>`, `set <setting> <value>`,
 `set toggle <setting>`, `set reset <setting>`, `set reset all`.
+
+## Structures (`#structures`)
+
+Ostinato finds structures two ways:
+
+- **Client** (works on any server): counts signature blocks in the chunks you have loaded and matches them per variant (all village biomes, both mineshafts, every ruined portal, temples, monument, mansion, stronghold, ancient city, trial chambers, nether and end structures). Biome picks the variant for ruined portals, ocean ruins and shipwrecks.
+- **Server** (singleplayer only): reads the exact structure starts. `#structures source server|both`.
+
+Commands: `#structures [list] [type]`, `nearest [type]`, `goto [type]`, `types`, `source <client|server|both>`, `clear`, `on|off`. A type is a variant id (`village_desert`) or a family (`village`).
+
+Known limits (client mode): buried treasure is server-only; an outpost or shipwreck inside the same 3x3 chunks as a mineshaft can be masked; the beached shipwreck and mountain portal variants may come back as the generic id. Calibration against a fresh world: 29 of 34 variants exact, 2 family-level, 3 missed.
