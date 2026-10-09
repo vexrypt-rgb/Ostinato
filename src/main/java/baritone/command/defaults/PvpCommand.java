@@ -22,7 +22,7 @@ public class PvpCommand extends Command {
         PvpProcess pvp = ((Baritone) baritone).getPvpProcess();
         String what = args.hasAny() ? args.getString() : "players";
         switch (what.toLowerCase()) {
-            case "hostiles": pvp.attackHostiles(); break;
+            case "hostiles": ((Baritone) baritone).getPveProcess().attackHostiles(); logDirect("Mobs are PvE now: running #pve hostiles"); return;
             case "players": pvp.attackPlayers(); break;
             case "stats": logDirect(pvp.stats()); return;
             case "clear": pvp.clearEnemies(); logDirect("Enemy list cleared"); return;
@@ -39,7 +39,7 @@ public class PvpCommand extends Command {
 
     @Override
     public String getShortDesc() {
-        return "Fight a player, all players or hostile mobs";
+        return "Fight a player or all players (mobs: #pve)";
     }
 
     @Override
