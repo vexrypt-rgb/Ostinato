@@ -128,6 +128,16 @@ public final class StructureBehavior extends Behavior {
         for (Consumer<DetectedStructure> l : listeners) l.accept(s);
     }
 
+    /** True when a bastion already known near {@code at} has its layout (a variant-less one is dropped so it can be refined). */
+    private synchronized boolean hasVariant(BlockPos at) {
+        for (DetectedStructure o : new ArrayList<>(found)) {
+            if (!o.id.equals("bastion_remnant") || o.pos.distSqr(at) >= 96 * 96) continue;
+            if (o.variant != null) return true;
+            if (BastionVariant.loaded(ctx.world(), o.pos) >= 40) found.remove(o);
+        }
+        return false;
+    }
+
     private static String family(String id) {
         StructureInfo i = StructureInfo.byId(id);
         return i == null ? id : i.family;
@@ -211,7 +221,12 @@ public final class StructureBehavior extends Behavior {
             String biome = ctx.world().getBiome(mid).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
             for (Signatures.Hit h : Signatures.evaluate(tot, dimension, biome)) {
                 BlockPos at = centroid(tot, sm, h.id, mid);
-                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick, h.variant));
+                String variant = null;
+                if (h.id.equals("bastion_remnant")) {
+                    if (hasVariant(at)) continue;
+                    variant = BastionVariant.classify(ctx.world(), at);
+                }
+                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick, variant));
             }
         }
         for (DetectedStructure s : hits) add(s);
