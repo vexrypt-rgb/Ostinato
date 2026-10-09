@@ -83,6 +83,7 @@ public class Baritone implements IBaritone {
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
     private final PvpProcess pvpProcess;
+    private final baritone.structure.StructureBehavior structureBehavior;
     private final PveProcess pveProcess;
 
     private final PathingControlManager pathingControlManager;
@@ -134,6 +135,7 @@ public class Baritone implements IBaritone {
             this.registerProcess(BoatProcess::new);
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.pveProcess              = this.registerProcess(PveProcess::new);
+            this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
             VexBench.install(this);
             baritone.process.SimBench.install(this);
         }
@@ -187,6 +189,10 @@ public class Baritone implements IBaritone {
     @Override
     public IPlayerContext getPlayerContext() {
         return this.playerContext;
+    }
+
+    public baritone.structure.StructureBehavior getStructureBehavior() {
+        return this.structureBehavior;
     }
 
     public PvpProcess getPvpProcess() {
