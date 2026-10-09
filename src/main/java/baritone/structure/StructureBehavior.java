@@ -94,7 +94,7 @@ public final class StructureBehavior extends Behavior {
         int[] tot = new int[Cat.ALL.length];
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                int[] c = counts.get(ChunkPos.asLong(cx + dx, cz + dz));
+                int[] c = counts.get(ChunkPos.pack(cx + dx, cz + dz));
                 if (c != null) for (int k = 0; k < tot.length; k++) tot[k] += c[k];
             }
         }
@@ -134,7 +134,7 @@ public final class StructureBehavior extends Behavior {
             for (int x = cx - d; x <= cx + d && done < PER_TICK; x++) {
                 for (int z = cz - d; z <= cz + d && done < PER_TICK; z++) {
                     if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) != d) continue;
-                    long key = ChunkPos.asLong(x, z);
+                    long key = ChunkPos.pack(x, z);
                     synchronized (this) {
                         if (counts.containsKey(key)) continue;
                     }
@@ -187,9 +187,9 @@ public final class StructureBehavior extends Behavior {
             boolean any = false;
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    int[] c = counts.get(ChunkPos.asLong(cx + dx, cz + dz));
+                    int[] c = counts.get(ChunkPos.pack(cx + dx, cz + dz));
                     if (c == null) continue;
-                    long[] s = sums.get(ChunkPos.asLong(cx + dx, cz + dz));
+                    long[] s = sums.get(ChunkPos.pack(cx + dx, cz + dz));
                     for (int k = 0; k < tot.length; k++) {
                         tot[k] += c[k];
                         if (c[k] != 0) any = true;

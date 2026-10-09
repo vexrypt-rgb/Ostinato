@@ -47,7 +47,7 @@ public final class ServerStructureSource {
                             if (!s.isValid()) continue;
                             // each start is stored in its own chunk only
                             ChunkPos sp = s.getChunkPos();
-                            if (sp.x != x || sp.z != z) continue;
+                            if (sp.x() != x || sp.z() != z) continue;
                             var key = reg.getKey(e.getKey());
                             if (key == null) continue;
                             BoundingBox bb = s.getBoundingBox();
