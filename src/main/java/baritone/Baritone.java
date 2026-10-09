@@ -83,6 +83,7 @@ public class Baritone implements IBaritone {
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
     private final PvpProcess pvpProcess;
+    private final PveProcess pveProcess;
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -130,6 +131,7 @@ public class Baritone implements IBaritone {
             this.elytraProcess           = this.registerProcess(ElytraProcess::create);
             this.registerProcess(BackfillProcess::new);
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
+            this.pveProcess              = this.registerProcess(PveProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
             baritone.process.SimBench.install(this);
@@ -188,6 +190,10 @@ public class Baritone implements IBaritone {
 
     public PvpProcess getPvpProcess() {
         return this.pvpProcess;
+    }
+
+    public PveProcess getPveProcess() {
+        return this.pveProcess;
     }
 
     @Override
