@@ -62,3 +62,5 @@ Ostinato finds structures two ways:
 Commands: `#structures [list] [type]`, `nearest [type]`, `goto [type]`, `types`, `source <client|server|both>`, `clear`, `on|off`. A type is a variant id (`village_desert`) or a family (`village`).
 
 Known limits (client mode): buried treasure is server-only; an outpost or shipwreck inside the same 3x3 chunks as a mineshaft can be masked; the beached shipwreck and mountain portal variants may come back as the generic id. Calibration against a fresh world: 29 of 34 variants exact, 2 family-level, 3 missed.
+
+Bastion layouts use speedrun names: `housing`, `stables`, `treasure`, `bridge`. `#structures nearest stables` (or `bastion_stables`) selects one. The exact layout comes from the integrated server (singleplayer, `#structures source server|both`); block signatures alone can't tell the four apart reliably (2/8 in testing), so client-only mode reports plain `bastion_remnant`.

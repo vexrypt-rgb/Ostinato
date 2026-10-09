@@ -58,11 +58,18 @@ public final class StructureBehavior extends Behavior {
     public synchronized List<DetectedStructure> find(String query) {
         List<DetectedStructure> r = new ArrayList<>();
         for (DetectedStructure s : found) {
-            if (query == null || query.isEmpty() || StructureInfo.matches(s.id, query)) r.add(s);
+            if (query == null || query.isEmpty() || StructureInfo.matches(s.id, query) || matchesVariant(s, query)) r.add(s);
         }
         BlockPos me = ctx.playerFeet();
         r.sort((a, b) -> Double.compare(a.pos.distSqr(me), b.pos.distSqr(me)));
         return r;
+    }
+
+    /** "stables" or "bastion_stables" selects that bastion layout. */
+    private static boolean matchesVariant(DetectedStructure s, String q) {
+        if (s.variant == null) return false;
+        String k = StructureInfo.strip(q);
+        return k.equals(s.variant) || k.equals(s.id.replace("_remnant", "") + "_" + s.variant);
     }
 
     @Override
@@ -204,7 +211,7 @@ public final class StructureBehavior extends Behavior {
             String biome = ctx.world().getBiome(mid).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
             for (Signatures.Hit h : Signatures.evaluate(tot, dimension, biome)) {
                 BlockPos at = centroid(tot, sm, h.id, mid);
-                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick));
+                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick, h.variant));
             }
         }
         for (DetectedStructure s : hits) add(s);

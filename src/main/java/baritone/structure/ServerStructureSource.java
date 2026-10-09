@@ -20,6 +20,21 @@ import java.util.Map;
 public final class ServerStructureSource {
     private ServerStructureSource() {}
 
+    /** Sub-type from the start piece's template path (bastions are picked by their first jigsaw pool). */
+    static String variantOf(String id, StructureStart s) {
+        if (!id.equals("bastion_remnant") || s.getPieces().isEmpty()) return null;
+        String d = s.getPieces().get(0).toString();
+        for (var p : s.getPieces()) {
+            String t = String.valueOf(p);
+            if (t.contains("bastion/")) { d = t; break; }
+        }
+        if (d.contains("/treasure/")) return "treasure";
+        if (d.contains("/hoglin_stable/")) return "stables";
+        if (d.contains("/bridge/")) return "bridge";
+        if (d.contains("/units/")) return "housing";
+        return null;
+    }
+
     public static boolean available() {
         return Minecraft.getInstance().getSingleplayerServer() != null;
     }
@@ -51,7 +66,7 @@ public final class ServerStructureSource {
                             var key = reg.getKey(e.getKey());
                             if (key == null) continue;
                             BoundingBox bb = s.getBoundingBox();
-                            out.add(new DetectedStructure(key.getPath(), dim, bb.getCenter(), DetectedStructure.Source.SERVER, 1.0, tick));
+                            out.add(new DetectedStructure(key.getPath(), dim, bb.getCenter(), DetectedStructure.Source.SERVER, 1.0, tick, variantOf(key.getPath(), s)));
                         }
                     }
                 }
