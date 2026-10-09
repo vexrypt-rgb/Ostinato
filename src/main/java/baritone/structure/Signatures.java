@@ -65,22 +65,28 @@ final class Signatures {
             if (c[DARK_OAK_LOG.ordinal()] >= 10 && c[COBBLE.ordinal()] >= 10 && c[CHEST.ordinal()] >= 1 && c[DARK_OAK_PLANKS.ordinal()] < 150) {
                 out.add(new Hit("pillager_outpost", 0.65));
             }
-            if (c[DARK_OAK_PLANKS.ordinal()] >= 150 && c[COBBLE.ordinal()] >= 50 && c[RED_CARPET.ordinal()] + c[BIRCH_PLANKS.ordinal()] >= 5) {
+            if (c[DARK_OAK_PLANKS.ordinal()] >= 150 && c[COBBLE.ordinal()] >= 50 && c[RED_CARPET.ordinal()] >= 2 && c[COBWEB.ordinal()] < 10) {
                 out.add(new Hit("mansion", 0.9));
             }
             if (c[PRISMARINE.ordinal()] >= 200 && c[SEA_LANTERN.ordinal()] >= 4) out.add(new Hit("monument", 0.95));
             if (c[SCULK.ordinal()] >= 50 && c[DEEPSLATE_BRICKS.ordinal()] >= 50 && c[SOUL_LANTERN.ordinal()] >= 1) out.add(new Hit("ancient_city", 0.9));
             if (c[TRIAL_SPAWNER.ordinal()] >= 1 || (c[TUFF_BRICKS.ordinal()] >= 150 && c[COPPER_BULB.ordinal()] >= 1)) out.add(new Hit("trial_chambers", 0.9));
             if (c[SUSPICIOUS_GRAVEL.ordinal()] >= 1 && c[MUD_BRICKS.ordinal()] >= 5 && c[TERRACOTTA.ordinal()] >= 5) out.add(new Hit("trail_ruins", 0.7));
-            if (c[OBSIDIAN.ordinal()] >= 3 && c[MAGMA.ordinal()] + c[CRYING_OBSIDIAN.ordinal()] >= 1 && c[SANDSTONE.ordinal()] < 100) {
+            if (c[OBSIDIAN.ordinal()] >= 5 && c[MAGMA.ordinal()] + c[CRYING_OBSIDIAN.ordinal()] >= 1) {
                 out.add(new Hit(portalVariant(biome), 0.6));
             }
             boolean ocean = biome.contains("ocean");
-            if (ocean && c[CHEST.ordinal()] >= 1 && c[OAK_PLANKS.ordinal()] + c[SPRUCE_PLANKS.ordinal()] + c[DARK_OAK_PLANKS.ordinal()] >= 15) {
+            boolean mined = c[COBWEB.ordinal()] >= 3 || c[RAIL.ordinal()] >= 3;
+            if (ocean && !mined && c[CHEST.ordinal()] >= 1 && c[OAK_PLANKS.ordinal()] + c[SPRUCE_PLANKS.ordinal()] + c[DARK_OAK_PLANKS.ordinal()] >= 15) {
                 out.add(new Hit("shipwreck", 0.6));
-            } else if (!ocean && c[CHEST.ordinal()] >= 1 && c[OAK_LOG.ordinal()] + c[SPRUCE_LOG.ordinal()] >= 8
-                    && c[OAK_PLANKS.ordinal()] + c[SPRUCE_PLANKS.ordinal()] >= 15 && biome.contains("beach")) {
+            } else if (!ocean && !mined && c[BED.ordinal()] == 0 && c[PATH.ordinal()] == 0 && c[CHEST.ordinal()] >= 1
+                    && c[OAK_LOG.ordinal()] + c[SPRUCE_LOG.ordinal()] >= 8 && c[OAK_PLANKS.ordinal()] + c[SPRUCE_PLANKS.ordinal()] >= 15
+                    && (biome.contains("beach") || biome.contains("shore"))) {
                 out.add(new Hit("shipwreck_beached", 0.5));
+            }
+            if (ocean && !mined && (biome.contains("warm") || biome.contains("lukewarm")) && c[SANDSTONE.ordinal()] >= 8
+                    && c[SANDSTONE.ordinal()] < 400) {
+                out.add(new Hit("ocean_ruin_warm", 0.35));
             }
             if (ocean && c[STONE_BRICKS.ordinal()] + c[SANDSTONE.ordinal()] >= 20 && c[MOSSY_COBBLE.ordinal()] + c[STONE_BRICKS.ordinal()] >= 10
                     && c[PRISMARINE.ordinal()] < 100) {
@@ -90,7 +96,7 @@ final class Signatures {
             if (c[NETHER_BRICKS.ordinal()] >= 100 && c[NETHER_FENCE.ordinal()] >= 10) out.add(new Hit("fortress", 0.9));
             if (c[BLACKSTONE.ordinal()] >= 200 && c[GILDED.ordinal()] >= 1) out.add(new Hit("bastion_remnant", 0.9));
             if (c[BONE_BLOCK.ordinal()] >= 5) out.add(new Hit("nether_fossil", 0.8));
-            if (c[OBSIDIAN.ordinal()] >= 3 && c[CRYING_OBSIDIAN.ordinal()] + c[MAGMA.ordinal()] >= 1 && c[BLACKSTONE.ordinal()] < 200) {
+            if (c[OBSIDIAN.ordinal()] >= 5 && c[CRYING_OBSIDIAN.ordinal()] + c[MAGMA.ordinal()] >= 1) {
                 out.add(new Hit("ruined_portal_nether", 0.6));
             }
         } else if (dimension.equals(StructureInfo.END)) {

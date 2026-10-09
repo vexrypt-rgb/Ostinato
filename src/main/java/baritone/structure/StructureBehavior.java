@@ -88,10 +88,25 @@ public final class StructureBehavior extends Behavior {
         }
     }
 
+    /** Non-zero block-category counts in the 3x3 chunk window around {@code at}; for calibration. */
+    public synchronized String describe(BlockPos at) {
+        int cx = at.getX() >> 4, cz = at.getZ() >> 4;
+        int[] tot = new int[Cat.ALL.length];
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int[] c = counts.get(ChunkPos.asLong(cx + dx, cz + dz));
+                if (c != null) for (int k = 0; k < tot.length; k++) tot[k] += c[k];
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Cat c : Cat.ALL) if (tot[c.ordinal()] > 0) sb.append(c.name()).append('=').append(tot[c.ordinal()]).append(' ');
+        return sb.toString();
+    }
+
     private synchronized void add(DetectedStructure s) {
         for (DetectedStructure o : found) {
             if (!o.dimension.equals(s.dimension)) continue;
-            boolean sameSpot = o.pos.distSqr(s.pos) < 48 * 48;
+            boolean sameSpot = o.pos.distSqr(s.pos) < 96 * 96;
             if (o.source == s.source && o.id.equals(s.id) && sameSpot) return;
             if (o.source != s.source && sameSpot && StructureInfo.matches(o.id, family(s.id))) {
                 // the exact server record wins over a client guess at the same place
@@ -183,7 +198,9 @@ public final class StructureBehavior extends Behavior {
                 }
             }
             if (!any) continue;
-            BlockPos mid = new BlockPos(cx * 16 + 8, ctx.playerFeet().getY(), cz * 16 + 8);
+            long ySum = 0, yN = 0;
+            for (int k = 0; k < tot.length; k++) { ySum += sm[k * 3 + 1]; yN += tot[k]; }
+            BlockPos mid = new BlockPos(cx * 16 + 8, (int) (ySum / Math.max(1, yN)), cz * 16 + 8);
             String biome = ctx.world().getBiome(mid).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
             for (Signatures.Hit h : Signatures.evaluate(tot, dimension, biome)) {
                 BlockPos at = centroid(tot, sm, h.id, mid);
