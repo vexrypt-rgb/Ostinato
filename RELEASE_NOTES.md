@@ -14,6 +14,17 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 1.21.11 | `1.21.11` | 21 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## New in v1.19.0
+
+- **PvE combat** (`#pve [hostiles|<mob id>|stats|clear]`): mobs now have their own combat process instead of
+  borrowing the player-fight one. Each mob gets a profile (melee, ranged, bomb, avoid) and the bot picks tactics
+  from it: charged swings with back-off during recharge, a shield guard against hard hitters, a weaving charge at
+  skeletons and other shooters, creeper clearance, eating only when no shooter has line of sight, ignoring mobs it
+  cannot reach (burrowed silverfish), and running from Wardens, Guardians, Withers, Ender Dragons, Evokers and Ravagers.
+- `#pvp hostiles` and freecam mob enemies now route to `#pve`; `#pvp` is players only.
+- Trained live against about 30 mob scenarios on hard (single mobs, mixed groups, hordes, weak kit). The 1.21.4 and
+  26.3 builds compile but have not been played yet.
+
 ## New in v1.18.0
 
 - **Add-on messages on the swarm link**: `SwarmControl.registerHandler(type, handler)` lets another mod send
