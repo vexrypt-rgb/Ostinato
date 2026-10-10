@@ -2080,7 +2080,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
     /** A piglin walks to an ingot it sees land a few blocks off: no need to stand on top of it. */
-    private static final double CAMP_THROW = 5.5;
+    private static final double CAMP_THROW = 3.0; // run 75: 81 throws spent 5 ingots; a Q-throw carries ~2-3 blocks and we re-picked the rest
     private boolean camping;
     /** Surface cells of dug piglin holes (the hole is the two blocks below) and the one being dug. */
     private final List<BlockPos> holes = new ArrayList<>();
@@ -2196,6 +2196,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
      * time one is free, until out of ingots or the targets are met. Only short hops (3) for drops; chests wait until after.
      */
     private PathingCommand tradeCamp(Player me, List<Piglin> piglins, Map<String, Integer> have, boolean done) {
+        // a throw the piglin never picked up (not holding gold 2 s later) frees it again
+        for (Piglin p : piglins) { Long at = admiring.get(p.getUUID()); if (at != null && ticks - at > 40 && !p.getOffhandItem().is(Items.GOLD_INGOT)) admiring.remove(p.getUUID()); }
         int ingots = ingotCount(me);
         long calm = piglins.stream().filter(p -> calmNear(me, p, camping ? 8 : 6)).count();
         if (!camping && !done && ingots >= 6 && calm >= 2 && !onEdge(me.blockPosition())) { camping = true; campIdleSince = ticks; logDirect("Bastion: trade camp, " + calm + " piglins, " + ingots + " ingots"); }
