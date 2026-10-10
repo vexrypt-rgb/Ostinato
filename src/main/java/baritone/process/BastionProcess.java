@@ -2176,7 +2176,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     BastionTrap.Site s = holeSite(me, piglins, q, dx, dz);
                     if (s.usable() && (bestPos == null || me.blockPosition().distSqr(q) < me.blockPosition().distSqr(bestPos))) { best = s; bestPos = q; }
                 }
-                if (bestPos == null) { pickRetry = ticks + 600; logDirect("Bastion: no pickup hole site next to " + caughtHole.toShortString()); }
+                if (bestPos == null) {
+                    pickRetry = ticks + 600;
+                    StringBuilder why = new StringBuilder();
+                    for (int dx : new int[]{-1, 1}) for (int dz : new int[]{-1, 1}) why.append(" ").append(holeSite(me, piglins, caughtHole.offset(dx, 0, dz), dx, dz));
+                    logDirect("Bastion: no pickup hole site next to " + caughtHole.toShortString() + why);
+                }
                 else { digHole = bestPos; digPickup = true; holeDigging = false; digSince = ticks; logDirect("Bastion: digging pickup hole at " + bestPos.toShortString()); return pause0(); }
             }
             if (pickHole != null) {
@@ -2301,6 +2306,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             admiring.put(t.getUUID(), ticks);
             throwTick = ticks;
             throwsDone++;
+            logDirect("Bastion: camp throw " + throwsDone + " at " + String.format("%.1f", me.distanceTo(t)) + " ingots(before)=" + me.getInventory().countItem(Items.GOLD_INGOT));
         }
         status = "camp: throwing (" + admiring.size() + " admiring, throws=" + throwsDone + ")";
         return pause0();
