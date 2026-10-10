@@ -471,6 +471,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             double nx = nudgeDest.getX() + 0.5 - p0.getX(), nz = nudgeDest.getZ() + 0.5 - p0.getZ();
             baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-nx, nz)), 20), true);
             baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+            ticks++; // tick0 owns the clock and does not run while nudging (run 22: nudged for 10 minutes)
             status = "nudging toward " + nudgeDest.toShortString();
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
