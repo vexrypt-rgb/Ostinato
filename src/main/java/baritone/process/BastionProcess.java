@@ -1184,6 +1184,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
         double shoreDist = shore == null ? -1 : Math.sqrt(feet.distSqr(shore));
         BastionLava.Escape esc = BastionLava.choose(shoreDist, depth, me.getHealth(), slot >= 0, cell != null, pillarBlocks(me) > 0);
+        if (!me.isInLava()) lavaSince = -1; else if (lavaSince < 0) lavaSince = ticks;
+        // swimming for a shore that never comes (lava8: 4 s in the lava 2 blocks from the edge, dead): door after 1 s
+        if (esc == BastionLava.Escape.SWIM && slot >= 0 && cell != null && lavaSince >= 0 && ticks - lavaSince > 20) esc = BastionLava.Escape.DOOR;
         if (esc != BastionLava.Escape.DOOR) return null;
         if (slot >= 9) {
             ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
@@ -1934,7 +1937,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
-    private long burnSince = -1;
+    private long burnSince = -1, lavaSince = -1;
 
     private boolean lavaNearPos(BlockPos at) {
         for (BlockPos c : BlockPos.betweenClosed(at.offset(-2, -1, -2), at.offset(2, 1, 2))) if (lavaAt(c)) return true;
