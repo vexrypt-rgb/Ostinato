@@ -113,7 +113,7 @@ public final class BastTest implements AbstractGameEventListener {
             say("BAST target " + target);
             if (REAL) {
                 run("execute in minecraft:the_nether run forceload add " + (target.getX() + 90) + " " + target.getZ());
-                BlockPos[] spot = new BlockPos[1];
+                BlockPos[] spot = new BlockPos[2];
                 MinecraftServer sv2 = mc.getSingleplayerServer();
                 sv2.submit(() -> {
                     var lvl = sv2.getLevel(net.minecraft.resources.ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
@@ -127,6 +127,7 @@ public final class BastTest implements AbstractGameEventListener {
                                 BlockPos f = q.offset(ox, 0, oz);
                                 open = lvl.getBlockState(f).getBlock() == net.minecraft.world.level.block.Blocks.NETHERRACK && lvl.getBlockState(f.above()).isAir() && lvl.getBlockState(f.above(2)).isAir() && lvl.getBlockState(f.above(3)).isAir();
                             }
+                            if (open && spot[1] == null) spot[1] = q.above();
                             // no lava within 8 (runs 34 and lava7 started next to a lavafall and burned before the test began)
                             for (int lx = -8; lx <= 8 && open; lx++) for (int ly = -3; ly <= 6 && open; ly++) for (int lz = -8; lz <= 8 && open; lz++)
                                 if (lvl.getFluidState(q.offset(lx, ly, lz)).is(net.minecraft.tags.FluidTags.LAVA)) open = false;
@@ -134,6 +135,7 @@ public final class BastTest implements AbstractGameEventListener {
                         }
                     }
                 }).join();
+                if (spot[0] == null) spot[0] = spot[1]; // no lava-free spot in range (lava9 crashed on null): take any open one
                 say("BAST start " + spot[0]);
                 run("execute as @p in minecraft:the_nether run tp @p " + spot[0].getX() + " " + spot[0].getY() + " " + spot[0].getZ());
             } else run("execute as @p in minecraft:the_nether run tp @p " + target.getX() + " 80 " + target.getZ());
