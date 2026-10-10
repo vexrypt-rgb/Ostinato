@@ -71,7 +71,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             tick(event);
         } catch (Throwable t) {
             failure = "tick failed: " + t;
+            String was = startedWith;
             stop();
+            startedWith = was; // so a settings change still restarts the link
         }
     }
 

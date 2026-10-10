@@ -100,9 +100,13 @@ public final class LocalSpoolTransport implements SwarmTransport {
 
     private void deliver(Path dir, String line) throws IOException {
         Path tmp = dir.resolve(".tmp-" + UUID.randomUUID());
-        Files.write(tmp, line.getBytes(StandardCharsets.US_ASCII));
-        String name = String.format("%016x-%s-%08x%s", System.currentTimeMillis(), self, counter.incrementAndGet(), SUFFIX);
-        Files.move(tmp, dir.resolve(name), StandardCopyOption.ATOMIC_MOVE);
+        try {
+            Files.write(tmp, line.getBytes(StandardCharsets.US_ASCII));
+            String name = String.format("%016x-%s-%08x%s", System.currentTimeMillis(), self, counter.incrementAndGet(), SUFFIX);
+            Files.move(tmp, dir.resolve(name), StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(tmp); // only still there when the write or the rename failed
+        }
     }
 
     @Override
@@ -121,6 +125,10 @@ public final class LocalSpoolTransport implements SwarmTransport {
                 line = new String(Files.readAllBytes(p), StandardCharsets.US_ASCII).trim();
                 Files.delete(p);
             } catch (NoSuchFileException raced) {
+                continue;
+            } catch (IOException busy) {
+                // held open by something else for a moment; it stays in the inbox for the next poll, and the
+                // lines already taken out of it are not lost with this one
                 continue;
             }
             out.add(line);

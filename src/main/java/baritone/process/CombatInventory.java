@@ -65,7 +65,7 @@ final class CombatInventory {
         // 1626 bench, 17 rounds: the spear routine dealt 0-4 a round and died in 11. A plain jab
         // is 0.96 through diamond and a smash is 4-7, so a kit with a mace and wind charges
         // plays the mace and leaves the spear in the hotbar.
-        if (slotOf(me, Items.MACE) >= 0 && (slotOf(me, Items.WIND_CHARGE) >= 0 || me.getOffhandItem().getItem() == Items.WIND_CHARGE)) return -1;
+        if (has(me, Items.MACE) && (has(me, Items.WIND_CHARGE) || me.getOffhandItem().getItem() == Items.WIND_CHARGE)) return -1;
         int byItem = best(me, SPEARS);
         if (byItem >= 0) return byItem;
         for (int i = 0; i < 9; i++) {
@@ -123,15 +123,33 @@ final class CombatInventory {
         invSwap(me, menuSlot, 40);
     }
 
-    /** Hotbar slot of the item, pulling it into the hotbar (slot 8) if it's only in the main inventory. */
+    /** Whether we carry the item at all. Asking moves nothing; {@link #slotOf} does, and is for the moment of use. */
+    boolean has(Player me, Item item) {
+        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) return true;
+        return false;
+    }
+
+    /** Hotbar slot of the item, pulling it into the hotbar if it's only in the main inventory. */
     int slotOf(Player me, Item item) {
         for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
         for (int i = 9; i < 36; i++) {
             if (me.getInventory().getItem(i).getItem() == item) {
-                return invSwap(me, i, 8) ? 8 : -1;
+                int to = spare(me);
+                return invSwap(me, i, to) ? to : -1;
             }
         }
         return -1;
+    }
+
+    /** Hotbar slot to pull an item into: an empty one, else the last that holds no sword or axe. */
+    private int spare(Player me) {
+        int kept = -1;
+        for (int i = 8; i >= 0; i--) {
+            ItemStack st = me.getInventory().getItem(i);
+            if (st.isEmpty()) return i;
+            if (kept < 0 && !java.util.Arrays.asList(SWORDS).contains(st.getItem()) && !java.util.Arrays.asList(AXES).contains(st.getItem())) kept = i;
+        }
+        return kept < 0 ? 8 : kept;
     }
 
     int best(Player me, Item[] tiers) {

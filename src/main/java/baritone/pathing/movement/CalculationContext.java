@@ -113,6 +113,10 @@ public class CalculationContext {
     public final BetterWorldBorder worldBorder;
 
     public final PrecomputedData precomputedData;
+    /** The walk hooks of {@link AltoClefSettings} as they stood when planning began; the lists are null while no hook is registered, which is nearly always. */
+    public final boolean swimThroughLava;
+    private final List<java.util.function.Predicate<BlockPos>> forceWalkOn;
+    private final List<java.util.function.Predicate<BlockPos>> avoidWalkThrough;
 
     public CalculationContext(IBaritone baritone) {
         this(baritone, false);
@@ -138,6 +142,9 @@ public class CalculationContext {
         this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
         this.allowBreak = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowBreak.value;
+        this.swimThroughLava = AltoClefSettings.getInstance().canSwimThroughLava();
+        this.forceWalkOn = AltoClefSettings.getInstance().forceWalkOnSnapshot();
+        this.avoidWalkThrough = AltoClefSettings.getInstance().forceAvoidWalkThroughSnapshot();
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
         this.allowParkour = ExperimentalMovement.allowParkour();
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
@@ -258,10 +265,28 @@ public class CalculationContext {
         if (isPossiblyProtected(x, y, z)) {
             return COST_INF;
         }
-        if (AltoClefSettings.getInstance().shouldAvoidBreaking(new BlockPos(x, y, z)) || current.getBlock() instanceof EndPortalFrameBlock) {
+        if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z) || current.getBlock() instanceof EndPortalFrameBlock) {
             return COST_INF;
         }
         return 1;
+    }
+
+    /** Whether a hook asks us to keep out of this cell. The executor asks the same of {@link AltoClefSettings}, so the two agree. */
+    public boolean avoidsWalkThrough(int x, int y, int z) {
+        return avoidWalkThrough != null && anyMatch(avoidWalkThrough, x, y, z);
+    }
+
+    /** Whether a hook vouches for this block as footing. */
+    public boolean forcesWalkOn(int x, int y, int z) {
+        return forceWalkOn != null && anyMatch(forceWalkOn, x, y, z);
+    }
+
+    private static boolean anyMatch(List<java.util.function.Predicate<BlockPos>> preds, int x, int y, int z) {
+        BlockPos pos = new BlockPos(x, y, z);
+        for (int i = 0; i < preds.size(); i++) {
+            if (preds.get(i).test(pos)) return true;
+        }
+        return false;
     }
 
     /** A free boat at feet level on (x,y,z) or right beside it, ready to board at a cliff top. */

@@ -309,7 +309,8 @@ public class MovementDescend extends Movement {
         int mask = 0;
         for (int k = 0; k < LadderClutch.CELLS && landY + k < startY; k++) {
             // the clutch item goes in this cell, so it has to be somewhere altoclef lets us place
-            if (!context.get(destX, landY + k, destZ).isAir() || context.isPossiblyProtected(destX, landY + k, destZ)) {
+            if (!context.get(destX, landY + k, destZ).isAir() || context.isPossiblyProtected(destX, landY + k, destZ)
+                    || AltoClefSettings.getInstance().shouldAvoidPlacingAt(destX, landY + k, destZ)) {
                 continue;
             }
             for (Direction side : Direction.Plane.HORIZONTAL) {

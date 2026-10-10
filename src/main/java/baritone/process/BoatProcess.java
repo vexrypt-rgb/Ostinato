@@ -1,5 +1,7 @@
 package baritone.process;
 
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+
 import baritone.Baritone;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.utils.BoatUtil;
@@ -49,6 +51,8 @@ public final class BoatProcess extends BaritoneProcessHelper {
     private int phaseTicks, sailStuck;
     private double lastProgressD;
     private int lastCheck;
+    /** Answers of {@link #surface} for the search under way, by cell; null outside one. */
+    private Long2ByteOpenHashMap seen;
 
     public BoatProcess(Baritone baritone) {
         super(baritone);
@@ -89,6 +93,9 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 return enter(Phase.EXIT);
             }
             return false;
+        }
+        if (lastCheck > ctx.player().tickCount + 200) {
+            lastCheck = 0; // tickCount starts again with a new player entity (respawn, another dimension)
         }
         if (ctx.player().tickCount - lastCheck < 40) {
             return false;
@@ -185,9 +192,20 @@ public final class BoatProcess extends BaritoneProcessHelper {
         }
     }
 
+    /** {@link #surface} within one search, which asks about every cell a dozen times over. */
+    private boolean surfaceSeen(int x, int y, int z) {
+        long k = key(x, z);
+        byte v = seen.get(k);
+        if (v == 0) {
+            v = (byte) (surface(x, y, z) ? 1 : 2);
+            seen.put(k, v);
+        }
+        return v == 1;
+    }
+
     private boolean nearShore(int x, int y, int z) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            if (!surface(x + dx, y, z + dz)) return true;
+            if (!surfaceSeen(x + dx, y, z + dz)) return true;
         }
         return false;
     }
@@ -202,6 +220,15 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     /** extra: blocks spent reaching the start (e.g. walking to a found boat), taken off the gain. */
     private boolean plan(Goal g, BlockPos feet, boolean aboard, double extra) {
+        seen = new Long2ByteOpenHashMap();
+        try {
+            return search(g, feet, aboard, extra);
+        } finally {
+            seen = null;
+        }
+    }
+
+    private boolean search(Goal g, BlockPos feet, boolean aboard, double extra) {
         BlockPos start = null;
         search:
         for (int r = 0; r <= 3; r++) {
@@ -235,8 +262,8 @@ public final class BoatProcess extends BaritoneProcessHelper {
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 int nx = cx + dx, nz = cz + dz;
-                if (Math.abs(nx - start.getX()) > RADIUS || Math.abs(nz - start.getZ()) > RADIUS || !surface(nx, y, nz)) continue;
-                if (dx != 0 && dz != 0 && (!surface(cx + dx, y, cz) || !surface(cx, y, cz + dz))) continue;
+                if (Math.abs(nx - start.getX()) > RADIUS || Math.abs(nz - start.getZ()) > RADIUS || !surfaceSeen(nx, y, nz)) continue;
+                if (dx != 0 && dz != 0 && (!surfaceSeen(cx + dx, y, cz) || !surfaceSeen(cx, y, cz + dz))) continue;
                 double nd = c[0] + (dx != 0 && dz != 0 ? 1.414 : 1) + (nearShore(nx, y, nz) ? 3 : 0);
                 long nk = key(nx, nz);
                 Double old = dist.get(nk);

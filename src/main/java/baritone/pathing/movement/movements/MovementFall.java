@@ -79,7 +79,7 @@ public class MovementFall extends Movement {
     public static volatile int boatRideTick;
 
     public static boolean boatRideClaimed(int now) {
-        return boatRide && now - boatRideTick <= 5;
+        return boatRide && Math.abs(now - boatRideTick) <= 5; // either way: tickCount starts again with a new player entity
     }
     private Boolean boatMode;
     private int boatTicks;
@@ -150,6 +150,9 @@ public class MovementFall extends Movement {
         ladderIn = false;
         ticks = clickedAt = pickupMisses = 0;
         pickupStart = goneAt = -1;
+        // a movement the executor runs again decides afresh and gets its full time to place and mount
+        boatMode = null;
+        boatTicks = 0;
     }
 
     private FallMode fallMode() {
@@ -318,7 +321,7 @@ public class MovementFall extends Movement {
             if (boatTicks++ > 200) {
                 boatRide = false;
                 logDebug("boat fall: stuck riding at edge " + ctx.player().position() + " ticks=" + boatTicks);
-            return state.setStatus(MovementStatus.UNREACHABLE);
+                return state.setStatus(MovementStatus.UNREACHABLE);
             }
             return state.setTarget(new MovementTarget(new Rotation(want, 10), true));
         }

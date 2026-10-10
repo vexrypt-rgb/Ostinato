@@ -249,6 +249,16 @@ public class MovementSlime extends Movement {
         return state.getStatus() != MovementStatus.RUNNING || !running;
     }
 
+    /** The executor runs a movement again after a setback; a flight that was under way must not be taken as flown. */
+    @Override
+    public void reset() {
+        super.reset();
+        js = null;
+        real = null;
+        running = landed = false;
+        settle = 0;
+    }
+
     @Override
     public MovementState updateState(MovementState state) {
         super.updateState(state);
@@ -270,15 +280,7 @@ public class MovementSlime extends Movement {
             System.arraycopy(o.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
         Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x;
-        real.y = p.y;
-        real.z = p.z;
-        real.vx = m.x;
-        real.vy = m.y;
-        real.vz = m.z;
-        real.onGround = ctx.player().onGround();
-        real.sprinting = ctx.player().isSprinting();
-        real.collidedH = ctx.player().horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
         if (landed) {
             settle++;
             if (ctx.playerFeet().equals(dest) && (settle > 3 || Math.abs(m.x) + Math.abs(m.z) < 0.03)) {
