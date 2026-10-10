@@ -43,6 +43,7 @@ import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
 import baritone.bastion.BastionLava;
 import baritone.bastion.EdgeCost;
+import baritone.bastion.BastionTrap;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.bastion.BastionPlan;
 import baritone.bastion.BastionSettings;
@@ -122,6 +123,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         badLoot.clear();
+        holes.clear();
+        digHole = null;
+        holeRetry = 0;
         camping = false;
         unreachable.clear();
         usefulSeen = -1;
@@ -1948,6 +1952,81 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
     private boolean camping;
+    /** Surface cells of dug piglin holes (the hole is the two blocks below) and the one being dug. */
+    private final List<BlockPos> holes = new ArrayList<>();
+    private BlockPos digHole;
+    private boolean holeDigging;
+    private long holeRetry, lastBait;
+
+    private boolean trapped(Piglin p) {
+        for (BlockPos h : holes) if (p.blockPosition().getX() == h.getX() && p.blockPosition().getZ() == h.getZ() && p.getY() < h.getY() - 0.5) return true;
+        return false;
+    }
+
+    private BastionTrap.Site holeSite(Player me, List<Piglin> piglins, BlockPos c, int dx, int dz) {
+        BlockPos a = c.below(), b = c.below(2);
+        boolean open = ctx.world().getBlockState(c).isAir() && ctx.world().getBlockState(c.above()).isAir();
+        BlockState sa = ctx.world().getBlockState(a), sb = ctx.world().getBlockState(b);
+        boolean mineable = solid(a) && solid(b) && sa.getDestroySpeed(ctx.world(), a) >= 0 && sb.getDestroySpeed(ctx.world(), b) >= 0 && sa.getDestroySpeed(ctx.world(), a) < 20 && sb.getDestroySpeed(ctx.world(), b) < 20
+                && !sa.is(Blocks.CHEST) && !sb.is(Blocks.CHEST) && !sa.is(Blocks.GOLD_BLOCK) && !sb.is(Blocks.GOLD_BLOCK) && !(sa.getBlock() instanceof net.minecraft.world.level.block.FallingBlock);
+        boolean walled = true;
+        for (BlockPos h : new BlockPos[]{a, b}) for (Direction d : Direction.Plane.HORIZONTAL) walled &= solid(h.relative(d));
+        boolean lava = lavaNearPos(a) || lavaNearPos(b.below());
+        double pd = 99;
+        for (Piglin p : piglins) pd = Math.min(pd, p.position().distanceTo(Vec3.atCenterOf(c)));
+        return new BastionTrap.Site(dx, dz, open, mineable, walled, solid(b.below()), lava, onEdge(c), pd);
+    }
+
+    /** Dig up to two separate 1x2 holes beside the camp, bait them with an ingot, and let the camp trade with whoever falls in. */
+    private PathingCommand holeStep(Player me, List<Piglin> piglins, int ingots) {
+        BlockPos feet = me.blockPosition();
+        if (digHole == null && holes.size() < 2 && ingots >= 4 && ticks > holeRetry && me.onGround()) {
+            List<BastionTrap.Site> sites = new ArrayList<>();
+            for (Direction d : Direction.Plane.HORIZONTAL) sites.add(holeSite(me, piglins, feet.relative(d), d.getStepX(), d.getStepZ()));
+            List<int[]> taken = new ArrayList<>();
+            for (BlockPos h : holes) taken.add(new int[]{h.getX() - feet.getX(), h.getZ() - feet.getZ()});
+            BastionTrap.Site s = BastionTrap.choose(sites, taken);
+            if (s == null) holeRetry = ticks + 600;
+            else { digHole = feet.offset(s.dx(), 0, s.dz()); holeDigging = false; digSince = ticks; logDirect("Bastion: digging piglin hole at " + digHole.toShortString()); }
+        }
+        if (digHole != null) {
+            BlockPos target = solid(digHole.below()) ? digHole.below() : solid(digHole.below(2)) ? digHole.below(2) : null;
+            if (target == null) {
+                holes.add(digHole);
+                digHole = null;
+                holeDigging = false;
+                return pause0();
+            }
+            if (ticks - digSince > 300) { logDirect("Bastion: hole dig stalled, skipping"); digHole = null; holeRetry = ticks + 1200; return null; }
+            if (feet.getX() == digHole.getX() && feet.getZ() == digHole.getZ()) { digHole = null; holeRetry = ticks + 600; return null; }
+            int pick = pickaxeSlot(me);
+            if (pick < 0) { digHole = null; holeRetry = ticks + 6000; return null; }
+            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
+            me.getInventory().setSelectedSlot(pick);
+            // sneak: never step into the hole we are digging
+            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(target).add(0, 0.5, 0), ctx.playerRotations()), true);
+            if (!target.equals(holeTarget)) { holeTarget = target; ctx.playerController().clickBlock(target, Direction.UP); }
+            else ctx.playerController().onPlayerDamageBlock(target, Direction.UP);
+            status = "camp: digging piglin hole";
+            return pause0();
+        }
+        // bait an empty hole: an ingot dropped in brings a piglin down after it
+        for (BlockPos h : holes) {
+            boolean occupied = piglins.stream().anyMatch(this::trapped);
+            if (occupied || ticks - lastBait < 140 || ingots < 2) continue;
+            int slot = hotbarGold(me);
+            if (slot < 0) return null;
+            me.getInventory().setSelectedSlot(slot);
+            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+            aimer.look(Vec3.atCenterOf(h.below(2)), 0);
+            if (Math.abs(Mth.wrapDegrees(me.getYRot() - (float) Math.toDegrees(Math.atan2(-(h.getX() + 0.5 - me.getX()), h.getZ() + 0.5 - me.getZ())))) < 15 && safeDrop(me)) { lastBait = ticks; status = "camp: baiting hole"; }
+            return pause0();
+        }
+        return null;
+    }
+    private BlockPos holeTarget;
+    private long digSince;
     private long campIdleSince;
 
 
@@ -1990,14 +2069,27 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "camp: pick up " + itemId(drop.getItem());
             return new PathingCommand(new GoalBlock(drop.blockPosition()), PathingCommandType.SET_GOAL_AND_PATH);
         }
+        PathingCommand hole = holeStep(me, piglins, ingots);
+        if (hole != null) return hole;
         Piglin t = null;
         for (Piglin p : piglins) {
-            if (!calmNear(me, p, THROW_RANGE) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
-            if (t == null || me.distanceTo(p) < me.distanceTo(t)) t = p;
+            if (!(calmNear(me, p, THROW_RANGE) || trapped(p) && me.distanceTo(p) <= THROW_RANGE) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
+            // a trapped piglin first: it cannot wander off mid-trade
+            if (t == null || trapped(p) && !trapped(t) || trapped(p) == trapped(t) && me.distanceTo(p) < me.distanceTo(t)) t = p;
         }
         if (t == null) {
             if (calm > 0 || !admiring.isEmpty()) campIdleSince = ticks;
-            if (ticks - campIdleSince > 200) { camping = false; return null; }
+            if (holes.isEmpty() && ticks - campIdleSince > 40) {
+                // the group wandered off: follow it a short way instead of ending the camp
+                Piglin f = null;
+                for (Piglin p : piglins) if (p.isAlive() && !p.isBaby() && !p.isAggressive() && Math.abs(p.getY() - me.getY()) <= 2 && me.distanceTo(p) < 16 && brutesAround(p) == 0
+                        && !lavaNearPos(p.blockPosition()) && !lavaDropNear(p.blockPosition()) && (f == null || me.distanceTo(p) < me.distanceTo(f))) f = p;
+                if (f != null && ticks - campIdleSince < 400) {
+                    status = "camp: following piglins (" + String.format("%.1f", me.distanceTo(f)) + ")";
+                    return new PathingCommand(new GoalNear(f.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
+                }
+            }
+            if (ticks - campIdleSince > (holes.isEmpty() ? 400 : 600)) { camping = false; return null; }
             status = "camp: waiting (" + admiring.size() + " admiring, " + calm + " near)";
             return pause0();
         }
