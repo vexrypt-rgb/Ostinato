@@ -1976,7 +1976,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         BlockPos a = c.below(), b = c.below(2);
         boolean open = ctx.world().getBlockState(c).isAir() && ctx.world().getBlockState(c.above()).isAir();
         BlockState sa = ctx.world().getBlockState(a), sb = ctx.world().getBlockState(b);
-        boolean mineable = solid(a) && solid(b) && sa.getDestroySpeed(ctx.world(), a) >= 0 && sb.getDestroySpeed(ctx.world(), b) >= 0 && sa.getDestroySpeed(ctx.world(), a) < 20 && sb.getDestroySpeed(ctx.world(), b) < 20
+        // thin floors: the lower cell may already be open (a gap under the floor), as long as it is walled and floored
+        boolean bOk = sb.isAir() || solid(b) && sb.getDestroySpeed(ctx.world(), b) >= 0 && sb.getDestroySpeed(ctx.world(), b) < 20;
+        boolean mineable = solid(a) && bOk && sa.getDestroySpeed(ctx.world(), a) >= 0 && sa.getDestroySpeed(ctx.world(), a) < 20
                 && !sa.is(Blocks.CHEST) && !sb.is(Blocks.CHEST) && !sa.is(Blocks.GOLD_BLOCK) && !sb.is(Blocks.GOLD_BLOCK) && !(sa.getBlock() instanceof net.minecraft.world.level.block.FallingBlock);
         boolean walled = true;
         for (BlockPos h : new BlockPos[]{a, b}) for (Direction d : Direction.Plane.HORIZONTAL) walled &= solid(h.relative(d));
