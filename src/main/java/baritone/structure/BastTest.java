@@ -127,6 +127,9 @@ public final class BastTest implements AbstractGameEventListener {
                                 BlockPos f = q.offset(ox, 0, oz);
                                 open = lvl.getBlockState(f).getBlock() == net.minecraft.world.level.block.Blocks.NETHERRACK && lvl.getBlockState(f.above()).isAir() && lvl.getBlockState(f.above(2)).isAir() && lvl.getBlockState(f.above(3)).isAir();
                             }
+                            // no lava within 8 (runs 34 and lava7 started next to a lavafall and burned before the test began)
+                            for (int lx = -8; lx <= 8 && open; lx++) for (int ly = -3; ly <= 6 && open; ly++) for (int lz = -8; lz <= 8 && open; lz++)
+                                if (lvl.getFluidState(q.offset(lx, ly, lz)).is(net.minecraft.tags.FluidTags.LAVA)) open = false;
                             if (open) { spot[0] = q.above(); break; }
                         }
                     }
