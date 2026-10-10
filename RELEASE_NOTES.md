@@ -14,6 +14,36 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 26.3 | `26.3` | 25 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## New in v1.19.2
+
+A second review pass. Mostly fixes; the kinematic simulation learns a few blocks and potion effects.
+
+- **Combat** (1.21.11, 26.3): looking up an item no longer moves it. Items are pulled into the hotbar only when
+  they are about to be held, so a fight that carries more than nine useful things no longer shuffles them in
+  and out with the inventory screen flashing. An inventory screen the fight opened and then had no use for is
+  closed again; one the player opened is left alone. Digging through to a walled-off opponent respects `allowBreak`.
+- **Kinematic simulation** (all versions): soul sand and honey slow the simulated walk as they do the real
+  one, honey halves the jump and slows a fall down its side, and Speed, Slowness, Jump Boost and Soul Speed
+  are followed. The planner's and the driver's views of the world answer the same questions. Under Levitation
+  or Slow Falling the look-ahead drivers stand down and no gap jumps are planned; under Slowness the longer
+  jumps (four-block gaps, neos, climb and momentum jumps) are left out.
+- **Kinematic fixes** (1.21.11, 26.3): the mid-air extension check judged every jump against the first
+  destination it was ever asked about, and the parkour landing check never dropped its cached collision boxes.
+- **Pathing**: a look-ahead mover that holds one path position too long steps aside for classic movement on
+  1.21.11 and 26.3 as well (physics and kinematic drivers only). The physics mover leaves digging, bridging and
+  drops deeper than three blocks to Baritone. A drop into shallow water next to deep water costs more instead
+  of being refused, which left no way down under some cliffs.
+- **`maxPathLengthBlocks`** (all versions; ported from xiaoka6666/baritone by way of the 26.3 line): throws
+  away a path longer than this many positions and leaves that goal alone for five seconds. Off by default
+  (`0`), because it also refuses long routes that are fine. On 26.3, where it was added at 150, it is now off
+  as well.
+- **Lanterns**: a lantern standing on the ground can be walked on, as the low floor it is (no pillaring from
+  it, no jump from it onto a full block).
+- **GUI**: the reset button says what it will reset, and the task panel no longer lists the task folder on
+  every frame.
+- The fault event file stops growing at 4 MB.
+- Checked by unit tests and builds on every line, not played live.
+
 ## New in v1.19.1
 
 A review pass over the fork's own code. Fixes only, no new features.
