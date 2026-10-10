@@ -458,8 +458,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (stuckAnchor == null || me.position().distanceTo(stuckAnchor) > 2.5) {
             stuckAnchor = me.position();
             stuckSince = ticks;
+            BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = 40D;
             return cmd;
         }
+        // no path at all (in-game: a bridge bastion whose only way in is through netherrack, 10 minutes standing still):
+        // the walk-around penalty only suits short detours, so allow digging once we are going nowhere
+        if (calcFailed || ticks - stuckSince > 100) BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = 2D;
         if (ticks - stuckSince < 200) return cmd;
         // blacklist the cells the current movement keeps trying to reach (and where we stand), then plan again around them
         try {
