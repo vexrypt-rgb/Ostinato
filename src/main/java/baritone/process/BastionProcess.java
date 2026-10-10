@@ -40,6 +40,7 @@ import net.minecraft.core.Direction;
 import baritone.api.pathing.goals.GoalGetToBlock;
 import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
+import baritone.bastion.BastionLava;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.bastion.BastionPlan;
 import baritone.bastion.BastionSettings;
@@ -117,6 +118,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsExhausted = false;
         chestsLooted = 0;
         stuckCount.clear();
+        doorPos = null;
         preferGold = null;
         dropPlan = null;
         plannedFallUntil = 0;
@@ -596,6 +598,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return pveP.onTick(calcFailed, isSafeToCancel);
         }
 
+        // standing in our door pocket: the lava cannot reach us, so wait out the fire here instead of walking back into it
+        if (doorPos != null) {
+            boolean inDoor = ctx.world().getBlockState(doorPos).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
+                    && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(doorPos).expandTowards(0, 1, 0));
+            if (inDoor && (me.isOnFire() || ticks < doorSince + 40)) {
+                status = "in door pocket, waiting for the fire to go out";
+                return pause0();
+            }
+            if (!inDoor || !me.isOnFire()) doorPos = null;
+        }
         if (me.isInLava()) {
             // in lava: no planning, just step directly away from the nearest lava and jump (a path from here may never come)
             Vec3 away = Vec3.ZERO;
@@ -612,6 +624,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 if (shore == null || me.blockPosition().distSqr(c) < me.blockPosition().distSqr(shore)) shore = c;
             }
             if (shore != null) away = Vec3.atBottomCenterOf(shore).subtract(me.position());
+            PathingCommand door = doorPocket(me, shore);
+            if (door != null) return door;
             if (away.horizontalDistanceSqr() > 0.01) {
                 baritone.getPveProcess().hold = false;
                 float yaw = (float) Math.toDegrees(Math.atan2(-away.x, away.z));
@@ -876,6 +890,41 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     private boolean floor(BlockPos p) {
         return !ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty();
+    }
+
+    private BlockPos doorPos;
+    private long doorSince;
+
+    /** Deep lava or a far shore: put a door in the lava around us and stand in the pocket it makes (see BastionLava). */
+    private PathingCommand doorPocket(Player me, BlockPos shore) {
+        BlockPos feet = me.blockPosition();
+        int depth = 0;
+        for (int i = -1; i < 4 && lavaAt(feet.above(1).below(i + 1)); i++) depth++;
+        // the door's lower half needs a full block under it: our feet cell, or the one below while we bob above it
+        BlockPos cell = null;
+        for (BlockPos c : new BlockPos[]{feet, feet.below()}) {
+            BlockState under = ctx.world().getBlockState(c.below());
+            if (lavaAt(c) && under.isFaceSturdy(ctx.world(), c.below(), Direction.UP) && (lavaAt(c.above()) || ctx.world().getBlockState(c.above()).canBeReplaced())) { cell = c; break; }
+        }
+        int slot = -1;
+        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
+        double shoreDist = shore == null ? -1 : Math.sqrt(feet.distSqr(shore));
+        BastionLava.Escape esc = BastionLava.choose(shoreDist, depth, me.getHealth(), slot >= 0, cell != null, pillarBlocks(me) > 0);
+        if (esc != BastionLava.Escape.DOOR) return null;
+        if (slot >= 9) {
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
+            return pause0();
+        }
+        me.getInventory().setSelectedSlot(slot);
+        BlockPos floorPos = cell.below();
+        Vec3 hit = Vec3.atCenterOf(floorPos).add(0, 0.5, 0);
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
+        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, floorPos, false));
+        doorPos = cell.immutable();
+        doorSince = ticks;
+        status = "lava: door pocket at " + cell.toShortString() + " (depth " + depth + ", shore " + (shore == null ? "none" : String.format("%.1f", shoreDist)) + ")";
+        logDirect("Bastion: " + status);
+        return pause0();
     }
 
     private boolean lavaNear(Player me) {
