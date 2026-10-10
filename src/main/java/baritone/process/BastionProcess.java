@@ -208,7 +208,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // a mob on another level (the bastion's lower floors, a pit) cannot be fought and would pin us in place trying to path to it
         if (otherLevel(e, me)) return false;
         Long until = ignored.get(e.getUUID());
-        if (until != null && until > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 4)) return false;
+        if (until != null && until > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)) return false;
         if (e instanceof PiglinBrute || e instanceof Zoglin) return me.distanceTo(e) < THREAT_RANGE;
         boolean hunting = e instanceof Mob m && (m.getTarget() == me || (m.isAggressive() && me.distanceTo(e) < 10));
         if (e instanceof Hoglin) return me.distanceTo(e) < (early ? THREAT_RANGE : 8) || hunting;
@@ -516,7 +516,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // two blocks (gravel/soul sand alternate): its attack box ends at its head, ours still reaches it, so we fight it from above.
         List<LivingEntity> heavies = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(THREAT_RANGE),
                 e -> e != me && (e instanceof PiglinBrute || e instanceof Zoglin) && e.isAlive() && (perching || !otherLevel(e, me))
-                        && !(ignored.getOrDefault(e.getUUID(), 0L) > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 4)));
+                        && !(ignored.getOrDefault(e.getUUID(), 0L) > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)));
         boolean heavyComing = heavies.stream().anyMatch(e -> me.distanceTo(e) < 8 || me.distanceTo(e) < 12 && e instanceof Mob m && m.isAggressive());
         PveProcess pveP = baritone.getPveProcess();
         if (!perching && !me.isInLava() && !me.isOnFire() && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
@@ -1079,6 +1079,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             BlockPos b = new BlockPos(pt.x(), pt.y(), pt.z());
             if (!ctx.world().hasChunkAt(b)) { unloaded = true; continue; }
             if (looted.contains(b) || badChest.getOrDefault(b, 0L) > ticks || badGold.getOrDefault(b, 0L) > ticks) continue;
+            // a brute guarding it (even one we gave up fighting) kills a speedrun kit: come back when it has moved
+            if (!ctx.world().getEntitiesOfClass(PiglinBrute.class, new net.minecraft.world.phys.AABB(b).inflate(9), PiglinBrute::isAlive).isEmpty()) { unloaded = true; continue; } // deferred, not done
             if (pt.kind() == BastionPlan.Kind.GOLD) {
                 if (!wantGold || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
             } else if (!ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
