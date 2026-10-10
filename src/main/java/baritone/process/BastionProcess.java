@@ -766,9 +766,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 baritone.getLookBehavior().updateTarget(new Rotation(yaw, 10), true);
                 baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
                 // holding jump keeps us bobbing at the surface where no door cell is found (lava8-10): with a door, sink instead
-                boolean door = false;
-                for (int i = 0; i < 36 && !door; i++) door = me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS);
-                if (!door || shore != null && me.position().distanceTo(Vec3.atBottomCenterOf(shore)) < 1.6) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
+                boolean haveDoor = false;
+                for (int i = 0; i < 36 && !haveDoor; i++) haveDoor = me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS);
+                if (!haveDoor || shore != null && me.position().distanceTo(Vec3.atBottomCenterOf(shore)) < 1.6) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
                 status = "step away from lava";
                 return pause0();
             }
