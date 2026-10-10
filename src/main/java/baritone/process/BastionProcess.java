@@ -460,6 +460,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
             stuckAvoider = pos -> { Long until = stuckAvoid.get(pos); return until != null && until > ticks; };
             AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().add(stuckAvoider);
         }
+        if (ticks < nudgeUntil && nudgeDest != null && ctx.player() != null && !ctx.player().isInLava()) {
+            // walk straight at the step the planner keeps failing (run 16: 5 minutes at index 0 of a 2-block MovementFall)
+            Player p0 = ctx.player();
+            double nx = nudgeDest.getX() + 0.5 - p0.getX(), nz = nudgeDest.getZ() + 0.5 - p0.getZ();
+            baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-nx, nz)), 20), true);
+            baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+            status = "nudging toward " + nudgeDest.toShortString();
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        }
         PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
         Player me = ctx.player();
         if (cmd == null || cmd.commandType != PathingCommandType.SET_GOAL_AND_PATH || me == null) {
@@ -481,6 +490,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             var cur = baritone.getPathingBehavior().getCurrent();
             if (cur != null) {
                 var mv = cur.getPath().movements().get(Math.min(cur.getPosition(), cur.getPath().movements().size() - 1));
+                if (mv instanceof baritone.pathing.movement.movements.MovementFall || mv instanceof baritone.pathing.movement.movements.MovementDescend) {
+                    nudgeDest = new BlockPos(mv.getDest().x, mv.getDest().y, mv.getDest().z);
+                    nudgeUntil = ticks + 20;
+                }
                 for (var d : new baritone.api.utils.BetterBlockPos[]{mv.getDest(), mv.getSrc()}) {
                     if (d.equals(me.blockPosition())) continue;
                     BlockPos dp = new BlockPos(d.x, d.y, d.z);
@@ -1798,6 +1811,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     /** A dropped item near us that is not our own ingot: barter loot. */
     private final Set<Integer> badLoot = new HashSet<>();
+    private BlockPos nudgeDest;
+    private long nudgeUntil;
     private int lootTarget = -1;
     private long startTick;
 
