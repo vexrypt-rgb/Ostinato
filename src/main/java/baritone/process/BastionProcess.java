@@ -527,6 +527,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
                         && !(ignored.getOrDefault(e.getUUID(), 0L) > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)));
         boolean heavyComing = heavies.stream().anyMatch(e -> me.distanceTo(e) < 8 || me.distanceTo(e) < 12 && e instanceof Mob m && m.isAggressive());
         PveProcess pveP = baritone.getPveProcess();
+        // a brute hits for ~6-13 through gold armour: low on health with one close, a speedrunner leaves with what they have
+        // (in-game run 13 fought, perched and retreated at 12 hp and died in the tower)
+        if (bastion != null && !exiting && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
+            logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp, leaving");
+            pveP.hold = false;
+            perching = false;
+            if (fighting) pveP.clearEnemies();
+            fighting = false;
+            return exit(me, counts(me));
+        }
+        if (exiting && bastion != null) return exit(me, counts(me));
         if (!perching && !me.isInLava() && !me.isOnFire() && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
             perching = true;
             perchUp = false;
@@ -1263,7 +1274,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     /** Opening a chest angers every piglin that can see us (gold armour does not help); brutes are hostile anyway. */
     private boolean piglinWatching(Player me, List<LivingEntity> near) {
-        for (LivingEntity e : near) if (e instanceof Piglin p && !p.isBaby() && p.isAlive() && me.distanceTo(p) < 16 && p.hasLineOfSight(me)) return true;
+        for (LivingEntity e : near) if ((e instanceof Piglin p && !p.isBaby() || e instanceof PiglinBrute) && e.isAlive() && me.distanceTo(e) < 16 && e.hasLineOfSight(me)) return true;
         return false;
     }
 
@@ -1345,11 +1356,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 status = "chest: piglins watching, waiting";
                 return pause0();
             }
-            if (!haveGold) {
-                // no ingot to calm them with afterwards: come back later
-                badChest.put(next, ticks + 600);
-                return null;
-            }
+            // opening a chest angers every piglin that sees it, gold armour or not (run 13: 17 -> 6 hp after opening anyway):
+            // never open in view, come back later
+            badChest.put(next, ticks + 600);
+            chestTarget = null;
+            return null;
         }
         baritone.getLookBehavior().updateTarget(rot, true);
         // aimAt already proved this rotation hits the chest; the smoothed aim may never settle exactly, so do not wait for it
