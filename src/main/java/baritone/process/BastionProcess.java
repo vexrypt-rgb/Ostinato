@@ -1278,9 +1278,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private boolean lavaNear(Player me) {
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 0; dy++) if (lavaAt(me.blockPosition().offset(dx, dy, dz))) return true;
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 0; dy++) if (realLava(me.blockPosition().offset(dx, dy, dz))) return true;
         return false;
     }
+
+    private boolean realLava(BlockPos p) { return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA); }
 
     private boolean lavaAt(BlockPos p) {
         return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || EdgeCost.lavaSoon.contains(LavaFlow.key(p.getX(), p.getY(), p.getZ()));
