@@ -119,6 +119,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         badLoot.clear();
+        distractTries.clear();
         startTick = 0;
         doorPos = null;
         descentSteps = 0;
@@ -219,7 +220,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         boolean hunting = e instanceof Mob m && (m.getTarget() == me || (m.isAggressive() && me.distanceTo(e) < 10));
         if (e instanceof Hoglin) return me.distanceTo(e) < (early ? THREAT_RANGE : 8) || hunting;
         // an angry adult piglin that is handed gold forgets us (see distract); only fight it when we have none to give
-        if (e instanceof Piglin p) return hunting && !(luring && me.getHealth() >= 10) && !(haveGold && !p.isBaby());
+        // run 15: dropped gold did not calm piglins angered by a mined gold block, and it died distracting at 14 hp.
+        // Two tries per piglin, then fight it.
+        if (e instanceof Piglin p) return hunting && !(luring && me.getHealth() >= 10) && !(haveGold && !p.isBaby() && distractTries.getOrDefault(p.getUUID(), 0) < 2 && me.getHealth() >= 14);
         return false;
     }
 
@@ -301,6 +304,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long lastDistract = -1000;
     public int distractions;
 
+    private final Map<java.util.UUID, Integer> distractTries = new HashMap<>();
+
     private PathingCommand distract(Player me, Piglin angry) {
         PathingCommand pause = new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (ticks - lastDistract < 30) return pause;
@@ -318,7 +323,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, angry))) < 12) {
             ((LocalPlayer) me).drop(false);
             lastDistract = ticks;
-            distractions++;
+            distractions++; distractTries.merge(angry.getUUID(), 1, Integer::sum);
             traded.add(angry.getUUID());
             status = "distract: dropped gold";
         }
@@ -773,7 +778,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (haveGold) {
             Piglin angry = null;
             for (LivingEntity e : near) {
-                if (e instanceof Piglin p && !p.isBaby() && p.isAlive() && p.isAggressive() && me.distanceTo(p) < 12 && (angry == null || me.distanceTo(p) < me.distanceTo(angry))) angry = p;
+                if (e instanceof Piglin p && !p.isBaby() && p.isAlive() && p.isAggressive() && me.distanceTo(p) < 12 && distractTries.getOrDefault(p.getUUID(), 0) < 2 && me.getHealth() >= 14 && (angry == null || me.distanceTo(p) < me.distanceTo(angry))) angry = p;
             }
             if (angry != null) {
                 PathingCommand d = distract(me, angry);
