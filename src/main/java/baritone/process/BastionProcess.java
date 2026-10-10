@@ -568,7 +568,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (exiting && bastion != null) return exit(me, counts(me));
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
-        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && me.distanceTo(e) < 8 && (e instanceof Mob m && m.isAggressive() || me.getHealth() < 16) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
+        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && me.distanceTo(e) < 9 && (e.hasLineOfSight(me) || me.getHealth() < 16) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
         if (brute != null) {
             pveP.hold = false;
             perching = false;
@@ -913,7 +913,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         for (Piglin p : piglins) {
             if (p.getOffhandItem().is(Items.GOLD_INGOT) || p.isAggressive() || !p.isAlive()) continue;
             int brutes = brutesAround(p);
-            if (brutes >= 3) continue;
+            // brutes are always hostile and as fast as us: never walk up to a piglin with one beside it (run 24: 8 brutes, dead)
+            if (brutes >= 1) continue;
             // reachability: height difference means stairs or a drop, no line of sight means a wall in between
             double score = me.distanceTo(p) + 4 * Math.abs(p.getY() - me.getY()) + (me.hasLineOfSight(p) ? 0 : 8) + 10 * brutes;
             if (score < bestScore) { bestScore = score; target = p; }
