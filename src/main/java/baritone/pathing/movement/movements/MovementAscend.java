@@ -191,6 +191,8 @@ public class MovementAscend extends Movement {
         BlockState jumpingOnto = BlockStateInterface.get(ctx, positionToPlace);
         if (!MovementHelper.canWalkOn(ctx, positionToPlace, jumpingOnto)) {
             ticksWithoutPlacement++;
+            // checked first: the back-off below returned early forever when we never stopped overlapping the cell (run 44: 4 minutes)
+            if (ticksWithoutPlacement > 80) return state.setStatus(MovementStatus.UNREACHABLE);
             // standing over the cell we must fill (overhanging the edge) blocks the placement: step back onto src first
             if (ctx.player().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
                 // ease back onto the centre of src by velocity, not by walking: walking "towards src" from its edge
