@@ -30,6 +30,7 @@ import baritone.gui.model.*;
 import baritone.gui.render.GuiDraw;
 import baritone.gui.render.Icons;
 import baritone.gui.tasks.game.TaskService;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.world.item.Item;
@@ -255,6 +256,7 @@ public final class OstinatoScreen extends Screen {
             out.removeIf(e -> !isModified(e));
         }
         rows = out;
+        dropdown = null; // its row may be gone
         scrollTarget = 0;
         scrollAnim.snap(0);
     }
@@ -502,7 +504,7 @@ public final class OstinatoScreen extends Screen {
     private void drawHeader(GuiGraphics ms, int mx, int my, int accent, long now) {
         GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
         float lw = GuiDraw.textColors(ms, "Ostinato", x0 + 28, y0 + 9, 1.5f, true, Theme.logoColors(accent, 8), true);
-        String chip = "Baritone 1.16.1";
+        String chip = "Baritone " + SharedConstants.getCurrentVersion().getName();
         float cx = x0 + 28 + lw + 8, cw = GuiDraw.width(chip) + 10;
         if (cx + cw < searchX0() - 6) {
             GuiDraw.round(ms, cx, y0 + 10, cx + cw, y0 + 21, 2.5f, 0x1A7AA2F7);
@@ -1440,7 +1442,8 @@ public final class OstinatoScreen extends Screen {
                 return true;
             }
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE || key == KeyNames.parse(settings.guiKeybind.value)) {
+        // a letter bound to the screen must still be typable in the search box
+        if (key == GLFW.GLFW_KEY_ESCAPE || (!searchFocused && key == KeyNames.parse(settings.guiKeybind.value))) {
             onClose();
             return true;
         }

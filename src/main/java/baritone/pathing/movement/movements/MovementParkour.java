@@ -316,6 +316,12 @@ public class MovementParkour extends Movement {
     }
 
     @Override
+    public void reset() {
+        super.reset();
+        ranUp = false;
+    }
+
+    @Override
     public MovementState updateState(MovementState state) {
         super.updateState(state);
         if (state.getStatus() != MovementStatus.RUNNING) {

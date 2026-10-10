@@ -187,7 +187,7 @@ public final class SigilS2S {
         SigilS2C.Frame fr = SigilS2C.parseFrame(SigilB64.decode(fields[fields.length - 1]), false);
         SigilException lastErr = new SigilException("Could not open signed circle message.");
         for (SigilCircle circle : keyring) {
-            if (!circle.slug().equals(fields[1]) && !circle.name().toLowerCase().equals(fields[1])) {
+            if (!circle.slug().equals(fields[1]) && !circle.name().toLowerCase(java.util.Locale.ROOT).equals(fields[1])) {
                 continue;
             }
             byte[] ctx = context(circle.name());

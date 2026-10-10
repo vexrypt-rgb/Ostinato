@@ -17,13 +17,10 @@ final class CombatMovement {
         void key(Input in);
     }
 
-    private static final boolean KINEMATIC = !"false".equals(System.getProperty("ostinato.kinematic"));
-
     /** Ticks of forward to hold released so the sprint drops before a hit; the process's hit logic sets it. */
     int wtap;
 
     private int strafeDir = 1, strafeLeft, dodgeLeft, dodgeDir = 1;
-    private baritone.pathing.kinematic.KinematicController kin;
 
     private final IPlayerContext ctx;
     private final Random rng;

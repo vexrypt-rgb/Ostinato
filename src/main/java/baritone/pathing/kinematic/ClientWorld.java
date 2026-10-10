@@ -4,6 +4,7 @@ import baritone.api.utils.IPlayerContext;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -25,6 +26,21 @@ public final class ClientWorld implements PlayerSim.World {
 
     public void reset() {
         cache.clear();
+    }
+
+    /** Loads the real player's position, velocity and collision flags into {@code sim}. */
+    public static void readPlayer(IPlayerContext ctx, PlayerSim sim) {
+        Vec3 p = ctx.player().position();
+        Vec3 m = ctx.player().getDeltaMovement();
+        sim.x = p.x;
+        sim.y = p.y;
+        sim.z = p.z;
+        sim.vx = m.x;
+        sim.vy = m.y;
+        sim.vz = m.z;
+        sim.onGround = ctx.player().onGround();
+        sim.sprinting = ctx.player().isSprinting();
+        sim.collidedH = ctx.player().horizontalCollision;
     }
 
     @Override

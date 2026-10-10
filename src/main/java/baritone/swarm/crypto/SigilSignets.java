@@ -99,11 +99,25 @@ public final class SigilSignets {
         return out;
     }
 
-    /** name -> key, last file wins on duplicate names. */
+    /**
+     * name -> key. A member may have two records for one key (the public pin beside the local seed); the one
+     * that can sign is kept. Two records naming one member with different keys are refused: which is pinned
+     * must not depend on file order.
+     */
     public static Map<String, SigilEd25519> loadMap(Path sigilHome) throws SigilException {
+        return toMap(load(sigilHome));
+    }
+
+    static Map<String, SigilEd25519> toMap(List<Record> records) throws SigilException {
         Map<String, SigilEd25519> out = new LinkedHashMap<String, SigilEd25519>();
-        for (Record r : load(sigilHome)) {
-            out.put(r.name, r.key);
+        for (Record r : records) {
+            SigilEd25519 had = out.get(r.name);
+            if (had != null && !java.util.Arrays.equals(had.publicKey(), r.key.publicKey())) {
+                throw new SigilException("Two signets for '" + r.name + "' with different keys.");
+            }
+            if (had == null || !had.canSign()) {
+                out.put(r.name, r.key);
+            }
         }
         return Collections.unmodifiableMap(out);
     }

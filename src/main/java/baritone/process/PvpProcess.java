@@ -32,6 +32,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Random;
 import java.util.function.Predicate;
@@ -108,6 +109,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         float hp = me.getHealth() + me.getAbsorptionAmount();
         if (lastHealth >= 0 && hp < lastHealth) damageTaken += lastHealth - hp;
         lastHealth = hp;
+        // tickCount starts again with a new player entity (respawn, another dimension)
+        if (me.tickCount < lastAxeTick) lastAxeTick = -1000;
+        if (me.tickCount < targetSwingTick) targetSwingTick = 0;
 
         if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = pick(me);
         baritone.getInputOverrideHandler().clearAllKeys();
@@ -119,8 +123,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
         boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
         boolean safe = eyeToBox(me, target) > 4.5 || targetEating;
-        if (eatTicks > 0 || (me.getHealth() <= 5 || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
-                && (slotOf(me, Items.GOLDEN_APPLE) >= 0 || slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0)) {
+        if (eatTicks > 0 || (me.getHealth() <= 5 || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (has(me, Items.RESPAWN_ANCHOR) ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
+                && (has(me, Items.GOLDEN_APPLE) || has(me, Items.ENCHANTED_GOLDEN_APPLE))) {
             if (eat(me)) return pause();
         }
 
@@ -144,7 +148,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (dist <= DRIVE) steer(me, dist);
             return pause();
         }
-        if (!los && dist <= 3) { // right there but walled off (a crawl gap under our feet, a hole): dig through
+        if (!los && dist <= 3 && Baritone.settings().allowBreak.value) { // right there but walled off (a crawl gap under our feet, a hole): dig through
             BlockHitResult wall = ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), target.getEyePosition(),
                     net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me));
             if (wall.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
@@ -155,7 +159,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         if (dist > DRIVE || !los) {
-            if (los && dist > BOW_MIN && slotOf(me, Items.BOW) >= 0 && slotOf(me, Items.ARROW) >= 0) return bow(me);
+            if (los && dist > BOW_MIN && has(me, Items.BOW) && has(me, Items.ARROW)) return bow(me);
             use(false);
             return new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }
@@ -251,7 +255,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private boolean shouldBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && slotOf(me, Items.SHIELD) < 0) return false;
+        if (me.getOffhandItem().getItem() != Items.SHIELD && !has(me, Items.SHIELD)) return false;
+        // the totem keeps the offhand while it is what keeps us alive: swapping the two every tick does neither job
+        if (me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING && (me.getHealth() <= 8 || crystalFight)) return false;
         ItemStack using = target.getUseItem();
         if (target.isUsingItem() && (using.getItem() == Items.BOW || using.getItem() == Items.CROSSBOW) && dist > 4) return true;
         AABB around = me.getBoundingBox().inflate(6);
@@ -281,9 +287,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private boolean eat(Player me) {
-        Item apple = me.getHealth() <= 6 && slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0 ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
-        if (slotOf(me, apple) < 0) apple = Items.ENCHANTED_GOLDEN_APPLE;
-        if (slotOf(me, apple) < 0) {
+        Item apple = me.getHealth() <= 6 && has(me, Items.ENCHANTED_GOLDEN_APPLE) ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
+        if (!has(me, apple)) apple = Items.ENCHANTED_GOLDEN_APPLE;
+        if (!has(me, apple)) {
             eatTicks = 0;
             return false;
         }
@@ -315,16 +321,34 @@ public final class PvpProcess extends BaritoneProcessHelper {
         ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, 40, ClickType.SWAP, me);
     }
 
-    /** Hotbar slot of the item, pulling it into the hotbar (slot 8) if it's only in the main inventory. */
+    /** Whether we carry the item at all. Asking moves nothing; {@link #slotOf} does, and is for the moment of use. */
+    private boolean has(Player me, Item item) {
+        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) return true;
+        return false;
+    }
+
+    /** Hotbar slot of the item, pulling it into the hotbar if it's only in the main inventory. */
     private int slotOf(Player me, Item item) {
         for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
         for (int i = 9; i < 36; i++) {
             if (me.getInventory().getItem(i).getItem() == item) {
-                ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me);
-                return 8;
+                int to = spare(me);
+                ctx.playerController().windowClick(me.inventoryMenu.containerId, i, to, ClickType.SWAP, me);
+                return to;
             }
         }
         return -1;
+    }
+
+    /** Hotbar slot to pull an item into: an empty one, else the last that holds no weapon. */
+    private int spare(Player me) {
+        int kept = -1;
+        for (int i = 8; i >= 0; i--) {
+            ItemStack st = me.getInventory().getItem(i);
+            if (st.isEmpty()) return i;
+            if (kept < 0 && !Arrays.asList(SWORDS).contains(st.getItem()) && !Arrays.asList(AXES).contains(st.getItem())) kept = i;
+        }
+        return kept < 0 ? 8 : kept;
     }
 
     private int best(Player me, Item[] tiers) {
@@ -365,7 +389,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private LivingEntity pick(Player me) {
         return ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(CHASE),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && filter.test(e))
+                        e -> e != me && e.isAlive() && !e.isRemoved() && !e.isSpectator() && filter.test(e))
                 .stream().filter(e -> me.distanceTo(e) <= CHASE)
                 .min(Comparator.comparingDouble(me::distanceToSqr)).orElse(null);
     }
@@ -381,9 +405,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * else lay obsidian beside the target's feet. Anything that would hurt us more than it, or pop us, is skipped.
      */
     private boolean crystal(Player me) {
-        crystalFight = slotOf(me, Items.END_CRYSTAL) >= 0 || slotOf(me, Items.RESPAWN_ANCHOR) >= 0 || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
+        crystalFight = has(me, Items.END_CRYSTAL) || has(me, Items.RESPAWN_ANCHOR) || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
         if (anchor(me)) return true;
-        if (slotOf(me, Items.END_CRYSTAL) < 0 || me.distanceTo(target) > 7) return false;
+        if (!has(me, Items.END_CRYSTAL) || me.distanceTo(target) > 7) return false;
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         EndCrystal hitIt = null;
         float best = 0;
@@ -395,7 +419,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                 hitIt = c;
             }
         }
-        if (hitIt == null && slotOf(me, Items.OBSIDIAN) >= 0) {
+        if (hitIt == null && has(me, Items.OBSIDIAN)) {
             // a crystal that would hurt us and that we won't pop: wall it off at leg height
             EndCrystal danger = null;
             float worst = 6;
@@ -427,7 +451,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             }
         }
         if (base != null) return place(me, Items.END_CRYSTAL, base);
-        if (slotOf(me, Items.OBSIDIAN) < 0) return false;
+        if (!has(me, Items.OBSIDIAN)) return false;
         BlockPos floor = null;
         best = 0;
         for (Direction d : Direction.Plane.HORIZONTAL) {
@@ -449,7 +473,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * glowstone, else put an anchor down beside its feet.
      */
     private boolean anchor(Player me) {
-        if (slotOf(me, Items.RESPAWN_ANCHOR) < 0 && slotOf(me, Items.GLOWSTONE) < 0 || me.distanceTo(target) > 7) return false;
+        if (!has(me, Items.RESPAWN_ANCHOR) && !has(me, Items.GLOWSTONE) || me.distanceTo(target) > 7) return false;
         Level w = ctx.world();
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         BlockPos t = target.blockPosition(), boom = null, charge = null, backOff = null;
@@ -480,7 +504,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             select(me, slot);
             return click(me, boom);
         }
-        if (charge != null && slotOf(me, Items.GLOWSTONE) >= 0) {
+        if (charge != null && has(me, Items.GLOWSTONE)) {
             select(me, slotOf(me, Items.GLOWSTONE));
             return me.getMainHandItem().getItem() == Items.GLOWSTONE && click(me, charge);
         }
@@ -493,7 +517,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             key(Input.MOVE_BACK);
             return true;
         }
-        if (slotOf(me, Items.RESPAWN_ANCHOR) < 0 || slotOf(me, Items.GLOWSTONE) < 0) return false;
+        if (!has(me, Items.RESPAWN_ANCHOR) || !has(me, Items.GLOWSTONE)) return false;
         BlockPos spot = null;
         float best = 0;
         // not just beside them: a target down a one-wide hole has no free side, only the rim
@@ -511,8 +535,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */
     private boolean shield(Player me, BlockPos threat) {
-        Item block = slotOf(me, Items.OBSIDIAN) >= 0 ? Items.OBSIDIAN : slotOf(me, Items.COBBLESTONE) >= 0 ? Items.COBBLESTONE
-                : slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? Items.RESPAWN_ANCHOR : null;
+        Item block = has(me, Items.OBSIDIAN) ? Items.OBSIDIAN : has(me, Items.COBBLESTONE) ? Items.COBBLESTONE
+                : has(me, Items.RESPAWN_ANCHOR) ? Items.RESPAWN_ANCHOR : null;
         if (block == null) return false;
         BlockPos feet = me.blockPosition();
         int dx = Integer.signum(threat.getX() - feet.getX()), dz = Integer.signum(threat.getZ() - feet.getZ());

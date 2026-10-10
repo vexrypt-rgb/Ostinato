@@ -24,6 +24,11 @@ final class MobProfile {
     /** Rough damage per hit, used to rank who to kill first. */
     final double threat;
 
+    private static final MobProfile BOMB = new MobProfile(Kind.BOMB, 12);
+    private static final MobProfile AVOID = new MobProfile(Kind.AVOID, 30);
+    private static final MobProfile SHOOTER = new MobProfile(Kind.RANGED, 5);
+    private static final MobProfile GHAST = new MobProfile(Kind.RANGED, 10);
+
     private MobProfile(Kind kind, double threat) {
         this.kind = kind;
         this.threat = threat;
@@ -34,20 +39,20 @@ final class MobProfile {
     }
 
     static MobProfile of(LivingEntity e) {
-        if (e instanceof net.minecraft.world.entity.monster.Creeper) return new MobProfile(Kind.BOMB, 12);
+        if (e instanceof net.minecraft.world.entity.monster.Creeper) return BOMB;
         if (e instanceof net.minecraft.world.entity.monster.warden.Warden
                 || e instanceof net.minecraft.world.entity.monster.Guardian
                 || e instanceof net.minecraft.world.entity.boss.wither.WitherBoss
                 || e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon
                 || e instanceof net.minecraft.world.entity.monster.Evoker
                 || e instanceof net.minecraft.world.entity.monster.Ravager) {
-            return new MobProfile(Kind.AVOID, 30);
+            return AVOID;
         }
         if (e instanceof net.minecraft.world.entity.monster.RangedAttackMob
                 || e instanceof net.minecraft.world.entity.monster.Ghast
                 || e instanceof net.minecraft.world.entity.monster.Blaze
                 || e instanceof net.minecraft.world.entity.monster.Shulker) {
-            return new MobProfile(Kind.RANGED, e instanceof net.minecraft.world.entity.monster.Ghast ? 10 : 5);
+            return e instanceof net.minecraft.world.entity.monster.Ghast ? GHAST : SHOOTER;
         }
         double dmg = e.getAttributes().hasAttribute(Attributes.ATTACK_DAMAGE) ? e.getAttributeValue(Attributes.ATTACK_DAMAGE) : 3;
         return new MobProfile(Kind.MELEE, dmg);

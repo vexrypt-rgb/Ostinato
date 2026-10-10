@@ -130,6 +130,10 @@ public final class TungstenMovementBackend implements IMovementBackend, Helper {
         }
         try {
             cancelPathingOnly();
+            if (searching()) {
+                // find() ignores a call until the previous search thread has wound down, so nothing would start
+                return false;
+            }
             Vec3 target = new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
             targetField.set(null, target);
             pathfinderFind.invoke(pathfinder, mc.level, target, mc.player);
@@ -154,6 +158,24 @@ public final class TungstenMovementBackend implements IMovementBackend, Helper {
         }
     }
 
+    /** A cancelled search that has not wound down yet; {@link #pathTo} declines until it has. */
+    public boolean isStopping() {
+        if (!isAvailable()) {
+            return false;
+        }
+        try {
+            AtomicBoolean stop = (AtomicBoolean) pathfinderStop.get(pathfinder);
+            return stop != null && stop.get() && searching();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private boolean searching() throws IllegalAccessException {
+        AtomicBoolean active = (AtomicBoolean) pathfinderActive.get(pathfinder);
+        return active != null && active.get();
+    }
+
     @Override
     public boolean isPathing() {
         if (!isAvailable()) {
@@ -163,8 +185,7 @@ public final class TungstenMovementBackend implements IMovementBackend, Helper {
             if (followIsActive != null && Boolean.TRUE.equals(followIsActive.invoke(null))) {
                 return true;
             }
-            AtomicBoolean active = (AtomicBoolean) pathfinderActive.get(pathfinder);
-            if (active != null && active.get()) {
+            if (searching()) {
                 return true;
             }
             Object exec = executorField.get(null);

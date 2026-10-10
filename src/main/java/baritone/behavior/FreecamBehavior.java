@@ -17,7 +17,6 @@
 
 package baritone.behavior;
 
-import baritone.api.BaritoneAPI;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.event.events.TickEvent;

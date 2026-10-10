@@ -54,6 +54,7 @@ public class MovementSwim extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
+        SRC.get().context = null; // the world may have changed since
         return cost(context, src.x, src.y, src.z, dest.x - src.x, dest.y - src.y, dest.z - src.z);
     }
 
@@ -146,8 +147,30 @@ public class MovementSwim extends Movement {
         return !f.isEmpty() && !f.isSource() && f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING);
     }
 
+    /** The last source cell asked about, and whether one can swim from it: the planner asks once per direction. */
+    private static final class Src {
+        Object context;
+        int x, y, z;
+        boolean wet;
+    }
+
+    private static final ThreadLocal<Src> SRC = ThreadLocal.withInitial(Src::new);
+
+    /** Swimming, not walking: the source is water, or a cell we will have dug into it. */
+    private static boolean wet(CalculationContext c, int x, int y, int z) {
+        Src s = SRC.get();
+        if (s.context != c || s.x != x || s.y != y || s.z != z) {
+            s.context = c;
+            s.x = x;
+            s.y = y;
+            s.z = z;
+            s.wet = water(c, x, y, z) || dugShaft(c, x, y, z);
+        }
+        return s.wet;
+    }
+
     public static double cost(CalculationContext c, int x, int y, int z, int dx, int dy, int dz) {
-        if (!Baritone.settings().swimInWater.value) return COST_INF;
+        if (!Baritone.settings().swimInWater.value || !wet(c, x, y, z)) return COST_INF;
         int tx = x + dx, ty = y + dy, tz = z + dz;
         if (dy == 1 && Math.abs(dx) + Math.abs(dz) == 1 && water(c, x, y, z) && MovementHelper.canWalkOn(c.bsi, tx, y, tz)
                 && headroom(c, tx, ty, tz) && headroom(c, tx, ty + 1, tz) && headroom(c, x, ty, z) && headroom(c, x, ty + 1, z)) {
@@ -160,9 +183,8 @@ public class MovementSwim extends Movement {
         if (dy > 0 && ((water(c, x, y, z) && shallow(c, x, y, z)) || ((dx != 0 || dz != 0) && water(c, tx, ty, tz) && current(c, tx, ty, tz)))) return COST_INF;
         // Falling water shoves down harder than a diagonal swim climbs: stuck at the foot of a waterfall. Straight up still works.
         if (dy > 0 && (dx != 0 || dz != 0) && (falling(c, tx, ty, tz) || falling(c, tx, y, tz))) return COST_INF;
-        // Swimming, not walking: both ends must be in water with room for the head.
+        // Both ends must be in water with room for the head.
         // Dest may be the air block just above the surface (surfacing); it must sit on water.
-        if (!water(c, x, y, z) && !dugShaft(c, x, y, z)) return COST_INF;
         if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) == 1) {
             // Axis moves may dig: the new feet/head cells are water, passable, or mined out (slowly).
             double mine = 0;
