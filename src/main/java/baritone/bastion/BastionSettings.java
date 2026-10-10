@@ -23,6 +23,8 @@ public final class BastionSettings {
     public static int exitDistance = 72;
     /** Ticks to wait for piglins to look away before opening a chest anyway. */
     public static int chestWaitTicks = 200;
+    /** Most ingots worth fetching for one bastion (gold blocks are finite and slow to mine). */
+    public static int goldCap = 64;
 
     static { resetTargets(); }
 
@@ -45,6 +47,7 @@ public final class BastionSettings {
                 case "exit": exitWhenDone = Boolean.parseBoolean(value); return null;
                 case "exitdistance": exitDistance = Integer.parseInt(value); return null;
                 case "chestwait": chestWaitTicks = Integer.parseInt(value); return null;
+                case "goldcap": goldCap = Math.max(1, Integer.parseInt(value)); return null;
                 default:
                     int n = Integer.parseInt(value);
                     if (n <= 0) TARGETS.remove(key); else TARGETS.put(key, n);
@@ -57,6 +60,6 @@ public final class BastionSettings {
 
     public static String describe() {
         return "targets=" + TARGETS + " barters=" + maxConcurrentBarters + " keepIngots=" + keepIngots + " maxDrop=" + maxSafeDrop
-                + " lowHealth=" + lowHealth + " exit=" + exitWhenDone + " exitDistance=" + exitDistance + " chestWait=" + chestWaitTicks;
+                + " lowHealth=" + lowHealth + " exit=" + exitWhenDone + " exitDistance=" + exitDistance + " chestWait=" + chestWaitTicks + " goldCap=" + goldCap;
     }
 }

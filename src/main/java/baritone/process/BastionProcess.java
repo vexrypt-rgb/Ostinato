@@ -38,7 +38,9 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.Direction;
 
 import baritone.api.pathing.goals.GoalGetToBlock;
+import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
+import baritone.api.pathing.goals.GoalBlock;
 import baritone.bastion.BastionPlan;
 import baritone.bastion.BastionSettings;
 import net.minecraft.core.component.DataComponents;
@@ -114,6 +116,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         goldSourceGone = false;
         chestsExhausted = false;
         chestsLooted = 0;
+        preferGold = null;
+        dropPlan = null;
+        plannedFallUntil = 0;
+        craftStep = 0;
+        admiring.clear();
         bastion = null;
         admiring.clear();
         throwsDone = lootPicked = 0;
@@ -445,7 +452,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
 
         haveGold = ingotCount(me) >= 1;
-        // hurt: never take even a 3-block drop into a bastion pit
+        PathingCommand clutch = clutch(me);
+        if (clutch != null) return clutch;        // hurt: never take even a 3-block drop into a bastion pit
         BaritoneAPI.getSettings().maxFallHeightNoWater.value = me.getHealth() < BastionSettings.lowHealth ? Math.min(2, BastionSettings.maxSafeDrop) : BastionSettings.maxSafeDrop;
         // 0. A brute swings for ~9, so by the time we are hurt it is too late to run. As soon as one is coming for us, pillar up
         // two blocks (gravel/soul sand alternate): its attack box ends at its head, ours still reaches it, so we fight it from above.
@@ -668,9 +676,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
             PathingCommand c = lootChests(me, near);
             if (c != null) return c;
         }
-        if (ingotCount(me) < 2 && !done) {
+        // gold bookkeeping: blocks count nine ingots (split in the 2x2 grid when the ingots run low), nuggets only count
+        int blocks = countOf(me, Items.GOLD_BLOCK), throwable = BastionGoals.throwable(ingotCount(me), blocks);
+        if (craftStep > 0 || blocks > 0 && ingotCount(me) < 2) {
+            PathingCommand craft = craftGold(me);
+            if (craft != null) return craft;
+        }
+        // nearly out: mine the nearest safe gold block (the plan above already fetches planned gold blocks when more is needed)
+        if (!done && throwable < 2) {
             PathingCommand acquire = acquireGold(me, near);
-            if (acquire != null) return acquire;
+            if (acquire != null) { goldSourceGone = false; return acquire; }
             goldSourceGone = true; // no pickaxe or no gold block left in range
         }
 
@@ -743,6 +758,162 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "threw gold (" + admiring.size() + " admiring)";
         }
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+    }
+
+    // ---- gold crafting, verified drops, fall clutch ----
+    private BlockPos preferGold;
+    private BastionDrops.Ledge dropPlan;
+    private long dropScan = -1000, dropSince, plannedFallUntil;
+    private BlockPos dropFor;
+
+    private int countOf(Player me, net.minecraft.world.item.Item item) {
+        int n = 0;
+        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(item)) n += s.getCount(); }
+        return n;
+    }
+
+    /** One gold block becomes nine ingots in the 2x2 grid: pick up, right-click one in, put the rest back, take the result. */
+    private PathingCommand craftGold(Player me) {
+        if (me.containerMenu != me.inventoryMenu) return null; // a chest is open: its slot ids are not the inventory's
+        int held = slotOf(me, Items.GOLD_BLOCK);
+        if (held < 0 && craftStep == 0) return null;
+        var c = ctx.playerController();
+        int w = me.inventoryMenu.containerId;
+        if (craftStep == 0) craftFrom = held < 9 ? held + 36 : held;
+        switch (craftStep) {
+            case 0 -> c.windowClick(w, craftFrom, 0, ClickType.PICKUP, me);
+            case 1 -> c.windowClick(w, 1, 1, ClickType.PICKUP, me);
+            case 2 -> c.windowClick(w, craftFrom, 0, ClickType.PICKUP, me);
+            default -> c.windowClick(w, 0, 0, ClickType.QUICK_MOVE, me);
+        }
+        craftStep = (craftStep + 1) % 4;
+        status = "craft ingots";
+        return pause0();
+    }
+
+    private boolean floor(BlockPos p) {
+        return !ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty();
+    }
+
+    private boolean lavaAt(BlockPos p) {
+        return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA);
+    }
+
+    /** Feet height of the landing below (x, y, z) feet cell; Integer.MIN_VALUE when the column is unloaded, ends in lava or is too deep. */
+    private int landing(int x, int y, int z, boolean[] safe) {
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        for (int yy = y; yy > y - 40; yy--) {
+            m.set(x, yy - 1, z);
+            if (!ctx.world().hasChunkAt(m)) return Integer.MIN_VALUE;
+            if (lavaAt(m) || lavaAt(m.above())) return Integer.MIN_VALUE;
+            if (floor(m)) {
+                BlockState st = ctx.world().getBlockState(m);
+                BlockPos feet = m.above();
+                boolean ok = !st.is(Blocks.MAGMA_BLOCK) && !st.is(Blocks.FIRE) && !st.is(Blocks.SOUL_FIRE) && !floor(feet.above()) && ctx.world().getFluidState(feet).isEmpty();
+                for (Direction d : Direction.Plane.HORIZONTAL) ok &= !lavaAt(feet.relative(d)) && !lavaAt(m.relative(d));
+                safe[0] = ok;
+                return yy;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
+    /** Ledges within 10 blocks at our height whose drop lands on a checked floor. */
+    private List<BastionDrops.Ledge> ledges(Player me) {
+        List<BastionDrops.Ledge> out = new ArrayList<>();
+        BlockPos at = me.blockPosition();
+        boolean[] safe = new boolean[1];
+        for (int dx = -10; dx <= 10; dx++) for (int dz = -10; dz <= 10; dz++) for (int dy = -1; dy <= 1; dy++) {
+            BlockPos s = at.offset(dx, dy, dz);
+            if (!ctx.world().hasChunkAt(s) || !floor(s.below()) || floor(s) || floor(s.above())) continue;
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                BlockPos o = s.relative(d);
+                if (floor(o) || floor(o.above()) || floor(o.below())) continue;
+                safe[0] = false;
+                int land = landing(o.getX(), o.getY(), o.getZ(), safe);
+                if (land == Integer.MIN_VALUE) continue;
+                out.add(new BastionDrops.Ledge(s.getX(), s.getY(), s.getZ(), d.getStepX(), d.getStepZ(), land, safe[0]));
+            }
+        }
+        return out;
+    }
+
+    /** A verified drop toward a target far below, instead of the long stairs; null to path normally. */
+    private PathingCommand drop(Player me, BlockPos target) {
+        if (!me.onGround() || me.getY() - target.getY() < BastionSettings.maxSafeDrop + 3) { if (dropPlan != null && me.getY() < dropPlan.y() - 1) dropPlan = null; return null; }
+        if (!target.equals(dropFor) || ticks - dropScan > 60 && dropPlan == null) {
+            dropFor = target;
+            dropScan = ticks;
+            BlockPos at = me.blockPosition();
+            dropPlan = BastionDrops.choose(ledges(me), at.getX(), at.getY(), at.getZ(), target.getX(), target.getY(), target.getZ(), me.getHealth(), BastionSettings.maxSafeDrop);
+            dropSince = ticks;
+        }
+        if (dropPlan == null) return null;
+        if (ticks - dropSince > 300) { dropPlan = null; dropScan = ticks + 200; return null; }
+        BlockPos ledge = new BlockPos(dropPlan.x(), dropPlan.y(), dropPlan.z());
+        if (!me.blockPosition().equals(ledge)) {
+            status = "to verified drop " + ledge.toShortString() + " (" + dropPlan.height() + " down)";
+            return new PathingCommand(new GoalBlock(ledge), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        // on the ledge: walk off it; the clutch stands down for this fall
+        plannedFallUntil = ticks + 60;
+        float yaw = (float) Math.toDegrees(Math.atan2(-dropPlan.dx(), dropPlan.dz()));
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 30), true);
+        baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+        status = "taking verified drop (" + dropPlan.height() + ")";
+        return pause0();
+    }
+
+    /** Falling further than is safe: put a block under (or beside and under) us now, while the damage so far is still small. */
+    private PathingCommand clutch(Player me) {
+        if (me.onGround() || me.isInLava() || me.getDeltaMovement().y > -0.2 || me.isFallFlying()) return null;
+        BlockPos feet = me.blockPosition();
+        int remaining = 0;
+        boolean intoLava = false;
+        for (int i = 1; i <= 64; i++) {
+            BlockPos b = feet.below(i);
+            if (!ctx.world().hasChunkAt(b)) return null;
+            if (lavaAt(b)) { intoLava = true; remaining = i - 1; break; }
+            if (floor(b)) { remaining = i - 1; break; }
+            remaining = i;
+        }
+        int slot = clutchBlock(me);
+        BastionDrops.Clutch d = BastionDrops.clutch(me.fallDistance, remaining + (me.getY() - feet.getY()), intoLava, ticks < plannedFallUntil,
+                me.getHealth(), BastionSettings.maxSafeDrop, slot >= 0);
+        if (d != BastionDrops.Clutch.PLACE) return null;
+        // the cell just below our feet, placed against any solid neighbour (the ledge we came off is usually one)
+        for (int down = 1; down <= 2; down++) {
+            BlockPos cell = feet.below(down);
+            if (floor(cell)) return null;
+            for (Direction dir : Direction.values()) {
+                if (dir == Direction.UP) continue;
+                BlockPos against = cell.relative(dir);
+                if (!floor(against)) continue;
+                Vec3 hit = Vec3.atCenterOf(against).add(Vec3.atLowerCornerOf(dir.getOpposite().getUnitVec3i()).scale(0.5));
+                if (me.getEyePosition(1.0F).distanceTo(hit) > ctx.playerController().getBlockReachDistance()) continue;
+                if (slot >= 9) {
+                    ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
+                    return pause0();
+                }
+                me.getInventory().setSelectedSlot(slot);
+                baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
+                ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, dir.getOpposite(), against, false));
+                status = "clutch: block under us (" + (int) me.fallDistance + " fallen, " + remaining + " to go" + (intoLava ? ", lava" : "") + ")";
+                return pause0();
+            }
+        }
+        return null;
+    }
+
+    /** Netherrack, soul sand or another throwaway; gravel last since it falls through unless the cell under it is solid. */
+    private int clutchBlock(Player me) {
+        int gravel = -1;
+        for (int i = 0; i < 36; i++) {
+            ItemStack s = me.getInventory().getItem(i);
+            if (s.is(Items.GRAVEL)) { if (gravel < 0) gravel = i; continue; }
+            if (s.is(Items.NETHERRACK) || s.is(Items.SOUL_SAND) || s.is(Items.COBBLESTONE) || s.is(Items.BLACKSTONE) || s.is(Items.COBBLED_DEEPSLATE)) return i;
+        }
+        return gravel;
     }
 
     // ---- speedrun router: goals, chest plan, exit ----
@@ -823,6 +994,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (Math.hypot(b.getX() - bastion.pos.getX(), b.getZ() - bastion.pos.getZ()) > 56 || looted.contains(b)) continue;
             pts.add(new BastionPlan.Point(b.getX(), b.getY(), b.getZ(), BastionPlan.Kind.CHEST));
         }
+        List<BlockPos> gold = BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, new BlockOptionalMetaLookup(Blocks.GOLD_BLOCK), 64, 64, 64);
+        for (BlockPos b : gold) {
+            if (Math.hypot(b.getX() - bastion.pos.getX(), b.getZ() - bastion.pos.getZ()) > 56) continue;
+            pts.add(new BastionPlan.Point(b.getX(), b.getY(), b.getZ(), BastionPlan.Kind.GOLD));
+        }
         BlockPos at = me.blockPosition();
         plan = BastionPlan.order(layout(), bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
     }
@@ -832,14 +1008,33 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) > 64) return null;
         if (ticks - chestScan > 100 || !bastion.pos.equals(planFor)) replan(me);
         BlockPos next = null;
+        boolean unloaded = false;
+        Map<String, Integer> have = counts(me);
+        boolean wantGold = BastionGoals.needGold(BastionGoals.missing(have, BastionSettings.TARGETS),
+                BastionGoals.throwable(ingotCount(me), countOf(me, Items.GOLD_BLOCK)), BastionSettings.keepIngots, BastionSettings.goldCap);
         for (BastionPlan.Point pt : plan) {
             BlockPos b = new BlockPos(pt.x(), pt.y(), pt.z());
-            if (looted.contains(b) || badChest.getOrDefault(b, 0L) > ticks || !ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
+            if (!ctx.world().hasChunkAt(b)) { unloaded = true; continue; }
+            if (looted.contains(b) || badChest.getOrDefault(b, 0L) > ticks || badGold.getOrDefault(b, 0L) > ticks) continue;
+            if (pt.kind() == BastionPlan.Kind.GOLD) {
+                if (!wantGold || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
+            } else if (!ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
             next = b;
             break;
         }
-        chestsExhausted = next == null;
+        // only "no chest left" once we stand in the bastion with its chunks loaded; from outside an empty plan means nothing
+        chestsExhausted = next == null && !unloaded && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40;
         if (next == null) return null;
+        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK)) {
+            // gold block next in the plan: the miner handles the piglin rule (breaking gold angers every piglin in 16, seen or not)
+            preferGold = next;
+            PathingCommand g = drop(me, next);
+            if (g != null) return g;
+            PathingCommand m = acquireGold(me, near);
+            if (m != null) return m;
+            badGold.put(next, ticks + 1200);
+            return null;
+        }
         if (!next.equals(chestTarget)) {
             chestTarget = next;
             chestSince = ticks;
@@ -853,6 +1048,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         double d = me.getEyePosition(1.0F).distanceTo(Vec3.atCenterOf(next));
         Rotation rot = d <= 4.3 ? aimAt(me, next) : null;
         if (rot == null) {
+            PathingCommand dc = drop(me, next);
+            if (dc != null) return dc;
             status = "to chest " + next.toShortString() + " (" + layout() + ", " + plan.size() + " planned)";
             return new PathingCommand(new GoalGetToBlock(next), PathingCommandType.SET_GOAL_AND_PATH);
         }
@@ -978,24 +1175,6 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         lastGoldTick = ticks;
         piglinsNear(me, near); // keeps the stuck-piglin tracking current while we walk over
-        // a gold block we hold becomes nine ingots in the 2x2 grid: pick up, place one, put the rest back, take the result
-        int held = slotOf(me, Items.GOLD_BLOCK);
-        if (held >= 0 || craftStep > 0) {
-            var c = ctx.playerController();
-            int w = me.inventoryMenu.containerId;
-            // after step 0 the block is on the cursor and held is -1: remember the slot it came from to put the rest back
-            if (craftStep == 0) craftFrom = held < 9 ? held + 36 : held;
-            int id = craftFrom;
-            switch (craftStep) {
-                case 0 -> c.windowClick(w, id, 0, ClickType.PICKUP, me);
-                case 1 -> c.windowClick(w, 1, 1, ClickType.PICKUP, me);
-                case 2 -> c.windowClick(w, id, 0, ClickType.PICKUP, me);
-                default -> c.windowClick(w, 0, 0, ClickType.QUICK_MOVE, me);
-            }
-            craftStep = (craftStep + 1) % 4;
-            status = "craft ingots";
-            return pause;
-        }
         // pick up a dropped block first
         for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(24))) {
             if (i.getItem().is(Items.GOLD_BLOCK)) {
@@ -1024,7 +1203,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 int guards = 0;
                 for (PiglinBrute b : brutes) if (b.blockPosition().distSqr(p) <= 144) guards++;
                 if (pass == 0 && guards >= 3) continue;
-                double score = Math.sqrt(me.blockPosition().distSqr(p)) + 10.0 * guards;
+                double score = Math.sqrt(me.blockPosition().distSqr(p)) + 10.0 * guards - (p.equals(preferGold) ? 1000 : 0);
                 if (score < bestScore) { bestScore = score; best = p; }
             }
         }

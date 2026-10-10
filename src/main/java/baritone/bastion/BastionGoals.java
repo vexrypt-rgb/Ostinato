@@ -54,4 +54,43 @@ public final class BastionGoals {
         for (int v : miss.values()) total += v;
         return inFlight == 0 || total > inFlight;
     }
+
+    // ---- gold bookkeeping ----
+
+    /** Ingot equivalent of what we carry: a block is nine ingots, nine nuggets one (nuggets need a crafting table, so they are counted, not thrown). */
+    public static int ingotEquivalent(int ingots, int nuggets, int blocks) {
+        return ingots + 9 * blocks + nuggets / 9;
+    }
+
+    /** Ingots usable for bartering right now or after an inventory craft (blocks split in the 2x2 grid; nuggets do not fit it). */
+    public static int throwable(int ingots, int blocks) {
+        return ingots + 9 * blocks;
+    }
+
+    /** Expected count of an item per barter, 1.21 table (total weight 459). On 1.16.1 pearls are 20/423 x 4-8: about 4x better. */
+    public static final Map<String, Double> PER_THROW = Map.of(
+            "ender_pearl", 10 / 459.0 * 3,
+            "obsidian", 40 / 459.0,
+            "crying_obsidian", 40 / 459.0 * 2,
+            "string", 20 / 459.0 * 6,
+            "fire_resistance", 16 / 459.0,
+            "gravel", 40 / 459.0 * 12,
+            "soul_sand", 40 / 459.0 * 5);
+
+    /** Throws expected to cover the slowest missing target (capped: chests and gold are finite). */
+    public static int throwsNeeded(Map<String, Integer> missing, int cap) {
+        double worst = 0;
+        for (Map.Entry<String, Integer> e : missing.entrySet()) {
+            Double ev = PER_THROW.get(e.getKey());
+            if (ev == null || ev <= 0) continue;
+            worst = Math.max(worst, e.getValue() / ev);
+        }
+        return (int) Math.min(cap, Math.ceil(worst));
+    }
+
+    /** Whether to go after gold (mine a block, take it from a chest): only when what we carry will not cover the expected throws. */
+    public static boolean needGold(Map<String, Integer> missing, int throwableIngots, int reserve, int cap) {
+        if (missing.isEmpty()) return false;
+        return throwableIngots - reserve < throwsNeeded(missing, cap);
+    }
 }
