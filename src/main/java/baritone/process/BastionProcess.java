@@ -605,6 +605,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             boolean inDoor = ctx.world().getBlockState(doorPos).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
                     && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(doorPos).expandTowards(0, 1, 0));
             if (inDoor && descentSteps == 0) planDescent(me);
+            // a 0.6-wide body off the cell centre still touches the lava next to the door (in-game: isInLava the whole time)
+            Vec3 mid = Vec3.atBottomCenterOf(doorPos);
+            double ox = mid.x - me.getX(), oz = mid.z - me.getZ();
+            if (Math.hypot(ox, oz) > 0.12) {
+                baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-ox, oz)), me.getXRot()), true);
+                me.setDeltaMovement(ox * 0.4, me.getDeltaMovement().y, oz * 0.4);
+            }
             // mid-descent the old door breaks with the block under it, so this runs whether or not we are in a door right now
             if (descentSteps > 0 && ticks - doorSince > 300) { descentSteps = -1; logDirect("Bastion: door descent stalled, normal escape"); }
             if (descentSteps > 0) {
