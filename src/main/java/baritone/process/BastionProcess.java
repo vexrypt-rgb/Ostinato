@@ -582,6 +582,29 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "brute at " + String.format("%.1f", me.distanceTo(brute)) + ", towering";
             return pause0();
         }
+        if (brute != null && !perching && !headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 2) {
+            // a tunnel (run 29: dug into the netherrack, no room to tower): wall it off, brutes do not dig
+            Direction dir = Direction.getApproximateNearest(brute.getX() - me.getX(), 0, brute.getZ() - me.getZ());
+            BlockPos feet = me.blockPosition(), c0 = feet.relative(dir), c1 = c0.above();
+            BlockPos cell = ctx.world().getBlockState(c0).canBeReplaced() ? c0 : ctx.world().getBlockState(c1).canBeReplaced() ? c1 : null;
+            if (cell != null && !brute.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(cell))) {
+                int b = clutchBlock(me);
+                if (b >= 0 && b < 9) {
+                    me.getInventory().setSelectedSlot(b);
+                    BlockPos against = cell.below();
+                    if (!ctx.world().getBlockState(against).canBeReplaced()) {
+                        Vec3 hit = Vec3.atCenterOf(against).add(0, 0.5, 0);
+                        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
+                        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, against, false));
+                        status = "walling off brute in tunnel";
+                        return pause0();
+                    }
+                } else if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 6, ClickType.SWAP, me); return pause0(); }
+            } else if (cell == null) {
+                status = "walled off from brute";
+                return pause0();
+            }
+        }
         if (brute != null && !perching) {
             pveP.hold = false;
             if (fighting) { pveP.clearEnemies(); fighting = false; }
