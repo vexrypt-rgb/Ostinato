@@ -120,6 +120,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         badLoot.clear();
+        unreachable.clear();
+        usefulSeen = -1;
         distractTries.clear();
         startTick = 0;
         doorPos = null;
@@ -326,7 +328,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         me.getInventory().setSelectedSlot(slot);
         aimer.look(angry.position().add(0, 0.3, 0), 0);
         if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, angry))) < 12) {
-            ((LocalPlayer) me).drop(false);
+            if (!safeDrop(me)) return pause0();
             lastDistract = ticks;
             distractions++; distractTries.merge(angry.getUUID(), 1, Integer::sum);
             traded.add(angry.getUUID());
@@ -423,7 +425,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             me.getInventory().setSelectedSlot(slot);
             aimer.look(Vec3.atBottomCenterOf(pit).add(0, 0.6, 0), 0);
             if (++aimTicks >= 6) {
-                ((LocalPlayer) me).drop(false);
+                if (!safeDrop(me)) return pause0();
                 angered = true; // reused as "bait thrown"
                 status = "bait: threw ingot";
             }
@@ -475,7 +477,14 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "nudging toward " + nudgeDest.toShortString();
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
+        if (ctx.player() != null) {
+            selAtTickStart = ctx.player().getInventory().getSelectedSlot();
+            // picked-up counter from the inventory (counting the item we walked to missed most pickups, run 32: 2)
+            int u = 0;
+            for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
+            if (usefulSeen >= 0 && u > usefulSeen && ticks - throwTick < ADMIRE_TICKS + 600) lootPicked += u - usefulSeen;
+            usefulSeen = u;
+        }        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
         Player me = ctx.player();
         if (cmd == null || cmd.commandType != PathingCommandType.SET_GOAL_AND_PATH || me == null) {
             stuckAnchor = null;
@@ -930,7 +939,6 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (loot != null) {
             status = "loot " + itemId(loot.getItem());
             lootTarget = loot.getId();
-            if (me.distanceTo(loot) < 1.2 && loot.getId() != lastLootId) { lastLootId = loot.getId(); lootPicked++; }
             return new PathingCommand(new GoalNear(loot.blockPosition(), 0), PathingCommandType.SET_GOAL_AND_PATH);
         }
 
@@ -944,8 +952,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         Piglin target = null;
         double bestScore = Double.MAX_VALUE;
+        // Park and spam (how runners do it): any free piglin already in throw range with line of sight gets an ingot
+        // without us moving. Only when none is, walk to one on our level, and give up on one we cannot reach.
+        Piglin inRange = null;
+        for (Piglin p : piglins) {
+            if (p.getOffhandItem().is(Items.GOLD_INGOT) || p.isAggressive() || !p.isAlive() || p.isBaby() || admiring.containsKey(p.getUUID())) continue;
+            if (me.distanceTo(p) <= THROW_RANGE && me.hasLineOfSight(p) && brutesAround(p) == 0 && (inRange == null || me.distanceTo(p) < me.distanceTo(inRange))) inRange = p;
+        }
+        if (inRange != null) piglins = List.of(inRange);
         for (Piglin p : piglins) {
             if (p.getOffhandItem().is(Items.GOLD_INGOT) || p.isAggressive() || !p.isAlive()) continue;
+            if (unreachable.getOrDefault(p.getUUID(), 0L) > ticks) continue;
+            // another level of the bastion (run 30: 1347 ticks closing in on piglins under the bridge) is not worth the walk
+            if (Math.abs(p.getY() - me.getY()) > 2.5 || me.distanceTo(p) > 24) continue;
             int brutes = brutesAround(p);
             // brutes are always hostile and as fast as us: never walk up to a piglin with one beside it (run 24: 8 brutes, dead)
             if (brutes >= 1) continue;
@@ -963,6 +982,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return new PathingCommand(new GoalXZ(c.getX(), c.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
         }
         if (me.distanceTo(target) > THROW_RANGE || !me.hasLineOfSight(target)) {
+            if (!target.getUUID().equals(closeInId)) { closeInId = target.getUUID(); closeInSince = ticks; }
+            else if (ticks - closeInSince > 200) { unreachable.put(target.getUUID(), ticks + 1200); closeInId = null; }
             status = "close in";
             return new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
         }
@@ -974,7 +995,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         me.getInventory().setSelectedSlot(slot);
         aimer.look(target.position().add(0, 0.4, 0), 0);
         if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, target))) < 12) {
-            ((LocalPlayer) me).drop(false);
+            if (!safeDrop(me)) return pause0();
             admiring.put(target.getUUID(), ticks);
             throwTick = ticks;
             throwsDone++;
@@ -1494,7 +1515,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         me.getInventory().setSelectedSlot(slot);
         aimer.look(target.position().add(0, 0.4, 0), 0);
         if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, target))) < 12) {
-            ((LocalPlayer) me).drop(false);
+            if (!safeDrop(me)) return pause0();
             admiring.put(target.getUUID(), ticks);
             throwTick = ticks;
             throwsDone++;
@@ -1898,6 +1919,21 @@ public final class BastionProcess extends BaritoneProcessHelper {
         return false;
     }
     private BlockPos nudgeDest;
+    private int selAtTickStart = -1;
+    private final Map<java.util.UUID, Long> unreachable = new HashMap<>();
+    private java.util.UUID closeInId;
+    private long closeInSince;
+    private int usefulSeen = -1;
+
+    /**
+     * Drop one ingot. A slot picked this tick has not reached the server yet (the drop packet does not flush it), so the
+     * server would drop whatever was held before: run 32 threw its iron pickaxe to a piglin this way. Wait a tick.
+     */
+    private boolean safeDrop(Player me) {
+        if (me.getInventory().getSelectedSlot() != selAtTickStart || !me.getMainHandItem().is(Items.GOLD_INGOT)) return false;
+        ((LocalPlayer) me).drop(false);
+        return true;
+    }
     private long lastWatched = -1000;
     private long nudgeUntil;
     private int lootTarget = -1;
@@ -1906,7 +1942,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private ItemEntity lootNear(Player me) {
         if (ticks - throwTick > ADMIRE_TICKS + 600) return null;
         ItemEntity best = null;
-        for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(10))) {
+        for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(admiring.isEmpty() ? 10 : 5))) {
             if (!BastionGoals.barterUseful(itemId(i.getItem())) || badLoot.contains(i.getId())) continue;
             if (best == null || me.distanceToSqr(i) < me.distanceToSqr(best)) best = i;
         }
