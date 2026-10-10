@@ -93,12 +93,23 @@ public class MovementJump extends Movement {
         FAILED.clear();
     }
 
+    /** Whether this jump failed lately. Nearly always nothing has, and the planner asks for every template at every node. */
+    private static boolean avoided(long key) {
+        if (FAILED.isEmpty()) {
+            return false;
+        }
+        Long until = FAILED.get(key);
+        return until != null && until > System.currentTimeMillis();
+    }
+
     private static long failKey(int x, int y, int z, int dx, int dy, int dz) {
         return BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz);
     }
 
     private MovementState fail(MovementState state, String why) {
-        FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis() + 30_000);
+        long now = System.currentTimeMillis();
+        FAILED.values().removeIf(until -> until <= now);
+        FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), now + 30_000);
         logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.player().position() + "); avoiding this jump for 30s");
         return state.setStatus(MovementStatus.UNREACHABLE);
     }
@@ -175,8 +186,7 @@ public class MovementJump extends Movement {
                 if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz)) {
                     continue;
                 }
-                Long until = FAILED.get(failKey(x, y, z, dx, y + t.dy, dz));
-                if (until != null && until > System.currentTimeMillis()) {
+                if (avoided(failKey(x, y, z, dx, y + t.dy, dz))) {
                     continue;
                 }
                 for (int r = 1; r <= t.runUp; r++) {
@@ -266,6 +276,20 @@ public class MovementJump extends Movement {
         return src.z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
     }
 
+    /** The executor runs a movement again after a setback; a flight that was under way must not be taken as flown. */
+    @Override
+    public void reset() {
+        super.reset();
+        js = null;
+        real = null;
+        running = landed = false;
+        settle = replans = replanCooldown = 0;
+        if (trace != null) {
+            trace.finish(false);
+            trace = null;
+        }
+    }
+
     @Override
     public MovementState updateState(MovementState state) {
         MovementState s = update0(state);
@@ -314,15 +338,7 @@ public class MovementJump extends Movement {
             System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
         Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x;
-        real.y = p.y;
-        real.z = p.z;
-        real.vx = m.x;
-        real.vy = m.y;
-        real.vz = m.z;
-        real.onGround = ctx.player().onGround();
-        real.sprinting = ctx.player().isSprinting();
-        real.collidedH = ctx.player().horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
         if (landed) {
             // let the landing settle, then step to the middle for the next movement
             // (a neo lands hanging over the side, feet outside dest: step in once the landing has settled)

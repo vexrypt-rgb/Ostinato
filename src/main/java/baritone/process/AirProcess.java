@@ -69,6 +69,7 @@ public final class AirProcess extends BaritoneProcessHelper {
     @Override
     public boolean isActive() {
         if (ctx.player() == null || ctx.world() == null || !Baritone.settings().swimInWater.value) {
+            door = null; // a pocket from the world we left must not be picked up again in the next one
             return active = false;
         }
         int air = ctx.player().getAirSupply(), max = ctx.player().getMaxAirSupply();
@@ -144,24 +145,26 @@ public final class AirProcess extends BaritoneProcessHelper {
     }
 
     /**
-     * Bubble-column cells (with column above, so the eyes are in it too) within 12 blocks that are
-     * closer than the surface; null if none. A roofed-over tunnel has no reachable surface at all.
+     * Bubble-column cells (with column above, so the eyes are in it too) within 40 blocks across and 8
+     * up or down that are closer than the surface; null if none. A roofed-over tunnel has no reachable surface at all.
      */
     private Goal columnGoal(int surfaceDist) {
         BlockPos feet = ctx.playerFeet();
         int best = surfaceDist == Integer.MAX_VALUE ? Integer.MAX_VALUE : surfaceDist + 2;
         colDist = Integer.MAX_VALUE;
         Set<BlockPos> cells = new HashSet<>();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -40; dx <= 40; dx++) {
             for (int dz = -40; dz <= 40; dz++) {
                 for (int dy = -8; dy <= 8; dy++) {
-                    BlockPos p = feet.offset(dx, dy, dz);
-                    if (column(p) && column(p.above())) {
-                        int d = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-                        if (d < best) {
-                            cells.add(p.immutable());
-                            colDist = Math.min(colDist, d);
-                        }
+                    int d = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+                    if (d >= best) continue;
+                    p.set(feet.getX() + dx, feet.getY() + dy, feet.getZ() + dz);
+                    if (!column(p)) continue;
+                    p.move(Direction.UP);
+                    if (column(p)) {
+                        cells.add(feet.offset(dx, dy, dz));
+                        colDist = Math.min(colDist, d);
                     }
                 }
             }

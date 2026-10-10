@@ -49,7 +49,7 @@ final class CombatTargeting {
     LivingEntity retarget(Player me, LivingEntity target) {
         java.util.function.ToDoubleFunction<LivingEntity> score = e -> e.getHealth() + e.getAbsorptionAmount() + 0.6 * me.distanceTo(e);
         LivingEntity best = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(7),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && matches.test(e))
+                        e -> e != me && e.isAlive() && !e.isRemoved() && !e.isSpectator() && matches.test(e))
                 .stream().min(Comparator.comparingDouble(score)).orElse(null);
         if (best != null && best != target && score.applyAsDouble(best) < score.applyAsDouble(target) - 3) return best;
         return target;
@@ -69,7 +69,7 @@ final class CombatTargeting {
     /** Nearest matching enemy within {@code chase} blocks, or null. */
     LivingEntity pick(Player me, double chase) {
         return ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(chase),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && matches.test(e))
+                        e -> e != me && e.isAlive() && !e.isRemoved() && !e.isSpectator() && matches.test(e))
                 .stream().filter(e -> me.distanceTo(e) <= chase)
                 .min(Comparator.comparingDouble(me::distanceToSqr)).orElse(null);
     }

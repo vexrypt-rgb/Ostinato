@@ -14,9 +14,11 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -36,6 +38,8 @@ public final class PveProcess extends BaritoneProcessHelper {
     private static final float CHARGED = 0.92f;
 
     private Predicate<LivingEntity> filter;
+    /** Mobs marked by hand; fought as well as whatever the filter matches. */
+    private final Set<UUID> marked = new HashSet<>();
     private String label = "";
     private LivingEntity target;
     private final Random rng = new Random(11);
@@ -70,7 +74,10 @@ public final class PveProcess extends BaritoneProcessHelper {
         lastHealth = -1;
         attacks = kills = hurtEvents = blocks = meals = 0;
         damageTaken = 0;
-        ticks = 0; ignoreUntil.clear(); blind.clear();
+        ticks = 0;
+        marked.clear();
+        ignoreUntil.clear();
+        blind.clear();
         engaged.clear();
     }
 
@@ -87,15 +94,14 @@ public final class PveProcess extends BaritoneProcessHelper {
     /** Marked by hand (freecam). Players are PvP's; this takes mobs only. */
     public boolean addEnemy(LivingEntity e) {
         if (e == null || e instanceof Player || ctx.player() == null) return false;
-        UUID id = e.getUUID();
-        Predicate<LivingEntity> prev = filter;
-        if (prev == null) label = "marked";
-        filter = x -> x.getUUID().equals(id) || (prev != null && prev.test(x));
+        if (!isActive()) attack(x -> false, "marked");
+        marked.add(e.getUUID());
         return true;
     }
 
     public void clearEnemies() {
         filter = null;
+        marked.clear();
         target = null;
     }
 
@@ -117,7 +123,8 @@ public final class PveProcess extends BaritoneProcessHelper {
     }
 
     private boolean matches(LivingEntity e) {
-        return e != ctx.player() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null && filter.test(e);
+        return e != ctx.player() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null
+                && (marked.contains(e.getUUID()) || filter.test(e));
     }
 
     @Override
@@ -136,12 +143,19 @@ public final class PveProcess extends BaritoneProcessHelper {
         List<LivingEntity> all = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(SCAN), this::matches);
         for (LivingEntity e : all) if (me.distanceTo(e) < 8) engaged.put(e.getUUID(), e);
         engaged.values().removeIf(e -> {
-            if (e.isDeadOrDying() || !e.isAlive()) {
+            // a mob that unloads or despawns is gone, not killed
+            if (e.isDeadOrDying()) {
                 kills++;
                 return true;
             }
             return e.isRemoved() || me.distanceTo(e) > SCAN + 8;
         });
+        if (ticks % 200 == 0) {
+            ignoreUntil.values().removeIf(until -> until <= ticks);
+            Set<UUID> near = new HashSet<>();
+            for (LivingEntity e : all) near.add(e.getUUID());
+            blind.keySet().retainAll(near);
+        }
         if (all.isEmpty()) {
             target = null;
             use(false);
@@ -240,14 +254,7 @@ public final class PveProcess extends BaritoneProcessHelper {
             // sprinting and the shield do not mix, and a shooter that is not closed on just keeps shooting:
             // charge it, weaving across its aim; the shield is only for when we are hurt and cannot get there
             boolean hurt = me.getHealth() <= 8;
-            if (armed && los && hd > 5 && hurt && me.getOffhandItem().getItem() == Items.SHIELD && hd <= DRIVE_PVE + 6) {
-                look(target.getEyePosition());
-                if (blockTicks++ == 0) blocks++;
-                use(true);
-                if (blockTicks > 60) {
-                    blockTicks = 0;
-                    use(false);
-                }
+            if (armed && los && hd > 5 && hurt && hd <= DRIVE_PVE + 6 && shieldUp(me, target)) {
                 movement.dodgeRanged(me);
                 return decide("block");
             }
@@ -329,6 +336,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         look(me.getEyePosition().add(away.normalize().scale(6)));
     }
 
+    /** Hold the offhand shield toward the mob, dropping it for a tick every so often. False without a shield. */
     private boolean shieldUp(Player me, LivingEntity from) {
         if (me.getOffhandItem().getItem() != Items.SHIELD) return false;
         look(from.getEyePosition());
@@ -429,6 +437,7 @@ public final class PveProcess extends BaritoneProcessHelper {
     @Override
     public void onLostControl() {
         filter = null;
+        marked.clear();
         target = null;
         engaged.clear();
         eatTicks = blockTicks = retreatTicks = backoff = 0;

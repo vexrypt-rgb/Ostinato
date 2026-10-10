@@ -25,9 +25,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -117,13 +117,7 @@ public final class KinematicController {
         if (!buildLine(path, pathPosition)) {
             return -1;
         }
-        Vec3 p = ctx.player().position();
-        Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x; real.y = p.y; real.z = p.z;
-        real.vx = m.x; real.vy = m.y; real.vz = m.z;
-        real.onGround = ctx.player().onGround();
-        real.sprinting = ctx.player().isSprinting();
-        real.collidedH = ctx.player().horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
 
         double[] here = project(real.x, real.z);
         double end = line.get(line.size() - 1)[3];
@@ -539,7 +533,6 @@ public final class KinematicController {
         return line.get(line.size() - 1);
     }
 
-    /** Lowest floor the player may be at around arc length s (an ascend/descend switches floors mid-segment). */
     /** Standing above the path: the box stepped or jumped onto terrain the path goes around, and Baritone loses it. */
     private boolean climbedOff(double s) {
         if (!sim.onGround) {
@@ -554,6 +547,7 @@ public final class KinematicController {
         return false;
     }
 
+    /** Lowest floor the player may be at around arc length s (an ascend/descend switches floors mid-segment). */
     private double floorAt(double s) {
         for (int i = 0; i + 1 < line.size(); i++) {
             double[] a = line.get(i), b = line.get(i + 1);

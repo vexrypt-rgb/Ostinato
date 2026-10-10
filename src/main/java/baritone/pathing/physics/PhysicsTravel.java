@@ -23,7 +23,6 @@ import baritone.pathing.movement.movements.MovementDiagonal;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementTraverse;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -66,13 +65,7 @@ public final class PhysicsTravel {
             return drop();
         }
         world.reset();
-        Vec3 p = ctx.player().position();
-        Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x; real.y = p.y; real.z = p.z;
-        real.vx = m.x; real.vy = m.y; real.vz = m.z;
-        real.onGround = ctx.player().onGround();
-        real.sprinting = ctx.player().isSprinting();
-        real.collidedH = ctx.player().horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
         real.jumpTicks = jumpTicks;
 
         int end = pathPosition;
