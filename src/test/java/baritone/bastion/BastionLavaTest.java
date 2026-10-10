@@ -49,4 +49,12 @@ public class BastionLavaTest {
         assertEquals(true, BastionLava.sealNow(true, true));
         assertEquals(false, BastionLava.sealNow(false, true));
     }
+
+    @Test
+    public void edgeRule() {
+        assertEquals(false, EdgeCost.deadly(5, 2));  // floor 2 down before the lava
+        assertEquals(false, EdgeCost.deadly(2, -1)); // lava right below: a step, not a drop
+        assertEquals(true, EdgeCost.deadly(6, -1));  // 6 of air onto lava
+        assertEquals(true, EdgeCost.deadly(-1, -1)); // nothing in range: void
+    }
 }

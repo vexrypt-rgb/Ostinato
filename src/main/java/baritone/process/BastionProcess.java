@@ -42,6 +42,7 @@ import baritone.api.pathing.goals.GoalGetToBlock;
 import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
 import baritone.bastion.BastionLava;
+import baritone.bastion.EdgeCost;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.bastion.BastionPlan;
 import baritone.bastion.BastionSettings;
@@ -97,6 +98,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     /** {@code variant} is a layout (housing, stables, treasure, bridge) or empty for any bastion. */
     public void start(String variant) {
+        EdgeCost.enabled = true;
         query = variant == null || variant.isEmpty() ? "bastion_remnant" : variant;
         active = true;
         // walk around netherrack rather than dig through it: digging is slow and a speedrun has no time for it
@@ -120,6 +122,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         badLoot.clear();
+        camping = false;
         unreachable.clear();
         usefulSeen = -1;
         distractTries.clear();
@@ -154,6 +157,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     public void stop() {
+        EdgeCost.enabled = false;
         active = false;
         if (savedBreakPenalty != null) {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
@@ -909,6 +913,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
         // 2a. Chests in plan order for this layout.
         if (bastion != null) {
+            PathingCommand camp = tradeCamp(me, piglins, have, done);
+            if (camp != null) return camp;
             // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
             PathingCommand bt0 = barterOnTheWay(me, near);
             if (bt0 != null) return bt0;
@@ -1940,6 +1946,73 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
+    private boolean camping;
+    private long campIdleSince;
+
+
+    /** Standing next to an open drop over lava/void (same rule as the path cost). */
+    private boolean onEdge(BlockPos at) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            if (dx == 0 && dz == 0) continue;
+            boolean deadly = true;
+            for (int d = 1; d <= EdgeCost.SCAN; d++) {
+                BlockPos c = at.offset(dx, -d, dz);
+                if (lavaAt(c)) { deadly = d > EdgeCost.MIN_DROP; break; }
+                if (!ctx.world().getBlockState(c).getCollisionShape(ctx.world(), c).isEmpty()) { deadly = false; break; }
+            }
+            if (deadly) return true;
+        }
+        return false;
+    }
+
+    private boolean calmNear(Player me, Piglin p, double r) {
+        return p.isAlive() && !p.isBaby() && !p.isAggressive() && me.distanceTo(p) <= r && Math.abs(p.getY() - me.getY()) <= 2
+                && me.hasLineOfSight(p) && brutesAround(p) == 0;
+    }
+
+    /**
+     * Trade camp, the way runners barter: with 2+ calm piglins within 6 and 6+ ingots, stand still and throw an ingot each
+     * time one is free, until out of ingots or the targets are met. Only short hops (3) for drops; chests wait until after.
+     */
+    private PathingCommand tradeCamp(Player me, List<Piglin> piglins, Map<String, Integer> have, boolean done) {
+        int ingots = ingotCount(me);
+        long calm = piglins.stream().filter(p -> calmNear(me, p, camping ? 8 : 6)).count();
+        if (!camping && !done && ingots >= 6 && calm >= 2 && !onEdge(me.blockPosition())) { camping = true; campIdleSince = ticks; logDirect("Bastion: trade camp, " + calm + " piglins, " + ingots + " ingots"); }
+        if (!camping) return null;
+        if (done || ingots < 1 || onEdge(me.blockPosition())) { camping = false; return null; }
+        admiring.values().removeIf(t -> ticks - t > ADMIRE_TICKS);
+        ItemEntity drop = null;
+        for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(3))) {
+            if (BastionGoals.barterUseful(itemId(i.getItem())) && !i.getItem().is(Items.GOLD_INGOT) && Math.abs(i.getY() - me.getY()) < 1.5 && (drop == null || me.distanceToSqr(i) < me.distanceToSqr(drop))) drop = i;
+        }
+        if (drop != null && me.distanceTo(drop) > 0.8) {
+            status = "camp: pick up " + itemId(drop.getItem());
+            return new PathingCommand(new GoalBlock(drop.blockPosition()), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        Piglin t = null;
+        for (Piglin p : piglins) {
+            if (!calmNear(me, p, THROW_RANGE) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
+            if (t == null || me.distanceTo(p) < me.distanceTo(t)) t = p;
+        }
+        if (t == null) {
+            if (calm > 0 || !admiring.isEmpty()) campIdleSince = ticks;
+            if (ticks - campIdleSince > 200) { camping = false; return null; }
+            status = "camp: waiting (" + admiring.size() + " admiring, " + calm + " near)";
+            return pause0();
+        }
+        campIdleSince = ticks;
+        int slot = hotbarGold(me);
+        if (slot < 0) { camping = false; return null; }
+        me.getInventory().setSelectedSlot(slot);
+        aimer.look(t.position().add(0, 0.4, 0), 0);
+        if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, t))) < 12 && safeDrop(me)) {
+            admiring.put(t.getUUID(), ticks);
+            throwTick = ticks;
+            throwsDone++;
+        }
+        status = "camp: throwing (" + admiring.size() + " admiring, throws=" + throwsDone + ")";
+        return pause0();
+    }
     private long burnSince = -1, lavaSince = -1;
 
     private boolean lavaNearPos(BlockPos at) {
