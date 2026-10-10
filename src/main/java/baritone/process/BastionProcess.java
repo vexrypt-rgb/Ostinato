@@ -2102,7 +2102,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         double d = me.distanceTo(b);
         float cd = me.getAttackStrengthScale(0.5f);
         aimer.look(b.getEyePosition(), 0);
-        if (cd >= 0.95f && d <= 3.0 && me.hasLineOfSight(b)) {
+        if (cd >= 0.95f && d <= 3.3 /* center distance; run 92 blocked for 8 s at ~3.1 and never swung */ && me.hasLineOfSight(b)) {
             // lower the shield and swing this tick, then block again
             net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false);
             if (me.isUsingItem()) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(me);
