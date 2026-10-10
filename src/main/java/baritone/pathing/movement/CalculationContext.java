@@ -23,6 +23,7 @@ import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
+import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.BoatUtil;
@@ -146,15 +147,19 @@ public class CalculationContext {
         this.forceWalkOn = AltoClefSettings.getInstance().forceWalkOnSnapshot();
         this.avoidWalkThrough = AltoClefSettings.getInstance().forceAvoidWalkThroughSnapshot();
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
-        this.allowParkour = ExperimentalMovement.allowParkour();
+        // every jump over a gap is planned for a plain fall: under Levitation or Slow Falling none lands where planned
+        this.allowParkour = ExperimentalMovement.allowParkour()
+                && ClientWorld.plainGravity(baritone.getPlayerContext());
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
+        // the longer jumps are rolled out at the plain walk, and under Slowness they fall short
+        boolean fullPace = ClientWorld.fullPace(baritone.getPlayerContext());
         // only the kinematic controller can build the hop speed a 4 block gap needs
-        this.allowParkourFourGap = ExperimentalMovement.kinematicTravel();
-        this.allowNeos = ExperimentalMovement.allowNeos();
-        this.allowClimbJumps = ExperimentalMovement.allowClimbJumps();
-        this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
+        this.allowParkourFourGap = ExperimentalMovement.kinematicTravel() && fullPace;
+        this.allowNeos = ExperimentalMovement.allowNeos() && fullPace;
+        this.allowClimbJumps = ExperimentalMovement.allowClimbJumps() && fullPace;
+        this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps() && fullPace;
         net.minecraft.world.item.Item clutchItem = Baritone.settings().allowLadderClutch.value ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
         this.clutchIsLadder = clutchItem == net.minecraft.world.item.Items.LADDER;

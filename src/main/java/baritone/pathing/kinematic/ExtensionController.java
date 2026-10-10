@@ -29,6 +29,9 @@ public final class ExtensionController {
     private final IPlayerContext ctx;
     private PlayerSim sim;
     private ClientWorld client;
+    /** The jump the simulator's world is laid out for: the blocks still to be laid under it count as there. */
+    private BetterBlockPos simDest;
+    private int simExt, simSx, simSz;
     private int lastPos = -1, ticks, cooldown;
     private boolean backed, placeJump;
     /** Ticks driven, so callers can verify the mode is in use. */
@@ -51,7 +54,7 @@ public final class ExtensionController {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
-                || player.getAbilities().flying || pathPosition >= path.movements().size()) {
+                || player.getAbilities().flying || pathPosition >= path.movements().size() || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {
@@ -280,14 +283,19 @@ public final class ExtensionController {
 
     /** Would sprinting forward from the current state and jumping after {@code delay} ticks land on the destination? */
     private boolean jumpLands(BetterBlockPos dest, int ext, int sx, int sz, float yaw, int delay) {
+        // fields, not the arguments: the world below is built once and outlives the first jump it was asked about
+        simDest = dest;
+        simExt = ext;
+        simSx = sx;
+        simSz = sz;
         if (sim == null) {
             client = new ClientWorld(ctx);
             sim = new PlayerSim(new PlayerSim.World() {
                 @Override
                 public void collect(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, java.util.List<double[]> out) {
                     client.collect(minX, minY, minZ, maxX, maxY, maxZ, out);
-                    for (int j = 0; j <= ext; j++) { // the blocks that will be laid in mid-air count as there
-                        BetterBlockPos c = cell(dest, sx, sz, -j).below();
+                    for (int j = 0; j <= simExt; j++) { // the blocks that will be laid in mid-air count as there
+                        BetterBlockPos c = cell(simDest, simSx, simSz, -j).below();
                         if (c.x + 1 > minX && c.x < maxX && c.y + 1 > minY && c.y < maxY && c.z + 1 > minZ && c.z < maxZ) {
                             out.add(new double[]{c.x, c.y, c.z, c.x + 1, c.y + 1, c.z + 1});
                         }
@@ -297,6 +305,36 @@ public final class ExtensionController {
                 @Override
                 public float slipperiness(int x, int y, int z) {
                     return client.slipperiness(x, y, z);
+                }
+
+                @Override
+                public float speedFactor(int x, int y, int z) {
+                    return client.speedFactor(x, y, z);
+                }
+
+                @Override
+                public float jumpFactor(int x, int y, int z) {
+                    return client.jumpFactor(x, y, z);
+                }
+
+                @Override
+                public boolean sticky(int x, int y, int z) {
+                    return client.sticky(x, y, z);
+                }
+
+                @Override
+                public boolean bouncy(int x, int y, int z) {
+                    return client.bouncy(x, y, z);
+                }
+
+                @Override
+                public boolean water(int x, int y, int z) {
+                    return client.water(x, y, z);
+                }
+
+                @Override
+                public boolean climbable(int x, int y, int z) {
+                    return client.climbable(x, y, z);
                 }
             });
         }
@@ -308,6 +346,7 @@ public final class ExtensionController {
         sim.sprinting = p.isSprinting();
         sim.collidedH = false;
         sim.jumpTicks = 0;
+        ClientWorld.readEffects(ctx, sim);
         boolean left = false;
         for (int t = 0; t < 60; t++) {
             sim.tick(yaw, true, true, t == delay);

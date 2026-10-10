@@ -143,6 +143,11 @@ public class PathExecutor implements IPathExecutor, Helper {
 
     private int tickDepth;
 
+    /** Ticks a look-ahead mover may hold one path position (the longest single movement is a second or two), and how long it then sits out. */
+    private static final int DRIVER_PATIENCE = 100;
+    private static final int DRIVER_REST = 60;
+    private int drivenOnCurrent, driverRest;
+
     /**
      * The inventory has nothing to place and one of the next few movements lays a block (a bridge, an extension
      * jump, a pillar): the path is dead. Cancelling replans it, and the planner then sees there are no blocks.
@@ -177,12 +182,19 @@ public class PathExecutor implements IPathExecutor, Helper {
             cancel();
             return false;
         }
-        int driven = physics.tick(behavior.baritone, path, pathPosition);
-        lastDriver = driven >= 0 ? Driver.PHYSICS : Driver.BARITONE;
-        if (driven < 0) {
-            driven = kinematic.tick(behavior.baritone, path, pathPosition);
+        int driven = -1;
+        lastDriver = Driver.BARITONE;
+        if (driverRest > 0) {
+            driverRest--;
+        } else {
+            driven = physics.tick(behavior.baritone, path, pathPosition);
             if (driven >= 0) {
-                lastDriver = Driver.KINEMATIC;
+                lastDriver = Driver.PHYSICS;
+            } else {
+                driven = kinematic.tick(behavior.baritone, path, pathPosition);
+                if (driven >= 0) {
+                    lastDriver = Driver.KINEMATIC;
+                }
             }
         }
         if (driven < 0) {
@@ -243,7 +255,19 @@ public class PathExecutor implements IPathExecutor, Helper {
             if (driven != pathPosition) {
                 pathPosition = driven;
                 ticksOnCurrent = 0;
+                drivenOnCurrent = 0;
+            } else if ((lastDriver == Driver.PHYSICS || lastDriver == Driver.KINEMATIC) && ++drivenOnCurrent > DRIVER_PATIENCE) {
+                // moving, yet not along the path: none of the timeouts below run while a mover drives, so it steps aside.
+                // Only the look-ahead movers: the others (mining, a long fall) hold a position for as long as the work takes.
+                Baritone.settings().movementFault.value.accept("M01", lastDriver + " held " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " for " + drivenOnCurrent + " ticks, handing back to Baritone");
+                drivenOnCurrent = 0;
+                driverRest = DRIVER_REST;
+                lastDriver = Driver.BARITONE;
+                clearKeys();
+                driven = -1;
             }
+        }
+        if (driven >= 0) {
             sprintNextTick = true;
             return false;
         }
@@ -790,6 +814,7 @@ public class PathExecutor implements IPathExecutor, Helper {
     private void onChangeInPathPosition() {
         clearKeys();
         ticksOnCurrent = 0;
+        drivenOnCurrent = 0;
     }
 
     private void clearKeys() {

@@ -69,7 +69,22 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     private volatile AbstractNodeCostSearch inProgress;
     private final Object pathCalcLock = new Object();
 
+    // Goals whose path came out longer than maxPathLengthBlocks and was thrown away, and when. Whatever set
+    // such a goal tends to ask for it again at once, so it is left alone for a few seconds.
+    // Read and written with pathPlanLock held.
+    // Ported from xiaoka6666/baritone (26.3 branch).
+    private final java.util.Map<Goal, Long> overlongGoalLastDiscardMs = new java.util.HashMap<>();
+    private static final long OVERLONG_GOAL_COOLDOWN_MS = 5000;
+
     private final Object pathPlanLock = new Object();
+
+    /** Whether this goal's path was thrown away as too long a moment ago. Call with pathPlanLock held. */
+    private boolean overlongCoolingDown(Goal goal) {
+        long now = System.currentTimeMillis();
+        // forgets the ones that are over too, or every goal ever refused stays in the map
+        overlongGoalLastDiscardMs.values().removeIf(at -> now - at >= OVERLONG_GOAL_COOLDOWN_MS);
+        return overlongGoalLastDiscardMs.containsKey(goal);
+    }
 
     private boolean lastAutoJump;
 
@@ -218,6 +233,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                         queuePathEvent(PathEvent.PATH_FINISHED_NEXT_STILL_CALCULATING);
                         return;
                     }
+                    if (overlongCoolingDown(goal)) {
+                        return;
+                    }
                     // we aren't calculating
                     queuePathEvent(PathEvent.CALC_STARTED);
                     findPathInNewThread(expectedSegmentStart, true, context);
@@ -305,6 +323,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             }
             synchronized (pathCalcLock) {
                 if (inProgress != null) {
+                    return false;
+                }
+                if (overlongCoolingDown(goal)) {
                     return false;
                 }
                 queuePathEvent(PathEvent.CALC_STARTED);
@@ -537,6 +558,15 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             PathCalculationResult calcResult = pathfinder.calculate(primaryTimeout, failureTimeout);
             synchronized (pathPlanLock) {
                 Optional<PathExecutor> executor = calcResult.getPath().map(p -> new PathExecutor(PathingBehavior.this, p));
+                // An over-long route is not walked: from here on it is a calculation that found nothing.
+                int cap = Baritone.settings().maxPathLengthBlocks.value;
+                if (cap > 0 && executor.isPresent() && executor.get().getPath().length() > cap) {
+                    logDirect("Discarding path of " + executor.get().getPath().length() + " positions (maxPathLengthBlocks is " + cap + ")");
+                    if (goal != null) {
+                        overlongGoalLastDiscardMs.put(goal, System.currentTimeMillis());
+                    }
+                    executor = Optional.empty();
+                }
                 if (current == null) {
                     if (executor.isPresent()) {
                         if (executor.get().getPath().positions().contains(expectedSegmentStart)) {

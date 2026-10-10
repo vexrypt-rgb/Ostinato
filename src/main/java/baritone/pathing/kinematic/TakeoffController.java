@@ -68,7 +68,7 @@ public final class TakeoffController {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || player.isInWater() || player.isInLava() || player.onClimbable()
                 || player.isFallFlying() || player.isPassenger() || player.getAbilities().flying
-                || pathPosition >= path.movements().size()) {
+                || pathPosition >= path.movements().size() || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         IMovement im = path.movements().get(pathPosition);
@@ -103,15 +103,7 @@ public final class TakeoffController {
         }
         world.reset();
         Vec3 p = player.position(), m = player.getDeltaMovement();
-        real.x = p.x;
-        real.y = p.y;
-        real.z = p.z;
-        real.vx = m.x;
-        real.vy = m.y;
-        real.vz = m.z;
-        real.onGround = player.onGround();
-        real.sprinting = player.isSprinting();
-        real.collidedH = player.horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
         var in = baritone.getInputOverrideHandler();
         var look = baritone.getLookBehavior();
 

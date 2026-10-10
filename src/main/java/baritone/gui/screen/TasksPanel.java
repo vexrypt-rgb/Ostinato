@@ -36,6 +36,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -65,6 +66,8 @@ final class TasksPanel {
     private int editStep;
     private String editKey;
     private boolean dropdown;
+    private List<String> savedNames = Collections.emptyList();
+    private long savedNamesAt;
     private long loadConfirmUntil;
     private String loadConfirmName;
     private long newConfirmUntil;
@@ -79,6 +82,16 @@ final class TasksPanel {
 
     private TaskList list() {
         return svc.list();
+    }
+
+    /** The saved lists' names. Asked for every frame, so the folder is read at most twice a second. */
+    private List<String> savedNames() {
+        long now = System.currentTimeMillis();
+        if (now - savedNamesAt > 500) {
+            savedNamesAt = now;
+            savedNames = svc.files().list();
+        }
+        return savedNames;
     }
 
     private TaskRunner runner() {
@@ -116,7 +129,9 @@ final class TasksPanel {
         if (svc.dirty) {
             return "unsaved changes (Ctrl+S)";
         }
-        return svc.files().exists(list().name()) ? "saved to baritone/tasks/" + TaskFiles.sanitize(list().name()) + ".json" : "not saved yet";
+        String file = TaskFiles.sanitize(list().name());
+        boolean saved = savedNames().stream().anyMatch(file::equalsIgnoreCase);
+        return saved ? "saved to baritone/tasks/" + TaskFiles.sanitize(list().name()) + ".json" : "not saved yet";
     }
 
     int footerStatusColor() {
@@ -421,7 +436,7 @@ final class TasksPanel {
     }
 
     private void drawDropdown(GuiGraphics ms, int mx, int my, int accent, float lx0, float lx1) {
-        List<String> names = svc.files().list();
+        List<String> names = savedNames();
         int n = Math.min(10, names.size());
         float y0 = top + 21, h = Math.max(1, n) * 12 + 4;
         ms.pose().pushMatrix();
@@ -495,6 +510,7 @@ final class TasksPanel {
         overwriteConfirmUntil = 0;
         try {
             svc.save();
+            savedNamesAt = 0;
             svc.dirty = false;
             screen.flash("Saved baritone/tasks/" + list().name() + ".json", Theme.GREEN);
             return true;
@@ -533,7 +549,8 @@ final class TasksPanel {
         // dropdown first
         float rx = px1 - (GuiDraw.width("New") + 16) - 3 - (GuiDraw.width("Save") + 16) - 3, lx0 = rx - 92;
         if (dropdown) {
-            List<String> names = svc.files().list();
+            // the same names the dropdown is showing, so a click lands on the row that was drawn
+            List<String> names = savedNames();
             int n = Math.min(10, names.size());
             float y0 = top + 21;
             for (int i = 0; i < n; i++) {

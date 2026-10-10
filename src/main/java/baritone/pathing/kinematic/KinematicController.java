@@ -25,7 +25,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -106,7 +105,7 @@ public final class KinematicController {
     private int drive(Baritone baritone, IPath path, int pathPosition) {
         if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
                 || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
-                || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+                || ctx.player().isFallFlying() || ctx.player().isPassenger() || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {
@@ -341,17 +340,12 @@ public final class KinematicController {
      * Simulates both options for a few ticks; a jump into lava, a gap or a drop is refused.
      */
     public boolean jumpHelps(double tx, double tz) {
-        if (ctx.player().isInWater() || ctx.player().isInLava()) {
+        if (ctx.player().isInWater() || ctx.player().isInLava() || !ClientWorld.plainGravity(ctx)) {
             return false;
         }
         world.reset();
-        Vec3 p = ctx.player().position();
-        Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x; real.y = p.y; real.z = p.z;
-        real.vx = m.x; real.vy = m.y; real.vz = m.z;
-        real.onGround = ctx.player().onGround();
+        ClientWorld.readPlayer(ctx, real);
         real.sprinting = true;
-        real.collidedH = ctx.player().horizontalCollision;
         float yaw = (float) Math.toDegrees(Math.atan2(-(tx - real.x), tz - real.z));
         double[] closed = new double[2];
         for (int j = 0; j < 2; j++) {

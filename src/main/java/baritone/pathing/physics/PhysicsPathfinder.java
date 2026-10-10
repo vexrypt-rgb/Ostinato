@@ -120,10 +120,17 @@ public final class PhysicsPathfinder {
     /** Dedup key: position to 0.25 blocks, horizontal speed to 0.1, grounded flag. */
     private static long key(PlayerSim s) {
         long k = (long) Math.floor(s.x * 4) & 0xFFFFF;
-        k = k * 1048576 + ((long) Math.floor(s.z * 4) & 0xFFFFF);
-        k = k * 4096 + ((long) Math.floor(s.y * 4) & 0xFFF);
-        k = k * 31 + (long) Math.floor(s.vx * 10) * 7 + (long) Math.floor(s.vz * 10);
-        return k * 2 + (s.onGround ? 1 : 0);
+        k = k << 20 | ((long) Math.floor(s.z * 4) & 0xFFFFF);
+        k = k << 12 | ((long) Math.floor(s.y * 4) & 0xFFF);
+        // each part in bits of its own: two states that differ in any of them never share a key
+        k = k << 4 | speedBucket(s.vx);
+        k = k << 4 | speedBucket(s.vz);
+        return k << 1 | (s.onGround ? 1 : 0);
+    }
+
+    /** Speed in steps of 0.1 as 0..15, which covers the +-0.8 blocks per tick a player on foot stays within. */
+    private static long speedBucket(double v) {
+        return Math.max(0, Math.min(15, (long) Math.floor(v * 10) + 8));
     }
 
     private static List<Action> unwind(Node n) {
