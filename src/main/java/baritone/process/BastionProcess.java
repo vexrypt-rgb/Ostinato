@@ -569,7 +569,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && me.distanceTo(e) < 9 && (e.hasLineOfSight(me) || me.getHealth() < 16) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
-        if (brute != null && !perching && me.onGround() && headroom(me, me.blockPosition().getY()) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
+        if (brute != null && !perching && !me.isInLava() && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             perching = true;
@@ -587,8 +587,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             Vec3 away = me.position().subtract(brute.position()).multiply(1, 0, 1);
             if (away.lengthSqr() < 0.01) away = new Vec3(1, 0, 0);
-            evadeGoal = BlockPos.containing(me.position().add(away.normalize().scale(14)));
-            evadeUntil = ticks + 60;
+            evadeUntil = 0; // the evade step fought this one tick for tick in run 28
             status = "kiting brute at " + String.format("%.1f", me.distanceTo(brute));
             return new PathingCommand(new GoalRunAway(14, brute.blockPosition()), PathingCommandType.SET_GOAL_AND_PATH);
         }        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
