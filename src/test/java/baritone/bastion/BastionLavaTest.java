@@ -27,4 +27,26 @@ public class BastionLavaTest {
         assertEquals(PILLAR, choose(-1, 3, 20, true, false, true));
         assertEquals(NONE, choose(-1, 3, 20, false, false, false));
     }
+
+    @Test
+    public void descentStepsAndDoors() {
+        // feet in the lake (0), floor layer (1) and below (2,3) clean netherrack: break twice, head ends in the floor layer
+        boolean[] clean = {false, true, true, true}, solid = {false, true, true, true};
+        assertEquals(2, BastionLava.descentSteps(clean, solid));
+        assertEquals(3, BastionLava.doorsNeeded(2));
+        assertEquals(true, BastionLava.canDescend(2, 3, true));
+        assertEquals(false, BastionLava.canDescend(2, 2, true));
+        assertEquals(false, BastionLava.canDescend(2, 5, false));
+        // floor layer touches lava on a side (lava pocket in it): one more step down
+        assertEquals(3, BastionLava.descentSteps(new boolean[]{false, false, true, true, true}, new boolean[]{false, true, true, true, true}));
+        // a cave under the floor: no descent
+        assertEquals(-1, BastionLava.descentSteps(new boolean[]{false, true, true, true}, new boolean[]{false, true, false, true}));
+        assertEquals(-1, BastionLava.doorsNeeded(-1));
+    }
+
+    @Test
+    public void sealOnlyWhenBothCellsClean() {
+        assertEquals(true, BastionLava.sealNow(true, true));
+        assertEquals(false, BastionLava.sealNow(false, true));
+    }
 }

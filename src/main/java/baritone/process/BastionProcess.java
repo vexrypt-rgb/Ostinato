@@ -119,6 +119,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         doorPos = null;
+        descentSteps = 0;
+        digging = false;
         preferGold = null;
         dropPlan = null;
         plannedFallUntil = 0;
@@ -602,11 +604,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (doorPos != null) {
             boolean inDoor = ctx.world().getBlockState(doorPos).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
                     && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(doorPos).expandTowards(0, 1, 0));
+            if (inDoor && descentSteps == 0) planDescent(me);
+            // mid-descent the old door breaks with the block under it, so this runs whether or not we are in a door right now
+            if (descentSteps > 0 && ticks - doorSince > 300) { descentSteps = -1; logDirect("Bastion: door descent stalled, normal escape"); }
+            if (descentSteps > 0) {
+                PathingCommand d = descend(me);
+                if (d != null) return d;
+            }
             if (inDoor && (me.isOnFire() || ticks < doorSince + 40)) {
                 status = "in door pocket, waiting for the fire to go out";
                 return pause0();
             }
-            if (!inDoor || !me.isOnFire()) doorPos = null;
+            if ((!inDoor || !me.isOnFire()) && descentSteps <= 0) { doorPos = null; descentSteps = 0; }
         }
         if (me.isInLava()) {
             // in lava: no planning, just step directly away from the nearest lava and jump (a path from here may never come)
@@ -893,6 +902,84 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private BlockPos doorPos;
+    /** Door descent: breaks planned (0 = not planned, -1 = not possible from this pocket) and done. */
+    private int descentSteps, descentDone;
+
+    private boolean lavaBeside(BlockPos c) {
+        if (lavaAt(c)) return true;
+        for (Direction d : Direction.Plane.HORIZONTAL) if (lavaAt(c.relative(d))) return true;
+        return false;
+    }
+
+    private void planDescent(Player me) {
+        boolean[] clean = new boolean[8], solid = new boolean[8];
+        for (int i = 0; i < 8; i++) {
+            BlockPos c = doorPos.below(i);
+            BlockState st = ctx.world().getBlockState(c);
+            clean[i] = i > 0 && !lavaBeside(c); // our own pocket (0) sits in the lake by definition
+            solid[i] = i == 0 || floor(c) && st.getDestroySpeed(ctx.world(), c) >= 0 && !st.is(Blocks.CHEST) && !(st.getBlock() instanceof net.minecraft.world.level.block.FallingBlock);
+        }
+        int steps = BastionLava.descentSteps(clean, solid);
+        int doors = 0;
+        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.DOORS)) doors += s.getCount(); }
+        // the pocket we stand in already used its door: the rest of the descent needs one per break
+        descentSteps = BastionLava.canDescend(steps, doors + 1, pickaxeSlot(me) >= 0) ? steps : -1;
+        descentDone = 0;
+        if (descentSteps > 0) logDirect("Bastion: door descent, " + steps + " breaks, " + doors + " doors left");
+    }
+
+    /** One tick of the descent: mine the block under us, put a door in the cell we drop into, seal over our head at the bottom. */
+    private PathingCommand descend(Player me) {
+        BlockPos cur = doorPos, below = cur.below();
+        if (descentDone >= descentSteps) {
+            BlockPos seal = cur.above(2);
+            if (floor(seal)) { descentSteps = -1; logDirect("Bastion: sealed under the lava, digging out"); return null; }
+            int b = clutchBlock(me);
+            if (b < 0) { descentSteps = -1; return null; }
+            if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 7, ClickType.SWAP, me); return pause0(); }
+            me.getInventory().setSelectedSlot(b);
+            // sneaking, so the click on the door top places the block instead of opening the door
+            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+            if (me.isShiftKeyDown()) {
+                Vec3 hit = Vec3.atCenterOf(cur.above()).add(0, 0.5, 0);
+                ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, cur.above(), false));
+            }
+            status = "door descent: sealing above our head";
+            return pause0();
+        }
+        if (floor(below)) {
+            int pick = pickaxeSlot(me);
+            if (pick < 0) { descentSteps = -1; return null; }
+            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
+            me.getInventory().setSelectedSlot(pick);
+            baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90), true);
+            // mine that exact block: the crosshair would hit the door we stand in first
+            if (!digging) { ctx.playerController().clickBlock(below, Direction.UP); digging = true; }
+            else ctx.playerController().onPlayerDamageBlock(below, Direction.UP);
+            status = "door descent: mining " + (descentDone + 1) + "/" + descentSteps;
+            return pause0();
+        }
+        digging = false;
+        // the block is gone (our old door went with it): next tick, a door in the cell we drop into
+        int slot = -1;
+        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
+        if (slot < 0) { descentSteps = -1; return null; }
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me); return pause0(); }
+        me.getInventory().setSelectedSlot(slot);
+        BlockPos floorPos = below.below();
+        Vec3 hit = Vec3.atCenterOf(floorPos).add(0, 0.5, 0);
+        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, floorPos, false));
+        if (ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
+            // placed (the client sees it next tick at the latest): this is our pocket now
+            doorPos = below.immutable();
+            doorSince = ticks;
+            descentDone++;
+        }
+        status = "door descent: door " + descentDone + "/" + descentSteps;
+        return pause0();
+    }
+
+    private boolean digging;
     private long doorSince;
 
     /** Deep lava or a far shore: put a door in the lava around us and stand in the pocket it makes (see BastionLava). */
