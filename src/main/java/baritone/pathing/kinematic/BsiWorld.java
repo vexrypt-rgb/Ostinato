@@ -43,4 +43,19 @@ public final class BsiWorld implements PlayerSim.World {
     public boolean bouncy(int x, int y, int z) {
         return bsi.get0(x, y, z).getBlock() == Blocks.SLIME_BLOCK;
     }
+
+    @Override
+    public float speedFactor(int x, int y, int z) {
+        return bsi.get0(x, y, z).getBlock().getSpeedFactor();
+    }
+
+    @Override
+    public float jumpFactor(int x, int y, int z) {
+        return bsi.get0(x, y, z).getBlock().getJumpFactor();
+    }
+
+    @Override
+    public boolean sticky(int x, int y, int z) {
+        return bsi.get0(x, y, z).getBlock() == Blocks.HONEY_BLOCK;
+    }
 }

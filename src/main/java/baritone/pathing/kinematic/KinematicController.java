@@ -87,7 +87,8 @@ public final class KinematicController {
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
         if (!Baritone.settings().kinematicTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
-                || ctx.player().isOnLadder() || ctx.player().isElytraFlying() || ctx.player().isPassenger()) {
+                || ctx.player().isOnLadder() || ctx.player().isElytraFlying() || ctx.player().isPassenger()
+                || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {
@@ -100,6 +101,7 @@ public final class KinematicController {
         }
         Vector3d p = ctx.player().getPositionVec();
         Vector3d m = ctx.player().getMotion();
+        ClientWorld.readEffects(ctx, real);
         real.x = p.x; real.y = p.y; real.z = p.z;
         real.vx = m.x; real.vy = m.y; real.vz = m.z;
         real.onGround = ctx.player().isOnGround();

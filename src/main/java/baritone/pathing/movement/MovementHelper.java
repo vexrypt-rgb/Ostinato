@@ -443,6 +443,12 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (isBlockNormalCube(state) && (block != Blocks.MAGMA_BLOCK || Baritone.settings().allowWalkOnMagmaBlocks.value) && block != Blocks.BUBBLE_COLUMN && block != Blocks.HONEY_BLOCK) {
             return YES;
         }
+        // A lantern on the floor holds a player up. As NO, standing on one read as standing on air
+        // (seen on soul lanterns in the nether). It is a low floor: see isBottomSlab for what that rules out.
+        // Ported from xiaoka6666/baritone (26.3 branch), widened from the soul lantern to every lantern.
+        if (isStandingLantern(state)) {
+            return YES;
+        }
         if (block == Blocks.LADDER || (block == Blocks.VINE && Baritone.settings().allowVines.value)) { // TODO reconsider this
             return YES;
         }
@@ -650,9 +656,19 @@ public interface MovementHelper extends ActionCosts, Helper {
         return 0; // we won't actually mine it, so don't check fallings above
     }
 
+    /**
+     * A floor about half a block up: a bottom slab, or a lantern standing on the ground (9/16). A jump from one
+     * does not reach a full block above, and a full block beside it is a step, not a jump.
+     */
     static boolean isBottomSlab(BlockState state) {
-        return state.getBlock() instanceof SlabBlock
-                && state.get(SlabBlock.TYPE) == SlabType.BOTTOM;
+        return (state.getBlock() instanceof SlabBlock
+                && state.get(SlabBlock.TYPE) == SlabType.BOTTOM)
+                || isStandingLantern(state);
+    }
+
+    /** A lantern on the ground. One hanging has the block it hangs from where the player would stand. */
+    static boolean isStandingLantern(BlockState state) {
+        return state.getBlock() instanceof LanternBlock && !state.get(LanternBlock.HANGING);
     }
 
     /**

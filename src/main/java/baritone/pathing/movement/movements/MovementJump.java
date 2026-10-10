@@ -238,6 +238,7 @@ public class MovementJump extends Movement {
             System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
         Vector3d m = ctx.player().getMotion();
+        ClientWorld.readEffects(ctx, real);
         real.x = p.x;
         real.y = p.y;
         real.z = p.z;

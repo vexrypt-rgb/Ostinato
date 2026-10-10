@@ -23,6 +23,7 @@ import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
+import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.ToolSet;
@@ -116,13 +117,16 @@ public class CalculationContext {
         this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
         this.allowBreak = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowBreak.value;
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
-        this.allowParkour = Baritone.settings().allowParkour.value;
+        // every jump over a gap is planned for a plain fall: under Levitation or Slow Falling none lands where planned
+        this.allowParkour = Baritone.settings().allowParkour.value
+                && ClientWorld.plainGravity(baritone.getPlayerContext());
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
         this.allowJumpAt256 = Baritone.settings().allowJumpAt256.value || Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         this.allowParkourAscend = Baritone.settings().allowParkourAscend.value;
-        // only the kinematic controller can build the hop speed a 4 block gap needs
-        this.allowParkourFourGap = Baritone.settings().kinematicTravel.value;
+        // only the kinematic controller can build the hop speed a 4 block gap needs, and not under Slowness
+        this.allowParkourFourGap = Baritone.settings().kinematicTravel.value
+                && ClientWorld.fullPace(baritone.getPlayerContext());
         this.assumeWalkOnWater = Baritone.settings().assumeWalkOnWater.value;
         this.frostWalker = EnchantmentHelper.getMaxEnchantmentLevel(Enchantments.FROST_WALKER, baritone.getPlayerContext().player());
         this.allowDiagonalDescend = Baritone.settings().allowDiagonalDescend.value;

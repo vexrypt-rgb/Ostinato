@@ -68,6 +68,7 @@ public final class PhysicsTravel {
         world.reset();
         Vector3d p = ctx.player().getPositionVec();
         Vector3d m = ctx.player().getMotion();
+        ClientWorld.readEffects(ctx, real);
         real.x = p.x; real.y = p.y; real.z = p.z;
         real.vx = m.x; real.vy = m.y; real.vz = m.z;
         real.onGround = ctx.player().isOnGround();

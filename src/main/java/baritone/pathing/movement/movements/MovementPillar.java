@@ -32,7 +32,6 @@ import baritone.pathing.movement.MovementState;
 import baritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.block.*;
-import net.minecraft.state.properties.SlabType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.vector.Vector3d;
 
@@ -63,8 +62,8 @@ public class MovementPillar extends Movement {
             if (fromDown.getBlock() == Blocks.LADDER || fromDown.getBlock() == Blocks.VINE) {
                 return COST_INF; // can't pillar from a ladder or vine onto something that isn't also climbable
             }
-            if (fromDown.getBlock() instanceof SlabBlock && fromDown.get(SlabBlock.TYPE) == SlabType.BOTTOM) {
-                return COST_INF; // can't pillar up from a bottom slab onto a non ladder
+            if (MovementHelper.isBottomSlab(fromDown)) {
+                return COST_INF; // can't pillar up from a bottom slab (or a lantern) onto a non ladder
             }
         }
         if (from == Blocks.VINE && !hasAgainst(context, x, y, z)) { // TODO this vine can't be climbed, but we could place a pillar still since vines are replacable, no? perhaps the pillar jump would be impossible because of the slowdown actually.

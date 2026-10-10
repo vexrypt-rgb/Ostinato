@@ -5,8 +5,9 @@ import java.util.List;
 
 /**
  * Allocation-light copy of vanilla 1.16 player movement (LivingEntity.travel + Entity.move) for
- * look-ahead search. Covers walking, sprinting, jumping, step-up and block collision; no fluids,
- * ladders, sneaking or potion effects, so callers only use it on plain ground.
+ * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision, slime, and the blocks that
+ * slow a walk or a jump (soul sand, honey). Of the potion effects it follows Speed, Slowness and Jump Boost
+ * ({@link #speedScale}, {@link #jumpBoost}); nothing that changes gravity. No fluids, ladders or sneaking.
  */
 public final class PlayerSim {
 
@@ -20,16 +21,35 @@ public final class PlayerSim {
         default boolean bouncy(int x, int y, int z) {
             return false;
         }
+
+        /** What the block does to the pace of a walk over or through it: 0.4 for soul sand and honey. */
+        default float speedFactor(int x, int y, int z) {
+            return 1;
+        }
+
+        /** What the block does to a jump off it: 0.5 for honey. */
+        default float jumpFactor(int x, int y, int z) {
+            return 1;
+        }
+
+        /** Honey: a fall down its side is slowed to a slide. */
+        default boolean sticky(int x, int y, int z) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
     public static final double HEIGHT = 1.8f;
     public static final double STEP = 0.6;
+    /** Honey is 1/16 short of a full block on every side: how far from its middle the slide starts, and its top. */
+    private static final double HONEY_REACH = 0.4375 + HALF_WIDTH, HONEY_TOP = 0.9375;
 
     public double x, y, z, vx, vy, vz;
     public boolean onGround, sprinting, collidedH;
     /** Vanilla's jump cooldown: holding jump re-jumps only every 10 ticks. */
     public int jumpTicks;
+    /** Ground speed against the plain walk (Speed, Slowness), and what Jump Boost adds to the jump. */
+    public double speedScale = 1, jumpBoost;
 
     private final World world;
     private final List<double[]> boxes = new ArrayList<>();
@@ -41,6 +61,7 @@ public final class PlayerSim {
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
         onGround = o.onGround; sprinting = o.sprinting; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
+        speedScale = o.speedScale; jumpBoost = o.jumpBoost;
         return this;
     }
 
@@ -65,7 +86,7 @@ public final class PlayerSim {
         if (!jump) jumpTicks = 0;
         if (jump && onGround && jumpTicks == 0) {
             jumpTicks = 10;
-            vy = 0.42;
+            vy = 0.42 * jumpFactor() + jumpBoost;
             if (sprinting) {
                 vx -= sin * 0.2;
                 vz += cos * 0.2;
@@ -75,7 +96,7 @@ public final class PlayerSim {
         double slip = onGround ? blockSlip * 0.91 : 0.91;
         double speed;
         if (onGround) {
-            double move = sprinting ? 0.13 : 0.1;
+            double move = (sprinting ? 0.13 : 0.1) * speedScale;
             speed = move * (0.21600002 / (blockSlip * blockSlip * blockSlip));
         } else {
             speed = sprinting ? 0.026 : 0.02;
@@ -122,6 +143,52 @@ public final class PlayerSim {
             double k = 0.4 + Math.abs(vy) * 0.2;
             vx *= k;
             vz *= k;
+        }
+        honeySlide();
+        // vanilla Entity.move ends by scaling the horizontal speed by the block's factor
+        float drag = speedFactor();
+        if (drag != 1) {
+            vx *= drag;
+            vz *= drag;
+        }
+    }
+
+    /** Vanilla Entity.getSpeedFactor: the block the feet are in, else the one half a block below them. */
+    private float speedFactor() {
+        int cx = floor(x), cy = floor(y), cz = floor(z);
+        float f = world.speedFactor(cx, cy, cz);
+        int below = floor(y - 0.5000001);
+        return f != 1 || below == cy ? f : world.speedFactor(cx, below, cz);
+    }
+
+    /** Vanilla Entity.getJumpFactor: the same two blocks, feet first. */
+    private float jumpFactor() {
+        int cx = floor(x), cy = floor(y), cz = floor(z);
+        float f = world.jumpFactor(cx, cy, cz);
+        int below = floor(y - 0.5000001);
+        return f != 1 || below == cy ? f : world.jumpFactor(cx, below, cz);
+    }
+
+    /**
+     * Vanilla HoneyBlock.onEntityCollision: falling faster than gravity alone, below the block's top and past its
+     * side, the fall is held to a slide and the horizontal speed shrinks with it.
+     */
+    private void honeySlide() {
+        if (onGround || vy >= -0.08) return;
+        for (int cx = floor(x - HALF_WIDTH + 1e-5); cx <= floor(x + HALF_WIDTH - 1e-5); cx++) {
+            for (int cz = floor(z - HALF_WIDTH + 1e-5); cz <= floor(z + HALF_WIDTH - 1e-5); cz++) {
+                if (Math.abs(cx + 0.5 - x) + 1e-7 <= HONEY_REACH && Math.abs(cz + 0.5 - z) + 1e-7 <= HONEY_REACH) continue;
+                for (int cy = floor(y + 1e-5); cy <= floor(y + HEIGHT - 1e-5); cy++) {
+                    if (y > cy + HONEY_TOP - 1e-7 || !world.sticky(cx, cy, cz)) continue;
+                    if (vy < -0.13) {
+                        double k = -0.05 / vy;
+                        vx *= k;
+                        vz *= k;
+                    }
+                    vy = -0.05;
+                    return;
+                }
+            }
         }
     }
 

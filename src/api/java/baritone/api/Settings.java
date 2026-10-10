@@ -319,6 +319,21 @@ public final class Settings {
     public final Setting<Boolean> pitfallAvoidance = new Setting<>(true);
 
     /**
+     * The longest path, in positions, that Baritone will walk. A longer one is thrown away and the calculation
+     * counts as failed, so whatever set the goal can pick another instead of spending minutes on a route it will
+     * not keep to (seen in the nether: 274-282 block paths recalculated over and over with no progress). The same
+     * goal is then left alone for five seconds.
+     * <p>
+     * This also refuses a long route that is fine: with a cap of 150, a goal a couple of hundred blocks off across
+     * loaded terrain fails instead of being walked.
+     * <p>
+     * 0 = no cap (upstream behaviour), and the default for that reason. 150 is the value it was written with.
+     * <p>
+     * Ported from xiaoka6666/baritone (26.3 branch).
+     */
+    public final Setting<Integer> maxPathLengthBlocks = new Setting<>(0);
+
+    /**
      * Underwater with nothing breathable in reach, place a wooden door on the floor: a door can't hold
      * water, so its upper half is an air pocket to put the head in. The door is picked back up if it
      * was the only one carried.

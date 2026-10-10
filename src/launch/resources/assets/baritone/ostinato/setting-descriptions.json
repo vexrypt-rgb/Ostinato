@@ -287,5 +287,6 @@
  "guiKeybind": "Key that opens the Ostinato settings screen in game, polled every client tick while no screen is open. Takes a key name such as RCONTROL, RSHIFT, F8, K or NONE to disable, and can be rebound in the screen itself.",
  "renderPathHud": "Show the Ostinato path status card (goal, progress, ETA, mover, process) on the HUD while pathing. Hidden while the debug screen (F3) is open.",
  "pathHudAnchor": "Where the path status card sits on screen: RIGHT, LEFT, TOP_RIGHT or TOP_LEFT.",
- "guiAccentColor": "Accent color of the Ostinato settings screen and path status card."
+ "guiAccentColor": "Accent color of the Ostinato settings screen and path status card.",
+ "maxPathLengthBlocks": "The longest path, in positions, that will be walked. A longer one is thrown away and counts as a failed calculation, and the same goal is left alone for five seconds. Also refuses long routes that are fine, so it is off unless set; 150 is the value it was written with. 0 = no cap."
 }
