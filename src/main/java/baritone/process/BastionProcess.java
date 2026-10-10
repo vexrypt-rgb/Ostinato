@@ -116,6 +116,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         goldSourceGone = false;
         chestsExhausted = false;
         chestsLooted = 0;
+        stuckCount.clear();
         preferGold = null;
         dropPlan = null;
         plannedFallUntil = 0;
@@ -251,7 +252,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         BlockPos support = free ? below.below() : below;
         boolean gravel = !ctx.world().getBlockState(support).is(Blocks.GRAVEL);
         net.minecraft.world.item.Item first = gravel ? Items.GRAVEL : Items.SOUL_SAND, second = gravel ? Items.SOUL_SAND : Items.GRAVEL;
-        boolean picked = baritone.getInventoryBehavior().throwaway(true, s -> s.is(first))
+        boolean picked = baritone.getInventoryBehavior().throwaway(true, s -> s.is(Items.NETHERRACK))
+                || baritone.getInventoryBehavior().throwaway(true, s -> s.is(first))
                 || baritone.getInventoryBehavior().throwaway(true, s -> s.is(second));
         if (!picked) {
             // no gravel or soul sand: any block we are happy to lose will do
@@ -436,6 +438,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     // ---- stuck detector: the same few blocks for 10 s while we asked to path means a move that never completes ----
     private Vec3 stuckAnchor;
+    private final Map<String, Integer> stuckCount = new HashMap<>();
     private long stuckSince;
     public int unstucks;
 
@@ -472,6 +475,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 status = "stuck on " + mv.getClass().getSimpleName() + " to " + mv.getDest() + ", avoiding it";
             }
         } catch (RuntimeException ignoredEx) { }
+        String gk = String.valueOf(cmd.goal);
+        int times = stuckCount.merge(gk, 1, Integer::sum);
+        if (times >= 2) {
+            // the same target twice: it is the target, not the step. Give it up for a while and let the plan pick the next one
+            if (chestTarget != null) { badChest.put(chestTarget, ticks + 3000); chestTarget = null; }
+            if (goldTarget != null) { badGold.put(goldTarget, ticks + 3000); goldTarget = null; }
+            if (dropPlan != null) { dropPlan = null; dropScan = ticks + 400; }
+            stuckCount.remove(gk);
+            status += "; skipping target " + gk;
+        }
         logDirect("Bastion: " + status);
         unstucks++;
         stuckAnchor = null;
@@ -954,8 +967,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
         int gravel = -1;
         for (int i = 0; i < 36; i++) {
             ItemStack s = me.getInventory().getItem(i);
+            if (s.is(Items.NETHERRACK)) return i;
+        }
+        for (int i = 0; i < 36; i++) {
+            ItemStack s = me.getInventory().getItem(i);
             if (s.is(Items.GRAVEL)) { if (gravel < 0) gravel = i; continue; }
-            if (s.is(Items.NETHERRACK) || s.is(Items.SOUL_SAND) || s.is(Items.COBBLESTONE) || s.is(Items.BLACKSTONE) || s.is(Items.COBBLED_DEEPSLATE)) return i;
+            if (s.is(Items.SOUL_SAND) || s.is(Items.COBBLESTONE) || s.is(Items.BLACKSTONE) || s.is(Items.COBBLED_DEEPSLATE)) return i;
         }
         return gravel;
     }
@@ -1094,6 +1111,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         double d = me.getEyePosition(1.0F).distanceTo(Vec3.atCenterOf(next));
         Rotation rot = d <= 4.3 ? aimAt(me, next) : null;
         if (rot == null) {
+            PathingCommand bt = barterOnTheWay(me, near);
+            if (bt != null) return bt;
             PathingCommand dc = drop(me, next);
             if (dc != null) return dc;
             status = "to chest " + next.toShortString() + " (" + layout() + ", " + plan.size() + " planned)";
@@ -1122,6 +1141,31 @@ public final class BastionProcess extends BaritoneProcessHelper {
             }
         }
         status = "opening chest";
+        return pause0();
+    }
+
+    /** A calm piglin within throwing range while we walk the chest route: throw it an ingot without leaving the route. */
+    private PathingCommand barterOnTheWay(Player me, List<LivingEntity> near) {
+        admiring.values().removeIf(t -> ticks - t > ADMIRE_TICKS);
+        if (!BastionGoals.shouldThrow(counts(me), BastionSettings.TARGETS, ingotCount(me), BastionSettings.keepIngots, admiring.size(), BastionSettings.maxConcurrentBarters)) return null;
+        Piglin target = null;
+        for (LivingEntity e : near) {
+            if (!(e instanceof Piglin p) || p.isBaby() || !p.isAlive() || p.isAggressive() || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
+            if (me.distanceTo(p) > THROW_RANGE + 0.5 || !me.hasLineOfSight(p) || brutesAround(p) >= 2) continue;
+            if (target == null || me.distanceTo(p) < me.distanceTo(target)) target = p;
+        }
+        if (target == null) return null;
+        int slot = hotbarGold(me);
+        if (slot < 0) return pause0();
+        me.getInventory().setSelectedSlot(slot);
+        aimer.look(target.position().add(0, 0.4, 0), 0);
+        if (Math.abs(Mth.wrapDegrees(me.getYRot() - yawTo(me, target))) < 12) {
+            ((LocalPlayer) me).drop(false);
+            admiring.put(target.getUUID(), ticks);
+            throwTick = ticks;
+            throwsDone++;
+        }
+        status = "barter on the way (" + admiring.size() + " admiring)";
         return pause0();
     }
 

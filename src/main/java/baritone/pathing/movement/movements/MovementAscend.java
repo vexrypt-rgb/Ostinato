@@ -191,6 +191,17 @@ public class MovementAscend extends Movement {
         BlockState jumpingOnto = BlockStateInterface.get(ctx, positionToPlace);
         if (!MovementHelper.canWalkOn(ctx, positionToPlace, jumpingOnto)) {
             ticksWithoutPlacement++;
+            // standing over the cell we must fill (overhanging the edge) blocks the placement: step back onto src first
+            if (ctx.player().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
+                MovementHelper.moveTowards(ctx, state, src);
+                state.setInput(Input.MOVE_FORWARD, true);
+                state.setInput(Input.SNEAK, true);
+                return state;
+            }
+            if (ticksWithoutPlacement > 80) {
+                // no face we can see and reach: fail so the path is replanned instead of waiting here forever
+                return state.setStatus(MovementStatus.UNREACHABLE);
+            }
             if (MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), false, true) == PlaceResult.READY_TO_PLACE) {
                 state.setInput(Input.SNEAK, true);
                 if (ctx.player().isCrouching()) {

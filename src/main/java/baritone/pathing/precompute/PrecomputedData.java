@@ -85,6 +85,8 @@ public class PrecomputedData {
     }
 
     public boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        // the per-state cache is position-blind: a position blacklist (stuck detectors) must be checked first or it is ignored
+        if (!baritone.altoclef.AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().isEmpty() && baritone.altoclef.AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) return false;
         int id = Block.BLOCK_STATE_REGISTRY.getId(state);
         int blockData = data[id];
 
@@ -100,6 +102,7 @@ public class PrecomputedData {
     }
 
     public boolean fullyPassable(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        if (!baritone.altoclef.AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().isEmpty() && baritone.altoclef.AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) return false;
         int id = Block.BLOCK_STATE_REGISTRY.getId(state);
         int blockData = data[id];
 
