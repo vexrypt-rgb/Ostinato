@@ -483,6 +483,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (ticks < nudgeUntil && nudgeDest != null && ctx.player() != null && !ctx.player().isInLava()) {
             // walk straight at the step the planner keeps failing (run 16: 5 minutes at index 0 of a 2-block MovementFall)
             Player p0 = ctx.player();
+            // run 96: a MovementFall straight down through netherrack stalled with the netherrack held (no dig); walking
+            // toward our own column does nothing, so dig the block under our feet ourselves (never into lava)
+            BlockPos under = ctx.player().blockPosition().below();
+            if (nudgeDest.getX() == ctx.player().blockPosition().getX() && nudgeDest.getZ() == ctx.player().blockPosition().getZ() && solid(under) && !lavaNearPos(under.below())) {
+                int pk = pickaxeSlot(ctx.player());
+                if (pk >= 0 && pk < 9) ctx.player().getInventory().setSelectedSlot(pk);
+                else if (pk >= 9) ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, pk, 7, ClickType.SWAP, ctx.player());
+                baritone.getLookBehavior().updateTarget(new Rotation(ctx.player().getYRot(), 90), true);
+                if (!under.equals(holeTarget)) { holeTarget = under; ctx.playerController().clickBlock(under, Direction.UP); }
+                else ctx.playerController().onPlayerDamageBlock(under, Direction.UP);
+                ticks++;
+                status = "digging down to " + nudgeDest.toShortString();
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
             double nx = nudgeDest.getX() + 0.5 - p0.getX(), nz = nudgeDest.getZ() + 0.5 - p0.getZ();
             baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-nx, nz)), 20), true);
             baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
