@@ -1958,6 +1958,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     private void duelEnd(Player me, String why) {
         if (duelBrute != null) logDirect("Bastion: duel " + why + " hits=" + duelHits + " dmgTaken=" + String.format("%.1f", duelHp - me.getHealth()) + " t=" + (ticks - duelStart) / 20 + "s");
+        if (duelBrute != null) net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false);
         duelBrute = null;
     }
 
@@ -2003,6 +2004,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         aimer.look(b.getEyePosition(), 0);
         if (cd >= 0.95f && d <= 3.0 && me.hasLineOfSight(b)) {
             // lower the shield and swing this tick, then block again
+            net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false);
+            if (me.isUsingItem()) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(me);
             me.setSprinting(true);
             net.minecraft.client.Minecraft.getInstance().gameMode.attack((LocalPlayer) me, b);
             me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
@@ -2014,7 +2017,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "duel: closing in";
             return new PathingCommand(new GoalNear(b.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
         }
-        baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        // run 61: the CLICK_RIGHT override never raised the shield (using=false); hold the real use key and start the use
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.options.keyUse.setDown(true);
+        if (!me.isUsingItem()) mc.gameMode.useItem(me, net.minecraft.world.InteractionHand.OFF_HAND);
         status = "duel: blocking";
         return pause0();
     }
