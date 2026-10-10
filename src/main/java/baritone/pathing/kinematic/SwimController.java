@@ -18,7 +18,6 @@ import baritone.utils.BlockStateInterface;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,14 +86,8 @@ public final class SwimController {
         if (!buildLine(path, pathPosition)) {
             return -1;
         }
-        Vec3 p = player.position();
-        Vec3 m = player.getDeltaMovement();
-        real.x = p.x; real.y = p.y; real.z = p.z;
-        real.vx = m.x; real.vy = m.y; real.vz = m.z;
-        real.onGround = player.onGround();
-        real.sprinting = player.isSprinting();
+        ClientWorld.readPlayer(ctx, real);
         real.swimming = player.isSwimming();
-        real.collidedH = player.horizontalCollision;
 
         double[] here = project(real.x, real.y, real.z);
         if (here[1] > (breathing ? CORRIDOR + 8.0 : CORRIDOR + 1.0)) {

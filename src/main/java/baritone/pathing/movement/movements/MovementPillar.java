@@ -34,7 +34,6 @@ import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
@@ -64,8 +63,8 @@ public class MovementPillar extends Movement {
             if (MovementHelper.isClimbable(fromDown.getBlock())) {
                 return COST_INF; // can't pillar from a ladder or vine onto something that isn't also climbable
             }
-            if (fromDown.getBlock() instanceof SlabBlock && fromDown.getValue(SlabBlock.TYPE) == SlabType.BOTTOM) {
-                return COST_INF; // can't pillar up from a bottom slab onto a non ladder
+            if (MovementHelper.isBottomSlab(fromDown)) {
+                return COST_INF; // can't pillar up from a bottom slab (or a lantern) onto a non ladder
             }
         }
         BlockState toBreak = context.get(x, y + 2, z);

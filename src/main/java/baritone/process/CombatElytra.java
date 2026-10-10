@@ -67,14 +67,16 @@ final class CombatElytra {
         Item worn = me.getItemBySlot(chestSlot).getItem();
         if (mace >= 0 && worn != Items.ELYTRA && phase.macePhase == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 6 && dist < 40 && !overhead
                 && (rocket >= 0 || wind >= 0) && inv.slotOf(me, Items.ELYTRA) >= 0) {
-            // the wings are in the hotbar, not on the chest: put them on (the chestplate goes where they were)
+            // the wings are not on the chest: put them on from the hotbar (the chestplate goes where they were)
             phase.chestSaved = worn;
-            inv.invSwap(me, 6, inv.slotOf(me, Items.ELYTRA));
+            int wings = inv.toHotbar(me, inv.slotOf(me, Items.ELYTRA));
+            if (wings >= 0) inv.invSwap(me, 6, wings);
             return hands.decide("elytra");
         }
         if (worn == Items.ELYTRA && phase.chestSaved != null && phase.chestSaved != Items.AIR && phase.macePhase == 0 && me.onGround() && phase.maceCool > 0) {
             // landed: the chestplate is worth more than the wings in a melee
-            if (inv.slotOf(me, phase.chestSaved) >= 0 && inv.invSwap(me, 6, inv.slotOf(me, phase.chestSaved))) phase.chestSaved = null;
+            int plate = inv.toHotbar(me, inv.slotOf(me, phase.chestSaved));
+            if (plate >= 0 && inv.invSwap(me, 6, plate)) phase.chestSaved = null;
             return hands.decide("elytra");
         }
         if (mace >= 0 && (rocket >= 0 || wind >= 0) && worn == Items.ELYTRA

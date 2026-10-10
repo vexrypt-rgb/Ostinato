@@ -68,7 +68,7 @@ public final class ClutchController {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
-                || player.getAbilities().flying) {
+                || player.getAbilities().flying || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {
@@ -237,6 +237,7 @@ public final class ClutchController {
         sim.sprinting = p.isSprinting();
         sim.collidedH = false;
         sim.jumpTicks = 0;
+        ClientWorld.readEffects(ctx, sim);
     }
 
     /** Whether a sprint jump from here toward {@code travel} lands on the route, with blocks laid in reach counted as there. */
@@ -263,6 +264,36 @@ public final class ClutchController {
                 public float slipperiness(int x, int y, int z) {
                     return client.slipperiness(x, y, z);
                 }
+
+                @Override
+                public float speedFactor(int x, int y, int z) {
+                    return client.speedFactor(x, y, z);
+                }
+
+                @Override
+                public float jumpFactor(int x, int y, int z) {
+                    return client.jumpFactor(x, y, z);
+                }
+
+                @Override
+                public boolean sticky(int x, int y, int z) {
+                    return client.sticky(x, y, z);
+                }
+
+                @Override
+                public boolean bouncy(int x, int y, int z) {
+                    return client.bouncy(x, y, z);
+                }
+
+                @Override
+                public boolean water(int x, int y, int z) {
+                    return client.water(x, y, z);
+                }
+
+                @Override
+                public boolean climbable(int x, int y, int z) {
+                    return client.climbable(x, y, z);
+                }
             });
         }
         client.reset();
@@ -273,6 +304,7 @@ public final class ClutchController {
         sim.sprinting = p.isSprinting();
         sim.collidedH = false;
         sim.jumpTicks = 0;
+        ClientWorld.readEffects(ctx, sim);
         boolean left = false;
         for (int t = 0; t < 40; t++) {
             sim.tick(travel, true, true, t == 0);

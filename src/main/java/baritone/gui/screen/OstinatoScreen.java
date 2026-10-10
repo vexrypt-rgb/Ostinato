@@ -228,6 +228,15 @@ public final class OstinatoScreen extends Screen {
         modifiedAt = 0;
     }
 
+    /** Names what the reset button acts on, which is the rows shown: a whole category only when nothing narrows them. */
+    private String resetLabel() {
+        boolean searching = !search.get().trim().isEmpty();
+        if (modifiedView && !searching) {
+            return "Reset all modified";
+        }
+        return searching || filter != Filter.ALL ? "Reset shown" : "Reset category";
+    }
+
     private void rebuild() {
         String q = search.get().trim();
         List<Entry> out = new ArrayList<>();
@@ -966,7 +975,7 @@ public final class OstinatoScreen extends Screen {
         bxr = button(ms, freecamLabel(), bxr, false, mx, my, accent) - 5;
         boolean confirm = now < resetConfirmUntil;
         if (!tv) {
-            bxr = button(ms, confirm ? "Click to confirm" : "Reset category", bxr, false, mx, my, confirm ? Theme.DANGER : accent) - 10;
+            bxr = button(ms, confirm ? "Click to confirm" : resetLabel(), bxr, false, mx, my, confirm ? Theme.DANGER : accent) - 10;
         } else {
             bxr -= 5;
         }
@@ -1209,7 +1218,7 @@ public final class OstinatoScreen extends Screen {
             return true;
         }
         long now = System.currentTimeMillis();
-        String resetLabel = now < resetConfirmUntil ? "Click to confirm" : "Reset category";
+        String resetLabel = now < resetConfirmUntil ? "Click to confirm" : resetLabel();
         float rw = GuiDraw.width(resetLabel) + 16, rxr = fcxr - fcw - 5;
         if (in(mx, my, rxr - rw, fy + 5, rxr, fy + 19)) {
             if (now < resetConfirmUntil) {

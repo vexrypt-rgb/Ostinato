@@ -66,6 +66,7 @@ public class MovementParkour extends Movement {
     /** The extension is down and the player has backed up to run at the jump; only then does the run-up begin. */
     private boolean backed;
     private PlayerSim sim;
+    private ClientWorld simWorld;
 
     private MovementParkour(IBaritone baritone, BetterBlockPos src, int dist, Direction dir, boolean ascend) {
         super(baritone, src, src.relative(dir, dist).above(ascend ? 1 : 0), EMPTY, src.relative(dir, dist).below(ascend ? 0 : 1));
@@ -554,8 +555,10 @@ public class MovementParkour extends Movement {
 
     private boolean jumpLands(float yaw, int delay, boolean live) {
         if (sim == null) {
-            sim = new PlayerSim(new ClientWorld(ctx));
+            simWorld = new ClientWorld(ctx);
+            sim = new PlayerSim(simWorld);
         }
+        simWorld.reset(); // it remembers collision boxes, and blocks are laid and broken while this movement runs
         LocalPlayer p = ctx.player();
         sim.x = p.getX(); sim.y = p.getY(); sim.z = p.getZ();
         sim.vx = p.getDeltaMovement().x; sim.vy = p.getDeltaMovement().y; sim.vz = p.getDeltaMovement().z;
@@ -563,6 +566,7 @@ public class MovementParkour extends Movement {
         sim.sprinting = p.isSprinting();
         sim.collidedH = false;
         sim.jumpTicks = 0;
+        ClientWorld.readEffects(ctx, sim);
         boolean left = false;
         for (int t = 0; t < 60; t++) {
             sim.tick(yaw, true, true, t == delay);

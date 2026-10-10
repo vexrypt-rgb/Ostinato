@@ -154,6 +154,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
+        inv.closeAbandoned(me);
         checkEnemyReset(me);
         if (filter == null && enemies.isEmpty()) {
             recorder.end(me, "lost");
@@ -539,6 +540,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * so the round dealt 0. Set the slot as well as clicking the key.
      */
     private boolean select(Player me, int slot) {
+        slot = inv.toHotbar(me, slot); // from the main inventory this takes two ticks: false until it is up
         if (slot < 0) return false;
         if (me.getInventory().getSelectedSlot() != slot) {
             me.getInventory().setSelectedSlot(slot);
@@ -576,6 +578,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         shield.swingGap = shield.unseenBlock = click.probeTick = 0;
         tools.reset();
         inv.resetBreaks();
+        inv.closeScreen();
         shield.lastShieldTick = shield.lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();

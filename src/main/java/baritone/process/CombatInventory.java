@@ -17,6 +17,11 @@ final class CombatInventory {
     private final IPlayerContext ctx;
     private int invTick = -99;
     private final java.util.Map<Item, Integer> kitCount = new java.util.HashMap<>();
+    /** When each hotbar slot was last pulled into by {@link #slotOf}, as a running count of pulls; 0 = never. */
+    private final long[] pulled = new long[9];
+    private long pulls;
+    /** The inventory screen opened here for a swap, until that swap is clicked. */
+    private net.minecraft.client.gui.screens.Screen opened;
 
     CombatInventory(IPlayerContext ctx) {
         this.ctx = ctx;
@@ -123,33 +128,70 @@ final class CombatInventory {
         invSwap(me, menuSlot, 40);
     }
 
-    /** Whether we carry the item at all. Asking moves nothing; {@link #slotOf} does, and is for the moment of use. */
+    /** Whether we carry the item at all. */
     boolean has(Player me, Item item) {
-        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) return true;
-        return false;
+        return slotOf(me, item) >= 0;
     }
 
-    /** Hotbar slot of the item, pulling it into the hotbar if it's only in the main inventory. */
+    /**
+     * Where the item is: its hotbar slot (0-8), else its place in the main inventory (9-35), else -1. Asking moves
+     * nothing. The fight asks about a dozen items every tick only to know what it carries, and when asking pulled
+     * each one into the hotbar they pushed each other out again, the inventory screen opening for every swap.
+     * {@link #toHotbar} does the pulling, when the item is about to be held.
+     */
     int slotOf(Player me, Item item) {
-        for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
-        for (int i = 9; i < 36; i++) {
-            if (me.getInventory().getItem(i).getItem() == item) {
-                int to = spare(me);
-                return invSwap(me, i, to) ? to : -1;
-            }
-        }
+        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
         return -1;
     }
 
-    /** Hotbar slot to pull an item into: an empty one, else the last that holds no sword or axe. */
+    /**
+     * The hotbar slot for a place from {@link #slotOf}: the same one when it is in the hotbar already, else the
+     * item is pulled up into a spare slot. That swap takes two ticks, and this is -1 until it is done.
+     */
+    int toHotbar(Player me, int slot) {
+        if (slot < 9) return slot;
+        if (slot >= 36) return -1;
+        int to = spare(me);
+        if (!invSwap(me, slot, to)) return -1;
+        pulled[to] = ++pulls;
+        return to;
+    }
+
+    /** Hotbar slot to pull an item into: see {@link Spare#slot}. */
     private int spare(Player me) {
-        int kept = -1;
-        for (int i = 8; i >= 0; i--) {
+        boolean[] empty = new boolean[9], weapon = new boolean[9];
+        for (int i = 0; i < 9; i++) {
             ItemStack st = me.getInventory().getItem(i);
-            if (st.isEmpty()) return i;
-            if (kept < 0 && !java.util.Arrays.asList(SWORDS).contains(st.getItem()) && !java.util.Arrays.asList(AXES).contains(st.getItem())) kept = i;
+            empty[i] = st.isEmpty();
+            weapon[i] = java.util.Arrays.asList(SWORDS).contains(st.getItem()) || java.util.Arrays.asList(AXES).contains(st.getItem())
+                    || st.getItem() == Items.MACE || isSpear(st);
         }
-        return kept < 0 ? 8 : kept;
+        return Spare.slot(empty, weapon, pulled, me.getInventory().getSelectedSlot());
+    }
+
+    /** The choice of slot on its own, in a class that loads without the game. */
+    static final class Spare {
+        private Spare() {}
+
+        /**
+         * Which hotbar slot gives way to an item pulled out of the inventory. An empty one first. Else one holding
+         * no melee weapon, and of those the one whose own pull is longest ago: never pulled into before anything
+         * that was, the highest index among equals. The slot in hand is taken only when no other will do, since
+         * what it holds may be in use. All weapons: the last slot.
+         * <p>
+         * Taking the same slot every time made two absent items that are wanted in turn (a mace and wind charges,
+         * say) throw each other out each time.
+         */
+        static int slot(boolean[] empty, boolean[] weapon, long[] pulled, int selected) {
+            for (int i = 8; i >= 0; i--) if (empty[i]) return i;
+            int best = -1;
+            for (int i = 8; i >= 0; i--) {
+                if (weapon[i] || i == selected) continue;
+                if (best < 0 || pulled[i] < pulled[best]) best = i;
+            }
+            if (best >= 0) return best;
+            return selected >= 0 && selected < 9 && !weapon[selected] ? selected : 8;
+        }
     }
 
     int best(Player me, Item[] tiers) {
@@ -175,7 +217,8 @@ final class CombatInventory {
         net.minecraft.client.Minecraft mc = ctx.minecraft();
         if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
             if (mc.gui.screen() == null) {
-                mc.gui.setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(me));
+                opened = new net.minecraft.client.gui.screens.inventory.InventoryScreen(me);
+                mc.gui.setScreen(opened);
                 invTick = me.tickCount;
             }
             return false;
@@ -183,6 +226,27 @@ final class CombatInventory {
         if (me.tickCount <= invTick) return false;
         ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, button, ContainerInput.SWAP, me);
         mc.gui.setScreen(null);
+        opened = null;
         return true;
+    }
+
+    /**
+     * Once a tick, before anything asks for a swap. A swap is asked for on one tick and clicked on the next; when
+     * the fight wants something else by then, nobody comes back for it and nothing else closes the screen. Only a
+     * screen opened here is closed, never one the player opened.
+     */
+    void closeAbandoned(Player me) {
+        if (opened == null) return;
+        if (ctx.minecraft().gui.screen() != opened) {
+            opened = null;
+        } else if (me.tickCount > invTick + 1 || me.tickCount < invTick) {
+            closeScreen();
+        }
+    }
+
+    /** Close the screen a swap opened, if it is still up. */
+    void closeScreen() {
+        if (opened != null && ctx.minecraft().gui.screen() == opened) ctx.minecraft().gui.setScreen(null);
+        opened = null;
     }
 }

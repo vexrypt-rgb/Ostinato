@@ -45,7 +45,7 @@ final class CombatApproach {
 
     /** One tick of closing in; {@code spearUseCool} is the spear's charge cooldown, which decides whether a spear runs up on foot. */
     PathingCommand close(Player me, LivingEntity target, double dist, boolean los, int spearUseCool) {
-        if (!los && dist <= 3) { // right there but walled off (a crawl gap under our feet, a hole): dig through
+        if (!los && dist <= 3 && baritone.Baritone.settings().allowBreak.value) { // right there but walled off (a crawl gap under our feet, a hole): dig through
             BlockHitResult wall = ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), target.getEyePosition(),
                     net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me));
             // obsidian and anchors take minutes by hand: the bench sat 1800 ticks left-clicking one
