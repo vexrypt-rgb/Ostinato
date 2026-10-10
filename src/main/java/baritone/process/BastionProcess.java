@@ -804,6 +804,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         if (!me.isOnFire()) burnSince = -1; else if (burnSince < 0) burnSince = ticks;
         // run 37 stood still for 10 s and burned 20 -> 0 (something kept relighting it): stand at most 2 s, then carry on
+        // run 53 stood in a fire block and burned 20 -> 0: punch out fire under or next to us first
+        if (me.isOnFire() && !me.isInLava()) {
+            BlockPos f0 = me.blockPosition();
+            for (BlockPos f : new BlockPos[]{f0, f0.north(), f0.south(), f0.east(), f0.west()}) {
+                if (ctx.world().getBlockState(f).getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock) {
+                    ctx.playerController().clickBlock(f.below(), net.minecraft.core.Direction.UP);
+                    status = "putting out fire";
+                    return pause0();
+                }
+            }
+        }
         if (me.isOnFire() && !me.isInLava() && !perching && ticks - burnSince < 40) {
             // burning but clear of the lava: running a long path (with drops) at half health kills more than the flames do
             baritone.getPveProcess().hold = false;
