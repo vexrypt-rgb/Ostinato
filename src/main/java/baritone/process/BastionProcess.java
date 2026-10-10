@@ -521,7 +521,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             var cur = baritone.getPathingBehavior().getCurrent();
             if (cur != null) {
                 var mv = cur.getPath().movements().get(Math.min(cur.getPosition(), cur.getPath().movements().size() - 1));
-                if (mv instanceof baritone.pathing.movement.movements.MovementFall || mv instanceof baritone.pathing.movement.movements.MovementDescend)
+                if ((mv instanceof baritone.pathing.movement.movements.MovementFall || mv instanceof baritone.pathing.movement.movements.MovementDescend)
                         && mv.getSrc().y - mv.getDest().y <= 3 && !lavaNearPos(mv.getDest())) { // run 65: a nudge overshot a ledge, fell 40 into lava
                     nudgeDest = new BlockPos(mv.getDest().x, mv.getDest().y, mv.getDest().z);
                     nudgeUntil = ticks + 20;
