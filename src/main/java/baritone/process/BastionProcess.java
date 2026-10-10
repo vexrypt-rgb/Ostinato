@@ -814,7 +814,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
             BlockPos f0 = me.blockPosition();
             for (BlockPos f : new BlockPos[]{f0, f0.north(), f0.south(), f0.east(), f0.west()}) {
                 if (ctx.world().getBlockState(f).getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock) {
-                    ctx.playerController().clickBlock(f.below(), net.minecraft.core.Direction.UP);
+                    // run 67: punching the block under the fire did nothing and it burned to death in place; punch the fire itself, then walk out
+                    if (burnSince >= 0 && ticks - burnSince > 10) {
+                        for (Direction d : Direction.Plane.HORIZONTAL) {
+                            BlockPos q = f0.relative(d);
+                            if (ctx.world().getBlockState(q).isAir() && ctx.world().getBlockState(q.above()).isAir() && solid(q.below()) && !lavaNearPos(q)) {
+                                status = "walking out of fire";
+                                return new PathingCommand(new GoalBlock(q), PathingCommandType.SET_GOAL_AND_PATH);
+                            }
+                        }
+                    }
+                    baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(f), ctx.playerRotations()), true);
+                    ctx.playerController().clickBlock(f, net.minecraft.core.Direction.UP);
+                    me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
                     status = "putting out fire";
                     return pause0();
                 }
