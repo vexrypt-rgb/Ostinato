@@ -2095,6 +2095,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // run 64: turning to eat/climb/exit with a brute in reach got hit 7, 3 and 10; with a shield, keep blocking until it is out of reach
         // shield duel only (runs 58/59: no shield lost 11 hp in 3-4 hits)
         if (!me.getOffhandItem().is(Items.SHIELD)) { duelEnd(me, "aborted (no shield)"); return null; }
+        // run 98: "blocking" took 10 twice: a brute's axe disables the shield for 5 s; then it is no defence at all
+        if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) { duelEnd(me, "aborted (shield disabled)"); return null; }
         LivingEntity b = brutes.stream().filter(e -> me.distanceTo(e) < 12).min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
         if (b == null) { duelEnd(me, "lost sight"); return null; }
         LivingEntity fb = b;
