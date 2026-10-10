@@ -580,6 +580,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
         PveProcess pveP = baritone.getPveProcess();
         // a brute hits for ~6-13 through gold armour: low on health with one close, a speedrunner leaves with what they have
         // (in-game run 13 fought, perched and retreated at 12 hp and died in the tower)
+        // up a tower with a brute below: stay up there; walking down to leave is what killed run 47
+        if (bastion != null && me.onGround() && me.getY() >= perchBase + 1.9 && Math.abs(me.getX() - perchX - 0.5) < 1 && Math.abs(me.getZ() - perchZ - 0.5) < 1
+                && heavies.stream().anyMatch(e -> e instanceof PiglinBrute && me.distanceTo(e) < 10)) {
+            pveP.hold = false;
+            status = "on tower, waiting out the brute";
+            return pause0();
+        }
         if (bastion != null && !exiting && !perching && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp, leaving");
             pveP.hold = false;
@@ -591,7 +598,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (exiting && bastion != null) return exit(me, counts(me));
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
-        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 9 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
+        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
         if (brute != null && !perching && !me.isInLava() && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
