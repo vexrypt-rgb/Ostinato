@@ -43,6 +43,7 @@ import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
 import baritone.bastion.BastionLava;
 import baritone.bastion.EdgeCost;
+import baritone.bastion.LavaFlow;
 import baritone.bastion.BastionTrap;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.bastion.BastionPlan;
@@ -161,7 +162,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     public void stop() {
-        EdgeCost.enabled = false;
+        EdgeCost.enabled = false; EdgeCost.lavaSoon = java.util.Set.of();
         active = false;
         if (savedBreakPenalty != null) {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
@@ -488,7 +489,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         if (ctx.player() != null) {
-            selAtTickStart = ctx.player().getInventory().getSelectedSlot();
+            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), lavaNearPos(ctx.player().blockPosition()) && holeTarget != null && ctx.world().getBlockState(holeTarget).isAir());
             // picked-up counter from the inventory (counting the item we walked to missed most pickups, run 32: 2)
             int u = 0;
             for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
@@ -974,7 +975,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
         // 2a. Chests in plan order for this layout.
         if (bastion != null) {
-            PathingCommand camp = tradeCamp(me, piglins, have, done);
+            // run 86: ran out of ingots with 3 gold blocks left; the camp returns every tick, so split blocks before it
+                if (craftStep > 0 || countOf(me, Items.GOLD_BLOCK) > 0 && ingotCount(me) < 2) { PathingCommand cr = craftGold(me); if (cr != null) return cr; }
+                PathingCommand camp = tradeCamp(me, piglins, have, done);
             if (camp != null) return camp;
             // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
             PathingCommand bt0 = barterOnTheWay(me, near);
@@ -1278,7 +1281,34 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private boolean lavaAt(BlockPos p) {
-        return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA);
+        return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || EdgeCost.lavaSoon.contains(LavaFlow.key(p.getX(), p.getY(), p.getZ()));
+    }
+
+    private long flowAt = -100;
+    private BlockPos flowCenter;
+    /** Re-forecast lava spread around us (every 10 ticks, or right after a block next to lava was broken). */
+    private void updateFlow(Player me, boolean force) {
+        if (!force && ticks - flowAt < 10) return;
+        flowAt = ticks;
+        BlockPos c = me.blockPosition();
+        var w = ctx.world();
+        LavaFlow.Grid g = new LavaFlow.Grid() {
+            public int lava(int x, int y, int z) {
+                var fs = w.getFluidState(new BlockPos(x, y, z));
+                if (!fs.is(net.minecraft.tags.FluidTags.LAVA)) return -1;
+                if (fs.isSource() || fs.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING)) return 0;
+                return Math.max(0, 8 - fs.getAmount());
+            }
+            public boolean open(int x, int y, int z) {
+                BlockPos q = new BlockPos(x, y, z);
+                if (!w.isLoaded(q)) return false;
+                BlockState s = w.getBlockState(q);
+                return s.getFluidState().isEmpty() && (s.isAir() || s.canBeReplaced());
+            }
+        };
+        // horizon 100 ticks: the cells we could walk into within ~5 s
+        var f = LavaFlow.forecast(g, c.getX(), c.getY(), c.getZ(), 10, 100);
+        EdgeCost.lavaSoon = java.util.Set.copyOf(f.keySet());
     }
 
     /** Feet height of the landing below (x, y, z) feet cell; Integer.MIN_VALUE when the column is unloaded, ends in lava or is too deep. */

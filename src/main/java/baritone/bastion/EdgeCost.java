@@ -11,6 +11,9 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public final class EdgeCost {
     public static volatile boolean enabled;
+    /** cells LavaFlow predicts lava will reach soon (LavaFlow.key); treated as lava by the bastion checks and priced out of paths */
+    public static volatile java.util.Set<Long> lavaSoon = java.util.Set.of();
+    public static final double FLOW_PENALTY = 200;
     public static final double PENALTY = 25;
     /** Air deeper than this onto lava or nothing is a deadly edge. */
     public static final int MIN_DROP = 3, SCAN = 16;
@@ -19,6 +22,8 @@ public final class EdgeCost {
 
     public static double penalty(CalculationContext c, int x, int y, int z) {
         if (!enabled) return 0;
+        java.util.Set<Long> soon = lavaSoon;
+        if (!soon.isEmpty() && (soon.contains(LavaFlow.key(x, y, z)) || soon.contains(LavaFlow.key(x, y + 1, z)))) return FLOW_PENALTY;
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
             if (dx == 0 && dz == 0) continue;
             if (deadlyColumn(c, x + dx, y, z + dz)) return PENALTY;
