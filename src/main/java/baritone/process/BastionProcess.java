@@ -785,6 +785,22 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 baritone.getPveProcess().hold = false;
                 float yaw = (float) Math.toDegrees(Math.atan2(-away.x, away.z));
                 baritone.getLookBehavior().updateTarget(new Rotation(yaw, 10), true);
+                // run 69: pinned against a wall under a ceiling (head=blackstone, vc=true) and burned 17 -> 0; dig through the way out
+                if (me.horizontalCollision) {
+                    Direction fd = Direction.getApproximateNearest(away.x, 0, away.z);
+                    BlockPos fr = me.blockPosition().relative(fd);
+                    for (BlockPos w : new BlockPos[]{fr.above(), fr, me.blockPosition().above()}) {
+                        if (!solid(w) || lavaNearPos(w) && lavaAt(w.above())) continue;
+                        int pk = pickaxeSlot(me);
+                        if (pk >= 0 && pk < 9) me.getInventory().setSelectedSlot(pk);
+                        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(w), ctx.playerRotations()), true);
+                        if (!w.equals(holeTarget)) { holeTarget = w; ctx.playerController().clickBlock(w, fd.getOpposite()); }
+                        else ctx.playerController().onPlayerDamageBlock(w, fd.getOpposite());
+                        baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+                        status = "lava: digging out";
+                        return pause0();
+                    }
+                }
                 baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
                 // holding jump keeps us bobbing at the surface where no door cell is found (lava8-10): with a door, sink instead
                 boolean haveDoor = false;
