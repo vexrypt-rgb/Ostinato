@@ -1958,6 +1958,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
+    /** A piglin walks to an ingot it sees land a few blocks off: no need to stand on top of it. */
+    private static final double CAMP_THROW = 5.5;
     private boolean camping;
     /** Surface cells of dug piglin holes (the hole is the two blocks below) and the one being dug. */
     private final List<BlockPos> holes = new ArrayList<>();
@@ -2080,12 +2082,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (hole != null) return hole;
         Piglin t = null;
         for (Piglin p : piglins) {
-            if (!(calmNear(me, p, THROW_RANGE) || trapped(p) && me.distanceTo(p) <= THROW_RANGE) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
+            if (!(calmNear(me, p, CAMP_THROW) || trapped(p) && me.distanceTo(p) <= CAMP_THROW) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
             // a trapped piglin first: it cannot wander off mid-trade
             if (t == null || trapped(p) && !trapped(t) || trapped(p) == trapped(t) && me.distanceTo(p) < me.distanceTo(t)) t = p;
         }
         if (t == null) {
             if (calm > 0 || !admiring.isEmpty()) campIdleSince = ticks;
+            if (holes.isEmpty() && admiring.size() < 2) {
+                // calm piglins near but out of throw range (run 48: 71 waits to 4 throws): shuffle up to them
+                Piglin c = null;
+                for (Piglin p : piglins) if (calmNear(me, p, 8) && !admiring.containsKey(p.getUUID()) && me.distanceTo(p) > CAMP_THROW && !lavaNearPos(p.blockPosition()) && !lavaDropNear(p.blockPosition()) && (c == null || me.distanceTo(p) < me.distanceTo(c))) c = p;
+                if (c != null) { status = "camp: stepping closer"; return new PathingCommand(new GoalNear(c.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH); }
+            }
             if (holes.isEmpty() && ticks - campIdleSince > 40) {
                 // the group wandered off: follow it a short way instead of ending the camp
                 Piglin f = null;
