@@ -637,7 +637,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             logDirect("Bastion: time budget (" + BastionSettings.timeBudget + " s) used, leaving");
             return exit(me, counts(me));
         }
-        if (bastion != null && startTick == 0) startTick = Math.max(1, ticks);
+        // the clock starts on arrival, not detection (run 45 spent 3 of its 5 minutes on the approach)
+        if (bastion != null && startTick == 0 && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40) startTick = Math.max(1, ticks);
         if (!perching && !me.isInLava() && !me.isOnFire() && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
             perching = true;
             perchUp = false;
