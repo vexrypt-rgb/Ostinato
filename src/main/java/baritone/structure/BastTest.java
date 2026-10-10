@@ -180,7 +180,7 @@ public final class BastTest implements AbstractGameEventListener {
             run("execute at @p run summon piglin ~-4 ~ ~3");
             run("execute at @p run summon piglin_brute ~3 ~ ~-6");
             }
-            if (Boolean.getBoolean("ostinato.basttest.duel")) { run("give @p iron_axe"); run("execute at @p run summon piglin_brute ~5 ~ ~ {Tags:[\"duel\"]}"); }
+            if (Boolean.getBoolean("ostinato.basttest.duel")) { run("give @p iron_axe"); run("item replace entity @p weapon.offhand with shield"); run("execute at @p run summon piglin_brute ~5 ~ ~ {Tags:[\"duel\"]}"); }
             say("BAST setup done; starting #bastion " + VARIANT);
             b.getCommandManager().execute("bastion " + VARIANT);
             state = 4;

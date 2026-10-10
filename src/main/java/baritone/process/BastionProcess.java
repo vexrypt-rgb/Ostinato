@@ -1973,49 +1973,49 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private PathingCommand duel(Player me, List<LivingEntity> heavies) {
         List<LivingEntity> brutes = heavies.stream().filter(e -> e instanceof PiglinBrute && e.isAlive()).toList();
         if (duelBrute != null && !duelBrute.isAlive()) { duelEnd(me, "won"); return null; }
+        // shield duel only (runs 58/59: no shield lost 11 hp in 3-4 hits)
+        if (!me.getOffhandItem().is(Items.SHIELD)) { duelEnd(me, "aborted (no shield)"); return null; }
         LivingEntity b = brutes.stream().filter(e -> me.distanceTo(e) < 12).min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
         if (b == null) { duelEnd(me, "lost sight"); return null; }
         LivingEntity fb = b;
         boolean isolated = brutes.stream().noneMatch(e -> e != fb && e.distanceTo(fb) < 10);
-        String why = !isolated ? "outnumbered" : me.getHealth() < 10 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
+        String why = !isolated ? "outnumbered" : me.getHealth() < 14 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
         if (why != null) { duelEnd(me, "aborted (" + why + ")"); return null; }
-        if (duelBrute != b) { duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks; logDirect("Bastion: duel start vs brute at " + b.blockPosition().toShortString()); }
+        if (duelBrute != b) {
+            duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks;
+            // axe swap once, before engaging (swapping resets the attack cooldown)
+            int best = -1, rank = 0;
+            for (int i = 0; i < 36; i++) {
+                ItemStack s = me.getInventory().getItem(i);
+                int r = s.getItem() instanceof net.minecraft.world.item.AxeItem ? 2 : s.is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
+                if (r > rank) { rank = r; best = i; }
+            }
+            if (best >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, best, 0, ClickType.SWAP, me); best = 0; }
+            if (best >= 0) me.getInventory().setSelectedSlot(best);
+            logDirect("Bastion: duel start vs brute at " + b.blockPosition().toShortString());
+        }
         if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
         baritone.getPveProcess().hold = false;
-        // best weapon: axe, else sword
-        int best = -1; int rank = 0;
-        for (int i = 0; i < 36; i++) {
-            net.minecraft.world.item.Item it = me.getInventory().getItem(i).getItem();
-            int r = it instanceof net.minecraft.world.item.AxeItem ? 2 : me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
-            if (r > rank) { rank = r; best = i; }
-        }
-        if (best >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, best, 0, ClickType.SWAP, me); best = 0; }
-        if (best >= 0) me.getInventory().setSelectedSlot(best);
         double d = me.distanceTo(b);
         float cd = me.getAttackStrengthScale(0.5f);
         aimer.look(b.getEyePosition(), 0);
-        if (cd >= 0.95f && d <= 3.0 && me.hasLineOfSight(b) && ticks >= duelBackUntil) {
+        if (cd >= 0.95f && d <= 3.0 && me.hasLineOfSight(b)) {
+            // lower the shield and swing this tick, then block again
+            me.setSprinting(true);
             net.minecraft.client.Minecraft.getInstance().gameMode.attack((LocalPlayer) me, b);
             me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
             duelHits++;
-            duelBackUntil = ticks + 10;
             status = "duel: hit " + duelHits;
             return pause0();
         }
-        if (ticks < duelBackUntil || cd < 0.95f) {
-            if (d > 4.0) { status = "duel: waiting for cooldown"; return pause0(); }
-            // run 58: pathing away was too slow (brute caught up); back-pedal directly while facing it
-            if (lavaDropNear(BlockPos.containing(me.position().subtract(me.position().subtract(b.position()).normalize().scale(-1.5))), 1)) { duelEnd(me, "aborted (lava behind)"); return null; }
-            baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_BACK, true);
-            if (me.horizontalCollision && me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
-            status = "duel: stepping back";
-            return pause0();
+        if (d > 6 && cd >= 0.95f) {
+            status = "duel: closing in";
+            return new PathingCommand(new GoalNear(b.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
         }
-        me.setSprinting(true);
-        status = "duel: closing in";
-        return new PathingCommand(new GoalNear(b.blockPosition(), 1), PathingCommandType.SET_GOAL_AND_PATH);
+        baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        status = "duel: blocking";
+        return pause0();
     }
-
     private static float yawTo(Player me, LivingEntity e) {
         double dx = e.getX() - me.getX(), dz = e.getZ() - me.getZ();
         return (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90);
