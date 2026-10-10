@@ -1443,7 +1443,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "to chest " + next.toShortString() + " (" + layout() + ", " + plan.size() + " planned)";
             return new PathingCommand(new GoalGetToBlock(next), PathingCommandType.SET_GOAL_AND_PATH);
         }
-        if (piglinWatching(me, near)) {
+        boolean watched = piglinWatching(me, near);
+        if (watched) lastWatched = ticks;
+        // line of sight flickers: a piglin seen in the last second still counts (run 31 opened in a gap and was mobbed)
+        if (watched || ticks - lastWatched < 30) {
             if (chestWaitSince == 0) chestWaitSince = ticks;
             if (ticks - chestWaitSince < BastionSettings.chestWaitTicks) {
                 status = "chest: piglins watching, waiting";
@@ -1895,6 +1898,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         return false;
     }
     private BlockPos nudgeDest;
+    private long lastWatched = -1000;
     private long nudgeUntil;
     private int lootTarget = -1;
     private long startTick;
