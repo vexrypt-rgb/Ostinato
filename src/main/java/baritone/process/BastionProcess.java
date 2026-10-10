@@ -118,6 +118,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsExhausted = false;
         chestsLooted = 0;
         stuckCount.clear();
+        badLoot.clear();
+        startTick = 0;
         doorPos = null;
         descentSteps = 0;
         digging = false;
@@ -483,6 +485,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 status = "stuck on " + mv.getClass().getSimpleName() + " to " + mv.getDest() + ", avoiding it";
             }
         } catch (RuntimeException ignoredEx) { }
+        // a drop we cannot reach (run 14: 2 minutes on one crying obsidian): forget that item at once
+        if (status != null && status.startsWith("loot") && lootTarget >= 0) badLoot.add(lootTarget);
         String gk = String.valueOf(cmd.goal);
         int times = stuckCount.merge(gk, 1, Integer::sum);
         if (times >= 2) {
@@ -538,6 +542,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return exit(me, counts(me));
         }
         if (exiting && bastion != null) return exit(me, counts(me));
+        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
+            // a runner time-boxes the bastion: past the budget, leave with what we have
+            logDirect("Bastion: time budget (" + BastionSettings.timeBudget + " s) used, leaving");
+            return exit(me, counts(me));
+        }
+        if (bastion != null && startTick == 0) startTick = Math.max(1, ticks);
         if (!perching && !me.isInLava() && !me.isOnFire() && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
             perching = true;
             perchUp = false;
@@ -848,6 +858,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // 4. Pick up useful barter drops (junk is left lying).
         if (loot != null) {
             status = "loot " + itemId(loot.getItem());
+            lootTarget = loot.getId();
             if (me.distanceTo(loot) < 1.2 && loot.getId() != lastLootId) { lastLootId = loot.getId(); lootPicked++; }
             return new PathingCommand(new GoalNear(loot.blockPosition(), 0), PathingCommandType.SET_GOAL_AND_PATH);
         }
@@ -1781,11 +1792,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     /** A dropped item near us that is not our own ingot: barter loot. */
+    private final Set<Integer> badLoot = new HashSet<>();
+    private int lootTarget = -1;
+    private long startTick;
+
     private ItemEntity lootNear(Player me) {
         if (ticks - throwTick > ADMIRE_TICKS + 600) return null;
         ItemEntity best = null;
         for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(10))) {
-            if (!BastionGoals.barterUseful(itemId(i.getItem()))) continue;
+            if (!BastionGoals.barterUseful(itemId(i.getItem())) || badLoot.contains(i.getId())) continue;
             if (best == null || me.distanceToSqr(i) < me.distanceToSqr(best)) best = i;
         }
         return best;
