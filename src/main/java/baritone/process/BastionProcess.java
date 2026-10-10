@@ -599,7 +599,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
-        if (brute != null && !perching && !me.isInLava() && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
+        if (brute != null && !perching && me.distanceTo(brute) >= 4.5 && !me.isInLava() && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             perching = true;
