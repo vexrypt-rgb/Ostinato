@@ -2174,7 +2174,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     BlockPos q = caughtHole.offset(dx, 0, dz);
                     if (q.getX() == feet.getX() && q.getZ() == feet.getZ()) continue;
                     BastionTrap.Site s = holeSite(me, piglins, q, dx, dz);
-                    if (s.usable() && (bestPos == null || me.blockPosition().distSqr(q) < me.blockPosition().distSqr(bestPos))) { best = s; bestPos = q; }
+                    // we stand in it ourselves, so it needs no walls (run 83 rejected all four on walled=false)
+                    if (s.open() && s.mineable() && s.floored() && !s.lavaNear() && !s.edge() && (bestPos == null || me.blockPosition().distSqr(q) < me.blockPosition().distSqr(bestPos))) { best = s; bestPos = q; }
                 }
                 if (bestPos == null) {
                     pickRetry = ticks + 600;
