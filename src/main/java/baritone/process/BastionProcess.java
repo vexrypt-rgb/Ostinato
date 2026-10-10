@@ -1984,11 +1984,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
         baritone.getPveProcess().hold = false;
         // best weapon: axe, else sword
         int best = -1; int rank = 0;
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < 36; i++) {
             net.minecraft.world.item.Item it = me.getInventory().getItem(i).getItem();
             int r = it instanceof net.minecraft.world.item.AxeItem ? 2 : me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
             if (r > rank) { rank = r; best = i; }
         }
+        if (best >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, best, 0, ClickType.SWAP, me); best = 0; }
         if (best >= 0) me.getInventory().setSelectedSlot(best);
         double d = me.distanceTo(b);
         float cd = me.getAttackStrengthScale(0.5f);
@@ -2002,11 +2003,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return pause0();
         }
         if (ticks < duelBackUntil || cd < 0.95f) {
-            if (d > 4.5) { status = "duel: waiting for cooldown"; return pause0(); }
-            Vec3 away = me.position().subtract(b.position()).normalize().scale(5);
-            BlockPos to = BlockPos.containing(me.position().add(away));
+            if (d > 4.0) { status = "duel: waiting for cooldown"; return pause0(); }
+            // run 58: pathing away was too slow (brute caught up); back-pedal directly while facing it
+            if (lavaDropNear(BlockPos.containing(me.position().subtract(me.position().subtract(b.position()).normalize().scale(-1.5))), 1)) { duelEnd(me, "aborted (lava behind)"); return null; }
+            baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_BACK, true);
+            if (me.horizontalCollision && me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
             status = "duel: stepping back";
-            return new PathingCommand(new GoalNear(to, 1), PathingCommandType.SET_GOAL_AND_PATH);
+            return pause0();
         }
         me.setSprinting(true);
         status = "duel: closing in";
