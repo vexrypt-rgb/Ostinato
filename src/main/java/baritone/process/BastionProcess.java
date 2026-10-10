@@ -491,7 +491,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         if (ctx.player() != null) {
-            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), brokeNextToFluid());
+            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), brokeNextToFluid()); if (ticks - lastBlockTick == 3) { net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false); if (ctx.player().isUsingItem() && ctx.player().getUseItem().is(Items.SHIELD)) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(ctx.player()); }
             // picked-up counter from the inventory (counting the item we walked to missed most pickups, run 32: 2)
             int u = 0;
             for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
@@ -886,6 +886,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         boolean early = layout().equals("stables");
         List<LivingEntity> near = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(SEEN_RANGE), e -> e != me);
         if (near.stream().anyMatch(e -> threat(e, me, early))) {
+            List<LivingEntity> th0 = near.stream().filter(e -> threat(e, me, early)).toList();
+            if (th0.stream().allMatch(e -> e instanceof Piglin)) {
+                PathingCommand sk = skirmish(me, th0);
+                if (sk != null) return sk;
+            }
             PveProcess pve = baritone.getPveProcess();
             if (!fighting) {
                 fighting = true;
@@ -2121,9 +2126,62 @@ public final class BastionProcess extends BaritoneProcessHelper {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         mc.options.keyUse.setDown(true);
         if (!me.isUsingItem()) mc.gameMode.useItem(me, net.minecraft.world.InteractionHand.OFF_HAND);
-        status = "duel: blocking";
+        status = "duel: blocking"; lastBlockTick = ticks;
         return pause0();
     }
+    /**
+     * Regular piglins (runs 88, 91, 92, 94 lost melee 3 hits of ~5.4): three or more angry means leave; otherwise our own
+     * full-cooldown sword fight, blocking with a shield while the cooldown refills.
+     */
+    private long skirmishLog, lastBlockTick = -100;
+    private PathingCommand skirmish(Player me, List<LivingEntity> th) {
+        LivingEntity t = th.stream().min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
+        if (t == null) return null;
+        long close = th.stream().filter(e -> me.distanceTo(e) < 8).count();
+        if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
+        baritone.getPveProcess().hold = false;
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (close >= 3) {
+            mc.options.keyUse.setDown(false);
+            if (ticks - skirmishLog > 100) { skirmishLog = ticks; logDirect("Bastion: " + close + " angry piglins close, retreating"); }
+            status = "retreat from " + close + " piglins";
+            Vec3 away = Vec3.ZERO;
+            for (LivingEntity e : th) away = away.add(me.position().subtract(e.position()));
+            return new PathingCommand(new baritone.api.pathing.goals.GoalRunAway(16, th.stream().map(LivingEntity::blockPosition).toArray(BlockPos[]::new)), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        // sword for these: the axe cooldown is too slow against a fast piglin
+        int best = -1, rank = 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack s = me.getInventory().getItem(i);
+            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.getItem() instanceof net.minecraft.world.item.AxeItem ? 1 : 0;
+            if (r > rank) { rank = r; best = i; }
+        }
+        if (best >= 0 && me.getInventory().getSelectedSlot() != best) { me.getInventory().setSelectedSlot(best); status = "skirmish: draw"; return pause0(); }
+        double d = me.distanceTo(t);
+        float cd = me.getAttackStrengthScale(0.5f);
+        boolean shield = me.getOffhandItem().is(Items.SHIELD);
+        aimer.look(t.getEyePosition(), 0);
+        if (cd >= 0.95f && d <= 3.3 && me.hasLineOfSight(t)) {
+            mc.options.keyUse.setDown(false);
+            if (me.isUsingItem()) mc.gameMode.releaseUsingItem(me);
+            mc.gameMode.attack((LocalPlayer) me, t);
+            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            status = "skirmish: hit";
+            return pause0();
+        }
+        if (d > 3.3 && cd >= 0.95f) {
+            mc.options.keyUse.setDown(false);
+            status = "skirmish: close in";
+            return new PathingCommand(new GoalNear(t.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (shield) {
+            mc.options.keyUse.setDown(true);
+            if (!me.isUsingItem()) mc.gameMode.useItem(me, net.minecraft.world.InteractionHand.OFF_HAND);
+            status = "skirmish: blocking"; lastBlockTick = ticks;
+        } else status = "skirmish: cooldown";
+        return pause0();
+    }
+
     private static float yawTo(Player me, LivingEntity e) {
         double dx = e.getX() - me.getX(), dz = e.getZ() - me.getZ();
         return (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90);

@@ -132,6 +132,18 @@ public final class BastTest implements AbstractGameEventListener {
                             // no lava within 8 (runs 34 and lava7 started next to a lavafall and burned before the test began)
                             for (int lx = -8; lx <= 8 && open; lx++) for (int ly = -3; ly <= 6 && open; ly++) for (int lz = -8; lz <= 8 && open; lz++)
                                 if (lvl.getFluidState(q.offset(lx, ly, lz)).is(net.minecraft.tags.FluidTags.LAVA)) open = false;
+                            // lava that will spread here within 10 s (runs 82, 85 died at spawn)
+                            if (open) {
+                                final BlockPos qq = q;
+                                baritone.bastion.LavaFlow.Grid g = new baritone.bastion.LavaFlow.Grid() {
+                                    public int lava(int x, int y, int z) { var fs = lvl.getFluidState(new BlockPos(x, y, z)); return fs.is(net.minecraft.tags.FluidTags.LAVA) ? (fs.isSource() ? 0 : Math.max(0, 8 - fs.getAmount())) : -1; }
+                                    public boolean open(int x, int y, int z) { var s = lvl.getBlockState(new BlockPos(x, y, z)); return s.getFluidState().isEmpty() && (s.isAir() || s.canBeReplaced()); }
+                                };
+                                for (long k : baritone.bastion.LavaFlow.forecast(g, qq.getX(), qq.getY(), qq.getZ(), 12, 200).keySet()) {
+                                    int ky = (int) (k << 52 >> 52), kx = (int) (k >> 38), kz = (int) (k << 26 >> 38);
+                                    if (Math.abs(kx - qq.getX()) <= 4 && Math.abs(kz - qq.getZ()) <= 4 && Math.abs(ky - qq.getY()) <= 3) { open = false; break; }
+                                }
+                            }
                             if (open) { spot[0] = q.above(); break; }
                         }
                     }
@@ -183,6 +195,8 @@ public final class BastTest implements AbstractGameEventListener {
             }
             if (Boolean.getBoolean("ostinato.basttest.duel")) { run("give @p iron_axe"); run("item replace entity @p weapon.offhand with shield"); run("execute at @p run summon piglin_brute ~5 ~ ~ {Tags:[\"duel\"]}"); }
             if (Boolean.getBoolean("ostinato.basttest.shield")) { run("give @p iron_axe"); run("item replace entity @p weapon.offhand with shield"); }
+            if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) { baritone.bastion.BastionSettings.TARGETS.put("ender_pearl", 999); baritone.bastion.BastionSettings.exitWhenDone = false; }
+            if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) for (int g = Integer.getInteger("ostinato.basttest.gold"); g > 0; g -= 64) run("give @p gold_ingot " + Math.min(64, g));
             say("BAST setup done; starting #bastion " + VARIANT);
             if (System.getProperty("ostinato.basttest.budget") != null) baritone.bastion.BastionSettings.timeBudget = Integer.getInteger("ostinato.basttest.budget");
             b.getCommandManager().execute("bastion " + VARIANT);
