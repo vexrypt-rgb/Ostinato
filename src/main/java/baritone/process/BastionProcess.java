@@ -1020,6 +1020,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
     /** Deep lava or a far shore: put a door in the lava around us and stand in the pocket it makes (see BastionLava). */
     private PathingCommand doorPocket(Player me, BlockPos shore) {
         BlockPos feet = me.blockPosition();
+        // a door we placed shows up a tick after the click: adopt it at once (in-game we swam up out of it, taking it for lava)
+        for (BlockPos c : new BlockPos[]{feet.below(), feet}) {
+            BlockState ds = ctx.world().getBlockState(c);
+            if (ds.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && ds.getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) {
+                doorPos = c.immutable();
+                doorSince = ticks;
+                doorTries = 0;
+                status = "lava: in door pocket at " + c.toShortString();
+                logDirect("Bastion: " + status);
+                return pause0();
+            }
+        }
         int depth = 0;
         for (int i = -1; i < 4 && lavaAt(feet.above(1).below(i + 1)); i++) depth++;
         // the door's lower half needs a full block under it: our feet cell, or the one below while we bob above it
