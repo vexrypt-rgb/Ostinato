@@ -984,9 +984,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (slot < 0) { descentSteps = -1; return null; }
         if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me); return pause0(); }
         me.getInventory().setSelectedSlot(slot);
-        BlockPos floorPos = below.below();
-        Vec3 hit = Vec3.atCenterOf(floorPos).add(0, 0.5, 0);
-        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, floorPos, false));
+        placeDoor(me, below);
         if (ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
             // placed (the client sees it next tick at the latest): this is our pocket now
             doorPos = below.immutable();
@@ -998,6 +996,25 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private boolean digging;
+    private int doorTries;
+
+    /**
+     * Door into the cell on the block under it. A closed door is a 3/16 slab on one side of its cell and is refused when that
+     * slab would cut into us, which depends on which way we face; in-game the first facing failed every time. Turn a quarter
+     * every few tries so one of the four sides is clear of our body. True once the door is there.
+     */
+    private boolean placeDoor(Player me, BlockPos cell) {
+        if (ctx.world().getBlockState(cell).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) { doorTries = 0; return true; }
+        doorTries++;
+        float yaw = Mth.wrapDegrees(Math.round(me.getYRot() / 90f) * 90f + (doorTries % 3 == 0 ? 90 : 0));
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 89), true);
+        if (doorTries % 3 == 2) {
+            BlockPos floorPos = cell.below();
+            Vec3 hit = Vec3.atCenterOf(floorPos).add(0, 0.5, 0);
+            ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, floorPos, false));
+        }
+        return false;
+    }
     private long doorSince;
 
     /** Deep lava or a far shore: put a door in the lava around us and stand in the pocket it makes (see BastionLava). */
@@ -1021,14 +1038,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return pause0();
         }
         me.getInventory().setSelectedSlot(slot);
-        BlockPos floorPos = cell.below();
-        Vec3 hit = Vec3.atCenterOf(floorPos).add(0, 0.5, 0);
-        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
-        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, floorPos, false));
-        doorPos = cell.immutable();
-        doorSince = ticks;
-        status = "lava: door pocket at " + cell.toShortString() + " (depth " + depth + ", shore " + (shore == null ? "none" : String.format("%.1f", shoreDist)) + ")";
-        logDirect("Bastion: " + status);
+        if (placeDoor(me, cell)) {
+            doorPos = cell.immutable();
+            doorSince = ticks;
+            status = "lava: door pocket at " + cell.toShortString() + " (depth " + depth + ", shore " + (shore == null ? "none" : String.format("%.1f", shoreDist)) + ")";
+            logDirect("Bastion: " + status);
+        } else status = "lava: placing a door";
         return pause0();
     }
 
