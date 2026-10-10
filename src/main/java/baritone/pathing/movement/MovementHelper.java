@@ -450,7 +450,11 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (isBlockNormalCube(state) && (block != Blocks.MAGMA_BLOCK || Baritone.settings().allowWalkOnMagmaBlocks.value) && block != Blocks.BUBBLE_COLUMN && block != Blocks.HONEY_BLOCK) {
             return YES;
         }
-        if (block instanceof AzaleaBlock) {
+        // Soul lantern (0.625-height, not a SlabBlock) previously fell through to NO,
+        // so pathfinder computed goal points ~2 blocks high on lantern edges
+        // ("standing on air" spam in nether wastes). Walk on it like a full cube.
+        // Ported from xiaoka6666/baritone (26.3 branch).
+        if (block == Blocks.SOUL_LANTERN || block instanceof AzaleaBlock) {
             return YES;
         }
         if (block == Blocks.LADDER || (isClimbable(block) && Baritone.settings().allowVines.value)) { // TODO reconsider this

@@ -404,6 +404,19 @@ public final class Settings {
     public final Setting<Boolean> pitfallAvoidance = new Setting<>(true);
 
     /**
+     * Cap on the length of a path that Baritone will actually commit to walking.
+     * When the pathfinder produces a route longer than this many blocks, the result
+     * is discarded instead of being queued, so the bot does not spend minutes walking a
+     * 270+ block route it will never finish before its goal changes (observed nether
+     * ancient-city thrash: repeated 274-282 block path recalcs with zero progress).
+     * 0 = no cap (upstream behaviour). Default 150 is generous for legit overworld routes
+     * yet far short of the pathological nether dead-end distances.
+     * <p>
+     * Ported from xiaoka6666/baritone (26.3 branch).
+     */
+    public final Setting<Integer> maxPathLengthBlocks = new Setting<>(150);
+
+    /**
      * Enables some more advanced vine features. They're honestly just gimmicks and won't ever be needed in real
      * pathing scenarios. And they can cause Baritone to get trapped indefinitely in a strange scenario.
      * <p>
