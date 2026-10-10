@@ -904,6 +904,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
         // 2a. Chests in plan order for this layout.
         if (bastion != null) {
+            // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
+            PathingCommand bt0 = barterOnTheWay(me, near);
+            if (bt0 != null) return bt0;
             PathingCommand c = lootChests(me, near);
             if (c != null) return c;
         }
