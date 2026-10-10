@@ -1504,6 +1504,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             BlockPos b = new BlockPos(pt.x(), pt.y(), pt.z());
             if (!ctx.world().hasChunkAt(b)) { unloaded = true; continue; }
             if (looted.contains(b) || badChest.getOrDefault(b, 0L) > ticks || badGold.getOrDefault(b, 0L) > ticks) continue;
+                // run 84: skipped one chest, then looped 9 min on its neighbour; a skipped target rules out its whole cluster
+                boolean nearBad = false;
+                for (Map.Entry<BlockPos, Long> e : badChest.entrySet()) if (e.getValue() > ticks && e.getKey().distManhattan(b) <= 8) { nearBad = true; break; }
+                if (nearBad) continue;
             // a brute guarding it (even one we gave up fighting) kills a speedrun kit: come back when it has moved
             if (!ctx.world().getEntitiesOfClass(PiglinBrute.class, new net.minecraft.world.phys.AABB(b).inflate(9), PiglinBrute::isAlive).isEmpty()) { unloaded = true; continue; } // deferred, not done
             if (pt.kind() == BastionPlan.Kind.GOLD) {
@@ -2272,7 +2276,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (hole != null) return hole;
         Piglin t = null;
         for (Piglin p : piglins) {
-            if (!(calmNear(me, p, CAMP_THROW) || trapped(p) && me.distanceTo(p) <= CAMP_THROW) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
+            if (me.distanceTo(p) < 1.2 /* run 83: throws at 0.3-0.6 landed at our feet and came back */ || !(calmNear(me, p, CAMP_THROW) || trapped(p) && me.distanceTo(p) <= CAMP_THROW) || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
             // a trapped piglin first: it cannot wander off mid-trade
             if (t == null || trapped(p) && !trapped(t) || trapped(p) == trapped(t) && me.distanceTo(p) < me.distanceTo(t)) t = p;
         }
