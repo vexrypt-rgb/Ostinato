@@ -227,6 +227,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // a mob on another level (the bastion's lower floors, a pit) cannot be fought and would pin us in place trying to path to it
         // run 48: a hoglin in melee reach was skipped (other level / lava rule) and killed us mid-camp: always hit back
         if (e instanceof Hoglin && me.distanceTo(e) < 3.5 && Math.abs(e.getY() - me.getY()) < 1.5) return true;
+        // run 88: a piglin hit us 5 times while we stood still "recovering" (it was not on the threat list): hit back whatever just hit us
+        if (!(e instanceof PiglinBrute) && e == me.getLastHurtByMob() && me.tickCount - me.getLastHurtByMobTimestamp() < 60 && me.distanceTo(e) < 4 && Math.abs(e.getY() - me.getY()) < 1.5) return true;
         if (otherLevel(e, me)) return false;
         Long until = ignored.get(e.getUUID());
         if (until != null && until > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)) return false;
