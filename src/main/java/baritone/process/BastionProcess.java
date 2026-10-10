@@ -2070,8 +2070,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean holeDigging;
     private long holeRetry, lastBait;
 
+    private final java.util.Set<java.util.UUID> trapLogged = new java.util.HashSet<>();
     private boolean trapped(Piglin p) {
-        for (BlockPos h : holes) if (p.blockPosition().getX() == h.getX() && p.blockPosition().getZ() == h.getZ() && p.getY() < h.getY() - 0.5) return true;
+        for (BlockPos h : holes) if (p.blockPosition().getX() == h.getX() && p.blockPosition().getZ() == h.getZ() && p.getY() < h.getY() - 0.5) { if (trapLogged.add(p.getUUID())) logDirect("Bastion: piglin trapped in hole at " + h.toShortString()); return true; }
         return false;
     }
 
@@ -2113,15 +2114,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (digHole != null) {
             BlockPos target = solid(digHole.below()) ? digHole.below() : solid(digHole.below(2)) ? digHole.below(2) : null;
             if (target == null) {
+                logDirect("Bastion: piglin hole ready at " + digHole.toShortString());
                 holes.add(digHole);
                 digHole = null;
                 holeDigging = false;
                 return pause0();
             }
             if (ticks - digSince > 300) { logDirect("Bastion: hole dig stalled, skipping"); digHole = null; holeRetry = ticks + 1200; return null; }
-            if (feet.getX() == digHole.getX() && feet.getZ() == digHole.getZ()) { digHole = null; holeRetry = ticks + 600; return null; }
+            if (feet.getX() == digHole.getX() && feet.getZ() == digHole.getZ()) { logDirect("Bastion: hole dig aborted (standing on it)"); digHole = null; holeRetry = ticks + 600; return null; }
             int pick = pickaxeSlot(me);
-            if (pick < 0) { digHole = null; holeRetry = ticks + 6000; return null; }
+            if (pick < 0) { logDirect("Bastion: hole dig aborted (no pickaxe)"); digHole = null; holeRetry = ticks + 6000; return null; }
             if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
             me.getInventory().setSelectedSlot(pick);
             // sneak: never step into the hole we are digging
@@ -2141,7 +2143,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             me.getInventory().setSelectedSlot(slot);
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
             aimer.look(Vec3.atCenterOf(h.below(2)), 0);
-            if (Math.abs(Mth.wrapDegrees(me.getYRot() - (float) Math.toDegrees(Math.atan2(-(h.getX() + 0.5 - me.getX()), h.getZ() + 0.5 - me.getZ())))) < 15 && safeDrop(me)) { lastBait = ticks; status = "camp: baiting hole"; }
+            if (Math.abs(Mth.wrapDegrees(me.getYRot() - (float) Math.toDegrees(Math.atan2(-(h.getX() + 0.5 - me.getX()), h.getZ() + 0.5 - me.getZ())))) < 15 && safeDrop(me)) { lastBait = ticks; status = "camp: baiting hole"; logDirect("Bastion: baited hole at " + h.toShortString()); }
             return pause0();
         }
         return null;
