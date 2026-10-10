@@ -9,9 +9,9 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 
 | Minecraft | Branch | Java |
 | --- | --- | --- |
-| 1.21.4 | `main` | 21 |
+| 1.21.11 | `main` | 21 |
+| 1.21.4 | `1.21.4` | 21 |
 | 26.3 | `26.3` | 25 |
-| 1.21.11 | `1.21.11` | 21 |
 | 1.16.1 | `1.16.1` | 8 |
 
 ## New in v1.19.1

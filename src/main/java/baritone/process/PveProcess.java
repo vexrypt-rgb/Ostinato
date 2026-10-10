@@ -264,7 +264,7 @@ public final class PveProcess extends BaritoneProcessHelper {
                 // a fireball in flight is struck back; a mouse click on whatever the crosshair is on
                 look(target.getBoundingBox().getCenter());
                 if (ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult er && er.getEntity() != target
-                        && er.getEntity() instanceof net.minecraft.world.entity.projectile.Fireball) {
+                        && er.getEntity() instanceof net.minecraft.world.entity.projectile.hurtingprojectile.Fireball) {
                     press(ctx.minecraft().options.keyAttack);
                 }
             }
@@ -405,11 +405,11 @@ public final class PveProcess extends BaritoneProcessHelper {
 
     private boolean select(Player me, int slot) {
         if (slot < 0) return false;
-        if (me.getInventory().selected != slot) {
-            me.getInventory().selected = slot;
+        if (me.getInventory().getSelectedSlot() != slot) {
+            me.getInventory().setSelectedSlot(slot);
             press(ctx.minecraft().options.keyHotbarSlots[slot]);
         }
-        return me.getInventory().selected == slot;
+        return me.getInventory().getSelectedSlot() == slot;
     }
 
     private void look(Vec3 at) {

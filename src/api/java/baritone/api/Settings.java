@@ -792,6 +792,18 @@ public final class Settings {
     public final Setting<Boolean> renderPathAsLine = new Setting<>(false);
 
     /**
+     * Draw the current and next path as a smooth glowing ribbon with flowing colour, pulses and direction chevrons.
+     * Turn off for the plain line.
+     */
+    public final Setting<Boolean> fancyPath = new Setting<>(true);
+
+    /**
+     * Draw goal boxes, selection boxes and block outlines with a soft pulsing glow, and the path search as a glowing
+     * ribbon. Turn off for the plain outlines.
+     */
+    public final Setting<Boolean> fancyRender = new Setting<>(true);
+
+    /**
      * Render the goal
      */
     public final Setting<Boolean> renderGoal = new Setting<>(true);
@@ -862,6 +874,19 @@ public final class Settings {
      * Forces the client-sided yaw rotation to an average of the last {@link #smoothLookTicks} of server-sided rotations.
      */
     public final Setting<Boolean> smoothLook = new Setting<>(false);
+
+    /**
+     * Prototype: between ticks the view keeps moving toward the last aim goal in mouse-count steps, one per rendered
+     * frame, instead of arriving in one jump at the tick. Only used by the PvP look. On by default.
+     */
+    public final Setting<Boolean> frameLook = new Setting<>(true);
+
+    /**
+     * Every look Baritone makes (walking, mining, placing) turns the camera like a mouse: bounded speed, overshoot,
+     * tremor, mouse-count steps. PvP always does this. Off by default because path following and bridging were tuned
+     * against exact, instant rotations; not applied while elytra flying.
+     */
+    public final Setting<Boolean> humanLookEverywhere = new Setting<>(false);
 
     /**
      * Same as {@link #smoothLook} but for elytra flying.
@@ -1341,6 +1366,16 @@ public final class Settings {
      * Freecam flight speed multiplier (1 = vanilla walking and creative flight)
      */
     public final Setting<Double> freecamSpeed = new Setting<>(1D);
+
+    /**
+     * Let the freecam enemy list (middle-click, or attacked while in freecam) include mobs, not just players
+     */
+    public final Setting<Boolean> enemyMobs = new Setting<>(false);
+
+    /**
+     * Key that toggles freecam, as a Minecraft key name (e.g. key.keyboard.f8, key.keyboard.unknown to disable).
+     */
+    public final Setting<String> freecamKey = new Setting<>("key.keyboard.f8");
 
     /**
      * Opacity of the bot's ghost body while freecam is on (0 = invisible, 1 = solid)
@@ -1957,7 +1992,25 @@ public final class Settings {
     /**
      * Drive plain walking stretches of a path with a physics look-ahead controller instead of per-movement logic
      */
-    public final Setting<Boolean> kinematicTravel = new Setting<>(false);
+    public final Setting<Boolean> kinematicTravel = new Setting<>(true);
+
+    /**
+     * Slow kinematic: a slower, more careful physics-driven mode that also covers what kinematicTravel hands to Baritone. So far, swimming
+     */
+    public final Setting<Boolean> slowKinematic = new Setting<>(false);
+
+    /**
+     * Kinematic travel changes direction with the camera, a humanized mouse move, with W held, instead of snapping the
+     * rotation to the path every tick. The planner models the lag of the camera, so the turns still land on the path.
+     */
+    public final Setting<Boolean> headSteering = new Setting<>(true);
+
+    /**
+     * How far, in blocks, kinematic travel may drift to either side of the path line on open ground, as a slow random
+     * wander instead of a ruler-straight track. Zero follows the line exactly. Jumps, edges and the end of a stretch
+     * always follow the line.
+     */
+    public final Setting<Double> pathWander = new Setting<>(0.25);
 
     /**
      * Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and

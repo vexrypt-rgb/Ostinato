@@ -2,7 +2,7 @@
 
 ## Which version
 Ostinato keeps one branch per Minecraft version (see the compatibility table in the [README](../../README.md#compatibility)):
-`main` (1.21.4), `1.16.1`, `1.21.11`, `26.3`. Releases (latest v1.1.4) publish a jar per version. Pick the one
+`main` (1.21.11), `1.21.4`, `1.16.1`, `26.3`. Releases publish a jar per version. Pick the one
 that matches your game; a jar for one Minecraft version will not load on another. TenorClef builds must be
 paired with the matching Ostinato jar ([TenorClef's wiring guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md)).
 
@@ -15,7 +15,7 @@ Chat commands start with `#` (setting `prefix`). `#help` lists every command, cl
 ```
 #goto 100 64 -200
 #mine diamond_ore
-#set kinematicTravel true
+#set kinematicTravel false
 #stop
 ```
 - `#stop` / `#cancel` ends the current process; `#forcecancel` is the forceful version.

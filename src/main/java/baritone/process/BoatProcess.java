@@ -17,7 +17,7 @@ import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.InteractionHand;
@@ -100,7 +100,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
         if (ctx.player().tickCount - lastCheck < 40) {
             return false;
         }
-        boolean own = BoatUtil.hasBoat(ctx.player().getInventory().items);
+        boolean own = BoatUtil.hasBoat(ctx.player().getInventory().getNonEquipmentItems());
         Entity found = floatingBoat();
         if (!own && found == null) {
             return false;
@@ -334,7 +334,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 if (findBoat(4) != null) { enter(Phase.MOUNT); return pause(); }
                 int slot = BoatUtil.hotbarBoat(ctx);
                 if (slot < 0 || phaseTicks > 100) return abort("could not place the boat (" + Minecraft.getInstance().hitResult + " eye " + ctx.player().getEyeY() + ")");
-                ctx.player().getInventory().selected = slot;
+                ctx.player().getInventory().setSelectedSlot(slot);
                 if (surfacing()) {
                     if (phaseTicks < 15) return pause();
                     // Can't place from under the surface; let the swim carry on and look again shortly.
@@ -387,6 +387,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
             }
             case BREAK: {
                 if (boat == null || !boat.isAlive()) { enter(Phase.COLLECT); return pause(); }
+                if (danger()) { logDebug("Boat: danger about, leaving the boat"); return finish(); }
                 if (phaseTicks > 100 || ctx.player().distanceTo(boat) > 5) return finish();
                 look(boat.getX(), boat.getY() + 0.3, boat.getZ());
                 if (phaseTicks % 4 == 0) {
@@ -396,9 +397,16 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 return pause();
             }
             case COLLECT: {
+                if (danger()) { logDebug("Boat: danger about, leaving the drop"); return finish(); }
                 ItemEntity drop = boatDrop();
-                if (drop == null || phaseTicks > 100) return finish();
-                return new PathingCommand(new GoalNear(drop.blockPosition(), 1), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+                if (drop == null) {
+                    // the item spawns a tick or two after the boat breaks
+                    return phaseTicks > 12 ? finish() : pause();
+                }
+                if (phaseTicks > 160 || ctx.player().distanceTo(drop) < 0.6 && phaseTicks > 40) return finish();
+                // the path to the old goal is still running: drop it so the walk goes to the item, not onward
+                return new PathingCommand(new GoalBlock(drop.blockPosition()),
+                        phaseTicks % 40 == 1 ? PathingCommandType.CANCEL_AND_SET_GOAL : PathingCommandType.SET_GOAL_AND_PATH);
             }
             default:
                 return pause();
@@ -458,6 +466,16 @@ public final class BoatProcess extends BaritoneProcessHelper {
                     && (best == null || ctx.player().distanceTo(e) < ctx.player().distanceTo(best))) best = e;
         }
         return best;
+    }
+
+    /** Hostile mob close by, low health, burning or in lava: not the time to stand about collecting a boat. */
+    private boolean danger() {
+        var p = ctx.player();
+        if (p.getHealth() < 8 || p.isOnFire() || p.isInLava()) return true;
+        for (Entity e : ctx.entities()) {
+            if (e instanceof net.minecraft.world.entity.monster.Enemy && e.isAlive() && p.distanceTo(e) < 12) return true;
+        }
+        return false;
     }
 
     private ItemEntity boatDrop() {

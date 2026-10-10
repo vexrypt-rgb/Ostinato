@@ -52,6 +52,12 @@ final class CombatSwing {
      * Vanilla rejects a spear attack below minimum_attack_charge (1.0) and misses anything the ray misses.
      */
     boolean spearRayHits(Player me, LivingEntity target) {
-        return false; // spears arrive in 1.21.11
+        ItemStack st = me.getMainHandItem();
+        if (!isSpear(st) || me.cannotAttackWithItem(st, 0)) return false;
+        net.minecraft.world.item.component.AttackRange range = me.entityAttackRange();
+        net.minecraft.world.phys.HitResult hit = range.getClosesetHit(me, 1.0f, e -> e == target);
+        if (!(hit instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != target) return false;
+        double along = me.getEyePosition().distanceTo(er.getLocation());
+        return along >= SPEAR_JAB_LO && along <= SPEAR_JAB_HI;
     }
 }

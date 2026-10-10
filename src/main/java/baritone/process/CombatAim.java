@@ -56,6 +56,7 @@ final class CombatAim {
     }
 
     void aim(Rotation r, boolean blockInteract) {
+        baritone.getLookBehavior().human();
         baritone.getLookBehavior().updateTarget(r, blockInteract);
     }
 

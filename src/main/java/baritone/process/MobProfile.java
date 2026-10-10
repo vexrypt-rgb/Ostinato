@@ -44,7 +44,7 @@ final class MobProfile {
                 || e instanceof net.minecraft.world.entity.monster.Guardian
                 || e instanceof net.minecraft.world.entity.boss.wither.WitherBoss
                 || e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon
-                || e instanceof net.minecraft.world.entity.monster.Evoker
+                || e instanceof net.minecraft.world.entity.monster.illager.Evoker
                 || e instanceof net.minecraft.world.entity.monster.Ravager) {
             return AVOID;
         }

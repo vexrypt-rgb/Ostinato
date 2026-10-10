@@ -188,7 +188,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     next = null;
                     if (Baritone.settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
-                            clientLevel.disconnect();
+                            clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                         }
                     }
                     return;

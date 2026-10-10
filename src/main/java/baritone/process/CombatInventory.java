@@ -12,7 +12,7 @@ final class CombatInventory {
     static final Item[] SWORDS = {Items.NETHERITE_SWORD, Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD};
     static final Item[] AXES = {Items.NETHERITE_AXE, Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE, Items.GOLDEN_AXE, Items.WOODEN_AXE};
     /** Plain spears (no enchant required). Order is best-first for best(). */
-    static final Item[] SPEARS = {};
+    static final Item[] SPEARS = {Items.NETHERITE_SPEAR, Items.DIAMOND_SPEAR, Items.IRON_SPEAR, Items.COPPER_SPEAR, Items.GOLDEN_SPEAR, Items.STONE_SPEAR, Items.WOODEN_SPEAR};
 
     private final IPlayerContext ctx;
     private int invTick = -99;
@@ -66,14 +66,22 @@ final class CombatInventory {
         // is 0.96 through diamond and a smash is 4-7, so a kit with a mace and wind charges
         // plays the mace and leaves the spear in the hotbar.
         if (has(me, Items.MACE) && (has(me, Items.WIND_CHARGE) || me.getOffhandItem().getItem() == Items.WIND_CHARGE)) return -1;
-        return best(me, SPEARS);
+        int byItem = best(me, SPEARS);
+        if (byItem >= 0) return byItem;
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = me.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            // Tag covers every vanilla spear without requiring enchants or PIERCING_WEAPON
+            if (st.is(net.minecraft.tags.ItemTags.SPEARS)) return i;
+        }
+        return -1;
     }
 
     static boolean isSpear(ItemStack st) {
         if (st == null || st.isEmpty()) return false;
         Item it = st.getItem();
         for (Item s : SPEARS) if (it == s) return true;
-        return false;
+        return st.is(net.minecraft.tags.ItemTags.SPEARS);
     }
 
     /**

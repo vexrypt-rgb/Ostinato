@@ -23,8 +23,8 @@ jobs:
       matrix:
         include:
           - { mc: '1.16.1', ref: '1.16.1', java: '8', cmd: './gradlew build -Pbaritone.fabric_build' }
-          - { mc: '1.21.4', ref: 'main', java: '21', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
-          - { mc: '1.21.11', ref: '1.21.11', java: '21', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
+          - { mc: '1.21.4', ref: '1.21.4', java: '21', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
+          - { mc: '1.21.11', ref: 'main', java: '21', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
           - { mc: '26.3', ref: '26.3', java: '25', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
     steps:
       - uses: actions/checkout@v4

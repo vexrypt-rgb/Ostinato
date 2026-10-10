@@ -249,7 +249,7 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     private int doorCount() {
         int n = 0;
-        for (ItemStack st : ctx.player().getInventory().items) if (isWoodenDoor(st)) n += st.getCount();
+        for (ItemStack st : ctx.player().getInventory().getNonEquipmentItems()) if (isWoodenDoor(st)) n += st.getCount();
         return n;
     }
 

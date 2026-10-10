@@ -19,20 +19,24 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.utils.BaritoneProcessHelper;
+import static baritone.process.CombatAim.press;
+import static baritone.process.CombatInventory.*;
+import static baritone.process.CombatGeometry.*;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Random;
 import java.util.function.Predicate;
@@ -46,20 +50,25 @@ import java.util.function.Predicate;
  */
 public final class PvpProcess extends BaritoneProcessHelper {
 
-    private static final double REACH = 3.0, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
-    private static final Item[] SWORDS = {Items.NETHERITE_SWORD, Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD};
-    private static final Item[] AXES = {Items.NETHERITE_AXE, Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE, Items.GOLDEN_AXE, Items.WOODEN_AXE};
+    private static final double CHASE = 48;
 
     private Predicate<LivingEntity> filter;
+    /** Players marked as enemies (freecam middle-click, or attacking us while freecam is on); cleared on death or a non-pearl teleport. */
+    private final java.util.Set<java.util.UUID> enemies = new java.util.LinkedHashSet<>();
+    private Player enemiesOwner;
+    private net.minecraft.world.level.Level enemiesLevel;
+    private net.minecraft.world.phys.Vec3 enemiesPos;
+    private int pearlGrace;
     private String label;
     private LivingEntity target;
     private final Random rng = new Random(7);
-    private int strafeDir = 1, strafeLeft, wtap, eatTicks, groundedJumps, blockTicks;
-    private boolean crystalFight;
-    private int backingOff;
-    private int targetSwingTick, lastAxeTick = -1000;
-    private boolean critArmed;
+    private boolean chase;
+    /** The hit being watched. */
+    private int duelOpenUntil, lastSeenTick;
     private float lastHealth = -1;
+    private final PvpRecorder recorder = new PvpRecorder();
+    /** Short action token written to the PvP log this tick; set by {@link #decide}. */
+    private String tickDec = "-";
 
     public int attacks, crits, sprintHits, axeHits, blocks, gapples;
     public float damageTaken;
@@ -89,6 +98,45 @@ public final class PvpProcess extends BaritoneProcessHelper {
         attack(e -> e instanceof Enemy, "hostiles");
     }
 
+    private boolean matches(LivingEntity e) {
+        return enemies.contains(e.getUUID()) || (filter != null && filter.test(e));
+    }
+
+    public boolean addEnemy(LivingEntity p) {
+        Player me = ctx.player();
+        if (me == null || p == null || p == me) return false;
+        boolean added = enemies.add(p.getUUID());
+        if (added) {
+            enemiesOwner = me;
+            enemiesLevel = me.level();
+            enemiesPos = me.position();
+            if (filter == null) label = "enemies";
+        }
+        return added;
+    }
+
+    public void clearEnemies() {
+        enemies.clear();
+    }
+
+    public int enemyCount() {
+        return enemies.size();
+    }
+
+    /** Drops the enemy list when we die/respawn or are teleported (a pearl of ours doesn't count). */
+    private void checkEnemyReset(Player me) {
+        if (enemies.isEmpty()) return;
+        if (phase.pearlStage > 0 || me.getMainHandItem().is(Items.ENDER_PEARL)) pearlGrace = 60;
+        else if (pearlGrace > 0) pearlGrace--;
+        boolean reset = me != enemiesOwner || !me.isAlive() || me.level() != enemiesLevel
+            || (pearlGrace == 0 && enemiesPos != null && me.position().distanceToSqr(enemiesPos) > 100);
+        enemiesPos = me.position();
+        if (reset) {
+            enemies.clear();
+            if (filter == null) target = null;
+        }
+    }
+
     public LivingEntity getTarget() {
         return target;
     }
@@ -100,279 +148,410 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        return filter != null && ctx.player() != null;
+        return (filter != null || !enemies.isEmpty()) && ctx.player() != null;
     }
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
+        checkEnemyReset(me);
+        if (filter == null && enemies.isEmpty()) {
+            recorder.end(me, "lost");
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        }
         float hp = me.getHealth() + me.getAbsorptionAmount();
         if (lastHealth >= 0 && hp < lastHealth) damageTaken += lastHealth - hp;
+        boolean respawned = lastHealth >= 0 && lastHealth < 5 && hp > lastHealth + 8;
+        if (respawned) inv.resetBreaks();
         lastHealth = hp;
-        // tickCount starts again with a new player entity (respawn, another dimension)
-        if (me.tickCount < lastAxeTick) lastAxeTick = -1000;
-        if (me.tickCount < targetSwingTick) targetSwingTick = 0;
-
-        if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = pick(me);
-        baritone.getInputOverrideHandler().clearAllKeys();
-        if (target == null) {
+        // Bench respawn drops the kit before the kit is re-equipped. Do not swing naked.
+        if (Integer.getInteger("ostinato.vexbench", 0) > 0 && (respawned
+                || me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty())) {
+            if (recorder.active()) recorder.end(me, respawned ? "death" : "lost");
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        keepTotem(me);
 
-        boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
-        boolean safe = eyeToBox(me, target) > 4.5 || targetEating;
-        if (eatTicks > 0 || (me.getHealth() <= 5 || me.getHealth() <= 11 && safe || crystalFight && me.getAbsorptionAmount() == 0 && me.getHealth() <= (has(me, Items.RESPAWN_ANCHOR) ? 19 : 16)) && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)
-                && (has(me, Items.GOLDEN_APPLE) || has(me, Items.ENCHANTED_GOLDEN_APPLE))) {
-            if (eat(me)) return pause();
+        LivingEntity prevTarget = target;
+        if (target == null || !target.isAlive() || target.isRemoved() || me.distanceTo(target) > CHASE) target = targeting.pick(me, CHASE);
+        if (target != prevTarget) {
+            spears.retarget();
+            spears.spearReleaseNext = false;
         }
-
-        double dist = eyeToBox(me, target);
-        boolean los = me.hasLineOfSight(target);
-
-        if (shouldBlock(me, dist)) {
-            if (me.getOffhandItem().getItem() != Items.SHIELD) toOffhand(me, Items.SHIELD);
-            look(target.getEyePosition());
-            use(true);
-            if (blockTicks++ == 0) blocks++;
-            return pause();
-        }
-        if (blockTicks > 0) {
+        if (target != null && me.tickCount % 5 == 0 && phase.macePhase == 0) target = targeting.retarget(me, target);
+        baritone.getInputOverrideHandler().clearAllKeys();
+        if (target == null) {
+            if (prevTarget != null && prevTarget.isDeadOrDying()) recorder.markWin();
+            recorder.end(me, "lost");
             use(false);
-            blockTicks = 0;
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-
-        // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
-        if (crystal(me)) {
-            if (dist <= DRIVE) steer(me, dist);
-            return pause();
-        }
-        if (!los && dist <= 3 && Baritone.settings().allowBreak.value) { // right there but walled off (a crawl gap under our feet, a hole): dig through
-            BlockHitResult wall = ctx.world().clip(new net.minecraft.world.level.ClipContext(me.getEyePosition(), target.getEyePosition(),
-                    net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, me));
-            if (wall.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-                look(wall.getLocation());
-                ctx.minecraft().gameMode.continueDestroyBlock(wall.getBlockPos(), wall.getDirection());
-                me.swing(InteractionHand.MAIN_HAND);
-                return pause();
-            }
-        }
-        if (dist > DRIVE || !los) {
-            if (los && dist > BOW_MIN && has(me, Items.BOW) && has(me, Items.ARROW)) return bow(me);
+        survival.keepTotem(me);
+        targeting.track(target);
+        if (!recorder.active()) recorder.begin(me, target, label);
+        tickDec = "-";
+        brokeNote = inv.noteBreaks(me);
+        if (!brokeNote.isEmpty()) {
+            shield.blockTicks = 0;
+            shield.lastShieldTick = -1000;
             use(false);
-            return new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }
-        if (me.isUsingItem()) use(false);
+        try {
+            // 230839 axe hard safe: it ate six apples with no use flag on the client while we stood at 6 HP with
+            // eight of our own, "pressed" by an opponent holding food. A main hand full of food is not swinging a weapon.
+            boolean targetEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)
+                    || target.getMainHandItem().has(net.minecraft.core.component.DataComponents.FOOD);
+            // 210415 medium defensive: it backed off at 3.9 HP and ate for 80 ticks while every hop
+            // dropped the sprint just outside reach. 211205 safe: at 1 HP it ate for 500 ticks while
+            // the strafe ran parallel to its retreat. A target eating or walking away is run down
+            // in a straight line and hit on charge, no crit setup until it is in reach.
+            Vec3 gap = target.position().subtract(me.position());
+            chase = targetEating || gap.horizontalDistance() > 0.5
+                    && (tv().x * gap.x + tv().z * gap.z) / gap.horizontalDistance() > 0.1;
+            // Horizontal only. A mace hop makes the 3D gap > 4.5 while they are about to land.
+            boolean overhead = !target.onGround() && target.getY() > me.getY() + 1.0;
+            boolean safe = horizontalBoxDist(me, target) > 4.5 && target.onGround() && !target.swinging || targetEating;
+            // Eating through their dive is the D9 in the logs. Drop the apple and shield it.
+            // 0650 bench: 720 eat ticks, 282 right after spear_back. Killing blows were on eat
+            // or spear_back, never on spear_charge. A charge holds the use key on the spear, so
+            // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
+            // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
+            boolean charging = inv.spearSlot(me) >= 0 && spears.spearUseTicks > 0;
+            PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
+            if (ate != null) return ate;
 
-        boolean inReach = exactReach(me, target) <= REACH - 0.05;
-        // a shield being raised blocks before isBlocking() shows it; only swap in reach, since any swap drains the charge
-        boolean shieldUp = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
-        // a disabled shield stays "raised" for its 5s cooldown; don't keep throwing uncharged axe swings at it
-        boolean axeTime = shieldUp && inReach && me.tickCount - lastAxeTick > 60 && best(me, AXES) >= 0;
-        select(me, axeTime ? best(me, AXES) : weapon(me));
-        look(aimPoint(me, target));
+            double dist = eyeToBox(me, target);
+            boolean los = me.hasLineOfSight(target);
 
-        float cd = me.getAttackStrengthScale(0.5f);
-        if (target.swinging && target.swingTime == 0) targetSwingTick = me.tickCount;
-        boolean targetReady = me.tickCount - targetSwingTick >= 10; // its sword is charged: whoever swings first wins the exchange
-        boolean immune = target.hurtTime > 1;
-        boolean falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
-        boolean canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
-
-        steer(me, dist);
-        if (me.hurtTime == me.hurtDuration - 1 && canJump) me.jumpFromGround(); // jump reset
-
-        if (axeTime && inReach) { // an axe disables a raised shield whatever the charge
-            hit(me);
-            axeHits++;
-            lastAxeTick = me.tickCount;
-            return pause();
-        }
-        if (!me.onGround() && !falling && targetReady && inReach && cd >= 0.95f && !immune) {
-            hit(me); // don't hang in the air waiting for a crit while it swings first
-            critArmed = false;
-            return pause();
-        }
-        if (critArmed && falling && inReach && cd >= 0.9f && !immune) {
-            hit(me);
-            crits++;
-            critArmed = false;
-            return pause();
-        }
-        if (!me.onGround() && me.getDeltaMovement().y < 0.08 && dist <= REACH + 0.6 && cd >= 0.75f) {
-            me.setSprinting(false); // a sprinting hit is never a crit
-            critArmed = true;
-        }
-        if (!me.onGround() && !critArmed && inReach && cd >= 0.95f && !immune) {
-            hit(me); // knocked airborne without a crit set up: don't waste the cooldown
-            return pause();
-        }
-        if (me.onGround()) critArmed = false;
-        else groundedJumps = 0;
-
-        if (canJump && dist <= REACH + 0.8 && cd >= 0.55f && !immune && groundedJumps < 4) {
-            me.jumpFromGround();
-            groundedJumps++;
-            return pause();
-        }
-        if (me.onGround() && inReach && cd >= 0.95f && !immune && (!canJump || groundedJumps >= 4)) {
-            boolean sprint = me.isSprinting();
-            hit(me);
-            if (sprint) {
-                sprintHits++;
-                wtap = 2;
+            if (phase.pearlCool > 0) phase.pearlCool--;
+            tools.coolFire();
+            if (spears.spearCool > 0) spears.spearCool--;
+            if (hp <= 6 && !survival.canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
+                return decide("flee", survival.flee(me, target, dist));
             }
-            groundedJumps = 0;
+
+            // A spear that raises its shield here never steps into the 2-4 jab band.
+            // 1654 bench: a mace's 33-tick cooldown kept the shield up for 405 of 1800 ticks, and
+            // the hop that makes the damage starts from the ground. A mace with wind charges hops.
+            boolean maceHop = inv.slotOf(me, Items.MACE) >= 0 && inv.slotOf(me, Items.WIND_CHARGE) >= 0;
+            if (me.tickCount < lastSeenTick) { // respawned between bench rounds: tickCount restarted under the old stamps
+                duelOpenUntil = click.probeTick = 0;
+                shield.respawned();
+            }
+            lastSeenTick = me.tickCount;
+            shield.observe(me, target);
+            // a click that connected and left it unhurt met a shield the client was never shown:
+            // remember how long after its swing that was and keep the sword out of that window
+            click.settle(me, target);
+            boolean blockMelee = inv.spearSlot(me) < 0 && !maceHop && shield.meleeBlock(me, target, dist);
+            PathingCommand clutched = winds.clutch(me, target);
+            if (clutched != null) return clutched;
+            PathingCommand flared = elytra.flare(me);
+            if (flared != null) return flared;
+            PathingCommand dive = shield.underDive(me, target, dist, los);
+            if (dive != null) return dive;
+            PathingCommand guarded = shield.guard(me, target, dist, blockMelee);
+            if (guarded != null) return guarded;
+
+            // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
+            if (explosives.crystal(me, target)) {
+                if (dist <= DRIVE) movement.steer(me, target, dist, chase, melee.critArmed);
+                return decide("crystal");
+            }
+            Vec3 bomb = explosives.hazard(me);
+            if (bomb != null) { // never stand beside a live explosive: run straight away from it
+                Vec3 away = me.position().subtract(bomb).multiply(1, 0, 1);
+                if (away.lengthSqr() < 1.0e-4) away = me.position().subtract(target.position()).multiply(1, 0, 1);
+                look(me.getEyePosition().add(away.normalize().scale(5)));
+                key(Input.MOVE_FORWARD);
+                key(Input.SPRINT);
+                return decide("clear");
+            }
+            PathingCommand sp = special(me, dist, los);
+            if (sp != null) {
+                if ("-".equals(tickDec)) tickDec = "special";
+                return sp;
+            }
+            PathingCommand closing = approach.close(me, target, dist, los, spears.spearUseCool);
+            if (closing != null) return closing;
+            // A spear charge is the use key. Releasing here every tick reset the 10-tick delay.
+            if (me.isUsingItem() && spears.spearUseTicks == 0) use(false);
+
+            int spear = inv.spearSlot(me);
+            // Spear jabs from farther than a sword; never jab inside SPEAR_MIN (vanilla spear dead zone).
+            double reach = spear >= 0 ? SPEAR_REACH : REACH;
+            double er = exactReach(me, target);
+            // Movement uses horizontal distance to the hitbox. A mace hop makes the 3D eye distance
+            // jump to ~5 while we are already in the jab band, which was the close/back oscillation.
+            double hr = horizontalBoxDist(me, target);
+            spears.observe(me, spear, hr);
+            // Jab only in the middle of the 2-4 band. Outer edge (~4) misses; under SPEAR_MIN cannot connect.
+            boolean inReach = spear >= 0
+                    ? (hr >= SPEAR_JAB_LO && hr <= SPEAR_JAB_HI)
+                    : (er <= reach - 0.05);
+            boolean meFalling = !me.onGround() && me.getDeltaMovement().y < -0.05;
+            boolean targetFalling = !target.onGround() && tv().y < -0.05;
+            PathingCommand jabbed = spears.jab(me, target, los, spear, hr, targetEating, inReach, meFalling, targetFalling);
+            if (jabbed != null) return jabbed;
+
+            PathingCommand ready = melee.prepare(me, target, inReach, chase, targetEating);
+            if (ready != null) return ready;
+
+            // Plain spear: commit to closing or backing until settled inside 2-4, then hold and jab.
+            // No sprint near the band, so one tick cannot cross it. Lunge only with the enchant.
+            if (spear >= 0) return spears.pass(me, target, dist, los, spear, hr, er, targetEating);
+            return melee.exchange(me, target, dist);
+        } finally {
+            recorder.tick(me, target, eyeToBox(me, target),
+                    targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
+                            + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
+                            + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
+                            + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + click.clickKind,
+                    tickDec + brokeNote, attacks);
+            click.clickKind = '-';
         }
-        return pause();
     }
+
+    private final CombatTargeting targeting = new CombatTargeting(ctx, this::matches);
+    private final CombatInventory inv = new CombatInventory(ctx);
+    private final CombatDefense defense = new CombatDefense(ctx, inv);
+    private final CombatAim aimer = new CombatAim(baritone, ctx, rng);
+    private final CombatMovement movement = new CombatMovement(ctx, rng, PvpProcess.this::key);
+    private final CombatExplosives explosives = new CombatExplosives(ctx, inv, aimer, new CombatExplosives.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public boolean hit(Player me, Entity e) { return PvpProcess.this.hit(me, e); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+    });
+    private final CombatPhase phase = new CombatPhase();
+    private final CombatSwing swing = new CombatSwing();
+    private final CombatTools tools = new CombatTools(ctx, inv, aimer, targeting, explosives, new CombatTools.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
+        public void attacked() { attacks++; }
+    });
+    private final CombatSurvival survival = new CombatSurvival(ctx, inv, aimer, explosives, phase, new CombatSurvival.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
+        public void gappleEaten() { gapples++; }
+        public void abortCharge() { spears.abortCharge(); }
+    });
+    private final CombatPolicy policy = new CombatPolicy();
+    private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, policy.shield, new CombatShield.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int eatTicks() { return survival.eatTicks; }
+        public void blockStarted() { blocks++; }
+        public void dodge(Player me) { movement.dodgeRanged(me); }
+    });
+    private final CombatClick click = new CombatClick(ctx.minecraft(), aimer, swing, targeting, shield, new CombatClick.Hands() {
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void attacked() { attacks++; }
+    });
+    private final CombatMelee melee = new CombatMelee(inv, swing, targeting, shield, movement, new CombatMelee.Hands() {
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public void axeHit() { axeHits++; }
+        public void crit() { crits++; }
+        public void sprintHit() { sprintHits++; }
+    });
+    private final CombatSpear spears = new CombatSpear(inv, aimer, swing, policy.spear, new CombatSpear.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int eatTicks() { return survival.eatTicks; }
+        public void note(String line) { recorder.note(line); }
+    });
+    private final CombatApproach approach = new CombatApproach(ctx, inv, tools, phase, new CombatApproach.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
+        public int eatTicks() { return survival.eatTicks; }
+    });
+    private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+    });
+    private final CombatElytra elytra = new CombatElytra(ctx, inv, aimer, targeting, defense, phase, new CombatElytra.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int lastShield() { return shield.lastShieldTick; }
+        public void shielded(int tick) { shield.lastShieldTick = tick; }
+    });
+    private final CombatMace maces = new CombatMace(ctx, inv, aimer, targeting, phase, policy.mace, new CombatMace.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void look(Vec3 at) { PvpProcess.this.look(at); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public boolean hit(Player me) { return PvpProcess.this.hit(me); }
+        public boolean shieldDive(Player me, double dist) { return shield.shieldDive(me, target, dist); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public int lastAxe() { return shield.lastAxeTick; }
+        public void axeHit(int tick) { axeHits++; shield.lastAxeTick = tick; }
+        public int spearCool() { return spears.spearCool; }
+        public void spearCool(int ticks) { spears.spearCool = ticks; }
+    });
+    private final CombatWind winds = new CombatWind(ctx, inv, aimer, targeting, phase, new CombatWind.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+    });
+    private Vec3 tv() {
+        return targeting.velocity(target);
+    }
+
+    /** Mace, crossbow and trident play; null when the kit has none of them or they don't apply right now. */
+
+    private PathingCommand special(Player me, double dist, boolean los) {
+        if (phase.maceCool > 0) phase.maceCool--;
+        int mace = inv.slotOf(me, Items.MACE), wind = inv.slotOf(me, Items.WIND_CHARGE);
+        if (phase.windCool > 0) phase.windCool--;
+        boolean overhead = !target.onGround() && target.getY() > me.getY() + 3;
+        // Spear kit still jabs. Wind is only a knock-in just outside the band, or the hop under a mace smash.
+        // Far wind-charge spam and shield-holding stay off. A plain spear never lunges.
+        if (inv.spearSlot(me) >= 0 && phase.macePhase == 0 && phase.pearlStage == 0) {
+            // Their mace dive is the ~9 damage in the spear logs. Shield it; do not hop into it.
+            // Melee and the mace smash landed on spear_back, never on spear_charge.
+            // Shielding mid-charge swaps off the spear. Dive-block only while use is not held.
+            if (spears.spearUseTicks == 0 && shield.shieldDive(me, target, dist)) return decide("block");
+            // Do not hop in the middle of a charge approach. The hop was the whole fight and use never started.
+            boolean foeEating = target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD);
+            PathingCommand tool = spears.spearUseTicks == 0 && !spears.spearReopen && !spears.spearCommit && !foeEating && !(spears.spearUseCool == 0 && horizontalBoxDist(me, target) > 4.6)
+                    ? maces.spearTools(me, target, los, wind, mace) : null;
+            if (tool != null) return tool;
+            return null;
+        }
+        PathingCommand deflected = winds.deflect(me, target, wind);
+        if (deflected != null) return deflected;
+        boolean hasShield = me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0;
+        PathingCommand dived = winds.diver(me, target, dist, wind, hasShield);
+        if (dived != null) return dived;
+        PathingCommand covered = shield.diveCover(me, target, dist, hasShield);
+        if (covered != null) return covered;
+        PathingCommand feet = winds.feet(me, target, dist, los, wind);
+        if (feet != null) return feet;
+        int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
+        float myHp = me.getHealth() + me.getAbsorptionAmount();
+        PathingCommand dropped = maces.drop(me, target, los, mace, wind);
+        if (dropped != null) return dropped;
+        PathingCommand stranded = pearls.strand(me, target, pearlSlot, myHp, survival.eatTicks);
+        if (stranded != null) return stranded;
+        PathingCommand lifted = pearls.lift(me, target, dist, los, overhead, mace, wind, pearlSlot, myHp);
+        if (pearls.handled) return lifted;
+        PathingCommand struck = pearls.strike(me, target, dist, los, overhead, mace, wind);
+        if (pearls.handled) return struck;
+        PathingCommand winged = elytra.run(me, target, dist, los, overhead, mace, wind);
+        if (winged != null) return winged;
+        if (mace >= 0) return maces.run(me, target, dist, los, overhead, mace, wind);
+        return tools.run(me, target, dist, los);
+    }
+
+    private double groundY = Double.NaN;
 
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
     }
 
-    private void steer(Player me, double dist) {
-        if (--strafeLeft <= 0) {
-            strafeDir = rng.nextBoolean() ? 1 : -1;
-            strafeLeft = 10 + rng.nextInt(20);
-        }
-        if (wtap > 0) {
-            wtap--;
-            me.setSprinting(false);
-        } else if (dist > 2.4) {
-            key(Input.MOVE_FORWARD);
-            if (!critArmed && me.getFoodData().getFoodLevel() > 6) me.setSprinting(true);
-        } else if (dist < 1.2) {
-            key(Input.MOVE_BACK);
-        }
-        if (dist > 3.5) {
-            // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
-            if (me.onGround() && me.isSprinting() && !me.isInWater()) me.jumpFromGround();
-            return;
-        }
-        key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
-    }
-
-    private boolean shouldBlock(Player me, double dist) {
-        if (me.getOffhandItem().getItem() != Items.SHIELD && !has(me, Items.SHIELD)) return false;
-        // the totem keeps the offhand while it is what keeps us alive: swapping the two every tick does neither job
-        if (me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING && (me.getHealth() <= 8 || crystalFight)) return false;
-        ItemStack using = target.getUseItem();
-        if (target.isUsingItem() && (using.getItem() == Items.BOW || using.getItem() == Items.CROSSBOW) && dist > 4) return true;
-        AABB around = me.getBoundingBox().inflate(6);
-        for (AbstractArrow a : ctx.world().getEntitiesOfClass(AbstractArrow.class, around, x -> true)) {
-            Vec3 v = a.getDeltaMovement();
-            if (v.lengthSqr() < 0.25) continue;
-            Vec3 to = me.position().add(0, 1, 0).subtract(a.position());
-            if (to.normalize().dot(v.normalize()) > 0.9) return true;
-        }
-        return false;
-    }
-
-    private PathingCommand bow(Player me) {
-        select(me, slotOf(me, Items.BOW));
-        if (me.getMainHandItem().getItem() != Items.BOW) return pause();
-        // lead: arrow ~3 b/t at full draw, gravity 0.05
-        double d = me.distanceTo(target), t = d / 3.0;
-        Vec3 at = target.getEyePosition().add(target.getDeltaMovement().scale(t)).add(0, 0.5 * 0.05 * t * t, 0);
-        look(at);
-        if (me.isUsingItem() && me.getTicksUsingItem() >= 21) {
-            use(false);
-            attacks++;
-        } else {
-            use(true);
-        }
+    /** Record the action chosen this tick for {@link PvpRecorder}, then pause pathing. */
+    private PathingCommand decide(String d) {
+        tickDec = d;
+        ledgeGuard();
         return pause();
     }
 
-    private boolean eat(Player me) {
-        Item apple = me.getHealth() <= 6 && has(me, Items.ENCHANTED_GOLDEN_APPLE) ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE;
-        if (!has(me, apple)) apple = Items.ENCHANTED_GOLDEN_APPLE;
-        if (!has(me, apple)) {
-            eatTicks = 0;
-            return false;
+    /** True when the column at {@code at} has something to land on within a survivable fall of the last floor we stood on. */
+    private boolean floorUnder(Player me, Vec3 at) {
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        int x = Mth.floor(at.x), z = Mth.floor(at.z);
+        for (int y = Mth.floor(me.getY()); y >= Mth.floor(groundY) - 5; y--) {
+            p.set(x, y, z);
+            if (!ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) return true;
         }
-        select(me, slotOf(me, apple));
-        if (me.getMainHandItem().getItem() != apple) return true;
-        if (eatTicks++ == 0) gapples++;
-        key(Input.MOVE_BACK); // back off while chewing
-        me.setSprinting(false);
-        use(true);
-        look(target.getEyePosition());
-        if (eatTicks > 36) {
-            use(false);
-            eatTicks = 0;
-        }
-        return true;
-    }
-
-    private void keepTotem(Player me) {
-        if (me.getHealth() > 8 && !crystalFight || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
-        toOffhand(me, Items.TOTEM_OF_UNDYING);
-    }
-
-    /** Swap an inventory item into the offhand (button 40 = offhand swap). */
-    private void toOffhand(Player me, Item item) {
-        int slot = -1;
-        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) { slot = i; break; }
-        if (slot < 0) return;
-        int menuSlot = slot < 9 ? 36 + slot : slot;
-        ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, 40, ClickType.SWAP, me);
-    }
-
-    /** Whether we carry the item at all. Asking moves nothing; {@link #slotOf} does, and is for the moment of use. */
-    private boolean has(Player me, Item item) {
-        for (int i = 0; i < 36; i++) if (me.getInventory().getItem(i).getItem() == item) return true;
         return false;
     }
 
-    /** Hotbar slot of the item, pulling it into the hotbar if it's only in the main inventory. */
-    private int slotOf(Player me, Item item) {
-        for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == item) return i;
-        for (int i = 9; i < 36; i++) {
-            if (me.getInventory().getItem(i).getItem() == item) {
-                int to = spare(me);
-                ctx.playerController().windowClick(me.inventoryMenu.containerId, i, to, ClickType.SWAP, me);
-                return to;
-            }
+    /**
+     * A strafe and a hop off the rim of a raised floor was a 29 block fall and the whole health bar.
+     * When the keys and the momentum of this tick carry us over a drop the target is not down, steer back in.
+     */
+    private void ledgeGuard() {
+        Player me = ctx.player();
+        if (me == null || target == null) return;
+        if (me.onGround()) groundY = me.getY();
+        if (Double.isNaN(groundY)) return;
+        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
+        baritone.api.utils.IInputOverrideHandler in = baritone.getInputOverrideHandler();
+        double f = (in.isInputForcedDown(Input.MOVE_FORWARD) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_BACK) ? 1 : 0);
+        double s = (in.isInputForcedDown(Input.MOVE_LEFT) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_RIGHT) ? 1 : 0);
+        Vec3 want = new Vec3(s, 0, f).yRot(-me.getYRot() * Mth.DEG_TO_RAD);
+        if (want.lengthSqr() > 0) want = want.normalize();
+        Vec3 h = me.getDeltaMovement().multiply(4, 0, 4).add(want.scale(1.1));
+        if (h.lengthSqr() < 0.01) return;
+        if (floorUnder(me, me.position().add(h.scale(0.5))) && floorUnder(me, me.position().add(h))) return;
+        Vec3 to = target.position().subtract(me.position()).multiply(1, 0, 1);
+        if (to.lengthSqr() < 0.01 || !floorUnder(me, me.position().add(to.normalize().scale(1.5))) || to.dot(h) > 0 && !floorUnder(me, me.position())) {
+            to = h.scale(-1);
         }
-        return -1;
+        in.setInputForceState(Input.MOVE_FORWARD, false);
+        in.setInputForceState(Input.MOVE_BACK, false);
+        in.setInputForceState(Input.MOVE_LEFT, false);
+        in.setInputForceState(Input.MOVE_RIGHT, false);
+        float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
+        if (Math.abs(rel) < 67.5f) key(Input.MOVE_FORWARD);
+        else if (Math.abs(rel) > 112.5f) key(Input.MOVE_BACK);
+        if (rel > 22.5f && rel < 157.5f) key(Input.MOVE_RIGHT);
+        else if (rel < -22.5f && rel > -157.5f) key(Input.MOVE_LEFT);
+        tickDec = tickDec + "+ledge";
     }
 
-    /** Hotbar slot to pull an item into: an empty one, else the last that holds no weapon. */
-    private int spare(Player me) {
-        int kept = -1;
-        for (int i = 8; i >= 0; i--) {
-            ItemStack st = me.getInventory().getItem(i);
-            if (st.isEmpty()) return i;
-            if (kept < 0 && !Arrays.asList(SWORDS).contains(st.getItem()) && !Arrays.asList(AXES).contains(st.getItem())) kept = i;
+    /** Record the action chosen this tick for {@link PvpRecorder}, then return {@code cmd}. */
+    private PathingCommand decide(String d, PathingCommand cmd) {
+        tickDec = d;
+        return cmd;
+    }
+
+    private String brokeNote = "";
+
+    /**
+     * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
+     * so the round dealt 0. Set the slot as well as clicking the key.
+     */
+    private boolean select(Player me, int slot) {
+        if (slot < 0) return false;
+        if (me.getInventory().getSelectedSlot() != slot) {
+            me.getInventory().setSelectedSlot(slot);
+            press(ctx.minecraft().options.keyHotbarSlots[slot]);
         }
-        return kept < 0 ? 8 : kept;
+        return me.getInventory().getSelectedSlot() == slot;
     }
 
-    private int best(Player me, Item[] tiers) {
-        for (Item it : tiers) {
-            for (int i = 0; i < 9; i++) if (me.getInventory().getItem(i).getItem() == it) return i;
-        }
-        return -1;
-    }
+    /** Turn the view toward the angles with the smoothed look; true once it already points there within tol degrees. */
+    /** Every PvP look goes out as a bounded, mouse-stepped move; see LookBehavior.human(). */
+    private boolean hit(Player me, Entity e) { return click.clickOn(me, e); }
 
-    /** Crit play wants damage per swing: a sword, else an axe. */
-    private int weapon(Player me) {
-        int s = best(me, SWORDS);
-        return s >= 0 ? s : best(me, AXES);
-    }
-
-    private void select(Player me, int slot) {
-        if (slot >= 0) me.getInventory().selected = slot;
-    }
-
-    private void hit(Player me) {
-        ctx.minecraft().gameMode.attack(me, target);
-        me.swing(InteractionHand.MAIN_HAND);
-        attacks++;
-    }
+    private boolean hit(Player me) { return click.hit(me, target); }
 
     private void key(Input in) {
         baritone.getInputOverrideHandler().setInputForceState(in, true);
@@ -383,228 +562,21 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private void look(Vec3 at) {
-        Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-        baritone.getLookBehavior().updateTarget(r, true);
-    }
-
-    private LivingEntity pick(Player me) {
-        return ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(CHASE),
-                        e -> e != me && e.isAlive() && !e.isRemoved() && !e.isSpectator() && filter.test(e))
-                .stream().filter(e -> me.distanceTo(e) <= CHASE)
-                .min(Comparator.comparingDouble(me::distanceToSqr)).orElse(null);
-    }
-
-    private static Vec3 aimPoint(Player me, LivingEntity t) {
-        Vec3 eye = me.getEyePosition();
-        AABB b = t.getBoundingBox().deflate(0.05);
-        return new Vec3(Mth.clamp(eye.x, b.minX, b.maxX), Mth.clamp(eye.y, b.minY + 0.2, b.maxY - 0.1), Mth.clamp(eye.z, b.minZ, b.maxZ));
-    }
-
-    /**
-     * Crystal PvP: break the crystal that hurts the target most, else put a crystal on obsidian where it does,
-     * else lay obsidian beside the target's feet. Anything that would hurt us more than it, or pop us, is skipped.
-     */
-    private boolean crystal(Player me) {
-        crystalFight = has(me, Items.END_CRYSTAL) || has(me, Items.RESPAWN_ANCHOR) || !ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(8)).isEmpty();
-        if (anchor(me)) return true;
-        if (!has(me, Items.END_CRYSTAL) || me.distanceTo(target) > 7) return false;
-        float myHp = me.getHealth() + me.getAbsorptionAmount();
-        EndCrystal hitIt = null;
-        float best = 0;
-        for (EndCrystal c : ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(6))) {
-            if (exactReach(me, c) > REACH) continue;
-            float score = worth(me, c.position(), myHp);
-            if (score > best) {
-                best = score;
-                hitIt = c;
-            }
-        }
-        if (hitIt == null && has(me, Items.OBSIDIAN)) {
-            // a crystal that would hurt us and that we won't pop: wall it off at leg height
-            EndCrystal danger = null;
-            float worst = 6;
-            for (EndCrystal c : ctx.world().getEntitiesOfClass(EndCrystal.class, me.getBoundingBox().inflate(6))) {
-                float d = blast(me, c.position(), 12);
-                if (d >= worst) { worst = d; danger = c; }
-            }
-            if (danger != null && shield(me, danger.blockPosition())) return true;
-        }
-        if (hitIt != null) {
-            look(hitIt.position());
-            ctx.minecraft().gameMode.attack(me, hitIt);
-            me.swing(InteractionHand.MAIN_HAND);
-            return true;
-        }
-        Level w = ctx.world();
-        BlockPos base = null;
-        best = 0;
-        BlockPos t = target.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(t.offset(-3, -2, -3), t.offset(3, 1, 3))) {
-            if (!w.getBlockState(p).is(Blocks.OBSIDIAN) && !w.getBlockState(p).is(Blocks.BEDROCK)) continue;
-            if (!w.isEmptyBlock(p.above()) || !w.getEntities(null, new AABB(p.above())).isEmpty()) continue;
-            Vec3 at = Vec3.atBottomCenterOf(p.above());
-            if (me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5 || me.getEyePosition().distanceTo(at.add(0, 1, 0)) > REACH + 0.8) continue;
-            float score = worth(me, at, myHp);
-            if (score > best) {
-                best = score;
-                base = p.immutable();
-            }
-        }
-        if (base != null) return place(me, Items.END_CRYSTAL, base);
-        if (!has(me, Items.OBSIDIAN)) return false;
-        BlockPos floor = null;
-        best = 0;
-        for (Direction d : Direction.Plane.HORIZONTAL) {
-            for (BlockPos p : new BlockPos[]{t.relative(d), t.relative(d).below()}) {
-                if (!w.getBlockState(p).canBeReplaced() || w.getBlockState(p.below()).canBeReplaced()) continue;
-                if (!w.getEntities(null, new AABB(p)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-                float score = worth(me, Vec3.atBottomCenterOf(p.above()), myHp);
-                if (score > best) {
-                    best = score;
-                    floor = p.below();
-                }
-            }
-        }
-        return floor != null && place(me, Items.OBSIDIAN, floor);
-    }
-
-    /**
-     * Anchor PvP (overworld): blow a charged anchor that hurts the target, else charge an anchor near it with
-     * glowstone, else put an anchor down beside its feet.
-     */
-    private boolean anchor(Player me) {
-        if (!has(me, Items.RESPAWN_ANCHOR) && !has(me, Items.GLOWSTONE) || me.distanceTo(target) > 7) return false;
-        Level w = ctx.world();
-        float myHp = me.getHealth() + me.getAbsorptionAmount();
-        BlockPos t = target.blockPosition(), boom = null, charge = null, backOff = null;
-        float bestBoom = 0, bestCharge = 0, bestBack = 0;
-        for (BlockPos p : BlockPos.betweenClosed(t.offset(-3, -1, -3), t.offset(3, 2, 3))) {
-            if (!w.getBlockState(p).is(Blocks.RESPAWN_ANCHOR) || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-            Vec3 at = Vec3.atCenterOf(p);
-            float score = worth(me, at, myHp, 10), dmg = blast(target, at, 10);
-            boolean charged = w.getBlockState(p).getValue(RespawnAnchorBlock.CHARGE) > 0;
-            if (!charged && score > 0) {
-                // charging hurts nobody, so charge anything that would hurt the target
-                if (dmg > bestCharge) { bestCharge = dmg; charge = p.immutable(); }
-            } else if (charged && score > bestBoom) {
-                bestBoom = score;
-                boom = p.immutable();
-            } else if (score <= 0 && blast(me, at, 10) >= 8 && blast(me, at, 10) > bestBack) {
-                bestBack = blast(me, at, 10); // theirs or ours, it can go off in our face
-                backOff = p.immutable();
-            }
-        }
-        if (boom != null) {
-            int slot = -1;
-            for (int i = 0; i < 9; i++) {
-                Item it = me.getInventory().getItem(i).getItem();
-                if (it != Items.GLOWSTONE && it != Items.RESPAWN_ANCHOR) { slot = i; break; }
-            }
-            if (slot < 0) return false;
-            select(me, slot);
-            return click(me, boom);
-        }
-        if (charge != null && has(me, Items.GLOWSTONE)) {
-            select(me, slotOf(me, Items.GLOWSTONE));
-            return me.getMainHandItem().getItem() == Items.GLOWSTONE && click(me, charge);
-        }
-        // a charged anchor that would hurt us: wall it off at leg height, which is where most of the blast lands
-        if (backOff != null && shield(me, backOff)) return true;
-        backingOff = backOff == null ? 0 : backingOff + 1;
-        // a charged anchor that would hurt us too much from here: step away, then blow it (unless a wall keeps us pinned)
-        if (backOff != null && backingOff < 40) {
-            look(Vec3.atCenterOf(backOff));
-            key(Input.MOVE_BACK);
-            return true;
-        }
-        if (!has(me, Items.RESPAWN_ANCHOR) || !has(me, Items.GLOWSTONE)) return false;
-        BlockPos spot = null;
-        float best = 0;
-        // not just beside them: a target down a one-wide hole has no free side, only the rim
-        for (BlockPos q : BlockPos.betweenClosed(t.offset(-2, -1, -2), t.offset(2, 2, 2))) {
-            {
-                BlockPos p = q.immutable();
-                if (!w.getBlockState(p).canBeReplaced() || w.getBlockState(p.below()).canBeReplaced()) continue;
-                if (!w.getEntities(null, new AABB(p)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(p)) > 4.5) continue;
-                float score = worth(me, Vec3.atCenterOf(p), myHp, 10);
-                if (score > best) { best = score; spot = p; }
-            }
-        }
-        return spot != null && place(me, Items.RESPAWN_ANCHOR, spot.below());
-    }
-
-    /** Put a block in the cell between our feet and {@code threat} so the explosion's rays hit it instead of our legs. */
-    private boolean shield(Player me, BlockPos threat) {
-        Item block = has(me, Items.OBSIDIAN) ? Items.OBSIDIAN : has(me, Items.COBBLESTONE) ? Items.COBBLESTONE
-                : has(me, Items.RESPAWN_ANCHOR) ? Items.RESPAWN_ANCHOR : null;
-        if (block == null) return false;
-        BlockPos feet = me.blockPosition();
-        int dx = Integer.signum(threat.getX() - feet.getX()), dz = Integer.signum(threat.getZ() - feet.getZ());
-        Level w = ctx.world();
-        for (BlockPos c : new BlockPos[]{feet.offset(dx, 0, dz), feet.offset(dx, 0, 0), feet.offset(0, 0, dz)}) {
-            if (c.equals(feet) || c.equals(threat) || !w.getBlockState(c).canBeReplaced() || w.getBlockState(c.below()).canBeReplaced()) continue;
-            if (!w.getEntities(null, new AABB(c)).isEmpty() || me.getEyePosition().distanceTo(Vec3.atCenterOf(c)) > 4.5) continue;
-            return place(me, block, c.below());
-        }
-        return false;
-    }
-
-    /** Right-click the top face of a block with whatever is in hand. */
-    private boolean click(Player me, BlockPos on) {
-        Vec3 face = Vec3.atCenterOf(on).add(0, 0.5, 0);
-        look(face);
-        ctx.minecraft().gameMode.useItemOn(ctx.minecraft().player, InteractionHand.MAIN_HAND, new BlockHitResult(face, Direction.UP, on, false));
-        me.swing(InteractionHand.MAIN_HAND);
-        return true;
-    }
-
-    /** Right-click the top of {@code on} with {@code item}. */
-    private boolean place(Player me, Item item, BlockPos on) {
-        select(me, slotOf(me, item));
-        if (me.getMainHandItem().getItem() != item) return false;
-        return click(me, on);
-    }
-
-    /** How good a crystal blowing up at {@code at} is for us: its damage to the target minus ours, 0 if not worth it. */
-    private float worth(Player me, Vec3 at, float myHp) {
-        return worth(me, at, myHp, 12);
-    }
-
-    private float worth(Player me, Vec3 at, float myHp, double size) {
-        float dmg = blast(target, at, size), self = blast(me, at, size);
-        boolean totem = me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING;
-        if (self >= myHp - (totem ? 0 : 2) && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0;
-        // once they're low an even trade wins the race
-        if (dmg < 3 || dmg < self * (size == 10 ? (target.getHealth() + target.getAbsorptionAmount() > 10 ? 1.5f : 1) : (target.getHealth() + target.getAbsorptionAmount() <= 10 ? 0.8f : 1))) return 0;
-        if (size == 10 && self >= myHp - 4 && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0; // don't pop our own totem
-        return dmg - self * 0.6f;
-    }
-
-    /** Vanilla end crystal (power 6) damage to {@code e} after armour. */
-    private static float blast(LivingEntity e, Vec3 at, double size) {
-        double d = Math.sqrt(e.distanceToSqr(at)) / size;
-        if (d > 1) return 0;
-        // an anchor is removed before it blows, but would block its own rays here, so take it as fully exposed
-        double impact = (1 - d) * (size == 12 ? ServerExplosion.getSeenPercent(at, e) : 1);
-        float raw = (float) ((impact * impact + impact) / 2 * 7 * size + 1);
-        return CombatRules.getDamageAfterAbsorb(e, raw, e.damageSources().generic(), e.getArmorValue(), (float) e.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
-    }
-
-    private static double exactReach(Player me, Entity t) {
-        Vec3 eye = me.getEyePosition();
-        AABB b = t.getBoundingBox();
-        return eye.distanceTo(new Vec3(Mth.clamp(eye.x, b.minX, b.maxX), Mth.clamp(eye.y, b.minY, b.maxY), Mth.clamp(eye.z, b.minZ, b.maxZ)));
-    }
-
-    private static double eyeToBox(Player me, LivingEntity t) {
-        return me.getEyePosition().distanceTo(aimPoint(me, t));
+        aimer.look(at, target == null ? 0 : tv().horizontalDistance());
     }
 
     @Override
     public void onLostControl() {
+        recorder.end(ctx.player(), "lost");
         filter = null;
+        enemies.clear();
         target = null;
-        eatTicks = blockTicks = 0;
+        survival.eatTicks = survival.foodTicks = shield.blockTicks = duelOpenUntil = shield.targetSwingTick = 0;
+        shield.axeHeld = shield.flicked = false;
+        shield.swingGap = shield.unseenBlock = click.probeTick = 0;
+        tools.reset();
+        inv.resetBreaks();
+        shield.lastShieldTick = shield.lastAxeTick = -1000; // tickCount restarts with the respawned player
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
     }

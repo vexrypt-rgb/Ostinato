@@ -25,6 +25,8 @@ public class PvpCommand extends Command {
             case "hostiles": ((Baritone) baritone).getPveProcess().attackHostiles(); logDirect("Mobs are PvE now: running #pve hostiles"); return;
             case "players": pvp.attackPlayers(); break;
             case "stats": logDirect(pvp.stats()); return;
+            case "clear": pvp.clearEnemies(); logDirect("Enemy list cleared"); return;
+            case "enemies": logDirect(pvp.enemyCount() + " enemies marked"); return;
             default: pvp.attackPlayer(what);
         }
         logDirect("PvP: " + what);
@@ -32,7 +34,7 @@ public class PvpCommand extends Command {
 
     @Override
     public Stream<String> tabComplete(String label, IArgConsumer args) {
-        return Stream.of("players", "hostiles", "stats");
+        return Stream.of("players", "hostiles", "stats", "enemies", "clear");
     }
 
     @Override

@@ -45,6 +45,11 @@ public final class BsiWorld implements PlayerSim.World {
     }
 
     @Override
+    public boolean water(int x, int y, int z) {
+        return bsi.get0(x, y, z).getFluidState().is(net.minecraft.tags.FluidTags.WATER);
+    }
+
+    @Override
     public boolean climbable(int x, int y, int z) {
         return bsi.get0(x, y, z).is(net.minecraft.tags.BlockTags.CLIMBABLE);
     }

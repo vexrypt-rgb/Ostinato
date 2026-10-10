@@ -65,7 +65,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void updateTarget(Rotation rotation, boolean blockInteract) {
-        this.target = new Target(rotation, Target.Mode.resolve(ctx, blockInteract));
+        if (Baritone.settings().humanLookEverywhere.value && !ctx.player().isFallFlying()) this.human = true;
+        // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
+        this.target = new Target(rotation, this.human ? Target.Mode.CLIENT : Target.Mode.resolve(ctx, blockInteract));
     }
 
     @Override
@@ -78,6 +80,102 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         if (event.getType() == TickEvent.Type.IN) {
             this.processor.tick();
         }
+    }
+
+    private boolean human;
+
+    /**
+     * For this tick, the rotation that is sent is a hand's move from the last one: most of the way to the
+     * target, at most 60 degrees of yaw and 45 of pitch, in whole steps of the mouse at the current
+     * sensitivity. smoothLook only averages what the camera shows; the packet still carried the full snap.
+     */
+    public void human() {
+        this.human = true;
+    }
+
+    /**
+     * Prototype (the frameLook setting): between ticks the view keeps moving toward the last aim goal, one small
+     * mouse-count step per rendered frame, as a hand does, instead of arriving in one jump at the tick. The goal is
+     * dropped after two ticks without a refresh, so a stale aim never drags the view.
+     */
+        private Rotation frameGoal;
+    private int frameGoalTick;
+    private long lastFrameNanos;
+
+    public void frame() {
+        if (!Baritone.settings().frameLook.value) return;
+        long now = System.nanoTime();
+        double ticks = lastFrameNanos == 0 ? 0 : Math.min(2.0, (now - lastFrameNanos) / 50_000_000.0);
+        lastFrameNanos = now;
+        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        if (frameGoal == null || p == null || ticks <= 0) return;
+        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().screen != null) {
+            frameGoal = null;
+            return;
+        }
+        float dy = net.minecraft.util.Mth.wrapDegrees(frameGoal.getYaw() - p.getYRot()), dp = frameGoal.getPitch() - p.getXRot();
+        // the tick step closes 60% of the gap per tick: the same rate, in frame-sized pieces
+        float k = (float) (1 - Math.pow(0.4, ticks));
+        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
+        float step = (float) (f * f * f * 8.0 * 0.15);
+        float my = Math.round(dy * k / step) * step, mp = Math.round(dp * k / step) * step;
+        if (my == 0 && mp == 0) return;
+        p.setYRot(p.getYRot() + my);
+        p.setXRot(net.minecraft.util.Mth.clamp(p.getXRot() + mp, -90f, 90f));
+        p.yRotO += my;
+        p.xRotO = net.minecraft.util.Mth.clamp(p.xRotO + mp, -90f, 90f);
+    }
+
+    private float velYaw, velPitch;
+    private final java.util.Random handNoise = new java.util.Random();
+
+    /** Yaw speed of the simulated hand, degrees per tick, for predicting where the camera will be. */
+    public float yawVelocity() {
+        return velYaw;
+    }
+
+    /** One tick of the hand's yaw (the same model as {@link #humanStep}), for rollouts: returns the new camera yaw, speed in outVel[0]. */
+    public static float modelYawStep(float cam, float vel, float target, float[] outVel) {
+        float dy = net.minecraft.util.Mth.wrapDegrees(target - cam);
+        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float acc = 12f + Math.abs(dy) * 0.5f;
+        float out = vel + net.minecraft.util.Mth.clamp(want - vel, -acc, acc);
+        if (Math.abs(dy) <= 1.5f) out = dy;
+        if (Math.abs(dy) > 25f) out += vel * 0.12f;
+        outVel[0] = out;
+        return cam + out;
+    }
+
+    /**
+     * A hand does not jump to its target: the speed ramps up (limited acceleration), the move closes most of
+     * the gap each tick (so a long flick still lands in a few ticks), carries a little momentum past the
+     * target, and the wrist arc leaks a bit of pitch into a yaw sweep. Near the target a tremor of under a
+     * mouse count rides on top; the result is rounded to whole mouse counts as before.
+     */
+    private Rotation humanStep(Rotation want) {
+        float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
+        float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
+        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f) : dp;
+        // acceleration limit scales with the size of the move: a flick may start hard, a nudge starts soft
+        float accY = 12f + Math.abs(dy) * 0.5f, accP = 9f + Math.abs(dp) * 0.5f;
+        float outY = velYaw + net.minecraft.util.Mth.clamp(wantY - velYaw, -accY, accY);
+        float outP = velPitch + net.minecraft.util.Mth.clamp(wantP - velPitch, -accP, accP);
+        if (Math.abs(dy) <= 1.5f) outY = dy; // fine aim lands exactly, never lags behind a moving target
+        if (Math.abs(dp) <= 1.5f) outP = dp;
+        // momentum carries a fast move slightly past; the next tick corrects it
+        if (Math.abs(dy) > 25f) outY += velYaw * 0.12f;
+        outP += outY * 0.06f * (float) Math.signum(dp == 0 ? 1 : dp) * (Math.abs(dy) > 10f ? 1 : 0);
+        double tremor = Math.min(1.0, Math.abs(dy) / 6.0) < 1.0 ? 0.08 : 0.0;
+        outY += (float) (handNoise.nextGaussian() * tremor);
+        outP += (float) (handNoise.nextGaussian() * tremor);
+        velYaw = outY;
+        velPitch = outP;
+        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
+        float step = (float) (f * f * f * 8.0 * 0.15); // degrees per mouse count, as MouseHandler turns the player
+        outY = Math.round(outY / step) * step;
+        outP = Math.round(outP / step) * step;
+        return new Rotation(cy + outY, net.minecraft.util.Mth.clamp(cp + outP, -90f, 90f));
     }
 
     @Override
@@ -95,7 +193,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
 
                 this.prevRotation = new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
-                final Rotation actual = this.processor.peekRotation(this.target.rotation);
+                final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 ctx.player().setYRot(actual.getYaw());
                 ctx.player().setXRot(actual.getPitch());
                 break;
@@ -111,7 +209,11 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     while (this.smoothPitchBuffer.size() > Baritone.settings().smoothLookTicks.value) {
                         this.smoothPitchBuffer.removeFirst();
                     }
-                    if (this.target.mode == Target.Mode.SERVER) {
+                    if (this.human) {
+                        // the camera stays on the rotation that was sent
+                        this.frameGoal = this.target.rotation;
+                        this.frameGoalTick = ctx.player().tickCount;
+                    } else if (this.target.mode == Target.Mode.SERVER) {
                         ctx.player().setYRot(this.prevRotation.getYaw());
                         ctx.player().setXRot(this.prevRotation.getPitch());
                     } else if (ctx.player().isFallFlying() ? Baritone.settings().elytraSmoothLook.value : Baritone.settings().smoothLook.value) {
@@ -126,6 +228,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
+                if (!this.human) { velYaw = 0; velPitch = 0; }
+                this.human = false;
                 break;
             }
             default:
@@ -290,7 +394,14 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
 
         private float calculateMouseMove(float current, float target) {
-            final float delta = target - current;
+            // Shortest-path turn, capped so PvP aim tracks instead of snapping.
+            float delta = net.minecraft.util.Mth.wrapDegrees(target - current);
+            float cap = 32f;
+            try {
+                cap = Float.parseFloat(System.getProperty("ostinato.aim.deg", "32"));
+            } catch (NumberFormatException ignored) {}
+            if (cap < 1f) cap = 1f;
+            delta = net.minecraft.util.Mth.clamp(delta, -cap, cap);
             final double deltaPx = angleToMouse(delta); // yes, even the mouse movements use double
             return current + mouseToAngle(deltaPx);
         }

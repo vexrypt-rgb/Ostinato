@@ -504,7 +504,7 @@ public final class OstinatoScreen extends Screen {
     private void drawHeader(GuiGraphics ms, int mx, int my, int accent, long now) {
         GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
         float lw = GuiDraw.textColors(ms, "Ostinato", x0 + 28, y0 + 9, 1.5f, true, Theme.logoColors(accent, 8), true);
-        String chip = "Baritone " + SharedConstants.getCurrentVersion().getName();
+        String chip = "Baritone " + SharedConstants.getCurrentVersion().name();
         float cx = x0 + 28 + lw + 8, cw = GuiDraw.width(chip) + 10;
         if (cx + cw < searchX0() - 6) {
             GuiDraw.round(ms, cx, y0 + 10, cx + cw, y0 + 21, 2.5f, 0x1A7AA2F7);
@@ -1028,8 +1028,7 @@ public final class OstinatoScreen extends Screen {
         if (ty0 + th > height - 4) {
             ty0 = Math.max(4, my - 8 - th);
         }
-        ms.pose().pushPose();
-        ms.pose().translate(0, 0, 400); // above item icons
+        ms.pose().pushMatrix();
         GuiDraw.shadow(ms, tx0, ty0, tx0 + tw, ty0 + th, 4, 7, 0x80);
         GuiDraw.roundBorder(ms, tx0, ty0, tx0 + tw, ty0 + th, 4, 0xFF34405A, 0xFA151A24, 0xFA0C0F16);
         GuiDraw.gradH(ms, tx0 + 4, ty0 + 0.5f, tx0 + tw - 4, ty0 + 1, GuiDraw.alphaOf(accent, 0), GuiDraw.alphaOf(accent, 0xAA));
@@ -1056,7 +1055,7 @@ public final class OstinatoScreen extends Screen {
         String cmd = settings.prefix.value + "set " + e.name + " " + valueString(e);
         GuiDraw.text(ms, GuiDraw.trim(cmd, tw - 26, 1f), tx0 + 13, ly + 3, accent, false);
         GuiDraw.text(ms, mod ? "right-click row or the reset icon: reset to default" : "right-click row: reset to default", tx0 + 9, ly + 17, 0.5f, Theme.DIM, false, false);
-        ms.pose().popPose();
+        ms.pose().popMatrix();
     }
 
     private float kv(GuiGraphics ms, String k, String v, float x, float y, int col) {
@@ -1087,7 +1086,11 @@ public final class OstinatoScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent ev, boolean dbl) {
+        return mouseClicked(ev.x(), ev.y(), ev.button());
+    }
+
+    private boolean mouseClicked(double mx, double my, int button) {
         layout();
         if (capturing != null) {
             capturing = null;
@@ -1183,7 +1186,7 @@ public final class OstinatoScreen extends Screen {
                 return true;
             }
             tasks.layout(px0, px1, hb, fy);
-            return tasks.mouseClicked(mx, my, button) || super.mouseClicked(mx, my, button);
+            return tasks.mouseClicked(mx, my, button) || false;
         }
         // filter chips
         float chx = px1;
@@ -1241,7 +1244,7 @@ public final class OstinatoScreen extends Screen {
         if (e != null) {
             return clickRow(e, mx, my, button);
         }
-        return super.mouseClicked(mx, my, button);
+        return false;
     }
 
     private boolean clickRow(Entry e, double mx, double my, int button) {
@@ -1333,7 +1336,8 @@ public final class OstinatoScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+    public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent ev, double dx, double dy) {
+        double mx = ev.x(), my = ev.y();
         if (dragging != null) {
             dragSlider(dragging, mx);
             return true;
@@ -1342,14 +1346,14 @@ public final class OstinatoScreen extends Screen {
             dragThumb(my);
             return true;
         }
-        return super.mouseDragged(mx, my, button, dx, dy);
+        return super.mouseDragged(ev, dx, dy);
     }
 
     @Override
-    public boolean mouseReleased(double mx, double my, int button) {
+    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent ev) {
         dragging = null;
         draggingThumb = false;
-        return super.mouseReleased(mx, my, button);
+        return super.mouseReleased(ev);
     }
 
     @Override
@@ -1372,7 +1376,7 @@ public final class OstinatoScreen extends Screen {
             float cyc = rowY(e) + (ROW_H - 2) / 2f, cx = px1 - 14;
             if (in(mx, my, cx - controlWidth(e.kind) - 4, cyc - 8, cx + 4, cyc + 8)) {
                 double step = e.range != null ? e.range.step : SettingRanges.defaultStep(e.integral());
-                if (Screen.hasShiftDown()) {
+                if (Keys.shift()) {
                     step *= 10;
                 }
                 double v = e.number() + Math.signum(delta) * step;
@@ -1385,7 +1389,9 @@ public final class OstinatoScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int key, int scan, int mods) {
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent ev) {
+        int key = ev.key();
+        curKey = ev;
         if (dropdown != null && key == GLFW.GLFW_KEY_ESCAPE) {
             dropdown = null;
             return true;
@@ -1401,7 +1407,7 @@ public final class OstinatoScreen extends Screen {
         if (tasks.editing()) {
             return tasks.keyPressed(key);
         }
-        if (showTasks() && key == GLFW.GLFW_KEY_S && Screen.hasControlDown()) {
+        if (showTasks() && key == GLFW.GLFW_KEY_S && Keys.ctrl()) {
             tasks.save();
             return true;
         }
@@ -1415,7 +1421,7 @@ public final class OstinatoScreen extends Screen {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
+        if (key == GLFW.GLFW_KEY_F && Keys.ctrl()) {
             searchFocused = true;
             search.selectAll();
             return true;
@@ -1455,9 +1461,11 @@ public final class OstinatoScreen extends Screen {
             case GLFW.GLFW_KEY_UP: scrollTarget = Math.max(0, scrollTarget - ROW_H); return true;
             case GLFW.GLFW_KEY_HOME: scrollTarget = 0; return true;
             case GLFW.GLFW_KEY_END: scrollTarget = maxScroll(); return true;
-            default: return super.keyPressed(key, scan, mods);
+            default: return super.keyPressed(curKey);
         }
     }
+
+    private net.minecraft.client.input.KeyEvent curKey;
 
     private int accentOrMuted() {
         return Theme.accent();
@@ -1465,11 +1473,11 @@ public final class OstinatoScreen extends Screen {
 
     /** Shared editing keys for the search box and inline editors; true if handled. */
     boolean editKey(TextInput in, int key) {
-        if (Screen.isSelectAll(key)) {
+        if (Keys.ctrl() && key == GLFW.GLFW_KEY_A) {
             in.selectAll();
-        } else if (Screen.isPaste(key)) {
+        } else if (Keys.ctrl() && key == GLFW.GLFW_KEY_V) {
             in.insert(minecraft.keyboardHandler.getClipboard());
-        } else if (Screen.isCopy(key)) {
+        } else if (Keys.ctrl() && key == GLFW.GLFW_KEY_C) {
             minecraft.keyboardHandler.setClipboard(in.get());
         } else {
             switch (key) {
@@ -1486,7 +1494,8 @@ public final class OstinatoScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(char c, int mods) {
+    public boolean charTyped(net.minecraft.client.input.CharacterEvent ev) {
+        char c = (char) ev.codepoint();
         if (capturing != null) {
             return true;
         }

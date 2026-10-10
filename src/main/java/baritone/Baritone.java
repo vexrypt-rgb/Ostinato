@@ -130,11 +130,10 @@ public class Baritone implements IBaritone {
             this.inventoryPauserProcess  = this.registerProcess(InventoryPauserProcess::new);
             this.elytraProcess           = this.registerProcess(ElytraProcess::create);
             this.registerProcess(BackfillProcess::new);
-            this.registerProcess(AirProcess::new);
-            this.registerProcess(BoatProcess::new);
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.pveProcess              = this.registerProcess(PveProcess::new);
-            VexBench.install(this);
+            this.registerProcess(AirProcess::new);
+            this.registerProcess(BoatProcess::new);
             baritone.process.SimBench.install(this);
         }
 

@@ -142,7 +142,7 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                     onLostControl(); // we're there xd
                     if (Baritone.settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
-                            clientLevel.disconnect();
+                            clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                         }
                     }
                     if (Baritone.settings().notificationOnPathComplete.value) {

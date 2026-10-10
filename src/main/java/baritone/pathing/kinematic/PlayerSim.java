@@ -5,8 +5,8 @@ import java.util.List;
 
 /**
  * Allocation-light copy of vanilla 1.16 player movement (LivingEntity.travel + Entity.move) for
- * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision and ladders/vines; no
- * fluids, sneaking or potion effects, so callers only use it on plain ground.
+ * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision, ladders/vines and still water via
+ * {@link #tickWater}; no lava, currents, sneaking or potion effects.
  */
 public final class PlayerSim {
 
@@ -18,6 +18,11 @@ public final class PlayerSim {
 
         /** Slime: a landing bounces back up, walking on it is slowed. */
         default boolean bouncy(int x, int y, int z) {
+            return false;
+        }
+
+        /** Still or flowing water fills this cell (flow is not simulated). */
+        default boolean water(int x, int y, int z) {
             return false;
         }
 
@@ -33,7 +38,7 @@ public final class PlayerSim {
     private static final double CLIMB_LIMIT = 0.15, CLIMB_SPEED = 0.2;
 
     public double x, y, z, vx, vy, vz;
-    public boolean onGround, sprinting, collidedH;
+    public boolean onGround, sprinting, collidedH, swimming;
     /** Vanilla's jump cooldown: holding jump re-jumps only every 10 ticks. */
     public int jumpTicks;
 
@@ -46,7 +51,7 @@ public final class PlayerSim {
 
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
-        onGround = o.onGround; sprinting = o.sprinting; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
+        onGround = o.onGround; sprinting = o.sprinting; swimming = o.swimming; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
         return this;
     }
 
@@ -59,6 +64,11 @@ public final class PlayerSim {
 
     /** As above with the forward key's impulse: 1 forward, 0 none, -1 back. */
     public void tick(float yawDeg, int input, boolean sprint, boolean jump) {
+        tick(yawDeg, input, 0, sprint, jump);
+    }
+
+    /** With a strafe key too: +1 is A (left), -1 is D (right). Vanilla normalises a diagonal so strafing adds no speed. */
+    public void tick(float yawDeg, int input, int strafe, boolean sprint, boolean jump) {
         boolean forward = input > 0;
         if (Math.abs(vx) < 0.003) vx = 0;
         if (Math.abs(vy) < 0.003) vy = 0;
@@ -86,10 +96,17 @@ public final class PlayerSim {
         } else {
             speed = sprinting ? 0.026 : 0.02;
         }
-        if (input != 0) {
-            double f = 0.98 * speed * input;
-            vx += -sin * f;
-            vz += cos * f;
+        if (input != 0 || strafe != 0) {
+            double fz = 0.98 * input, fx = 0.98 * strafe;
+            double len = Math.sqrt(fx * fx + fz * fz);
+            if (len > 1) {
+                fx /= len;
+                fz /= len;
+            }
+            fx *= speed;
+            fz *= speed;
+            vx += fx * cos - fz * sin;
+            vz += fz * cos + fx * sin;
         }
         if (climbable()) { // LivingEntity.handleOnClimbableSpeed
             vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
@@ -103,6 +120,60 @@ public final class PlayerSim {
         vy = (vy - 0.08) * 0.98;
         vx *= slip;
         vz *= slip;
+    }
+
+    /** Water at the feet, the body's middle or the eyes: any of them puts vanilla into its fluid branch. */
+    public boolean inWater() {
+        return world.water(floor(x), floor(y + 0.1), floor(z));
+    }
+
+    public boolean eyesInWater() {
+        return world.water(floor(x), floor(y + 1.62 - 0.11), floor(z));
+    }
+
+    /**
+     * One tick in water (vanilla LivingEntity.travelInWater). Sprinting with the eyes under makes the swim pose,
+     * where vertical speed chases the look direction; otherwise JUMP rises and SNEAK sinks at 0.04 a tick.
+     * Climbing out: walking into a bank with free space above gives the 0.3 hop.
+     */
+    public void tickWater(float yawDeg, float pitchDeg, boolean forward, boolean sprint, boolean jump, boolean sneak) {
+        if (Math.abs(vx) < 0.003) vx = 0;
+        if (Math.abs(vy) < 0.003) vy = 0;
+        if (Math.abs(vz) < 0.003) vz = 0;
+        sprinting = forward && !collidedH && (sprint || sprinting);
+        // vanilla: the swim pose starts with the eyes under, and lasts while sprinting in water, even with the head out
+        swimming = sprinting && (swimming ? inWater() : eyesInWater());
+        double yaw = Math.toRadians(yawDeg);
+        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        if (swimming) {
+            double look = -Math.sin(Math.toRadians(pitchDeg));
+            double k = look < -0.2 ? 0.085 : 0.06;
+            if (look <= 0 || jump || world.water(floor(x), floor(y + 1 - 0.1), floor(z))) {
+                vy += (look - vy) * k;
+            }
+        }
+        if (forward) {
+            double f = 0.98 * 0.02;
+            vx += -sin * f;
+            vz += cos * f;
+        }
+        if (jump) vy += 0.04;
+        if (sneak) vy -= 0.04;
+        double startY = y;
+        move(vx, vy, vz);
+        double drag = sprinting ? 0.9 : 0.8;
+        vx *= drag;
+        vz *= drag;
+        vy *= 0.8;
+        if (!sprinting) {
+            vy -= 0.08 / 16.0;
+        }
+        if (collidedH) {
+            double[] r = collide(x, y, z, vx, vy + 0.6 - y + startY, vz);
+            if (r[0] == vx && r[1] == vy + 0.6 - y + startY && r[2] == vz && !world.water(floor(x + vx), floor(y + vy + 0.6 - y + startY), floor(z + vz))) {
+                vy = 0.3;
+            }
+        }
     }
 
     /** Whether the cell the player's feet are in can be hung on to. */

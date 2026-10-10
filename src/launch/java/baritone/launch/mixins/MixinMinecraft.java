@@ -24,7 +24,6 @@ import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.WorldEvent;
 import baritone.api.event.events.type.EventState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -54,6 +53,14 @@ public class MixinMinecraft {
 
     @Unique
     private BiFunction<EventState, TickEvent.Type, TickEvent> tickProvider;
+
+    /** Every rendered frame, not just every tick: the look layer's per-frame mouse prototype. */
+    @Inject(method = "runTick", at = @At("HEAD"))
+    private void ostinato$frame(boolean renderLevel, CallbackInfo ci) {
+        for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (baritone.getLookBehavior() instanceof baritone.behavior.LookBehavior lb) lb.frame();
+        }
+    }
 
     @Inject(
             method = "<init>",
@@ -131,7 +138,7 @@ public class MixinMinecraft {
             method = "setLevel",
             at = @At("HEAD")
     )
-    private void preLoadWorld(ClientLevel world, ReceivingLevelScreen.Reason arg2, CallbackInfo ci) {
+    private void preLoadWorld(final ClientLevel world, final CallbackInfo ci) {
         // If we're unloading the world but one doesn't exist, ignore it
         if (this.level == null && world == null) {
             return;
@@ -151,7 +158,7 @@ public class MixinMinecraft {
             method = "setLevel",
             at = @At("RETURN")
     )
-    private void postLoadWorld(ClientLevel world, ReceivingLevelScreen.Reason arg2, CallbackInfo ci) {
+    private void postLoadWorld(final ClientLevel world, final CallbackInfo ci) {
         // still fire event for both null, as that means we've just finished exiting a world
 
         // mc.world changing is only the primary baritone

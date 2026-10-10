@@ -53,9 +53,9 @@ public final class SettingCategorizer {
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater");
         put(m, RENDER, "yLevelBoxSize", "fadePath", "cachedChunksOpacity");
-        put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "randomLooking", "randomLooking113",
-                "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "physicsTravel",
-                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed",
+        put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "randomLooking", "randomLooking113",
+                "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
+                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
                 "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
         put(m, PATHING, "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",

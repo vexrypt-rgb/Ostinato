@@ -20,7 +20,8 @@ package baritone.launch.mixins;
 import baritone.Baritone;
 import baritone.behavior.FreecamBehavior;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.state.CameraRenderState;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import org.spongepowered.asm.mixin.Mixin;
@@ -38,16 +39,16 @@ public class MixinLivingEntityRenderer {
     private boolean baritone$ghost;
 
     @Inject(
-            method = "render(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+            method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/CameraRenderState;)V",
             at = @At("HEAD")
     )
-    private void markGhost(LivingEntityRenderState state, PoseStack pose, MultiBufferSource buffers, int light, CallbackInfo ci) {
+    private void markGhost(LivingEntityRenderState state, PoseStack pose, SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo ci) {
         baritone$ghost = FreecamBehavior.activeCamera() != null && state == FreecamBehavior.ghostState;
     }
 
     // Vanilla draws invisible-but-seen bodies at a fixed 15% alpha; the freecam ghost uses freecamGhostOpacity.
     @ModifyConstant(
-            method = "render(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+            method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/CameraRenderState;)V",
             constant = @Constant(intValue = 654311423)
     )
     private int ghostTint(int tint) {
