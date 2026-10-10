@@ -130,6 +130,7 @@ public final class PveProcess extends BaritoneProcessHelper {
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
+        inv.closeAbandoned(me);
         baritone.getInputOverrideHandler().clearAllKeys();
         ticks++;
         float hp = me.getHealth() + me.getAbsorptionAmount();
@@ -375,11 +376,11 @@ public final class PveProcess extends BaritoneProcessHelper {
         int slot = -1;
         if (me.getHealth() <= 8) {
             int g = goldenApple(me);
-            if (g >= 0) slot = g < 9 ? g : inv.slotOf(me, me.getInventory().getItem(g).getItem());
+            if (g >= 0) slot = g;
         }
         if (slot < 0 && me.getFoodData().needsFood()) {
             int i = healItem(me);
-            if (i >= 0) slot = i < 9 ? i : inv.slotOf(me, me.getInventory().getItem(i).getItem());
+            if (i >= 0) slot = i;
         }
         if (slot < 0) return false;
         if (!select(me, slot)) return true;
@@ -404,6 +405,7 @@ public final class PveProcess extends BaritoneProcessHelper {
     }
 
     private boolean select(Player me, int slot) {
+        slot = inv.toHotbar(me, slot); // from the main inventory this takes two ticks: false until it is up
         if (slot < 0) return false;
         if (me.getInventory().selected != slot) {
             me.getInventory().selected = slot;
@@ -441,6 +443,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         target = null;
         engaged.clear();
         eatTicks = blockTicks = retreatTicks = backoff = 0;
+        inv.closeScreen();
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
     }

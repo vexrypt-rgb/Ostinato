@@ -24,12 +24,61 @@ public final class ClientWorld implements PlayerSim.World {
         this.ctx = ctx;
     }
 
+    /** Whether the boots carry Soul Speed: looked up once between resets, null until asked. */
+    private Boolean soulSpeed;
+
     public void reset() {
         cache.clear();
+        soulSpeed = null;
     }
 
-    /** Loads the real player's position, velocity and collision flags into {@code sim}. */
+    // vanilla's own numbers are floats: walking speed, the sprint modifier, jump strength
+    private static final double WALK_SPEED = 0.1F, SPRINT_BONUS = 0.3F, JUMP_STRENGTH = 0.42F;
+
+    /**
+     * Whether the player falls the plain way. Levitation and Slow Falling (and a changed gravity attribute) do not,
+     * and {@link PlayerSim} does not follow them: anything that rolls it forward from the player is wrong then.
+     */
+    public static boolean plainGravity(IPlayerContext ctx) {
+        return !ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)
+                && !ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                && Math.abs(ctx.player().getGravity() - 0.08) < 1e-6;
+    }
+
+    /** The player's ground speed against the plain walk: above 1 under Speed, below it under Slowness. */
+    private static double walkScale(IPlayerContext ctx) {
+        // the attribute carries the sprint bonus while sprinting, which the simulator adds itself
+        double walk = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
+                / (ctx.player().isSprinting() ? 1 + SPRINT_BONUS : 1);
+        return near(walk / WALK_SPEED, 1);
+    }
+
+    /**
+     * Whether the player walks at least as fast as the plain walk. The jump templates are rolled out at that pace:
+     * faster only reaches further, and the search at the jump steers it, but slower falls short.
+     */
+    public static boolean fullPace(IPlayerContext ctx) {
+        return walkScale(ctx) >= 1;
+    }
+
+    /** A value this close to the plain one is the plain one: what the simulator does by default stays bit for bit. */
+    private static double near(double v, double plain) {
+        return Math.abs(v - plain) < 1e-4 ? plain : v;
+    }
+
+    /** Loads what effects, attributes and enchantments change about the real player's movement into {@code sim}. */
+    public static void readEffects(IPlayerContext ctx, PlayerSim sim) {
+        sim.speedScale = walkScale(ctx);
+        double jump = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.JUMP_STRENGTH);
+        sim.jumpStrength = near(jump, JUMP_STRENGTH) == JUMP_STRENGTH ? 0.42 : jump;
+        sim.jumpBoost = ctx.player().getJumpBoostPower();
+        // Soul Speed raises this only while the player stands on a soul block: read from anywhere else it is 0
+        sim.movementEfficiency = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_EFFICIENCY);
+    }
+
+    /** Loads the real player's position, velocity, collision flags, speed and jump strength into {@code sim}. */
     public static void readPlayer(IPlayerContext ctx, PlayerSim sim) {
+        readEffects(ctx, sim);
         Vec3 p = ctx.player().position();
         Vec3 m = ctx.player().getDeltaMovement();
         sim.x = p.x;
@@ -91,5 +140,38 @@ public final class ClientWorld implements PlayerSim.World {
     public boolean climbable(int x, int y, int z) {
         pos.set(x, y, z);
         return ctx.world().getBlockState(pos).is(net.minecraft.tags.BlockTags.CLIMBABLE);
+    }
+
+    @Override
+    public float speedFactor(int x, int y, int z) {
+        pos.set(x, y, z);
+        BlockState state = ctx.world().getBlockState(pos);
+        float f = state.getBlock().getSpeedFactor();
+        // Soul Speed takes a soul block's drag away. The attribute that does it is only raised while the player
+        // stands on one, so a rollout that starts anywhere else has to be told here
+        return f != 1 && state.is(net.minecraft.tags.BlockTags.SOUL_SPEED_BLOCKS) && soulSpeed() ? 1 : f;
+    }
+
+    private boolean soulSpeed() {
+        if (soulSpeed == null) {
+            soulSpeed = false;
+            for (net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> e
+                    : ctx.player().getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).getEnchantments().keySet()) {
+                if (e.is(net.minecraft.world.item.enchantment.Enchantments.SOUL_SPEED)) soulSpeed = true;
+            }
+        }
+        return soulSpeed;
+    }
+
+    @Override
+    public float jumpFactor(int x, int y, int z) {
+        pos.set(x, y, z);
+        return ctx.world().getBlockState(pos).getBlock().getJumpFactor();
+    }
+
+    @Override
+    public boolean sticky(int x, int y, int z) {
+        pos.set(x, y, z);
+        return ctx.world().getBlockState(pos).getBlock() == Blocks.HONEY_BLOCK;
     }
 }

@@ -23,6 +23,7 @@ import baritone.pathing.movement.movements.MovementDiagonal;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementTraverse;
+import baritone.utils.BlockStateInterface;
 
 import java.util.List;
 
@@ -36,6 +37,8 @@ public final class PhysicsTravel {
     private static final int LOOKAHEAD = 6;
     private static final double DRIFT = 0.1;
     private static final int NODE_BUDGET = 1500;
+    /** The deepest drop taken here: the furthest a player falls unhurt. */
+    private static final int MAX_DROP = 3;
 
     private final IPlayerContext ctx;
     private final ClientWorld world;
@@ -70,7 +73,19 @@ public final class PhysicsTravel {
 
         int end = pathPosition;
         List<?> moves = path.movements();
-        while (end < moves.size() && end - pathPosition < LOOKAHEAD && land((Movement) moves.get(end))) end++;
+        BlockStateInterface bsi = null;
+        while (end < moves.size() && end - pathPosition < LOOKAHEAD) {
+            Movement m = (Movement) moves.get(end);
+            if (!land(m)) break;
+            if (m.toBreakCached == null || m.toPlaceCached == null) {
+                if (bsi == null) bsi = new BlockStateInterface(ctx);
+                m.toBreak(bsi);
+                m.toPlace(bsi);
+            }
+            // The search knows physics only: what has to be dug or bridged stays with Baritone.
+            if (!m.toBreakCached.isEmpty() || !m.toPlaceCached.isEmpty()) break;
+            end++;
+        }
         if (end == pathPosition) return drop();
         BetterBlockPos goal = path.positions().get(end);
 
@@ -112,7 +127,11 @@ public final class PhysicsTravel {
     }
 
     private static boolean land(Movement m) {
-        return m instanceof MovementTraverse || m instanceof MovementAscend || m instanceof MovementDescend
-                || m instanceof MovementDiagonal || m instanceof MovementFall || m instanceof MovementParkour;
+        if (m instanceof MovementDescend || m instanceof MovementFall) {
+            // Further down hurts, and a fall that long was planned with a bucket or a clutch to end it.
+            return m.getSrc().y - m.getDest().y <= MAX_DROP;
+        }
+        return m instanceof MovementTraverse || m instanceof MovementAscend
+                || m instanceof MovementDiagonal || m instanceof MovementParkour;
     }
 }

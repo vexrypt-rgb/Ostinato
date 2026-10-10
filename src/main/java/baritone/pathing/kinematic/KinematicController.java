@@ -87,7 +87,8 @@ public final class KinematicController {
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
         if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
-                || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+                || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()
+                || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {

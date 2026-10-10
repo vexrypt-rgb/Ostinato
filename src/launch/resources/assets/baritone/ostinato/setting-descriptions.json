@@ -18,7 +18,6 @@
  "assumeWalkOnLava": "If you have Fire Resistance and Jesus then I guess you could turn this on lol",
  "assumeStep": "Assume step functionality; don't jump on an Ascend.",
  "assumeSafeWalk": "Assume safe walk functionality; don't sneak on a backplace traverse. Warning: if you do something janky like sneak-backplace from an ender chest, if this is true it won't sneak right click, it'll just right click, which means it'll open the chest instead of placing against it. That's why this defaults to off.",
- "allowJumpAt256": "If true, parkour is allowed to make jumps when standing on blocks at the maximum height, so player feet is y=256 Defaults to false because this fails on constantiam. Please let me know if this is ever disabled. Please.",
  "allowParkourAscend": "This should be monetized it's so good Defaults to true, but only actually takes effect if allowParkour is also true",
  "allowDiagonalDescend": "Allow descending diagonally Safer than allowParkour yet still slightly unsafe, can make contact with unchecked adjacent blocks, so it's unsafe in the nether. For a generic \"take some risks\" mode I'd turn on this one, parkour, and parkour place.",
  "allowDiagonalAscend": "Allow diagonal ascending Actually pretty safe, much safer than diagonal descend tbh",
@@ -46,7 +45,6 @@
  "considerPotionEffects": "For example, if you have Mining Fatigue or Haste, adjust the costs of breaking blocks accordingly.",
  "sprintAscends": "Sprint and jump a block early on ascends wherever possible",
  "sprintJump": "Jump while sprinting down long straight flat runs (~30% faster than plain sprinting)",
- "allowDoorAirPockets": "Underwater with nothing breathable in reach, place a wooden door on the floor: a door can't hold water, so its upper half is an air pocket to put the head in. The door is picked back up if it was the only one carried.",
  "allowBoats": "Place and ride a boat across large bodies of water when it is faster than swimming",
  "allowBoatFall": "Ride a boat off drops too high to fall safely (place it at the top, get in, drive off the edge)",
  "maxFallHeightBoat": "How far a boat can fall onto land with us in it",
@@ -96,7 +94,6 @@
  "chunkPackerQueueMaxSize": "The chunk packer queue can never grow to larger than this, if it does, the oldest chunks are discarded The newest chunks are kept, so that if you're moving in a straight line quickly then stop, your immediate render distance is still included",
  "backfill": "Fill in blocks behind you",
  "logAsToast": "Shows popup message in the upper right corner, similarly to when you make an advancement",
- "toastTimer": "The time of how long the message in the pop-up will display If below 1000L (1sec), it's better to disable this",
  "chatDebug": "Print all the debug messages to chat",
  "chatControl": "Allow chat based control of Baritone. Most likely should be disabled when Baritone is imported for use in something else",
  "chatControlAnyway": "Some clients like Impact try to force chatControl to off, so here's a second setting to do it anyway",
@@ -302,5 +299,6 @@
  "experimentalBlockPlacementPenalty": "While experimentalMovement is on, the block placement penalty is the lower of blockPlacementPenalty and this.",
  "experimentalMinHealth": "While experimentalMovement is on, a fall that hurts is allowed only if it leaves you at least this much health (half hearts, plus absorption).",
  "fallDamageCost": "Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on.",
- "kinematicTrace": "Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and simtrace/simtrace.csv, simtrace/summary.csv): how far off the prediction is one tick ahead, and how far a whole jump drifts."
+ "kinematicTrace": "Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and simtrace/simtrace.csv, simtrace/summary.csv): how far off the prediction is one tick ahead, and how far a whole jump drifts.",
+ "maxPathLengthBlocks": "The longest path, in positions, that will be walked. A longer one is thrown away and counts as a failed calculation, and the same goal is left alone for five seconds. Also refuses long routes that are fine, so it is off unless set; 150 is the value it was written with. 0 = no cap."
 }

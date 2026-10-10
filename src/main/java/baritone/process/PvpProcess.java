@@ -49,6 +49,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private static final double REACH = 3.0, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
     private static final Item[] SWORDS = {Items.NETHERITE_SWORD, Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD};
     private static final Item[] AXES = {Items.NETHERITE_AXE, Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE, Items.GOLDEN_AXE, Items.WOODEN_AXE};
+    /** When each hotbar slot was last pulled into by {@link #slotOf}, as a running count of pulls; 0 = never. */
+    private final long[] pulled = new long[9];
+    private long pulls;
 
     private Predicate<LivingEntity> filter;
     private String label;
@@ -334,21 +337,22 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (me.getInventory().getItem(i).getItem() == item) {
                 int to = spare(me);
                 ctx.playerController().windowClick(me.inventoryMenu.containerId, i, to, ClickType.SWAP, me);
+                pulled[to] = ++pulls;
                 return to;
             }
         }
         return -1;
     }
 
-    /** Hotbar slot to pull an item into: an empty one, else the last that holds no weapon. */
+    /** Hotbar slot to pull an item into: see {@link CombatInventory.Spare#slot}. */
     private int spare(Player me) {
-        int kept = -1;
-        for (int i = 8; i >= 0; i--) {
+        boolean[] empty = new boolean[9], weapon = new boolean[9];
+        for (int i = 0; i < 9; i++) {
             ItemStack st = me.getInventory().getItem(i);
-            if (st.isEmpty()) return i;
-            if (kept < 0 && !Arrays.asList(SWORDS).contains(st.getItem()) && !Arrays.asList(AXES).contains(st.getItem())) kept = i;
+            empty[i] = st.isEmpty();
+            weapon[i] = Arrays.asList(SWORDS).contains(st.getItem()) || Arrays.asList(AXES).contains(st.getItem()) || st.getItem() == Items.MACE;
         }
-        return kept < 0 ? 8 : kept;
+        return CombatInventory.Spare.slot(empty, weapon, pulled, me.getInventory().selected);
     }
 
     private int best(Player me, Item[] tiers) {

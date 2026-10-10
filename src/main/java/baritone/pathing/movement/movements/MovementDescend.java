@@ -45,6 +45,7 @@ import java.util.Set;
 public class MovementDescend extends Movement {
 
     private static final double SHALLOW_WATER_LANDING_PENALTY = 6;
+    private static final double DEEP_WATER_PASSED_UP_PENALTY = 14;
 
     /**
      * Drops (feet to feet) where a boat lands a hair above the floor, the rider is treated as on land,
@@ -219,10 +220,12 @@ public class MovementDescend extends Movement {
                     return false;
                 }
                 if (depth == 1) {
-                    if (deepDropBeside(context, destX, newY, destZ, y)) {
-                        return false; // deep water within two columns: drop there instead and swim straight away
-                    }
                     tentativeCost += SHALLOW_WATER_LANDING_PENALTY; // wading out of 1-deep water is slow
+                    if (deepDropBeside(context, destX, newY, destZ, y)) {
+                        // A drop that reaches the deep water wins by this much. Not refused: under a cliff over a
+                        // shelving shore every landing is shallow with deep water two columns out, and no drop reaches that.
+                        tentativeCost += DEEP_WATER_PASSED_UP_PENALTY;
+                    }
                 }
                 // found a fall into water
                 res.x = destX;
