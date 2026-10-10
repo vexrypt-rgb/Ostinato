@@ -2216,17 +2216,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long cureUntil;
     private PathingCommand fireCure(Player me) {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        if (ticks < cureUntil && me.isUsingItem()) { mc.options.keyUse.setDown(true); status = "drinking/eating for fire"; return pause0(); }
+        if (ticks < cureUntil && me.isUsingItem() && !(me.isInLava() && me.getUseItem().is(Items.GOLDEN_APPLE))) { mc.options.keyUse.setDown(true); status = "drinking/eating for fire"; return pause0(); }
         if (cureUntil > 0 && ticks >= cureUntil) { mc.options.keyUse.setDown(false); cureUntil = 0; }
         if (!(me.isOnFire() || me.isInLava()) || me.hasEffect(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE)) return null;
         int slot = -1;
         for (int i = 0; i < 9 && slot < 0; i++) if ("fire_resistance".equals(itemId(me.getInventory().getItem(i)))) slot = i;
-        if (slot < 0 && me.getHealth() < 12) for (int i = 0; i < 9 && slot < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) slot = i;
+        // run 102: ate an apple standing in lava and burned 12 -> 0 while chewing; apples only once out of the lava
+        if (slot < 0 && me.getHealth() < 12 && !me.isInLava()) for (int i = 0; i < 9 && slot < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) slot = i;
         if (slot < 0) {
             // pull one from the main inventory into hotbar slot 8
             for (int i = 9; i < 36; i++) {
                 ItemStack s = me.getInventory().getItem(i);
-                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 12 && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
+                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 12 && !me.isInLava() && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
             }
             return null;
         }
