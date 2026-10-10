@@ -2101,7 +2101,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         boolean isolated = brutes.stream().noneMatch(e -> e != fb && e.distanceTo(fb) < 10);
         // run 71: outnumbered, it walked its exit path past a brute at 1.4 blocks and took 10 in one hit; one in reach gets blocked anyway
         boolean inReach = me.distanceTo(b) < 5 && !otherLevel(b, me); // run 95: exit path met a brute at 1.3, hit for 10 before blocking
-        String why = !isolated && !inReach ? "outnumbered" : me.getHealth() < 14 && me.distanceTo(b) > 4 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
+        String why = !isolated && !inReach ? "outnumbered" : me.getHealth() < 14 && me.distanceTo(b) > 4 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : !inReach && lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
         if (why != null) { duelEnd(me, "aborted (" + why + ")"); return null; }
         if (duelBrute != b) {
             duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks;
@@ -2121,7 +2121,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         double d = me.distanceTo(b);
         float cd = me.getAttackStrengthScale(0.5f);
         aimer.look(b.getEyePosition(), 0);
-        if (cd >= 0.95f && d <= 3.3 /* center distance; run 92 blocked for 8 s at ~3.1 and never swung */ && me.hasLineOfSight(b)) {
+        // run 97: at a lava edge it kited (and was knocked into the lava); there we only block, never swing or close in
+        boolean edge = lavaDropNear(me.blockPosition(), 2);
+        if (!edge && cd >= 0.95f && d <= 3.3 /* center distance; run 92 blocked for 8 s at ~3.1 and never swung */ && me.hasLineOfSight(b)) {
             // lower the shield and swing this tick, then block again
             net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false);
             if (me.isUsingItem()) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(me);
@@ -2132,7 +2134,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "duel: hit " + duelHits;
             return pause0();
         }
-        if (d > 6 && cd >= 0.95f) {
+        if (!edge && d > 6 && cd >= 0.95f) {
             status = "duel: closing in";
             return new PathingCommand(new GoalNear(b.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
         }
