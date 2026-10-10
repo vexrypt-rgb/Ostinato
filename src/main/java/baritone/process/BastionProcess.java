@@ -2012,7 +2012,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (b == null) { duelEnd(me, "lost sight"); return null; }
         LivingEntity fb = b;
         boolean isolated = brutes.stream().noneMatch(e -> e != fb && e.distanceTo(fb) < 10);
-        String why = !isolated ? "outnumbered" : me.getHealth() < 14 && me.distanceTo(b) > 4 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
+        // run 71: outnumbered, it walked its exit path past a brute at 1.4 blocks and took 10 in one hit; one in reach gets blocked anyway
+        boolean inReach = me.distanceTo(b) < 3.5 && !otherLevel(b, me);
+        String why = !isolated && !inReach ? "outnumbered" : me.getHealth() < 14 && me.distanceTo(b) > 4 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
         if (why != null) { duelEnd(me, "aborted (" + why + ")"); return null; }
         if (duelBrute != b) {
             duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks;
