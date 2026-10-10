@@ -119,7 +119,7 @@ public final class BastTest implements AbstractGameEventListener {
                 sv2.submit(() -> {
                     var lvl = sv2.getLevel(net.minecraft.resources.ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
                     for (int half : new int[]{3, 1, 0}) for (int r = 0; r < 60 && spot[0] == null; r++) for (int dz = -r; dz <= r && spot[0] == null; dz++) {
-                        int x = target.getX() + 90 + r, z = target.getZ() + dz;
+                        int x = target.getX() + 45 + r /* runs 74, 77: 90 out the spawn was often cut off from the bastion */, z = target.getZ() + dz;
                         lvl.getChunk(x >> 4, z >> 4);
                         for (int y = 110; y > 40; y--) {
                             BlockPos q = new BlockPos(x, y, z);
