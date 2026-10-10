@@ -110,6 +110,7 @@ public class MovementDiagonal extends Movement {
     }
 
     public static void cost(CalculationContext context, int x, int y, int z, int destX, int destZ, MutableMoveResult res) {
+        if (MovementHelper.isLava(context.get(destX, y, destZ)) || MovementHelper.isLava(context.get(destX, y + 1, destZ))) return;
         if (!MovementHelper.canWalkThrough(context, destX, y + 1, destZ)) {
             return;
         }

@@ -1386,6 +1386,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // only "no chest left" once we stand in the bastion with its chunks loaded; from outside an empty plan means nothing
         chestsExhausted = next == null && !unloaded && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40;
         if (next == null) return null;
+        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK) && ingotCount(me) >= 4) {
+            // runs 20/27 walked to gold blocks holding 20+ ingots: trade those first, mine only when nearly out
+            badGold.put(next, ticks + 600);
+            return null;
+        }
         if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK)) {
             // gold block next in the plan: the miner handles the piglin rule (breaking gold angers every piglin in 16, seen or not)
             preferGold = next;
@@ -1450,10 +1455,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
         Piglin target = null;
         for (LivingEntity e : near) {
             if (!(e instanceof Piglin p) || p.isBaby() || !p.isAlive() || p.isAggressive() || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
-            if (me.distanceTo(p) > THROW_RANGE + 0.5 || !me.hasLineOfSight(p) || brutesAround(p) >= 2) continue;
+            // calm piglins within 14 that we can see are worth a short detour (runs 20/27: 6 throws in 300 s with 20+ ingots)
+            if (me.distanceTo(p) > 14 || !me.hasLineOfSight(p) || brutesAround(p) >= 1 || Math.abs(p.getY() - me.getY()) > 3) continue;
             if (target == null || me.distanceTo(p) < me.distanceTo(target)) target = p;
         }
         if (target == null) return null;
+        if (me.distanceTo(target) > THROW_RANGE) {
+            status = "detour to trade with piglin at " + String.format("%.1f", me.distanceTo(target));
+            return new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
+        }
         int slot = hotbarGold(me);
         if (slot < 0) return pause0();
         me.getInventory().setSelectedSlot(slot);
