@@ -782,7 +782,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             PathingCommand door = doorPocket(me, shore);
             if (door != null) return door;
             // run 76: bobbed 3 s at a shore it could not climb; after 1.5 s in lava, pillar up out of it instead
-            if (lavaSince >= 0 && ticks - lavaSince > 30 && pillarBlocks(me) > 0 && headroom(me, (int) Math.floor(me.getY() + 0.2))) {
+            if (lavaSince >= 0 && ticks - lavaSince > 30 && pillarBlocks(me) > 0 && solid(me.blockPosition().below()) /* run 79: nothing to place against in deep lava, it sank */ && headroom(me, (int) Math.floor(me.getY() + 0.2))) {
                 status = "lava: pillar out";
                 return tower(me);
             }
