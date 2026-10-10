@@ -1,5 +1,6 @@
 package baritone.pathing.kinematic;
 
+import baritone.utils.ExperimentalMovement;
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -22,7 +23,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,9 +47,10 @@ public final class KinematicController {
     // plans are scored at HORIZON but simulated this far so a hop chain that ends in a gap is rejected
     private static final int LOOKAHEAD = 36;
     private static final double BUMP = 0.6; // ~2 sprint ticks: grazing a wall also drops sprint, so clean lines should win
-    private static final double CORRIDOR = 0.55;
     /** Hand back to Baritone this far before the end of the drivable stretch. */
     private static final double HANDBACK = 1.2;
+    /** Rollout bound: falls, hazards and climbing off the path are checked separately, so plans may cut corners wider. */
+    private static final double WIDE = 1.1;
 
     private final IPlayerContext ctx;
     private final ClientWorld world;
@@ -85,7 +86,7 @@ public final class KinematicController {
     }
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
-        if (!Baritone.settings().kinematicTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
+        if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
                 || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
             return -1;
         }
@@ -97,19 +98,13 @@ public final class KinematicController {
         if (!buildLine(path, pathPosition)) {
             return -1;
         }
-        Vec3 p = ctx.player().position();
-        Vec3 m = ctx.player().getDeltaMovement();
-        real.x = p.x; real.y = p.y; real.z = p.z;
-        real.vx = m.x; real.vy = m.y; real.vz = m.z;
-        real.onGround = ctx.player().onGround();
-        real.sprinting = ctx.player().isSprinting();
-        real.collidedH = ctx.player().horizontalCollision;
+        ClientWorld.readPlayer(ctx, real);
 
         double[] here = project(real.x, real.z);
         double end = line.get(line.size() - 1)[3];
         // at the end of the whole path drive onto the goal block instead of handing back early
         double handback = lastMove == path.movements().size() - 1 ? 0.3 : HANDBACK;
-        if (here[1] > CORRIDOR + 0.35 || end - here[0] < handback) {
+        if (here[1] > WIDE + 0.2 || end - here[0] < handback) {
             return -1;
         }
         double moved = (real.x - lastX) * (real.x - lastX) + (real.z - lastZ) * (real.z - lastZ);
@@ -204,7 +199,7 @@ public final class KinematicController {
             }
             wasBumping = sim.collidedH;
             double[] pr = project(sim.x, sim.z);
-            if (pr[1] > CORRIDOR || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
+            if (pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
                 return -1e9;
             }
             s = Math.max(s, pr[0]);
@@ -223,7 +218,7 @@ public final class KinematicController {
         for (int t = 0; t < 14 && !sim.onGround; t++) {
             sim.tick(aim(sim.x, sim.z, s, false), true, true, false);
             double[] pr = project(sim.x, sim.z);
-            if (pr[1] > CORRIDOR || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
+            if (pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
                 return -1e9;
             }
             s = Math.max(s, pr[0]);
@@ -346,7 +341,6 @@ public final class KinematicController {
         return line.get(line.size() - 1);
     }
 
-    /** Lowest floor the player may be at around arc length s (an ascend/descend switches floors mid-segment). */
     /** Standing above the path: the box stepped or jumped onto terrain the path goes around, and Baritone loses it. */
     private boolean climbedOff(double s) {
         if (!sim.onGround) {
@@ -361,6 +355,7 @@ public final class KinematicController {
         return false;
     }
 
+    /** Lowest floor the player may be at around arc length s (an ascend/descend switches floors mid-segment). */
     private double floorAt(double s) {
         for (int i = 0; i + 1 < line.size(); i++) {
             double[] a = line.get(i), b = line.get(i + 1);

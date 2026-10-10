@@ -30,6 +30,7 @@ import baritone.gui.model.*;
 import baritone.gui.render.GuiDraw;
 import baritone.gui.render.Icons;
 import baritone.gui.tasks.game.TaskService;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.world.item.Item;
@@ -149,6 +150,9 @@ public final class OstinatoScreen extends Screen {
     private float thumbGrab;
     private long hoverSince;
     private float scrollTarget;
+    /** Sidebar row height, shrunk (then scrolled) when the window is too short for every category. */
+    private float sideH = 15, sideScroll, maxSideScroll;
+    private boolean sideCard = true;
     private String status;
     private int statusColor;
     private long statusUntil, resetConfirmUntil;
@@ -252,6 +256,7 @@ public final class OstinatoScreen extends Screen {
             out.removeIf(e -> !isModified(e));
         }
         rows = out;
+        dropdown = null; // its row may be gone
         scrollTarget = 0;
         scrollAnim.snap(0);
     }
@@ -403,6 +408,33 @@ public final class OstinatoScreen extends Screen {
 
     // ------------------------------------------------------------------ layout
 
+    private int sideItemCount() {
+        int n = 2;
+        for (SettingCategory c : SettingCategory.values()) {
+            List<Entry> l = byCat.get(c);
+            if (l != null && !l.isEmpty()) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private void layoutSidebar() {
+        int n = sideItemCount();
+        float top = hb + 8, sep = 12;
+        float withCard = (fy - 36 - 4 - top - sep) / n, noCard = (fy - 4 - top - sep) / n;
+        if (withCard >= 16) {
+            sideH = 15;
+            sideCard = true;
+        } else {
+            sideCard = false;
+            sideH = Math.max(11, Math.min(15, noCard - 1));
+        }
+        float content = n * (sideH + 1) + sep, region = fy - top - 2;
+        maxSideScroll = Math.max(0, content - region);
+        sideScroll = Math.max(0, Math.min(maxSideScroll, sideScroll));
+    }
+
     private void layout() {
         float w = width >= 444 ? Math.max(340, Math.min(620, width - 104)) : width - 16;
         float h = Math.max(200, Math.min(400, height - 46));
@@ -418,6 +450,7 @@ public final class OstinatoScreen extends Screen {
         sbx1 = x0 + (w >= 480 ? 122 : 100);
         px0 = sbx1 + 10;
         px1 = x1 - 12;
+        layoutSidebar();
         ry0 = hb + 26;
         listBottom = fy - 6;
     }
@@ -471,7 +504,7 @@ public final class OstinatoScreen extends Screen {
     private void drawHeader(GuiGraphics ms, int mx, int my, int accent, long now) {
         GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
         float lw = GuiDraw.textColors(ms, "Ostinato", x0 + 28, y0 + 9, 1.5f, true, Theme.logoColors(accent, 8), true);
-        String chip = "Baritone 1.16.1";
+        String chip = "Baritone " + SharedConstants.getCurrentVersion().getName();
         float cx = x0 + 28 + lw + 8, cw = GuiDraw.width(chip) + 10;
         if (cx + cw < searchX0() - 6) {
             GuiDraw.round(ms, cx, y0 + 10, cx + cw, y0 + 21, 2.5f, 0x1A7AA2F7);
@@ -530,7 +563,8 @@ public final class OstinatoScreen extends Screen {
     private void drawSidebar(GuiGraphics ms, int mx, int my, int accent) {
         GuiDraw.rect(ms, x0 + 0.5f, hb + 1, sbx1, fy, 0x70080A0F);
         GuiDraw.rect(ms, sbx1, hb + 1, sbx1 + 1, fy, 0x12FFFFFF);
-        float iy = hb + 8;
+        GuiDraw.scissor(x0, hb + 1, sbx1, fy);
+        float iy = hb + 8 - sideScroll;
         boolean searching = !search.get().trim().isEmpty();
         iy = sideItem(ms, iy, "Tasks", TaskService.INSTANCE.list().size(), TASKS_ICON, tasksView && !searching, tasksHover, mx, my, accent, false,
                 TaskService.INSTANCE.runner.active());
@@ -546,15 +580,24 @@ public final class OstinatoScreen extends Screen {
             }
             iy = sideItem(ms, iy, c.displayName, l.size(), icon(c), !modifiedView && !tasksView && !searching && c == selected, catHover.get(c), mx, my, accent, false, false);
         }
+        GuiDraw.endScissor();
+        if (maxSideScroll > 0) {
+            float trk = fy - hb - 4, th = Math.max(12, trk * trk / (trk + maxSideScroll));
+            float ty = hb + 2 + (trk - th) * (sideScroll / maxSideScroll);
+            GuiDraw.round(ms, sbx1 - 3, ty, sbx1 - 1, ty + th, 1, 0x40FFFFFF);
+        }
         // mini status card if there is room
         float cy0 = fy - 36, cx0 = x0 + 7, cx1 = sbx1 - 7;
+        if (!sideCard) {
+            return;
+        }
         if (settings.swarmEnabled.value && iy + 12 <= cy0 && BaritoneAPI.getProvider().getPrimaryBaritone() instanceof Baritone) {
             String sw = ((Baritone) BaritoneAPI.getProvider().getPrimaryBaritone()).getSwarmBehavior().summary();
             boolean up = sw.startsWith("online");
             GuiDraw.icon(ms, Icons.DOT, cx0 + 6, cy0 - 5, up ? Theme.GREEN : Theme.AMBER, 0.75f);
             GuiDraw.text(ms, GuiDraw.trim("Swarm " + sw, cx1 - cx0 - 12, 0.5f), cx0 + 11, cy0 - 5.5f, 0.5f, Theme.MUTED, false, false);
         }
-        if (iy + 4 <= cy0) {
+        {
             PathStatus st = PathStatus.capture(BaritoneAPI.getProvider().getPrimaryBaritone());
             GuiDraw.roundBorder(ms, cx0, cy0, cx1, fy - 7, 3, 0xFF232A38, 0xFF0F131B);
             int col = st.state == PathStatus.State.PATHING ? Theme.GREEN : st.state == PathStatus.State.CALCULATING ? Theme.AMBER : Theme.MUTED;
@@ -582,7 +625,7 @@ public final class OstinatoScreen extends Screen {
 
     private float sideItem(GuiGraphics ms, float iy, String label, int count, ItemStack icon, boolean sel, Anim hov,
                            int mx, int my, int accent, boolean special, boolean live) {
-        float ix0 = x0 + 6, ix1 = sbx1 - 6, h = 15;
+        float ix0 = x0 + 6, ix1 = sbx1 - 6, h = sideH;
         float hv = hov.target(in(mx, my, ix0, iy, ix1, iy + h)).get();
         if (sel) {
             GuiDraw.round(ms, ix0, iy, ix1, iy + h, 3, GuiDraw.alphaOf(accent, 0x22));
@@ -1082,8 +1125,9 @@ public final class OstinatoScreen extends Screen {
         }
         searchFocused = false;
         // sidebar
-        float iy = hb + 8;
-        if (in(mx, my, x0 + 6, iy, sbx1 - 6, iy + 15)) {
+        float iy = hb + 8 - sideScroll;
+        boolean inSide = in(mx, my, x0, hb + 1, sbx1, fy);
+        if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
             tasksView = true;
             modifiedView = false;
             search.set("");
@@ -1091,8 +1135,8 @@ public final class OstinatoScreen extends Screen {
             rebuild();
             return true;
         }
-        iy += 16 + 6;
-        if (in(mx, my, x0 + 6, iy, sbx1 - 6, iy + 15)) {
+        iy += sideH + 1 + 6;
+        if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
             tasksView = false;
             modifiedView = true;
             search.set("");
@@ -1100,13 +1144,13 @@ public final class OstinatoScreen extends Screen {
             rebuild();
             return true;
         }
-        iy += 16 + 6;
+        iy += sideH + 1 + 6;
         for (SettingCategory c : SettingCategory.values()) {
             List<Entry> l = byCat.get(c);
             if (l == null || l.isEmpty()) {
                 continue;
             }
-            if (in(mx, my, x0 + 6, iy, sbx1 - 6, iy + 15)) {
+            if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
                 tasksView = false;
                 modifiedView = false;
                 selected = c;
@@ -1115,7 +1159,7 @@ public final class OstinatoScreen extends Screen {
                 rebuild();
                 return true;
             }
-            iy += 16;
+            iy += sideH + 1;
         }
         float doneW0 = GuiDraw.width("Done") + 16;
         float fcw = GuiDraw.width(freecamLabel()) + 16, fcxr = x1 - 10 - doneW0 - 5;
@@ -1319,6 +1363,10 @@ public final class OstinatoScreen extends Screen {
             tasks.layout(px0, px1, hb, fy);
             return tasks.mouseScrolled(mx, my, delta);
         }
+        if (maxSideScroll > 0 && in(mx, my, x0, hb + 1, sbx1, fy)) {
+            sideScroll = Math.max(0, Math.min(maxSideScroll, sideScroll - (float) delta * 16));
+            return true;
+        }
         Entry e = rowAt(mx, my);
         if (e != null && editing == null && (e.kind == Kind.NUMBER || e.kind == Kind.SLIDER)) {
             float cyc = rowY(e) + (ROW_H - 2) / 2f, cx = px1 - 14;
@@ -1394,7 +1442,8 @@ public final class OstinatoScreen extends Screen {
                 return true;
             }
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE || key == KeyNames.parse(settings.guiKeybind.value)) {
+        // a letter bound to the screen must still be typable in the search box
+        if (key == GLFW.GLFW_KEY_ESCAPE || (!searchFocused && key == KeyNames.parse(settings.guiKeybind.value))) {
             onClose();
             return true;
         }

@@ -256,7 +256,10 @@ public final class SwarmBuild {
                 onStat(m);
                 return true;
             case STOP:
-                if (fromLead(m) && mine != null && m.group().equals(mineGroup)) {
+                // a stop names its job: one that arrives after the order for the next job must not end that one
+                String stopped = SwarmControl.parseBody(m.body()).get("job");
+                if (fromLead(m) && mine != null && m.group().equals(mineGroup)
+                        && (stopped == null || stopped.equals(mine.job))) {
                     builder.cancel();
                     log.accept("swarm: " + m.from() + " stopped build job " + mine.job);
                     mine = null;

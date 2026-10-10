@@ -17,7 +17,6 @@
 
 package baritone.behavior;
 
-import baritone.api.BaritoneAPI;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.event.events.TickEvent;
@@ -34,6 +33,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -49,7 +50,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 
 /**
- * Detached camera for picking a destination. Walks with gravity or, after a double-tapped jump, flies like creative flight; collides with blocks; and is clamped to the bot's render distance.
+ * Detached camera for picking a destination. Walks with player physics (fluids, ladders, ice, slime) or, after a double-tapped jump, flies like creative flight; collides with blocks; and is clamped to the bot's render distance.
  * Left click: follow the entity under the crosshair, else travel to the block under it.
  * Right click: travel to the camera's own position.
  */
@@ -189,8 +190,9 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     /**
-     * Walks like a survival player (gravity, jump, sprint) with block collision; double-tap jump
-     * toggles creative flight, as in creative mode. Approximates vanilla player physics.
+     * Walks like a survival player with block collision and step-up; double-tap jump toggles creative flight.
+     * Follows vanilla LivingEntity#travel: ice and slime slipperiness, soul sand and honey slowdown (speed and jump
+     * factors), slime bounce, cobwebs, ladders and vines, and swimming in water and lava with their currents.
      */
     private void move(Options gs) {
         camera.syncPrev();
@@ -213,12 +215,21 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         boolean sprint = held(gs.keySprint) && fwd > 0;
         double speed = Baritone.settings().freecamSpeed.value;
+        // currents push the camera like a player (and tell us whether it is in the fluid)
+        boolean water = !flying && camera.updateFluidHeightAndDoFluidPushing(FluidTags.WATER, 0.014);
+        boolean lava = !flying && !water && camera.updateFluidHeightAndDoFluidPushing(FluidTags.LAVA, 0.0023333333333333335);
+        boolean climbing = !flying && !water && !lava && camera.level().getBlockState(camera.blockPosition()).is(BlockTags.CLIMBABLE);
+        camera.stepUp = flying ? 0 : 0.6F;
+        camera.setShiftKeyDown(sneak && !flying); // sneaking stops slime bounce and slime slowdown, as for a player
         boolean onGround = camera.onGround();
+        float slip = onGround ? camera.level().getBlockState(BlockPos.containing(camera.getX(), camera.getY() - 0.5000001, camera.getZ())).getBlock().getFriction() : 1;
         double accel;
         if (flying) {
             accel = 0.05 * (sprint ? 2 : 1);
+        } else if (water || lava) {
+            accel = 0.02 * (sprint && water ? 2 : 1);
         } else if (onGround) {
-            accel = 0.1 * (sprint ? 1.3 : 1) * (sneak ? 0.3 : 1) * 0.21600002 / (0.6 * 0.6 * 0.6);
+            accel = 0.1 * (sprint ? 1.3 : 1) * (sneak ? 0.3 : 1) * 0.21600002 / (slip * slip * slip);
         } else {
             accel = sprint ? 0.026 : 0.02;
         }
@@ -232,33 +243,71 @@ public final class FreecamBehavior extends Behavior implements Helper {
         double my = m.y;
         if (flying) {
             my += ((jump ? 1 : 0) - (sneak ? 1 : 0)) * 0.15 * speed;
+        } else if (water || lava) {
+            my += (jump ? 0.04 : 0) - (sneak ? 0.04 : 0);
         } else if (jump && onGround) {
-            my = 0.42;
+            my = 0.42 * camera.jumpFactor();
             if (sprint) {
                 mx -= sin * 0.2;
                 mz += cos * 0.2;
             }
         }
-        Vec3 want = new Vec3(mx, my, mz);
-        camera.move(MoverType.SELF, want);
-        Vec3 moved = new Vec3(camera.getX() - camera.xo, camera.getY() - camera.yo, camera.getZ() - camera.zo);
-        if (Math.abs(moved.x - want.x) > 1e-4) {
-            mx = 0;
+        if (climbing) {
+            mx = Mth.clamp(mx, -0.15, 0.15);
+            mz = Mth.clamp(mz, -0.15, 0.15);
+            my = Math.max(my, sneak ? 0 : -0.15);
         }
-        if (Math.abs(moved.z - want.z) > 1e-4) {
-            mz = 0;
+        // Entity#move does collision, step-up, the soul sand/honey speed factor, cobweb slowdown and slime bounce
+        camera.setDeltaMovement(mx, my, mz);
+        double y0 = camera.getY();
+        stuckInBlocks();
+        camera.move(MoverType.SELF, camera.getDeltaMovement());
+        // The camera is never ticked by the level, so the landing effects Entity#move leaves to it are ours:
+        // slime bounces (unless sneaking), anything else stops the fall; a ceiling stops the rise.
+        if (camera.verticalCollisionBelow) {
+            camera.level().getBlockState(camera.getOnPos()).getBlock().updateEntityMovementAfterFallOn(camera.level(), camera);
+        } else if (camera.verticalCollision) {
+            Vec3 d = camera.getDeltaMovement();
+            camera.setDeltaMovement(d.x, 0, d.z);
         }
-        if (Math.abs(moved.y - want.y) > 1e-4) {
-            my = 0;
+        m = camera.getDeltaMovement();
+        mx = m.x;
+        my = m.y;
+        mz = m.z;
+        if (climbing && (camera.horizontalCollision || jump)) {
+            my = 0.2;
         }
         if (flying) {
             if (camera.onGround() && !jump) {
                 flying = false; // landing ends flight, as in creative
             }
             camera.setDeltaMovement(mx * 0.91, my * 0.6, mz * 0.91);
+        } else if (water || lava) {
+            double drag = water ? 0.8 : 0.5;
+            mx *= drag;
+            mz *= drag;
+            my = my * drag - (water ? 0.005 : 0.02);
+            // swimming into a bank with room above hops out, as vanilla does
+            if (camera.horizontalCollision && camera.freeAt(mx, my + 0.6 - camera.getY() + y0, mz)) {
+                my = 0.3;
+            }
+            camera.setDeltaMovement(mx, my, mz);
         } else {
-            double friction = camera.onGround() ? 0.6 * 0.91 : 0.91;
+            double friction = camera.onGround() ? slip * 0.91 : 0.91;
             camera.setDeltaMovement(mx * friction, (my - 0.08) * 0.98, mz * friction);
+        }
+    }
+
+    /** Cobwebs and sweet berry bushes slow the camera down, as Block#entityInside does for a ticked entity. */
+    private void stuckInBlocks() {
+        AABB box = camera.getBoundingBox().deflate(1.0E-7);
+        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            net.minecraft.world.level.block.state.BlockState st = camera.level().getBlockState(pos);
+            if (st.is(net.minecraft.world.level.block.Blocks.COBWEB)) {
+                camera.makeStuckInBlock(st, new Vec3(0.25, 0.05, 0.25));
+            } else if (st.is(net.minecraft.world.level.block.Blocks.SWEET_BERRY_BUSH)) {
+                camera.makeStuckInBlock(st, new Vec3(0.8, 0.75, 0.8));
+            }
         }
     }
 
@@ -370,6 +419,23 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
         Camera(Level world) {
             super(EntityType.PLAYER, world);
+        }
+
+        float stepUp;
+
+        @Override
+        public float maxUpStep() {
+            return stepUp;
+        }
+
+        float jumpFactor() {
+            return getBlockJumpFactor();
+        }
+
+        /** Whether the camera's box, shifted by (dx, dy, dz), is clear of blocks and fluid. */
+        boolean freeAt(double dx, double dy, double dz) {
+            net.minecraft.world.phys.AABB box = getBoundingBox().move(dx, dy, dz);
+            return level().noCollision(this, box) && !level().containsAnyLiquid(box);
         }
 
         void syncPrev() {

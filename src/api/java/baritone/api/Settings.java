@@ -218,6 +218,65 @@ public final class Settings {
     public final Setting<Boolean> allowDiagonalAscend = new Setting<>(false);
 
     /**
+     * Allow neo jumps: round the end of a wall one to three blocks thick. Only takes effect if allowParkour is also true.
+     */
+    public final Setting<Boolean> allowNeos = new Setting<>(true);
+
+    /**
+     * Allow jumps that need a run-up and bunny hops for speed (4 block flat gaps, long drops). Only takes effect if
+     * allowParkour is also true.
+     */
+    public final Setting<Boolean> allowMomentumJumps = new Setting<>(true);
+
+    /**
+     * Jump onto ladders and vines across a gap, and off them again, instead of walking the long way round.
+     * Needs allowParkour. Part of experimentalMovement.
+     */
+    public final Setting<Boolean> allowClimbJumps = new Setting<>(false);
+
+    /**
+     * Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it, like a water bucket clutch.
+     * Needs a ladder or vine on the hotbar.
+     */
+    public final Setting<Boolean> allowLadderClutch = new Setting<>(false);
+
+    /**
+     * After a ladder clutch, break the ladder and pick it back up so one ladder can save you more than once.
+     */
+    public final Setting<Boolean> pickupLadders = new Setting<>(true);
+
+    /**
+     * Move like a speedrunner: allowParkour, allowParkourAscend, allowNeos, allowMomentumJumps, allowClimbJumps,
+     * allowDiagonalAscend, allowDiagonalDescend and kinematicTravel behave as if they were on, whatever their own value
+     * (the settings are left alone, so turning this off hands your choices back). Jumps get cheaper by
+     * experimentalJumpBias, block placement by at most experimentalBlockPlacementPenalty, and falls that hurt are allowed
+     * down to experimentalMinHealth.
+     */
+    public final Setting<Boolean> experimentalMovement = new Setting<>(false);
+
+    /**
+     * Multiplier on the cost of jumps while experimentalMovement is on. Below 1 makes the jumpy route look cheaper than
+     * the equivalent walk.
+     */
+    public final Setting<Double> experimentalJumpBias = new Setting<>(0.9D);
+
+    /**
+     * While experimentalMovement is on, the block placement penalty is the lower of blockPlacementPenalty and this.
+     */
+    public final Setting<Double> experimentalBlockPlacementPenalty = new Setting<>(5D);
+
+    /**
+     * While experimentalMovement is on, a fall that hurts may be taken when there is no water bucket or clutch, but never
+     * one that would leave you below this much health (half hearts, plus absorption).
+     */
+    public final Setting<Double> experimentalMinHealth = new Setting<>(12D);
+
+    /**
+     * Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on.
+     */
+    public final Setting<Double> fallDamageCost = new Setting<>(20D);
+
+    /**
      * Allow mining the block directly beneath its feet
      * <p>
      * Turn this off to force it to make more staircases and less shafts
@@ -388,6 +447,13 @@ public final class Settings {
      * Jump while sprinting down long straight flat runs (~30% faster than plain sprinting)
      */
     public final Setting<Boolean> sprintJump = new Setting<>(false);
+
+    /**
+     * Underwater with nothing breathable in reach, place a wooden door on the floor: a door can't hold
+     * water, so its upper half is an air pocket to put the head in. The door is picked back up if it
+     * was the only one carried.
+     */
+    public final Setting<Boolean> allowDoorAirPockets = new Setting<>(true);
 
     /**
      * Place and ride a boat across large bodies of water when it is faster than swimming
@@ -1892,6 +1958,12 @@ public final class Settings {
      * Drive plain walking stretches of a path with a physics look-ahead controller instead of per-movement logic
      */
     public final Setting<Boolean> kinematicTravel = new Setting<>(false);
+
+    /**
+     * Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and
+     * simtrace/simtrace.csv, simtrace/summary.csv): how far off the prediction is one tick ahead, and how far a whole jump drifts.
+     */
+    public final Setting<Boolean> kinematicTrace = new Setting<>(false);
 
     /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.

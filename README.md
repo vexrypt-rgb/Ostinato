@@ -10,6 +10,16 @@ inventory, and schematic processes to make it happen. Multi-bot coordination
 (`#swarm`) uses the [SIGIL](https://github.com/vexrypt-rgb/sigil) wire format
 for sealed whispers.
 
+## User guides
+
+Step-by-step guides for every feature, written from the source:
+
+- [Guide index](docs/guides/README.md)
+- [Getting started](docs/guides/getting-started.md) · [Command reference](docs/guides/commands.md) · [Settings](docs/guides/settings.md)
+- [Movement and travel](docs/guides/movement.md) · [Combat, clutch and survival](docs/guides/combat-and-clutch.md)
+- [Mining, building and farming](docs/guides/mining-and-building.md) · [Swarm and region builds](docs/guides/swarm-and-region-builds.md)
+- [Screen, freecam and task lists](docs/guides/gui-freecam-tasks.md)
+
 ## Compatibility
 
 `gradle.properties` on this branch is the source of truth for the Minecraft
@@ -86,8 +96,35 @@ Beyond upstream Baritone, Ostinato adds:
   simulates a set of yaw and jump choices with a copy of vanilla player
   movement, then presses the keys of the one that gets furthest along the path
   while staying on it. Anything it cannot model (breaking, placing, water,
-  ladders, parkour) goes back to Baritone. Experimental; benchmarked with
+  most of parkour) goes back to Baritone. Experimental; benchmarked with
   TenorClef's PathBench.
+- **Soprano-style movement tech, found by simulation.** These features and their design come from
+  [Soprano](https://github.com/AverWasTaken/soprano) (AverWasTaken's Baritone fork); credit for the ideas
+  is theirs, and the ladder clutch is ported from their code. Where Soprano hand-codes each jump, Ostinato
+  searches vanilla player physics offline and ships the answers as templates, flown with the same
+  search at run time (`baritone.pathing.kinematic`). The simulated player now handles ladders and
+  vines, so these exist on top of the neo and momentum jumps already there:
+  - **Ladder and vine jumps** (`allowClimbJumps`, off by default): catch a ladder or vine in mid air
+    across a gap of 1 to 4 blocks, or let go of one and land on a ledge or another ladder
+    (`MovementClimbJump`).
+  - **Chained jumps** (`allowMomentumJumps`, on by default): two jumps through a one block pad, landing
+    with the speed the next jump needs, for gaps no single jump makes (`MovementChainJump`).
+  - **Ladder clutch** (`allowLadderClutch`, off by default): survive a long fall by placing a ladder or
+    vine on a wall beside the last blocks of it, then pick the ladder back up (`pickupLadders`). Needs
+    one on the hotbar; a water bucket is still preferred when it is no more expensive.
+  - **Experimental movement** (`experimentalMovement`): a preset, not a settings rewrite. Parkour,
+    neos, momentum and climb jumps, diagonals and `kinematicTravel` act as if on, jumps cost
+    `experimentalJumpBias` times as much, block placement at most `experimentalBlockPlacementPenalty`,
+    and falls that hurt are taken when nothing protects you and you stay above `experimentalMinHealth`.
+    Turning it off hands your own settings back.
+- **Checking the simulation** (`kinematicTrace`, off by default): while a jump, climb jump or chain flies,
+  every tick compares the real player with `PlayerSim`'s prediction and logs `SIMTRACE` lines (per-tick
+  rows in `simtrace/simtrace.csv`, one summary per movement in `simtrace/summary.csv`): the one-tick
+  prediction error, how far the whole jump drifts open loop, mismatches on being grounded, and how far
+  the real look lags the commanded yaw. `-Dostinato.simbench=jump,climb,chain` (or `all`; also
+  `-Dostinato.simbench.limit=N`, `-Dostinato.simbench.exit=true`) builds a course in the sky for each
+  template in a superflat singleplayer world, flies it, and writes `simbench/simbench.csv` plus a
+  `SIMBENCH SUMMARY` per kind: landed count and the median/p90 worst one-tick error.
 - **Pitfall avoidance** (`pitfallAvoidance`, on by default): the pathfinder
   never stands on sand, gravel or concrete powder resting on a block without
   collision (air, an open fence gate, a sign…), since it can drop out from

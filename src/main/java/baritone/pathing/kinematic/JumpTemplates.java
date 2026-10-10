@@ -23,6 +23,8 @@ public final class JumpTemplates {
         public final int[] plan;
         /** Cells {a, y, b, solid} the player's box (plus a small margin) touches: passable, or solid when the box only slides along it (a neo's wall). */
         public final int[][] cells;
+        /** Swings round the end of a wall: some cell is solid. */
+        public final boolean neo;
 
         Template(int a, int dy, int b, int runUp, double lateral, int ticks, int[] plan, int[][] cells) {
             this.lateral = lateral;
@@ -33,6 +35,9 @@ public final class JumpTemplates {
             this.runUp = runUp;
             this.ticks = ticks;
             this.cells = cells;
+            boolean wall = false;
+            for (int[] c : cells) wall |= c[3] == 1;
+            this.neo = wall;
         }
     }
 
@@ -86,7 +91,7 @@ public final class JumpTemplates {
 
     public static void main(String[] args) throws Exception {
         List<int[]> dests = new ArrayList<>(); // a, dy, b, wall
-        for (int a = 2; a <= 5; a++) for (int b = 0; b <= 4; b++) for (int dy = 1; dy >= -2; dy--) {
+        for (int a = 2; a <= 7; a++) for (int b = 0; b <= 4; b++) for (int dy = 1; dy >= -3; dy--) {
             if (b == 0 && dy >= 0 && a < (dy == 0 ? 5 : 4)) continue; // MovementParkour's straight gaps
             dests.add(new int[]{a, dy, b, 0});
         }

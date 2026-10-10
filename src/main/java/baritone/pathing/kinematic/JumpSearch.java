@@ -19,13 +19,29 @@ public final class JumpSearch {
     public static final int[] BRAKE = {0, 1};
     public static final int DIMS = 7;
 
-    private static final int MAX_GROUND = 40, MAX_AIR = 40, SETTLE = 8;
+    private static final int MAX_GROUND = 40, MAX_AIR = 40, SETTLE = 8, HANG = 3;
 
     /** Frame of one jump: approach unit vector (dx, dz), front edge coordinate along it, and the landing block. */
     public double dirX, dirZ, edge;
     public int destX, destY, destZ;
     /** 1, or -1 to mirror the yaw offsets when the lateral side is flipped. */
     public int side = 1;
+    /** Feet height on a slime block the jump bounces off on the way, else {@link Integer#MAX_VALUE}. */
+    public int bounceY = Integer.MAX_VALUE;
+    /** Accept wherever the plan settles after a bounce, writing the landing block to destX/Y/Z. */
+    public boolean anyDest;
+    /** Never press jump: walk off the edge (onto a slime pad right below it). */
+    public boolean noJump;
+    /**
+     * The destination is a ladder or vine cell: the jump is done when the player hangs on to it, rather than when it
+     * settles on the ground. Start a leap off a ladder with {@link #jumped} set and {@link #noJump}.
+     */
+    public boolean grab;
+    /**
+     * Done at the landing tick, on the block (destX, destY, destZ), with {@link #sim()} left in the landing state instead
+     * of settling: the first half of a chain, whose second jump starts from that momentum.
+     */
+    public boolean carry;
     /** Plan indices into the grids above, and the jumped/air-tick state carried between real ticks. */
     public final int[] plan = new int[DIMS];
     public boolean jumped;
@@ -33,6 +49,8 @@ public final class JumpSearch {
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
     public int ticks;
     public double miss;
+    /** Filled by {@link #run} in {@link #carry} mode: speed along the approach direction at the landing tick. */
+    public double landSpeed;
 
     private final PlayerSim sim;
 
@@ -59,7 +77,7 @@ public final class JumpSearch {
     }
 
     public boolean jump(int[] p, PlayerSim s, boolean jumped) {
-        if (jumped || !s.onGround) {
+        if (jumped || !s.onGround || noJump) {
             return false;
         }
         double along = s.x * dirX + s.z * dirZ;
@@ -76,7 +94,8 @@ public final class JumpSearch {
         sim.copyFrom(start);
         boolean jumped = jumped0;
         int air = air0, settle = -1;
-        double floor = Math.min(PlayerSim.floor(start.y + 0.01), destY) - 0.6;
+        boolean bounced = false;
+        double floor = Math.min(Math.min(PlayerSim.floor(start.y + 0.01), destY), bounceY) - 0.6;
         for (int t = 0; t < MAX_GROUND + MAX_AIR + SETTLE; t++) {
             if (!jumped && t >= MAX_GROUND) {
                 return false;
@@ -85,8 +104,8 @@ public final class JumpSearch {
             boolean takeoff = j && sim.x * dirX + sim.z * dirZ >= edge + EDGE[p[2]];
             int in = settle < 0 ? input(p, jumped, air) : 0;
             sim.tick(yaw(p, jumped, air), in, in > 0, j);
-            if (takeoff) {
-                jumped = true;
+            if (takeoff || (!jumped && !sim.onGround && bounceY != Integer.MAX_VALUE && sim.x * dirX + sim.z * dirZ > edge)) {
+                jumped = true; // toward a slime pad, walking off the edge is a take-off too
                 air = 0;
             } else if (jumped) {
                 air++;
@@ -97,9 +116,33 @@ public final class JumpSearch {
             if (sim.y < floor) {
                 return false;
             }
-            if (jumped && air > 1 && sim.onGround && settle < 0) {
+            if (grab && jumped && air >= 1 && PlayerSim.floor(sim.x) == destX && PlayerSim.floor(sim.y) == destY
+                    && PlayerSim.floor(sim.z) == destZ && sim.climbable()) {
+                return holds(t + 1, sweep);
+            }
+            if (sim.onGround && sim.vy > 0.1) {
+                bounced = true;
+            }
+            if (jumped && air > 1 && sim.onGround && settle < 0 && sim.vy <= 0.1) { // a slime bounce is not the landing
+                if (anyDest) {
+                    if (!bounced) {
+                        return false;
+                    }
+                    destX = PlayerSim.floor(sim.x);
+                    destY = PlayerSim.floor(sim.y + 0.01);
+                    destZ = PlayerSim.floor(sim.z);
+                }
                 if (Math.abs(sim.y - destY) > 0.01) {
                     return false; // came down somewhere else first
+                }
+                if (carry) {
+                    if (PlayerSim.floor(sim.x) != destX || PlayerSim.floor(sim.z) != destZ) {
+                        return false;
+                    }
+                    ticks = t + 1;
+                    miss = Math.max(Math.abs(sim.x - (destX + 0.5)), Math.abs(sim.z - (destZ + 0.5)));
+                    landSpeed = sim.vx * dirX + sim.vz * dirZ;
+                    return true;
                 }
                 settle = 0;
             }
@@ -114,6 +157,22 @@ public final class JumpSearch {
             }
         }
         return false;
+    }
+
+    /** The hang on to a ladder has to last: let go of everything and check the cell still holds us for a few ticks. */
+    private boolean holds(int tick, CellSink sweep) {
+        for (int k = 0; k < HANG; k++) {
+            sim.tick(0, 0, false, false);
+            if (sweep != null) {
+                sweep.box(sim.x, sim.y, sim.z);
+            }
+            if (!sim.climbable()) {
+                return false;
+            }
+        }
+        ticks = tick;
+        miss = 0;
+        return true;
     }
 
     /**
@@ -137,7 +196,8 @@ public final class JumpSearch {
                     if (!run(start, p, jumped, airTicks, null)) {
                         continue;
                     }
-                    double score = miss + 0.004 * ticks;
+                    // a chain's first jump must land with speed left for the second one, whatever it costs in centring
+                    double score = carry ? -landSpeed + 0.004 * ticks : miss + 0.004 * ticks;
                     if (score < bestScore) {
                         bestScore = score;
                         best = p.clone();
@@ -148,6 +208,34 @@ public final class JumpSearch {
         }
         System.arraycopy(best, 0, plan, 0, DIMS);
         run(start, plan, jumped, airTicks, null); // leave ticks/miss describing the chosen plan
+        return true;
+    }
+
+    /** Straight-line plans only (no turning): the cheap search the planner runs for slime bounces. */
+    public boolean searchStraight(PlayerSim start) {
+        int[] best = null, p = new int[DIMS];
+        double bestScore = Double.MAX_VALUE;
+        p[0] = 1; // O0 = 0
+        p[3] = 4; // O1 = 0
+        for (p[1] = 0; p[1] < HOP.length; p[1]++) for (p[2] = 0; p[2] < EDGE.length; p[2]++)
+            for (p[5] = 0; p[5] < RELEASE.length; p[5]++) for (p[6] = 0; p[6] < BRAKE.length; p[6]++) {
+                if (p[5] == 0 && p[6] == 1) {
+                    continue; // never released: the brake choice is moot
+                }
+                if (!run(start, p, false, 0, null)) {
+                    continue;
+                }
+                double score = miss + 0.004 * ticks;
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = p.clone();
+                }
+            }
+        if (best == null) {
+            return false;
+        }
+        System.arraycopy(best, 0, plan, 0, DIMS);
+        run(start, plan, false, 0, null);
         return true;
     }
 

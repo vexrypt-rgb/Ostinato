@@ -71,7 +71,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (bsi.get0(x, y + 1, z).getBlock() instanceof EndPortalFrameBlock) {
             return true;
         }
-        if (AltoClefSettings.getInstance().shouldAvoidBreaking(new BlockPos(x, y, z))) return true;
+        if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z)) return true;
 
         if (!bsi.worldBorder.canPlaceAt(x, z)) {
             return true;
@@ -125,25 +125,30 @@ public interface MovementHelper extends ActionCosts, Helper {
         return canWalkThrough(bsi, x, y, z, bsi.get0(x, y, z));
     }
 
+    // The planner's answers below must match the executor's (the bsi overload): a path through a cell the executor
+    // will not walk through leaves it trying to mine air.
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.swimThroughLava && state.getBlock() == Blocks.LAVA) {
+            return context.get(x, y + 1, z).getFluidState().isEmpty();
+        }
+        if (context.avoidsWalkThrough(x, y, z)) {
+            return false;
+        }
         return context.precomputedData.canWalkThrough(context.bsi, x, y, z, state);
     }
 
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z) {
-        return context.precomputedData.canWalkThrough(context.bsi, x, y, z, context.get(x, y, z));
+        return canWalkThrough(context, x, y, z, context.get(x, y, z));
     }
 
     static boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
-        Ternary canWalkThrough = canWalkThroughBlockState(state);
-        Block block = state.getBlock();
-        BlockState up = bsi.get0(x, y + 1, z);
-        if (AltoClefSettings.getInstance().canSwimThroughLava() && block == Blocks.LAVA) {
-            return up.getFluidState().isEmpty();
+        if (state.getBlock() == Blocks.LAVA && AltoClefSettings.getInstance().canSwimThroughLava()) {
+            return bsi.get0(x, y + 1, z).getFluidState().isEmpty(); // the surface only
         }
         if (AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) {
             return false;
         }
-
+        Ternary canWalkThrough = canWalkThroughBlockState(state);
         if (canWalkThrough == YES) {
             return true;
         }
@@ -286,6 +291,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean fullyPassable(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.avoidsWalkThrough(x, y, z)) {
+            return false;
+        }
         return context.precomputedData.fullyPassable(context.bsi, x, y, z, state);
     }
 
@@ -386,7 +394,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         return (facing == playerFacing) == open;
     }
 
-    static boolean avoidWalkingInto(BlockState state) {
+    public static boolean avoidWalkingInto(BlockState state) {
         Block block = state.getBlock();
         return !state.getFluidState().isEmpty()
                 || (block == Blocks.MAGMA_BLOCK && !Baritone.settings().allowWalkOnMagmaBlocks.value)
@@ -414,6 +422,9 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @return Whether or not the specified block can be walked on
      */
     static boolean canWalkOn(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        if (AltoClefSettings.getInstance().canWalkOnForce(x, y, z)) {
+            return true;
+        }
         Ternary canWalkOn = canWalkOnBlockState(state);
         if (canWalkOn == YES) {
             return true;
@@ -510,6 +521,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canWalkOn(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.forcesWalkOn(x, y, z)) {
+            return true;
+        }
         return context.precomputedData.canWalkOn(context.bsi, x, y, z, state);
     }
 
@@ -649,7 +663,10 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (!state.getFluidState().isEmpty()) {
                 return COST_INF;
             }
-            double mult = context.breakCostMultiplierAt(x, y, z, state);
+            if (context.avoidsWalkThrough(x, y, z)) {
+                return COST_INF; // kept out of, not walled off: digging does not open it
+            }
+            double mult = context.breakCostMultiplierAt(x, y, z, state); // asks the break avoiders, as does avoidBreaking
             if (mult >= COST_INF) {
                 return COST_INF;
             }
@@ -658,9 +675,6 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             double strVsBlock = context.toolSet.getStrVsBlock(state);
             if (strVsBlock <= 0) {
-                return COST_INF;
-            }
-            if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z)) {
                 return COST_INF;
             }
             double result = 1 / strVsBlock;

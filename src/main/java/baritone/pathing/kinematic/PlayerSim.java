@@ -5,8 +5,8 @@ import java.util.List;
 
 /**
  * Allocation-light copy of vanilla 1.16 player movement (LivingEntity.travel + Entity.move) for
- * look-ahead search. Covers walking, sprinting, jumping, step-up and block collision; no fluids,
- * ladders, sneaking or potion effects, so callers only use it on plain ground.
+ * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision and ladders/vines; no
+ * fluids, sneaking or potion effects, so callers only use it on plain ground.
  */
 public final class PlayerSim {
 
@@ -15,11 +15,22 @@ public final class PlayerSim {
         void collect(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, List<double[]> out);
 
         float slipperiness(int x, int y, int z);
+
+        /** Slime: a landing bounces back up, walking on it is slowed. */
+        default boolean bouncy(int x, int y, int z) {
+            return false;
+        }
+
+        /** Ladder, vine or anything else the player can hang on to. */
+        default boolean climbable(int x, int y, int z) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
     public static final double HEIGHT = 1.8f;
     public static final double STEP = 0.6;
+    private static final double CLIMB_LIMIT = 0.15, CLIMB_SPEED = 0.2;
 
     public double x, y, z, vx, vy, vz;
     public boolean onGround, sprinting, collidedH;
@@ -80,10 +91,23 @@ public final class PlayerSim {
             vx += -sin * f;
             vz += cos * f;
         }
+        if (climbable()) { // LivingEntity.handleOnClimbableSpeed
+            vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
+            vz = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vz));
+            vy = Math.max(vy, -CLIMB_LIMIT);
+        }
         move(vx, vy, vz);
+        if ((collidedH || jump) && climbable()) {
+            vy = CLIMB_SPEED; // pressing into the wall or holding jump climbs
+        }
         vy = (vy - 0.08) * 0.98;
         vx *= slip;
         vz *= slip;
+    }
+
+    /** Whether the cell the player's feet are in can be hung on to. */
+    public boolean climbable() {
+        return world.climbable(floor(x), floor(y), floor(z));
     }
 
     private void move(double dx, double dy, double dz) {
@@ -110,6 +134,14 @@ public final class PlayerSim {
         if (ox != r[0]) vx = 0;
         if (oz != r[2]) vz = 0;
         if (oy != r[1]) vy = 0;
+        // vanilla SlimeBlock: onLanded reverses the fall, onEntityWalk slows slow-moving walkers (never sneaking here)
+        boolean slime = world.bouncy(floor(x), floor(y - 0.2), floor(z));
+        if (slime && onGround && oy < 0) vy = -oy;
+        if (slime && onGround && Math.abs(vy) < 0.1) {
+            double k = 0.4 + Math.abs(vy) * 0.2;
+            vx *= k;
+            vz *= k;
+        }
     }
 
     /** Vanilla axis order: Y, then the larger horizontal axis first. */

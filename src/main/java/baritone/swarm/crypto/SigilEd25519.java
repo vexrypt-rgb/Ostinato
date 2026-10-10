@@ -75,6 +75,11 @@ public final class SigilEd25519 {
         return pub.clone();
     }
 
+    /** Whether this holds the private seed, not only the public key. */
+    public boolean canSign() {
+        return seed != null;
+    }
+
     public byte[] keyid() {
         return Arrays.copyOf(sha256(pub), KEYID_LEN);
     }
