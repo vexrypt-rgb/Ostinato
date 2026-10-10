@@ -557,7 +557,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         PveProcess pveP = baritone.getPveProcess();
         // a brute hits for ~6-13 through gold armour: low on health with one close, a speedrunner leaves with what they have
         // (in-game run 13 fought, perched and retreated at 12 hp and died in the tower)
-        if (bastion != null && !exiting && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
+        if (bastion != null && !exiting && !perching && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp, leaving");
             pveP.hold = false;
             perching = false;
@@ -569,9 +569,21 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && me.distanceTo(e) < 9 && (e.hasLineOfSight(me) || me.getHealth() < 16) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
-        if (brute != null) {
+        if (brute != null && !perching && me.onGround() && headroom(me, me.blockPosition().getY()) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
+            // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
+            if (fighting) { pveP.clearEnemies(); fighting = false; }
+            perching = true;
+            perchUp = false;
+            perchCapped = false;
+            perchBase = me.blockPosition().getY();
+            perchX = me.blockPosition().getX();
+            perchZ = me.blockPosition().getZ();
+            perchTick = ticks;
+            status = "brute at " + String.format("%.1f", me.distanceTo(brute)) + ", towering";
+            return pause0();
+        }
+        if (brute != null && !perching) {
             pveP.hold = false;
-            perching = false;
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             Vec3 away = me.position().subtract(brute.position()).multiply(1, 0, 1);
             if (away.lengthSqr() < 0.01) away = new Vec3(1, 0, 0);
