@@ -612,6 +612,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 if (d != null) return d;
             }
             if (inDoor && (me.isOnFire() || ticks < doorSince + 40)) {
+                // the fire lasts ~15 s after the lava (about 1 hp a second): a golden apple's regeneration outlasts it
+                int gap = -1;
+                for (int i = 0; i < 36 && gap < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) gap = i;
+                if (gap >= 0 && me.getHealth() < 12 && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)) {
+                    if (gap >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, gap, 6, ClickType.SWAP, me); return pause0(); }
+                    me.getInventory().setSelectedSlot(gap);
+                    baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+                    ctx.minecraft().options.keyUse.setDown(true);
+                    status = "in door pocket, eating a golden apple against the fire";
+                    return pause0();
+                }
                 status = "in door pocket, waiting for the fire to go out";
                 return pause0();
             }
@@ -947,7 +958,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "door descent: sealing above our head";
             return pause0();
         }
-        if (floor(below)) {
+        if (floor(below) && !(ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) {
             int pick = pickaxeSlot(me);
             if (pick < 0) { descentSteps = -1; return null; }
             if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
@@ -960,6 +971,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return pause0();
         }
         digging = false;
+        if (ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
+            // our new door showed up a tick after the click (in-game we then mined it again, thinking it was the floor)
+            doorPos = below.immutable();
+            doorSince = ticks;
+            descentDone++;
+            return pause0();
+        }
         // the block is gone (our old door went with it): next tick, a door in the cell we drop into
         int slot = -1;
         for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
