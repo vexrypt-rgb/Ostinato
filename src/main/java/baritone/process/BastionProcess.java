@@ -1,6 +1,7 @@
 package baritone.process;
 
 import baritone.Baritone;
+import baritone.api.pathing.goals.GoalRunAway;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.pathing.goals.GoalXZ;
 import baritone.api.pathing.goals.GoalYLevel;
@@ -216,7 +217,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (otherLevel(e, me)) return false;
         Long until = ignored.get(e.getUUID());
         if (until != null && until > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)) return false;
-        if (e instanceof PiglinBrute || e instanceof Zoglin) return me.distanceTo(e) < THREAT_RANGE;
+        // never melee a brute (runs 13, 21: 20 -> 10 hp in seconds); they are kited by the flee rule instead
+        if (e instanceof PiglinBrute) return false;
+        if (e instanceof Zoglin) return me.distanceTo(e) < THREAT_RANGE;
+        // do not chase anything standing by a drop over lava (run 19: knocked off the stables into the lava sea mid-fight)
+        if (lavaDropNear(e.blockPosition()) || lavaDropNear(me.blockPosition())) return false;
         boolean hunting = e instanceof Mob m && (m.getTarget() == me || (m.isAggressive() && me.distanceTo(e) < 10));
         if (e instanceof Hoglin) return me.distanceTo(e) < (early ? THREAT_RANGE : 8) || hunting;
         // an angry adult piglin that is handed gold forgets us (see distract); only fight it when we have none to give
@@ -560,7 +565,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return exit(me, counts(me));
         }
         if (exiting && bastion != null) return exit(me, counts(me));
-        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
+        // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
+        LivingEntity brute = null;
+        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && me.distanceTo(e) < 8 && (e instanceof Mob m && m.isAggressive() || me.getHealth() < 16) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
+        if (brute != null) {
+            pveP.hold = false;
+            perching = false;
+            if (fighting) { pveP.clearEnemies(); fighting = false; }
+            Vec3 away = me.position().subtract(brute.position()).multiply(1, 0, 1);
+            if (away.lengthSqr() < 0.01) away = new Vec3(1, 0, 0);
+            evadeGoal = BlockPos.containing(me.position().add(away.normalize().scale(14)));
+            evadeUntil = ticks + 60;
+            status = "kiting brute at " + String.format("%.1f", me.distanceTo(brute));
+            return new PathingCommand(new GoalRunAway(14, brute.blockPosition()), PathingCommandType.SET_GOAL_AND_PATH);
+        }        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
             // a runner time-boxes the bastion: past the budget, leave with what we have
             logDirect("Bastion: time budget (" + BastionSettings.timeBudget + " s) used, leaving");
             return exit(me, counts(me));
@@ -894,14 +912,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
         for (Piglin p : piglins) {
             if (p.getOffhandItem().is(Items.GOLD_INGOT) || p.isAggressive() || !p.isAlive()) continue;
             int brutes = brutesAround(p);
-            if (brutes >= 2) continue;
+            if (brutes >= 3) continue;
             // reachability: height difference means stairs or a drop, no line of sight means a wall in between
             double score = me.distanceTo(p) + 4 * Math.abs(p.getY() - me.getY()) + (me.hasLineOfSight(p) ? 0 : 8) + 10 * brutes;
             if (score < bestScore) { bestScore = score; target = p; }
         }
         if (target == null) {
             status = admiring.isEmpty() ? "no free piglin n=" + piglins.size() : "admiring x" + admiring.size() + ", no other free piglin";
-            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            if (!admiring.isEmpty() || bastion == null) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            // run 16 (bridge) stood here for minutes: walk the bastion to find calm piglins instead of waiting
+            status += ", searching";
+            int k = (int) (ticks / 200 % 4);
+            BlockPos c = bastion.pos.offset(k == 0 ? 12 : k == 2 ? -12 : 0, 0, k == 1 ? 12 : k == 3 ? -12 : 0);
+            return new PathingCommand(new GoalXZ(c.getX(), c.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
         }
         if (me.distanceTo(target) > THROW_RANGE || !me.hasLineOfSight(target)) {
             status = "close in";
@@ -1811,6 +1834,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     /** A dropped item near us that is not our own ingot: barter loot. */
     private final Set<Integer> badLoot = new HashSet<>();
+
+    /** A cell within 2 blocks whose column falls onto lava (an edge over the lava sea or a lava pit). */
+    private boolean lavaDropNear(BlockPos at) {
+        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+            BlockPos c = at.offset(dx, 0, dz);
+            if (!ctx.world().getBlockState(c.below()).getCollisionShape(ctx.world(), c.below()).isEmpty()) continue;
+            for (int y = 1; y <= 12; y++) {
+                BlockPos d = c.below(y);
+                if (lavaAt(d)) return true;
+                if (!ctx.world().getBlockState(d).getCollisionShape(ctx.world(), d).isEmpty()) break;
+            }
+        }
+        return false;
+    }
     private BlockPos nudgeDest;
     private long nudgeUntil;
     private int lootTarget = -1;

@@ -32,7 +32,7 @@ public final class BastionSettings {
 
     public static void resetTargets() {
         TARGETS.clear();
-        TARGETS.put("ender_pearl", 12);
+        TARGETS.put("ender_pearl", 8); // runs got ~1 throw/50 s: 12 never landed in a 300 s budget
         TARGETS.put("obsidian", 10);
         TARGETS.put("string", 6);
         TARGETS.put("fire_resistance", 1);
