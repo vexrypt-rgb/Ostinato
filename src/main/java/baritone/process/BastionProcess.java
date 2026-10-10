@@ -783,7 +783,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 return pause0();
             }
         }
-        if (me.isOnFire() && !me.isInLava() && !perching) {
+        if (!me.isOnFire()) burnSince = -1; else if (burnSince < 0) burnSince = ticks;
+        // run 37 stood still for 10 s and burned 20 -> 0 (something kept relighting it): stand at most 2 s, then carry on
+        if (me.isOnFire() && !me.isInLava() && !perching && ticks - burnSince < 40) {
             // burning but clear of the lava: running a long path (with drops) at half health kills more than the flames do
             baritone.getPveProcess().hold = false;
             status = "burning, standing still until it goes out";
@@ -1932,6 +1934,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
+    private long burnSince = -1;
 
     private boolean lavaNearPos(BlockPos at) {
         for (BlockPos c : BlockPos.betweenClosed(at.offset(-2, -1, -2), at.offset(2, 1, 2))) if (lavaAt(c)) return true;
