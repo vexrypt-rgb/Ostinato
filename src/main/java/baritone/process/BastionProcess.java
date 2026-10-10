@@ -2071,7 +2071,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 && !sa.is(Blocks.CHEST) && !sb.is(Blocks.CHEST) && !sa.is(Blocks.GOLD_BLOCK) && !sb.is(Blocks.GOLD_BLOCK) && !(sa.getBlock() instanceof net.minecraft.world.level.block.FallingBlock);
         boolean walled = true;
         for (BlockPos h : new BlockPos[]{a, b}) for (Direction d : Direction.Plane.HORIZONTAL) walled &= solid(h.relative(d));
-        boolean lava = lavaNearPos(a) || lavaNearPos(b.below());
+        boolean lava = false;
+        for (BlockPos h : new BlockPos[]{a, b, b.below()}) for (Direction d : Direction.values()) lava |= lavaAt(h.relative(d));
         double pd = 99;
         for (Piglin p : piglins) pd = Math.min(pd, p.position().distanceTo(Vec3.atCenterOf(c)));
         return new BastionTrap.Site(dx, dz, open, mineable, walled, solid(b.below()), lava, onEdge(c), pd);
@@ -2082,11 +2083,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
         BlockPos feet = me.blockPosition();
         if (digHole == null && holes.size() < 2 && ingots >= 4 && ticks > holeRetry && me.onGround()) {
             List<BastionTrap.Site> sites = new ArrayList<>();
-            for (Direction d : Direction.Plane.HORIZONTAL) sites.add(holeSite(me, piglins, feet.relative(d), d.getStepX(), d.getStepZ()));
+            // ring of 1 and 2 blocks (incl. diagonals): run 60/62 camped 20+ s and never found a site next to the feet
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) if ((dx != 0 || dz != 0) && Math.abs(dx) + Math.abs(dz) <= 3) sites.add(holeSite(me, piglins, feet.offset(dx, 0, dz), dx, dz));
             List<int[]> taken = new ArrayList<>();
             for (BlockPos h : holes) taken.add(new int[]{h.getX() - feet.getX(), h.getZ() - feet.getZ()});
             BastionTrap.Site s = BastionTrap.choose(sites, taken);
-            if (s == null) holeRetry = ticks + 600;
+            if (s == null) {
+                holeRetry = ticks + 600;
+                int[] r = new int[6];
+                for (BastionTrap.Site x : sites) { if (!x.open()) r[0]++; if (!x.mineable()) r[1]++; if (!x.walled()) r[2]++; if (!x.floored()) r[3]++; if (x.lavaNear()) r[4]++; if (x.edge()) r[5]++; }
+                logDirect("Bastion: no hole site of " + sites.size() + " (notOpen=" + r[0] + " notMineable=" + r[1] + " notWalled=" + r[2] + " noFloor=" + r[3] + " lava=" + r[4] + " edge=" + r[5] + ")");
+            }
             else { digHole = feet.offset(s.dx(), 0, s.dz()); holeDigging = false; digSince = ticks; logDirect("Bastion: digging piglin hole at " + digHole.toShortString()); }
         }
         if (digHole != null) {
