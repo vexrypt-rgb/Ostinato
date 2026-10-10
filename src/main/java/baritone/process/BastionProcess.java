@@ -599,6 +599,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 BlockPos lp = me.blockPosition().offset(dx, dy, dz);
                 if (ctx.world().getFluidState(lp).is(net.minecraft.tags.FluidTags.LAVA)) away = away.add(me.position().subtract(Vec3.atCenterOf(lp)));
             }
+            // better than "away from the lava we see": head for the nearest cell we can actually stand on (in-game, the
+            // away vector pointed back into a pool and we burned to death 1 block from the shore)
+            BlockPos shore = null;
+            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -1; dy <= 1; dy++) {
+                BlockPos c = me.blockPosition().offset(dx, dy, dz);
+                if (!floor(c.below()) || floor(c) || floor(c.above()) || lavaAt(c) || lavaAt(c.above()) || lavaAt(c.below())) continue;
+                if (shore == null || me.blockPosition().distSqr(c) < me.blockPosition().distSqr(shore)) shore = c;
+            }
+            if (shore != null) away = Vec3.atBottomCenterOf(shore).subtract(me.position());
             if (away.horizontalDistanceSqr() > 0.01) {
                 baritone.getPveProcess().hold = false;
                 float yaw = (float) Math.toDegrees(Math.atan2(-away.x, away.z));
@@ -606,6 +615,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
                 baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
                 status = "step away from lava";
+                return pause0();
+            }
+        }
+        if (me.isOnFire() && !me.isInLava() && !perching && lavaNear(me)) {
+            Vec3 away = Vec3.ZERO;
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int dy = -1; dy <= 1; dy++) {
+                BlockPos lp = me.blockPosition().offset(dx, dy, dz);
+                if (lavaAt(lp)) away = away.add(me.position().subtract(Vec3.atCenterOf(lp)));
+            }
+            if (away.horizontalDistanceSqr() > 0.01) {
+                baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-away.x, away.z)), 10), true);
+                baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+                status = "burning, stepping clear of the lava";
                 return pause0();
             }
         }
@@ -850,6 +872,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     private boolean floor(BlockPos p) {
         return !ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty();
+    }
+
+    private boolean lavaNear(Player me) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 0; dy++) if (lavaAt(me.blockPosition().offset(dx, dy, dz))) return true;
+        return false;
     }
 
     private boolean lavaAt(BlockPos p) {
