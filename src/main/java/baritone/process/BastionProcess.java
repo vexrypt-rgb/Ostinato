@@ -123,7 +123,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         chestsLooted = 0;
         stuckCount.clear();
         badLoot.clear();
-        holes.clear();
+        holes.clear(); pickHole = null; digPickup = false; inPickLogged = false; pickRetry = 0;
         digHole = null;
         holeRetry = 0;
         camping = false;
@@ -781,6 +781,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (shore != null) away = Vec3.atBottomCenterOf(shore).subtract(me.position());
             PathingCommand door = doorPocket(me, shore);
             if (door != null) return door;
+            // run 76: bobbed 3 s at a shore it could not climb; after 1.5 s in lava, pillar up out of it instead
+            if (lavaSince >= 0 && ticks - lavaSince > 30 && pillarBlocks(me) > 0 && headroom(me, (int) Math.floor(me.getY() + 0.2))) {
+                status = "lava: pillar out";
+                return tower(me);
+            }
             if (away.horizontalDistanceSqr() > 0.01) {
                 baritone.getPveProcess().hold = false;
                 float yaw = (float) Math.toDegrees(Math.atan2(-away.x, away.z));
@@ -2127,10 +2132,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 for (BastionTrap.Site x : sites) { if (!x.open()) r[0]++; if (!x.mineable()) r[1]++; if (!x.walled()) r[2]++; if (!x.floored()) r[3]++; if (x.lavaNear()) r[4]++; if (x.edge()) r[5]++; }
                 logDirect("Bastion: no hole site of " + sites.size() + " (notOpen=" + r[0] + " notMineable=" + r[1] + " notWalled=" + r[2] + " noFloor=" + r[3] + " lava=" + r[4] + " edge=" + r[5] + ")");
             }
-            else { digHole = feet.offset(s.dx(), 0, s.dz()); holeDigging = false; digSince = ticks; logDirect("Bastion: digging piglin hole at " + digHole.toShortString()); }
+            else { digHole = feet.offset(s.dx(), 0, s.dz()); digPickup = false; holeDigging = false; digSince = ticks; logDirect("Bastion: digging piglin hole at " + digHole.toShortString()); }
         }
         if (digHole != null) {
             BlockPos target = solid(digHole.below()) ? digHole.below() : solid(digHole.below(2)) ? digHole.below(2) : null;
+            if (target == null && digPickup) {
+                logDirect("Bastion: pickup hole ready at " + digHole.toShortString());
+                pickHole = digHole; digPickup = false; digHole = null; holeDigging = false;
+                return pause0();
+            }
             if (target == null) {
                 logDirect("Bastion: piglin hole ready at " + digHole.toShortString());
                 holes.add(digHole);
@@ -2152,6 +2162,44 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "camp: digging piglin hole";
             return pause0();
         }
+        // a piglin is trapped: dig a pickup hole diagonal to its hole and trade from inside it (drops land at our feet, the
+        // diagonal gap keeps the piglin in)
+        Piglin caught = null;
+        BlockPos caughtHole = null;
+        for (Piglin p : piglins) if (trapped(p)) { caught = p; for (BlockPos h : holes) if (p.blockPosition().getX() == h.getX() && p.blockPosition().getZ() == h.getZ()) caughtHole = h; break; }
+        if (caught != null && caughtHole != null) {
+            if (pickHole == null && ticks > pickRetry) {
+                BastionTrap.Site best = null; BlockPos bestPos = null;
+                for (int dx : new int[]{-1, 1}) for (int dz : new int[]{-1, 1}) {
+                    BlockPos q = caughtHole.offset(dx, 0, dz);
+                    if (q.getX() == feet.getX() && q.getZ() == feet.getZ()) continue;
+                    BastionTrap.Site s = holeSite(me, piglins, q, dx, dz);
+                    if (s.usable() && (bestPos == null || me.blockPosition().distSqr(q) < me.blockPosition().distSqr(bestPos))) { best = s; bestPos = q; }
+                }
+                if (bestPos == null) { pickRetry = ticks + 600; logDirect("Bastion: no pickup hole site next to " + caughtHole.toShortString()); }
+                else { digHole = bestPos; digPickup = true; holeDigging = false; digSince = ticks; logDirect("Bastion: digging pickup hole at " + bestPos.toShortString()); return pause0(); }
+            }
+            if (pickHole != null) {
+                BlockPos stand = pickHole.below(2);
+                if (!me.blockPosition().equals(stand)) {
+                    if (me.blockPosition().getX() == pickHole.getX() && me.blockPosition().getZ() == pickHole.getZ() && !me.onGround()) return pause0();
+                    status = "camp: into pickup hole";
+                    return new PathingCommand(new GoalBlock(stand), PathingCommandType.SET_GOAL_AND_PATH);
+                }
+                if (!inPickLogged) { inPickLogged = true; logDirect("Bastion: standing in pickup hole, trading with trapped piglin"); }
+                if (admiring.containsKey(caught.getUUID()) || caught.getOffhandItem().is(Items.GOLD_INGOT) || ingots < 1) { status = "camp: pickup hole, waiting"; return pause0(); }
+                int slot = hotbarGold(me);
+                if (slot < 0) return pause0();
+                me.getInventory().setSelectedSlot(slot);
+                // aim at the far corner of the trap hole so the ingot lands on the piglin's side, not back at our feet
+                Vec3 far = new Vec3(caughtHole.getX() + 0.5 + 0.35 * (caughtHole.getX() - pickHole.getX()), caughtHole.getY() - 2, caughtHole.getZ() + 0.5 + 0.35 * (caughtHole.getZ() - pickHole.getZ()));
+                aimer.look(far, 0);
+                float farYaw = (float) Math.toDegrees(Math.atan2(-(far.x - me.getX()), far.z - me.getZ()));
+                if (Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 10 && safeDrop(me)) { admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
+                status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
+                return pause0();
+            }
+        }
         // bait an empty hole: an ingot dropped in brings a piglin down after it
         for (BlockPos h : holes) {
             boolean occupied = piglins.stream().anyMatch(this::trapped);
@@ -2166,7 +2214,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         return null;
     }
-    private BlockPos holeTarget;
+    private BlockPos holeTarget, pickHole;
+    private boolean digPickup, inPickLogged;
+    private long pickRetry;
     private long digSince;
     private long campIdleSince;
 
