@@ -85,6 +85,7 @@ public class Baritone implements IBaritone {
     private final PvpProcess pvpProcess;
     private final baritone.structure.StructureBehavior structureBehavior;
     private final PveProcess pveProcess;
+    private final baritone.process.BastionProcess bastionProcess;
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -134,6 +135,7 @@ public class Baritone implements IBaritone {
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
             this.pveProcess              = this.registerProcess(PveProcess::new);
+            this.bastionProcess          = this.registerProcess(baritone.process.BastionProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
             baritone.process.SimBench.install(this);
@@ -196,6 +198,10 @@ public class Baritone implements IBaritone {
 
     public PvpProcess getPvpProcess() {
         return this.pvpProcess;
+    }
+
+    public baritone.process.BastionProcess getBastionProcess() {
+        return this.bastionProcess;
     }
 
     public PveProcess getPveProcess() {

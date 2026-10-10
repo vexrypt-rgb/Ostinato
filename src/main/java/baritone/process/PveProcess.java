@@ -94,7 +94,14 @@ public final class PveProcess extends BaritoneProcessHelper {
         return true;
     }
 
+    /** Set by a process that calls {@link #onTick} itself; keeps the filter alive while the path manager hands control elsewhere. */
+    public boolean driven;
+    /** Fight from where we stand: swing at what is in reach but never walk, back off or path (set while perched on a pillar). */
+    public boolean hold;
+
     public void clearEnemies() {
+        driven = false;
+        hold = false;
         filter = null;
         target = null;
     }
@@ -275,7 +282,11 @@ public final class PveProcess extends BaritoneProcessHelper {
         blockTicks = 0;
         shooterClose = prof.kind == MobProfile.Kind.RANGED;
 
-        // 6. Far or out of sight: walk there.
+        // 6. Far or out of sight: walk there (unless held in place, e.g. on a pillar, where it has to come to us).
+        if (hold && (hd > 4.6 || !los)) {
+            use(false);
+            return decide("hold");
+        }
         if (hd > DRIVE_PVE || !los && hd > 2.5) {
             use(false);
             return decide("path", new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
@@ -296,10 +307,13 @@ public final class PveProcess extends BaritoneProcessHelper {
             backoff = prof.kind == MobProfile.Kind.RANGED ? 0 : prof.kind == MobProfile.Kind.BOMB ? 8 : 4 + (adjacent > 1 ? 3 : 0);
             return decide("hit");
         }
+        if (hold) return decide("hold");
         // recharging: step back so its swing finds air, then close as the charge fills
         boolean recharging = charge < CHARGED;
         // a hard hitter in our face: the recharge is spent behind the shield rather than stepping back into its reach
-        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.EnderMan) && shieldUp(me, target)) {
+        // (an axe knocks the shield down for seconds, so guarding against one only costs us swings)
+        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.EnderMan)
+                && !target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES) && shieldUp(me, target)) {
             return decide("guard");
         }
         if (backoff > 0 && recharging && hd < 3.0) {
@@ -428,6 +442,8 @@ public final class PveProcess extends BaritoneProcessHelper {
 
     @Override
     public void onLostControl() {
+        // another process (BastionProcess) is calling onTick itself, so losing the arbitration is not losing the fight
+        if (driven) return;
         filter = null;
         target = null;
         engaged.clear();
