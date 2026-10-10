@@ -14,6 +14,32 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 1.21.11 | `1.21.11` | 21 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## New in v1.19.1
+
+A review pass over the fork's own code. Fixes only, no new features.
+
+- **Pathing**: the planner and the executor now give the same answer for cells an add-on (TenorClef) asks the bot
+  to keep out of or vouches for as footing, so a path no longer runs into a cell the executor refuses and then
+  tries to mine air. Jump, chain-jump, climb-jump, slime and parkour movements start afresh when the executor
+  runs them again after a setback. The swimming and failed-jump lookups the planner repeats at every node are cached.
+- **Look-ahead movers** (1.21.4): a physics or kinematic mover that holds one path position for too long now steps
+  aside for classic movement instead of circling with every timeout switched off.
+- **Tungsten backend**: retargeting waits for the cancelled search to wind down instead of falling back to
+  classic pathing on every new goal.
+- **Combat**: checking whether an item is carried no longer moves it into the hotbar; the totem keeps the offhand
+  while it is what keeps the bot alive; timers survive a respawn or dimension change (fights, boats, boat clutch);
+  spectators are not targeted. PvP on 1.21.4 digs through to an opponent that is right there but walled off.
+- **PvE**: a mob that despawns is no longer counted as a kill, marked mobs are fought alongside the filter, and the
+  per-mob bookkeeping is pruned.
+- **Swarm**: a build stop names its job, so a late stop cannot end the next job; an S2S endpoint refuses unsigned
+  tokens; two signet records naming one member with different keys are refused; the spool transport no longer
+  loses lines when a file is briefly held open; a settings change restarts the link.
+- **GUI**: an open dropdown is closed when the list is rebuilt, a letter bound to the screen can be typed into
+  the search box, and the version chip shows the game version.
+- **Air process**: an air pocket found in one world is not carried into the next.
+- 1.21.11 and 26.3 receive all of this except the look-ahead mover and PvP changes (their executor and combat
+  code differ); 1.16.1 receives the swarm fixes. Checked by unit tests and builds on every line, not played live.
+
 ## New in v1.19.0
 
 - **PvE combat** (`#pve [hostiles|<mob id>|stats|clear]`): mobs now have their own combat process instead of
