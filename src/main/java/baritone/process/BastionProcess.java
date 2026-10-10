@@ -596,6 +596,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return exit(me, counts(me));
         }
         if (exiting && bastion != null) return exit(me, counts(me));
+        PathingCommand dl = duel(me, heavies);
+        if (dl != null) return dl;
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
@@ -1944,6 +1946,71 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (h != null && h.getType() == HitResult.Type.BLOCK && ((BlockHitResult) h).getBlockPos().equals(p)) return r;
         }
         return null;
+    }
+
+    // timed brute duel: one isolated brute, full-cooldown sprint hits, step out of reach between swings
+    private LivingEntity duelBrute;
+    private int duelHits;
+    private float duelHp;
+    private long duelBackUntil, duelStart;
+
+    private void duelEnd(Player me, String why) {
+        if (duelBrute != null) logDirect("Bastion: duel " + why + " hits=" + duelHits + " dmgTaken=" + String.format("%.1f", duelHp - me.getHealth()) + " t=" + (ticks - duelStart) / 20 + "s");
+        duelBrute = null;
+    }
+
+    private boolean lavaDropNear(BlockPos c, int r) {
+        for (int dx = -r; dx <= r; dx++) for (int dz = -r; dz <= r; dz++) {
+            for (int dy = 0; dy < 16; dy++) {
+                BlockState s = ctx.world().getBlockState(c.offset(dx, -dy, dz));
+                if (!s.getFluidState().isEmpty() && s.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) return true;
+                if (dy > 0 && !s.isAir() && !s.getCollisionShape(ctx.world(), c.offset(dx, -dy, dz)).isEmpty()) break;
+            }
+        }
+        return false;
+    }
+
+    private PathingCommand duel(Player me, List<LivingEntity> heavies) {
+        List<LivingEntity> brutes = heavies.stream().filter(e -> e instanceof PiglinBrute && e.isAlive()).toList();
+        if (duelBrute != null && !duelBrute.isAlive()) { duelEnd(me, "won"); return null; }
+        LivingEntity b = brutes.stream().filter(e -> me.distanceTo(e) < 12).min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
+        if (b == null) { duelEnd(me, "lost sight"); return null; }
+        LivingEntity fb = b;
+        boolean isolated = brutes.stream().noneMatch(e -> e != fb && e.distanceTo(fb) < 10);
+        String why = !isolated ? "outnumbered" : me.getHealth() < 10 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
+        if (why != null) { duelEnd(me, "aborted (" + why + ")"); return null; }
+        if (duelBrute != b) { duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks; logDirect("Bastion: duel start vs brute at " + b.blockPosition().toShortString()); }
+        if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
+        baritone.getPveProcess().hold = false;
+        // best weapon: axe, else sword
+        int best = -1; int rank = 0;
+        for (int i = 0; i < 9; i++) {
+            net.minecraft.world.item.Item it = me.getInventory().getItem(i).getItem();
+            int r = it instanceof net.minecraft.world.item.AxeItem ? 2 : me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
+            if (r > rank) { rank = r; best = i; }
+        }
+        if (best >= 0) me.getInventory().setSelectedSlot(best);
+        double d = me.distanceTo(b);
+        float cd = me.getAttackStrengthScale(0.5f);
+        aimer.look(b.getEyePosition(), 0);
+        if (cd >= 0.95f && d <= 3.0 && me.hasLineOfSight(b) && ticks >= duelBackUntil) {
+            net.minecraft.client.Minecraft.getInstance().gameMode.attack((LocalPlayer) me, b);
+            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            duelHits++;
+            duelBackUntil = ticks + 10;
+            status = "duel: hit " + duelHits;
+            return pause0();
+        }
+        if (ticks < duelBackUntil || cd < 0.95f) {
+            if (d > 4.5) { status = "duel: waiting for cooldown"; return pause0(); }
+            Vec3 away = me.position().subtract(b.position()).normalize().scale(5);
+            BlockPos to = BlockPos.containing(me.position().add(away));
+            status = "duel: stepping back";
+            return new PathingCommand(new GoalNear(to, 1), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        me.setSprinting(true);
+        status = "duel: closing in";
+        return new PathingCommand(new GoalNear(b.blockPosition(), 1), PathingCommandType.SET_GOAL_AND_PATH);
     }
 
     private static float yawTo(Player me, LivingEntity e) {

@@ -180,6 +180,7 @@ public final class BastTest implements AbstractGameEventListener {
             run("execute at @p run summon piglin ~-4 ~ ~3");
             run("execute at @p run summon piglin_brute ~3 ~ ~-6");
             }
+            if (Boolean.getBoolean("ostinato.basttest.duel")) { run("give @p iron_axe"); run("execute at @p run summon piglin_brute ~5 ~ ~ {Tags:[\"duel\"]}"); }
             say("BAST setup done; starting #bastion " + VARIANT);
             b.getCommandManager().execute("bastion " + VARIANT);
             state = 4;
@@ -196,7 +197,8 @@ public final class BastTest implements AbstractGameEventListener {
                 say("BAST lava test: dropped into deep lava");
             }
             if (Boolean.getBoolean("ostinato.basttest.lava") && ticks == 900) { say("BAST END lava test hp=" + mc.player.getHealth() + " fire=" + mc.player.isOnFire() + " inLava=" + mc.player.isInLava() + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
-            if (Boolean.getBoolean("ostinato.basttest.nobrutes") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute]"); // 1.16.1 has no brutes
+            if (Boolean.getBoolean("ostinato.basttest.duel") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute,tag=!duel]");
+        if (Boolean.getBoolean("ostinato.basttest.nobrutes") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute]"); // 1.16.1 has no brutes
             if (mc.player.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
             if ((REAL || ticks <= 120 || b.getBastionProcess().status().contains("perch") || b.getBastionProcess().status().contains("eating") || mc.player.getHealth() < 20 || mc.player.isInLava()) && ticks % 3 == 0) {
                 var br = mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.PiglinBrute.class, mc.player.getBoundingBox().inflate(40));
