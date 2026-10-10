@@ -19,6 +19,7 @@ public final class BastTest implements AbstractGameEventListener {
     private int state, wait, ticks;
     private BlockPos target;
     private static final boolean REAL = System.getenv("BAST_REAL") != null;
+    private int duelSummons;
     private static final String VARIANT = System.getProperty("ostinato.basttest.variant", "any");
 
     private BastTest(Baritone b) { this.b = b; }
@@ -197,7 +198,8 @@ public final class BastTest implements AbstractGameEventListener {
                 say("BAST lava test: dropped into deep lava");
             }
             if (Boolean.getBoolean("ostinato.basttest.lava") && ticks == 900) { say("BAST END lava test hp=" + mc.player.getHealth() + " fire=" + mc.player.isOnFire() + " inLava=" + mc.player.isInLava() + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
-            if (Boolean.getBoolean("ostinato.basttest.duel") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute,tag=!duel]");
+            if (Boolean.getBoolean("ostinato.basttest.duel") && state > 0 && ticks % 300 == 150 && duelSummons < 4) { duelSummons++; run("execute unless entity @e[type=minecraft:piglin_brute,tag=duel] at @p run summon piglin_brute ^ ^ ^4 {Tags:[\"duel\"]}"); }
+        if (Boolean.getBoolean("ostinato.basttest.duel") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute,tag=!duel]");
         if (Boolean.getBoolean("ostinato.basttest.nobrutes") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute]"); // 1.16.1 has no brutes
             if (mc.player.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
             if ((REAL || ticks <= 120 || b.getBastionProcess().status().contains("perch") || b.getBastionProcess().status().contains("eating") || mc.player.getHealth() < 20 || mc.player.isInLava()) && ticks % 3 == 0) {

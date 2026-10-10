@@ -224,6 +224,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean threat(LivingEntity e, Player me, boolean early) {
         if (!e.isAlive()) return false;
         // a mob on another level (the bastion's lower floors, a pit) cannot be fought and would pin us in place trying to path to it
+        // run 48: a hoglin in melee reach was skipped (other level / lava rule) and killed us mid-camp: always hit back
+        if (e instanceof Hoglin && me.distanceTo(e) < 3.5 && Math.abs(e.getY() - me.getY()) < 1.5) return true;
         if (otherLevel(e, me)) return false;
         Long until = ignored.get(e.getUUID());
         if (until != null && until > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)) return false;
