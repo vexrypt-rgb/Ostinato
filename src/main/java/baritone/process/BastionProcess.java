@@ -780,6 +780,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             }
             if ((!inDoor || !me.isOnFire()) && descentSteps <= 0) { doorPos = null; descentSteps = 0; }
         }
+        PathingCommand cure = fireCure(me);
+        if (cure != null) return cure;
         if (me.isInLava()) {
             // in lava: no planning, just step directly away from the nearest lava and jump (a path from here may never come)
             Vec3 away = Vec3.ZERO;
@@ -836,7 +838,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
             Vec3 away = Vec3.ZERO;
             for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int dy = -1; dy <= 1; dy++) {
                 BlockPos lp = me.blockPosition().offset(dx, dy, dz);
-                if (lavaAt(lp)) away = away.add(me.position().subtract(Vec3.atCenterOf(lp)));
+                if (realLava(lp)) away = away.add(me.position().subtract(Vec3.atCenterOf(lp)));
+            }
+            // run 100: pressed into a tunnel wall for 4 s while burning (vc=true) and died; path to a clear cell instead
+            if (me.horizontalCollision) {
+                BlockPos safe = null;
+                for (BlockPos q : BlockPos.betweenClosed(me.blockPosition().offset(-4, -1, -4), me.blockPosition().offset(4, 1, 4))) {
+                    if (!floor(q.below()) || floor(q) || floor(q.above()) || lavaNearPos(q)) continue;
+                    if (safe == null || me.blockPosition().distSqr(q) < me.blockPosition().distSqr(safe)) safe = q.immutable();
+                }
+                if (safe != null) { status = "burning, pathing clear to " + safe.toShortString(); return new PathingCommand(new GoalBlock(safe), PathingCommandType.SET_GOAL_AND_PATH); }
+                away = Vec3.ZERO;
             }
             if (away.horizontalDistanceSqr() > 0.01) {
                 baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-away.x, away.z)), 10), true);
@@ -2197,6 +2209,34 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (!me.isUsingItem()) mc.gameMode.useItem(me, net.minecraft.world.InteractionHand.OFF_HAND);
             status = "skirmish: blocking"; lastBlockTick = ticks;
         } else status = "skirmish: cooldown";
+        return pause0();
+    }
+
+    /** Burning or in lava without fire resistance: drink a fire resistance potion, or eat a golden apple when hurt. */
+    private long cureUntil;
+    private PathingCommand fireCure(Player me) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (ticks < cureUntil && me.isUsingItem()) { mc.options.keyUse.setDown(true); status = "drinking/eating for fire"; return pause0(); }
+        if (cureUntil > 0 && ticks >= cureUntil) { mc.options.keyUse.setDown(false); cureUntil = 0; }
+        if (!(me.isOnFire() || me.isInLava()) || me.hasEffect(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE)) return null;
+        int slot = -1;
+        for (int i = 0; i < 9 && slot < 0; i++) if ("fire_resistance".equals(itemId(me.getInventory().getItem(i)))) slot = i;
+        if (slot < 0 && me.getHealth() < 12) for (int i = 0; i < 9 && slot < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) slot = i;
+        if (slot < 0) {
+            // pull one from the main inventory into hotbar slot 8
+            for (int i = 9; i < 36; i++) {
+                ItemStack s = me.getInventory().getItem(i);
+                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 12 && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
+            }
+            return null;
+        }
+        me.getInventory().setSelectedSlot(slot);
+        if (me.getInventory().getSelectedSlot() != selAtTickStart) return pause0();
+        mc.options.keyUse.setDown(true);
+        mc.gameMode.useItem(me, net.minecraft.world.InteractionHand.MAIN_HAND);
+        cureUntil = ticks + 40;
+        logDirect("Bastion: " + (me.isInLava() ? "in lava" : "burning") + " at " + (int) me.getHealth() + " hp, using " + itemId(me.getInventory().getItem(slot)));
+        status = "drinking/eating for fire";
         return pause0();
     }
 
