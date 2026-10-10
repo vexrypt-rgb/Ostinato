@@ -969,6 +969,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         for (Piglin p : piglins) {
             if (p.getOffhandItem().is(Items.GOLD_INGOT) || p.isAggressive() || !p.isAlive()) continue;
             if (unreachable.getOrDefault(p.getUUID(), 0L) > ticks) continue;
+            // a piglin by the lava sea is not worth walking to (run 35: walked into the lava closing in on one at y=34)
+            if (lavaDropNear(p.blockPosition()) || lavaNearPos(p.blockPosition())) continue;
             // another level of the bastion (run 30: 1347 ticks closing in on piglins under the bridge) is not worth the walk
             if (Math.abs(p.getY() - me.getY()) > 2.5 || me.distanceTo(p) > 24) continue;
             int brutes = brutesAround(p);
@@ -1509,6 +1511,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (!(e instanceof Piglin p) || p.isBaby() || !p.isAlive() || p.isAggressive() || admiring.containsKey(p.getUUID()) || p.getOffhandItem().is(Items.GOLD_INGOT)) continue;
             // calm piglins within 14 that we can see are worth a short detour (runs 20/27: 6 throws in 300 s with 20+ ingots)
             if (me.distanceTo(p) > 14 || !me.hasLineOfSight(p) || brutesAround(p) >= 1 || Math.abs(p.getY() - me.getY()) > 3) continue;
+            if (me.distanceTo(p) > THROW_RANGE && (lavaDropNear(p.blockPosition()) || lavaNearPos(p.blockPosition()))) continue;
             if (target == null || me.distanceTo(p) < me.distanceTo(target)) target = p;
         }
         if (target == null) return null;
@@ -1926,6 +1929,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
     private BlockPos nudgeDest;
     private int selAtTickStart = -1;
+
+    private boolean lavaNearPos(BlockPos at) {
+        for (BlockPos c : BlockPos.betweenClosed(at.offset(-2, -1, -2), at.offset(2, 1, 2))) if (lavaAt(c)) return true;
+        return false;
+    }
     private final Map<java.util.UUID, Long> unreachable = new HashMap<>();
     private java.util.UUID closeInId;
     private long closeInSince;
