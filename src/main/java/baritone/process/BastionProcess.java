@@ -589,6 +589,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "on tower, waiting out the brute";
             return pause0();
         }
+        PathingCommand dl = duel(me, heavies);
+        if (dl != null) return dl;
         if (bastion != null && !exiting && !perching && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp, leaving");
             pveP.hold = false;
@@ -598,8 +600,6 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return exit(me, counts(me));
         }
         if (exiting && bastion != null) return exit(me, counts(me));
-        PathingCommand dl = duel(me, heavies);
-        if (dl != null) return dl;
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
@@ -1976,13 +1976,14 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private PathingCommand duel(Player me, List<LivingEntity> heavies) {
         List<LivingEntity> brutes = heavies.stream().filter(e -> e instanceof PiglinBrute && e.isAlive()).toList();
         if (duelBrute != null && !duelBrute.isAlive()) { duelEnd(me, "won"); return null; }
+        // run 64: turning to eat/climb/exit with a brute in reach got hit 7, 3 and 10; with a shield, keep blocking until it is out of reach
         // shield duel only (runs 58/59: no shield lost 11 hp in 3-4 hits)
         if (!me.getOffhandItem().is(Items.SHIELD)) { duelEnd(me, "aborted (no shield)"); return null; }
         LivingEntity b = brutes.stream().filter(e -> me.distanceTo(e) < 12).min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
         if (b == null) { duelEnd(me, "lost sight"); return null; }
         LivingEntity fb = b;
         boolean isolated = brutes.stream().noneMatch(e -> e != fb && e.distanceTo(fb) < 10);
-        String why = !isolated ? "outnumbered" : me.getHealth() < 14 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
+        String why = !isolated ? "outnumbered" : me.getHealth() < 14 && me.distanceTo(b) > 4 ? "low hp" : perching ? "perched" : me.isInLava() ? "lava" : lavaDropNear(me.blockPosition(), 2) ? "lava edge" : otherLevel(b, me) ? "other level" : null;
         if (why != null) { duelEnd(me, "aborted (" + why + ")"); return null; }
         if (duelBrute != b) {
             duelBrute = b; duelHits = 0; duelHp = me.getHealth(); duelStart = ticks;
