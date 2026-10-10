@@ -1133,7 +1133,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             }
         }
         baritone.getLookBehavior().updateTarget(rot, true);
-        if (ticks - chestClickTick > 20 && ctx.playerRotations().isReallyCloseTo(rot)) {
+        // aimAt already proved this rotation hits the chest; the smoothed aim may never settle exactly, so do not wait for it
+        if (ticks - chestClickTick > 10) {
             HitResult h = RayTraceUtils.rayTraceTowards(me, rot, ctx.playerController().getBlockReachDistance(), false);
             if (h instanceof BlockHitResult bh && bh.getBlockPos().equals(next)) {
                 ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, bh);
@@ -1142,7 +1143,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 openedChest = next;
             }
         }
-        status = "opening chest";
+        status = "opening chest (hit " + hitDesc(me, next) + ", menu " + me.containerMenu.getClass().getSimpleName() + ")";
         return pause0();
     }
 
