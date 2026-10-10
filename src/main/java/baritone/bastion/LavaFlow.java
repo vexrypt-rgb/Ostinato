@@ -19,24 +19,31 @@ public final class LavaFlow {
     public static long key(int x, int y, int z) { return ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (y & 0xFFF); }
 
     /** Cells within r of (cx,cy,cz) that lava will reach within horizonTicks, mapped to arrival tick. */
+    public static final int WATER_STEP_TICKS = 5, WATER_RUN = 7;
+
     public static Map<Long, Integer> forecast(Grid g, int cx, int cy, int cz, int r, int horizonTicks) {
+        return forecast(g, cx, cy, cz, r, horizonTicks, MAX_RUN, STEP_TICKS);
+    }
+
+    /** Generic fluid spread: Nether lava (7, 10 ticks), water (7, 5 ticks). */
+    public static Map<Long, Integer> forecast(Grid g, int cx, int cy, int cz, int r, int horizonTicks, int maxRun, int stepTicks) {
         Map<Long, Integer> arrive = new HashMap<>();
         Map<Long, Integer> level = new HashMap<>();
         ArrayDeque<int[]> q = new ArrayDeque<>(); // x,y,z,level,tick
         for (int x = cx - r; x <= cx + r; x++) for (int y = cy - r; y <= cy + r; y++) for (int z = cz - r; z <= cz + r; z++) {
             int l = g.lava(x, y, z);
-            if (l >= 0 && l < MAX_RUN) { q.add(new int[]{x, y, z, l, 0}); level.put(key(x, y, z), l); }
+            if (l >= 0 && l < maxRun) { q.add(new int[]{x, y, z, l, 0}); level.put(key(x, y, z), l); }
         }
         int[][] dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         while (!q.isEmpty()) {
             int[] c = q.poll();
-            int t = c[4] + STEP_TICKS;
+            int t = c[4] + stepTicks;
             if (t > horizonTicks) continue;
             if (g.open(c[0], c[1] - 1, c[2])) { // falls first, and falling lava starts a fresh run
                 visit(g, q, arrive, level, cx, cy, cz, r, c[0], c[1] - 1, c[2], 0, t);
                 continue;
             }
-            if (c[3] + 1 > MAX_RUN) continue;
+            if (c[3] + 1 > maxRun) continue;
             for (int[] d : dirs) visit(g, q, arrive, level, cx, cy, cz, r, c[0] + d[0], c[1], c[2] + d[1], c[3] + 1, t);
         }
         return arrive;

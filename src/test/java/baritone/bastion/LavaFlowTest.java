@@ -39,4 +39,15 @@ public class LavaFlowTest {
         assertNull(f.get(LavaFlow.key(2, 1, 0)));
         assertNotNull(f.get(LavaFlow.key(-3, 1, 0)));
     }
+    @Test public void waterIsFaster() {
+        Map<Long, Integer> f = LavaFlow.forecast(flat(false), 0, 1, 0, 2, 1000, LavaFlow.WATER_RUN, LavaFlow.WATER_STEP_TICKS);
+        assertEquals(Integer.valueOf(35), f.get(LavaFlow.key(7, 1, 0)));
+    }
+
+    @Test public void pushesTowardDrop() {
+        // water at x=0..2, a deadly drop at x=3: cell x=2 pushes toward it, x=0 does not
+        assertTrue(EdgeCost.pushesToward(true, true));
+        assertFalse(EdgeCost.pushesToward(true, false));
+        assertFalse(EdgeCost.pushesToward(false, true));
+    }
 }

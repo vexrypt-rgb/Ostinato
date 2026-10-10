@@ -16,6 +16,7 @@
  */
 
 package baritone.pathing.movement.movements;
+import baritone.bastion.EdgeCost;
 
 import baritone.Baritone;
 import baritone.api.IBaritone;
@@ -151,6 +152,8 @@ public class MovementSwim extends Movement {
         int tx = x + dx, ty = y + dy, tz = z + dz;
         // never swim into lava: dig() treats a fluid cell as open, so a dug shaft next to lava was planned straight through it
         if (MovementHelper.isLava(c.get(tx, ty, tz)) || MovementHelper.isLava(c.get(tx, ty + 1, tz))) return COST_INF;
+        // intentional swimming skips the generic flow penalty, but not water that carries us toward a drop or lava
+        if (EdgeCost.waterPush(c, tx, ty, tz) > 0) return COST_INF;
         if (dy == 1 && Math.abs(dx) + Math.abs(dz) == 1 && water(c, x, y, z) && MovementHelper.canWalkOn(c.bsi, tx, y, tz)
                 && headroom(c, tx, ty, tz) && headroom(c, tx, ty + 1, tz) && headroom(c, x, ty, z) && headroom(c, x, ty + 1, z)) {
             // Up a step out of water (a stream down stairs): pushing into the edge while jumping takes

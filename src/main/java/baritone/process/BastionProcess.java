@@ -162,7 +162,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     public void stop() {
-        EdgeCost.enabled = false; EdgeCost.lavaSoon = java.util.Set.of();
+        EdgeCost.enabled = false; EdgeCost.lavaSoon = java.util.Set.of(); EdgeCost.waterSoon = java.util.Set.of();
         active = false;
         if (savedBreakPenalty != null) {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
@@ -491,7 +491,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         if (ctx.player() != null) {
-            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), lavaNearPos(ctx.player().blockPosition()) && holeTarget != null && ctx.world().getBlockState(holeTarget).isAir());
+            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), brokeNextToFluid());
             // picked-up counter from the inventory (counting the item we walked to missed most pickups, run 32: 2)
             int u = 0;
             for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
@@ -1286,6 +1286,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || EdgeCost.lavaSoon.contains(LavaFlow.key(p.getX(), p.getY(), p.getZ()));
     }
 
+    private BlockPos lastSel;
+    private boolean lastSelSolid;
+    /** The block we were aiming at last tick is gone and touches a fluid: a flow may have been released, re-forecast now. */
+    private boolean brokeNextToFluid() {
+        BlockPos was = lastSel; boolean wasSolid = lastSelSolid;
+        lastSel = ctx.getSelectedBlock().orElse(null);
+        lastSelSolid = lastSel != null && !ctx.world().getBlockState(lastSel).isAir();
+        if (was == null || !wasSolid || !ctx.world().getBlockState(was).isAir()) return false;
+        for (Direction d : Direction.values()) if (!ctx.world().getFluidState(was.relative(d)).isEmpty()) return true;
+        return false;
+    }
+
     private long flowAt = -100;
     private BlockPos flowCenter;
     /** Re-forecast lava spread around us (every 10 ticks, or right after a block next to lava was broken). */
@@ -1311,6 +1323,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // horizon 100 ticks: the cells we could walk into within ~5 s
         var f = LavaFlow.forecast(g, c.getX(), c.getY(), c.getZ(), 10, 100);
         EdgeCost.lavaSoon = java.util.Set.copyOf(f.keySet());
+        // water (overworld / the port): 7 sideways, 5 ticks a step; current water cells count too
+        LavaFlow.Grid wg = new LavaFlow.Grid() {
+            public int lava(int x, int y, int z) {
+                var fs = w.getFluidState(new BlockPos(x, y, z));
+                if (!fs.is(net.minecraft.tags.FluidTags.WATER)) return -1;
+                if (fs.isSource() || fs.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING)) return 0;
+                return Math.max(0, 8 - fs.getAmount());
+            }
+            public boolean open(int x, int y, int z) { return g.open(x, y, z); }
+        };
+        java.util.Set<Long> wet = new java.util.HashSet<>(LavaFlow.forecast(wg, c.getX(), c.getY(), c.getZ(), 10, 60, LavaFlow.WATER_RUN, LavaFlow.WATER_STEP_TICKS).keySet());
+        for (BlockPos q : BlockPos.betweenClosed(c.offset(-10, -4, -10), c.offset(10, 4, 10))) if (w.getFluidState(q).is(net.minecraft.tags.FluidTags.WATER)) wet.add(LavaFlow.key(q.getX(), q.getY(), q.getZ()));
+        EdgeCost.waterSoon = java.util.Set.copyOf(wet);
     }
 
     /** Feet height of the landing below (x, y, z) feet cell; Integer.MIN_VALUE when the column is unloaded, ends in lava or is too deep. */
