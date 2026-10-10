@@ -500,6 +500,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // the walk-around penalty only suits short detours, so allow digging once we are going nowhere
         if (calcFailed || ticks - stuckSince > 100) BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = 2D;
         if (ticks - stuckSince < 200) return cmd;
+        if ((ticks - stuckSince) % 600 == 599) {
+            // the same stale path for 30 s without a single step (run 33: 5 minutes on one movement): drop it outright
+            baritone.getPathingBehavior().forceCancel();
+            logDirect("Bastion: no progress for " + (ticks - stuckSince) / 20 + " s, force-cancelled the path");
+            return cmd;
+        }
         // blacklist the cells the current movement keeps trying to reach (and where we stand), then plan again around them
         try {
             var cur = baritone.getPathingBehavior().getCurrent();
