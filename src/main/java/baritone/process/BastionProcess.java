@@ -434,8 +434,52 @@ public final class BastionProcess extends BaritoneProcessHelper {
         return pause;
     }
 
+    // ---- stuck detector: the same few blocks for 10 s while we asked to path means a move that never completes ----
+    private Vec3 stuckAnchor;
+    private long stuckSince;
+    public int unstucks;
+
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        if (stuckAvoider == null) {
+            // onLostControl drops the predicate; put it back or blacklisted moves would be planned again
+            stuckAvoider = pos -> { Long until = stuckAvoid.get(pos); return until != null && until > ticks; };
+            AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().add(stuckAvoider);
+        }
+        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
+        Player me = ctx.player();
+        if (cmd == null || cmd.commandType != PathingCommandType.SET_GOAL_AND_PATH || me == null) {
+            stuckAnchor = null;
+            return cmd;
+        }
+        if (stuckAnchor == null || me.position().distanceTo(stuckAnchor) > 2.5) {
+            stuckAnchor = me.position();
+            stuckSince = ticks;
+            return cmd;
+        }
+        if (ticks - stuckSince < 200) return cmd;
+        // blacklist the cells the current movement keeps trying to reach (and where we stand), then plan again around them
+        try {
+            var cur = baritone.getPathingBehavior().getCurrent();
+            if (cur != null) {
+                var mv = cur.getPath().movements().get(Math.min(cur.getPosition(), cur.getPath().movements().size() - 1));
+                for (var d : new baritone.api.utils.BetterBlockPos[]{mv.getDest(), mv.getSrc()}) {
+                    if (d.equals(me.blockPosition())) continue;
+                    BlockPos dp = new BlockPos(d.x, d.y, d.z);
+                    stuckAvoid.put(dp, ticks + 1500L);
+                    stuckAvoid.put(dp.above(), ticks + 1500L);
+                }
+                status = "stuck on " + mv.getClass().getSimpleName() + " to " + mv.getDest() + ", avoiding it";
+            }
+        } catch (RuntimeException ignoredEx) { }
+        logDirect("Bastion: " + status);
+        unstucks++;
+        stuckAnchor = null;
+        // a cancel from inside our own tick trips the control manager; cancelling through the command drops the old path; next tick plans fresh around the avoid set
+        return new PathingCommand(cmd.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
+
+    private PathingCommand tick0(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
         ticks++;
         baritone.getInputOverrideHandler().clearAllKeys();
@@ -821,7 +865,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     /** Ledges within 10 blocks at our height whose drop lands on a checked floor. */
     private List<BastionDrops.Ledge> ledges(Player me) {
         List<BastionDrops.Ledge> out = new ArrayList<>();
-        BlockPos at = me.blockPosition();
+        BlockPos at = ctx.playerFeet();
         boolean[] safe = new boolean[1];
         for (int dx = -10; dx <= 10; dx++) for (int dz = -10; dz <= 10; dz++) for (int dy = -1; dy <= 1; dy++) {
             BlockPos s = at.offset(dx, dy, dz);
@@ -840,18 +884,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     /** A verified drop toward a target far below, instead of the long stairs; null to path normally. */
     private PathingCommand drop(Player me, BlockPos target) {
-        if (!me.onGround() || me.getY() - target.getY() < BastionSettings.maxSafeDrop + 3) { if (dropPlan != null && me.getY() < dropPlan.y() - 1) dropPlan = null; return null; }
+        if (!me.onGround() || ctx.playerFeet().getY() - target.getY() < BastionSettings.maxSafeDrop + 3) { if (dropPlan != null && me.getY() < dropPlan.y() - 1) dropPlan = null; return null; }
         if (!target.equals(dropFor) || ticks - dropScan > 60 && dropPlan == null) {
             dropFor = target;
             dropScan = ticks;
-            BlockPos at = me.blockPosition();
+            BlockPos at = ctx.playerFeet();
             dropPlan = BastionDrops.choose(ledges(me), at.getX(), at.getY(), at.getZ(), target.getX(), target.getY(), target.getZ(), me.getHealth(), BastionSettings.maxSafeDrop);
             dropSince = ticks;
         }
         if (dropPlan == null) return null;
         if (ticks - dropSince > 300) { dropPlan = null; dropScan = ticks + 200; return null; }
         BlockPos ledge = new BlockPos(dropPlan.x(), dropPlan.y(), dropPlan.z());
-        if (!me.blockPosition().equals(ledge)) {
+        if (!ctx.playerFeet().equals(ledge)) {
             status = "to verified drop " + ledge.toShortString() + " (" + dropPlan.height() + " down)";
             return new PathingCommand(new GoalBlock(ledge), PathingCommandType.SET_GOAL_AND_PATH);
         }
@@ -932,6 +976,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean outOfEverything(Player me) {
         return BastionSettings.exitWhenDone && ingotCount(me) <= BastionSettings.keepIngots && chestsExhausted && goldSourceGone && admiring.isEmpty();
     }
+
+    public static String itemIdPublic(ItemStack s) { return itemId(s); }
 
     static String itemId(ItemStack s) {
         if (s.is(Items.POTION) || s.is(Items.SPLASH_POTION) || s.is(Items.LINGERING_POTION)) {

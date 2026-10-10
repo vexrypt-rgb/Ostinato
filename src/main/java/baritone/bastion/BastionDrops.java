@@ -50,6 +50,9 @@ public final class BastionDrops {
 
     public enum Clutch { NONE, PLACE }
 
+    /** Smallest fall damage worth a clutch (half-hearts). */
+    public static final float MIN_CLUTCH_DAMAGE = 4;
+
     /**
      * While falling: place a block to stop now when the rest of the fall would hurt too much. Damage counts the whole fall, so
      * the clutch has to happen early: a block under us after 2 blocks lands us with no damage; one at the bottom saves nothing.
@@ -63,7 +66,8 @@ public final class BastionDrops {
         if (!haveBlock || remaining < 1.2) return Clutch.NONE;
         if (planned && !intoLava) return Clutch.NONE;
         float dmg = damage(fallen + remaining);
-        if (intoLava || dmg >= health - 2 || fallen + remaining > cap + 1 && dmg > 0) {
+        // a heart or so of damage is cheaper than the stray block and the pause (in-game: a 4-block fall clutched for 1 damage)
+        if (intoLava || dmg >= health - 2 || dmg >= MIN_CLUTCH_DAMAGE) {
             // too late to help: we would land on our own block with the same damage, but still out of lava
             return damage(fallen + 1) < dmg || intoLava ? Clutch.PLACE : Clutch.NONE;
         }

@@ -39,6 +39,8 @@ public class BastionFallGoldTest {
         // a planned verified drop is left alone, unless it turned out to end in lava
         assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 10, false, true, 20, 3, true));
         assertEquals(BastionDrops.Clutch.PLACE, BastionDrops.clutch(2, 10, true, true, 20, 3, true));
+        // a 4-block fall (1 damage) is not worth a block
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 2.2, false, false, 20, 3, true));
         // nothing to place
         assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 14, false, false, 20, 3, false));
         // landing next tick: a block now saves nothing
