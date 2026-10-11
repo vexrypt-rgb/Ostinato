@@ -662,9 +662,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // brute axes disable shields (runs 98, 106): no duel unless asked for
         PathingCommand dl = BastionSettings.duel ? duel(me, heavies) : null;
         if (dl != null) return dl;
+        // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
+        LivingEntity brute = null;
+        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
+        // a tower beats running (run 26, and runs 116, 117 where leaving on foot from a pack ended in two axe hits)
+        boolean canTower = brute != null && !perching && me.distanceTo(brute) >= 4.5 && !me.isInLava() && !lavaWithin(me, 3) && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown;
         long pack = heavies.stream().filter(e -> e instanceof PiglinBrute && me.distanceTo(e) < 16).count();
         // run 106: 9 brutes in a stables, hit down to 9 hp before leaving; leave on a pack, or hurt with one coming
-        if (bastion != null && !exiting && (!perching || me.getY() < perchBase + 1.9) && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
+        // runs 116, 117: a tower begun a moment earlier was dropped to leave on foot with a brute 5 blocks behind, and both
+        // times the brutes won the race (two hits kill). A tower is out of reach in under two seconds: let it get up, and
+        // only leave from the ground when it has had three seconds and is still low
+        boolean towerFailed = perching && me.getY() < perchBase + 1.9 && ticks - perchTick > 60;
+        if (bastion != null && !exiting && !canTower && (!perching || towerFailed) && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp (" + pack + " within 16), leaving");
             pveP.hold = false;
             perching = false;
@@ -673,10 +682,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             return exit(me, counts(me));
         }
         if (exiting && bastion != null) return exit(me, counts(me));
-        // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
-        LivingEntity brute = null;
-        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
-        if (brute != null && !perching && me.distanceTo(brute) >= 4.5 && !me.isInLava() && !lavaWithin(me, 3) && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
+        if (canTower) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             perching = true;
@@ -1674,12 +1680,16 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         if (dropPlan == null) return null;
         if (ticks - dropSince > 300) { dropPlan = null; dropScan = ticks + 200; return null; }
         BlockPos ledge = new BlockPos(dropPlan.x(), dropPlan.y(), dropPlan.z());
-        if (!ctx.playerFeet().equals(ledge)) {
+        // run 115: one step out we still stood on the rim, in the cell beyond the ledge, and were sent back to the ledge;
+        // the walk back and the walk off fought and we left the edge sideways, into a 10-block fall. Once the step
+        // off has begun it is finished
+        boolean stepping = ticks < plannedFallUntil && ctx.playerFeet().equals(ledge.offset(dropPlan.dx(), 0, dropPlan.dz()));
+        if (!ctx.playerFeet().equals(ledge) && !stepping) {
             status = "to verified drop " + ledge.toShortString() + " (" + dropPlan.height() + " down)";
             return new PathingCommand(new GoalBlock(ledge), PathingCommandType.SET_GOAL_AND_PATH);
         }
         // on the ledge: walk off it; the clutch stands down for this fall
-        plannedFallUntil = ticks + 60;
+        if (!stepping) plannedFallUntil = ticks + 60;
         float yaw = (float) Math.toDegrees(Math.atan2(-dropPlan.dx(), dropPlan.dz()));
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 30), true);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
