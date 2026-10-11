@@ -20,6 +20,7 @@ public final class BastTest implements AbstractGameEventListener {
     private BlockPos target;
     private static final boolean REAL = System.getenv("BAST_REAL") != null;
     private int duelSummons;
+    private static BlockPos waterBase;
     private static final String VARIANT = System.getProperty("ostinato.basttest.variant", "any");
 
     private BastTest(Baritone b) { this.b = b; }
@@ -86,6 +87,24 @@ public final class BastTest implements AbstractGameEventListener {
             run("gamerule advance_time false");
             run("gamerule spawn_mobs false");
             run("gamerule send_command_feedback false");
+            if (VARIANT.equals("waterpocket")) {
+                // sealed 7x7x14 water tank deep in stone, an air room 2 blocks past its east wall: pocket, refill, tunnel out
+                BlockPos p0 = mc.player.blockPosition();
+                int x = p0.getX(), y = -40, z = p0.getZ();
+                waterBase = new BlockPos(x, y, z);
+                run("forceload add " + (x - 16) + " " + (z - 16) + " " + (x + 16) + " " + (z + 16));
+                run("fill " + (x - 4) + " " + (y - 1) + " " + (z - 4) + " " + (x + 9) + " " + (y + 14) + " " + (z + 4) + " stone");
+                run("fill " + (x - 3) + " " + y + " " + (z - 3) + " " + (x + 3) + " " + (y + 13) + " " + (z + 3) + " water");
+                run("fill " + (x + 6) + " " + y + " " + (z - 1) + " " + (x + 8) + " " + (y + 1) + " " + (z + 1) + " air");
+                run("gamemode survival @p");
+                run("clear @p");
+                run("give @p oak_door 4"); run("give @p iron_pickaxe"); run("give @p cooked_beef 8");
+                run("tp @p " + x + " " + (y + 6) + " " + z);
+                say("BAST waterpocket tank at " + waterBase.toShortString());
+                baritone.api.BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("bastion any");
+                state = 4; ticks = 0;
+                return;
+            }
             MinecraftServer sv = mc.getSingleplayerServer();
             BlockPos[] found = new BlockPos[1];
             sv.submit(() -> {
@@ -220,6 +239,14 @@ public final class BastTest implements AbstractGameEventListener {
             if (Boolean.getBoolean("ostinato.basttest.duel") && state > 0 && ticks % 300 == 150 && duelSummons < 4) { duelSummons++; run("execute unless entity @e[type=minecraft:piglin_brute,tag=duel] at @p run summon piglin_brute ^ ^ ^4 {Tags:[\"duel\"]}"); }
         if (Boolean.getBoolean("ostinato.basttest.duel") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute,tag=!duel]");
         if (Boolean.getBoolean("ostinato.basttest.nobrutes") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute]"); // 1.16.1 has no brutes
+            if (waterBase != null) {
+                var pl = mc.player;
+                if (pl.getHealth() <= 0) { say("BAST END waterpocket died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
+                if (ticks % 20 == 0) System.out.println("BAST dbg t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " under=" + pl.isUnderWater() + " st=" + b.getBastionProcess().status() + " pos=" + pl.blockPosition().toShortString());
+                boolean out = !pl.isInWater() && pl.getX() >= waterBase.getX() + 4 && pl.getY() < waterBase.getY() + 3;
+                if (out || ticks >= 2400) { say("BAST END waterpocket " + (out ? "ESCAPED" : "TIMEOUT") + " t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " pos=" + pl.blockPosition().toShortString()); state = 9; mc.execute(mc::stop); return; }
+                return;
+            }
             if (mc.player.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
             if ((REAL || ticks <= 120 || b.getBastionProcess().status().contains("perch") || b.getBastionProcess().status().contains("eating") || mc.player.getHealth() < 20 || mc.player.isInLava()) && ticks % 3 == 0) {
                 var br = mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.PiglinBrute.class, mc.player.getBoundingBox().inflate(40));

@@ -44,6 +44,7 @@ import baritone.bastion.BastionGoals;
 import baritone.bastion.BastionLava;
 import baritone.bastion.EdgeCost;
 import baritone.bastion.ItemThrow;
+import baritone.bastion.FluidPocket;
 import baritone.bastion.LavaFlow;
 import baritone.bastion.BastionTrap;
 import baritone.api.pathing.goals.GoalBlock;
@@ -604,6 +605,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // the use key (shield, food) is only held by whoever needs it this tick; PveProcess leaves it down when we stop calling it
         ctx.minecraft().options.keyUse.setDown(false);
 
+        PathingCommand wp = waterPocket(me);
+        if (wp != null) return wp;
         // Bastions only exist in the nether; after a death the respawn lands in the overworld, so never walk there.
         if (!me.isAlive() || !me.level().dimension().identifier().getPath().equals("the_nether")) {
             if (fighting) baritone.getPveProcess().clearEnemies();
@@ -819,7 +822,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         PathingCommand cure = fireCure(me);
         if (cure != null) return cure;
         // run 102: lava flowed over the spawn floor (1 deep, on the ground) and the bot stood still for 3 s; walk straight out to the nearest dry cell
-        if (me.isInLava() && me.onGround()) {
+        // run 111: 1-deep lava on netherrack, onGround flickered while jumping and pillar-out took over and failed: shallow = solid under the feet cell
+        if (me.isInLava() && (me.onGround() || floor(me.blockPosition().below()) && !realLava(me.blockPosition().above()))) {
             BlockPos dry = null;
             for (BlockPos q : BlockPos.betweenClosed(me.blockPosition().offset(-3, -1, -3), me.blockPosition().offset(3, 1, 3))) {
                 if (realLava(q) || realLava(q.above()) || !floor(q.below()) || floor(q) || floor(q.above())) continue;
@@ -1317,6 +1321,104 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long doorSince;
 
     /** Deep lava or a far shore: put a door in the lava around us and stand in the pocket it makes (see BastionLava). */
+
+    // ---- underwater door pocket (overworld): breathe in a door, then swim up or tunnel out (shares FluidPocket with lava) ----
+    private BlockPos wDoor, wExit, wTunnel;
+    private long wLog;
+    private boolean water(BlockPos p) { return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.WATER); }
+    private int surfaceDepth(Player me) {
+        BlockPos e = BlockPos.containing(me.getEyePosition());
+        for (int i = 0; i < 40; i++) {
+            BlockPos q = e.above(i);
+            if (water(q)) continue;
+            if (ctx.world().getBlockState(q).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) continue;
+            return solid(q) ? -1 : i;
+        }
+        return -1;
+    }
+    private BlockPos findExit(BlockPos from) {
+        BlockPos best = null;
+        for (BlockPos q : BlockPos.betweenClosed(from.offset(-10, -1, -10), from.offset(10, 2, 10))) {
+            if (q.getY() != from.getY()) continue;
+            if (solid(q) || solid(q.above()) || water(q) || water(q.above()) || !solid(q.below())) continue;
+            if (ctx.world().getBlockState(q).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) continue;
+            if (best == null || from.distSqr(q) < from.distSqr(best)) best = q.immutable();
+        }
+        return best;
+    }
+    private boolean fluidNextTo(BlockPos c, BlockPos... ok) {
+        for (Direction d : Direction.values()) {
+            BlockPos n = c.relative(d);
+            boolean skip = false; for (BlockPos o : ok) if (n.equals(o)) skip = true;
+            if (!skip && (water(n) || realLava(n))) return true;
+        }
+        return false;
+    }
+    private PathingCommand waterPocket(Player me) {
+        var in = baritone.getInputOverrideHandler();
+        boolean under = me.isUnderWater();
+        if (!under && wTunnel == null && wDoor == null) return null;
+        if (me.level().dimension().identifier().getPath().equals("the_nether")) return null;
+        BlockPos feet = me.blockPosition();
+        boolean inPocket = wDoor != null && ctx.world().getBlockState(wDoor).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
+                && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(wDoor).expandTowards(0, 1, 0));
+        if (wTunnel != null && !under) inPocket = true; // in our own dry tunnel
+        if (!under && !inPocket) { wDoor = null; wTunnel = null; in.setInputForceState(Input.SNEAK, false); return null; }
+        int doors = 0, slot = -1;
+        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.DOORS)) { doors += s.getCount(); if (slot < 0) slot = i; } }
+        if (wExit == null || ticks % 40 == 0) wExit = findExit(feet);
+        int surf = surfaceDepth(me);
+        boolean floorOk = solid(feet.below()) && water(feet);
+        FluidPocket.Action a = FluidPocket.decide(me.getAirSupply(), me.getMaxAirSupply(), surf, inPocket, doors, floorOk, wExit != null, pickaxeSlot(me) >= 0);
+        if (ticks - wLog > 40) { wLog = ticks; logDirect("Bastion: water " + a + " air=" + me.getAirSupply() + " surface=" + surf + " doors=" + doors + " exit=" + (wExit == null ? "none" : wExit.toShortString()) + " at " + feet.toShortString()); }
+        status = "water: " + a;
+        in.setInputForceState(Input.SNEAK, false);
+        switch (a) {
+            case SWIM_UP -> { in.setInputForceState(Input.JUMP, true); return pause0(); }
+            case SINK -> { in.setInputForceState(Input.SNEAK, true); return pause0(); } // crouch sinks faster
+            case DOOR -> {
+                if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me); return pause0(); }
+                me.getInventory().setSelectedSlot(slot);
+                if (placeDoor(me, feet)) { wDoor = feet.immutable(); logDirect("Bastion: water door pocket at " + feet.toShortString() + " air=" + me.getAirSupply()); }
+                in.setInputForceState(Input.SNEAK, true);
+                return pause0();
+            }
+            case WAIT -> { in.setInputForceState(Input.SNEAK, true); return pause0(); }
+            case TUNNEL -> {
+                BlockPos cur = wTunnel != null ? wTunnel : wDoor;
+                if (cur == null) cur = feet;
+                // stand in the current tunnel cell first
+                if (!feet.equals(cur)) {
+                    Vec3 d = Vec3.atBottomCenterOf(cur).subtract(me.position());
+                    baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-d.x, d.z)), 0), true);
+                    in.setInputForceState(Input.MOVE_FORWARD, true);
+                    return pause0();
+                }
+                int dx = Integer.signum(wExit.getX() - cur.getX()), dz = Integer.signum(wExit.getZ() - cur.getZ());
+                Direction dir = Math.abs(wExit.getX() - cur.getX()) >= Math.abs(wExit.getZ() - cur.getZ()) ? (dx > 0 ? Direction.EAST : Direction.WEST) : (dz > 0 ? Direction.SOUTH : Direction.NORTH);
+                BlockPos n = cur.relative(dir);
+                if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
+                    wTunnel = n.immutable();
+                    if (n.equals(wExit) || !water(n) && wExit.distSqr(n) <= 1) { logDirect("Bastion: water tunnel reached the exit at " + n.toShortString()); wDoor = null; wTunnel = null; return null; }
+                    return pause0();
+                }
+                for (BlockPos t : new BlockPos[]{n.above(), n}) {
+                    if (!solid(t)) continue;
+                    if (fluidNextTo(t, cur, cur.above(), n, n.above())) { wExit = null; status = "water: tunnel blocked by fluid"; return pause0(); }
+                    int pk = pickaxeSlot(me);
+                    if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 7, ClickType.SWAP, me); return pause0(); }
+                    me.getInventory().setSelectedSlot(pk);
+                    baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(t), ctx.playerRotations()), true);
+                    if (!t.equals(holeTarget)) { holeTarget = t; ctx.playerController().clickBlock(t, dir.getOpposite()); }
+                    else ctx.playerController().onPlayerDamageBlock(t, dir.getOpposite());
+                    status = "water: tunnelling " + t.toShortString();
+                    return pause0();
+                }
+                return pause0();
+            }
+            default -> { return null; }
+        }
+    }
     private PathingCommand doorPocket(Player me, BlockPos shore) {
         BlockPos feet = me.blockPosition();
         // a door we placed shows up a tick after the click: adopt it at once (in-game we swam up out of it, taking it for lava)
