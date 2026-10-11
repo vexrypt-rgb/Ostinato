@@ -243,7 +243,7 @@ public final class BastTest implements AbstractGameEventListener {
                 var pl = mc.player;
                 if (pl.getHealth() <= 0) { say("BAST END waterpocket died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
                 if (ticks % 20 == 0) System.out.println("BAST dbg t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " under=" + pl.isUnderWater() + " st=" + b.getBastionProcess().status() + " pos=" + pl.blockPosition().toShortString());
-                boolean out = !pl.isInWater() && pl.getX() >= waterBase.getX() + 4 && pl.getY() < waterBase.getY() + 3;
+                boolean out = !pl.isInWater() && (Math.abs(pl.getBlockX() - waterBase.getX()) >= 5 || Math.abs(pl.getBlockZ() - waterBase.getZ()) >= 5) && pl.getY() < waterBase.getY() + 3; // outside the tank and its wall
                 if (out || ticks >= 2400) { say("BAST END waterpocket " + (out ? "ESCAPED" : "TIMEOUT") + " t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " pos=" + pl.blockPosition().toShortString()); state = 9; mc.execute(mc::stop); return; }
                 return;
             }
