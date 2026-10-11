@@ -28,6 +28,7 @@ Prefix `#`. Text below is taken from each command's built-in help; run `#help <c
 | `explore [x z]` / `explorefilter <json> [invert]` | explore; filter marks chunks as explored |
 | `find <block…>` | locate cached blocks |
 | `build <file> [x y z]` | build a schematic file |
+| `portal build [enter]` / `portal find` / `portal status` / `portal cancel` | build a nether portal at a lava pool with buckets (see [Mining and building](mining-and-building.md)) |
 | `schematica`, `litematica [#]` | build the schematic open in that mod |
 | `sel …` | WorldEdit-like selections (see [Mining and building](mining-and-building.md)) |
 | `wp …` | waypoints (`list save info delete restore clear goal goto`) |

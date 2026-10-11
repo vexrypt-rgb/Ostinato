@@ -17,6 +17,26 @@ skipped, so it is safe to re-run. `#litematica` and `#schematica` build what is 
 settings: `buildSchematicRotation`, `buildSchematicMirror`, `buildSubstitutes`. To split a build over bots see
 [Swarm and region builds](swarm-and-region-builds.md).
 
+## Nether portal at a lava pool (`#portal`)
+`#portal build` makes a nether portal out of a lava pool the way speedrunners do, without mining obsidian. It
+needs a water bucket, an empty bucket, flint and steel and a few solid blocks in the hotbar or inventory; a
+pickaxe is needed only where the pool is one block deep, and saves about ten seconds everywhere else.
+
+| Command | Effect |
+| --- | --- |
+| `#portal build` | walk to the best shore within 24 blocks, build and light the portal, refill the bucket with lava |
+| `#portal build enter` | the same, then walk into the portal |
+| `#portal find` | list the shores the portal fits on, best first, without building |
+| `#portal status` | the current step, or how the last build ended |
+| `#portal cancel` | stop |
+
+A shore fits when four lava sources lie in a row against solid ground with room above for the frame. The
+process (`PortalBuildProcess`) clears what is in the way, sets the base row with water, raises the two
+shapes on the shore, hangs the water from the overhang and casts the frame block by block with the bucket.
+Each step waits for the blocks it expects; cobblestone where obsidian should be is dug out and cast again. A
+build takes about 20 seconds with a pickaxe and about 30 without. A pool smaller than the frame, or a
+one-deep pool with no pickaxe, is refused with a message.
+
 ## Selections (`#sel`)
 Set corners with `sel pos1` / `sel pos2`, then `sel set <block>`, `walls`, `shell`, `sphere`, `hsphere`,
 `cylinder <axis>`, `hcylinder`, `cleararea`, `replace <blocks> <with>`, `expand`/`contract`/`shift`, `undo`, `clear`.
