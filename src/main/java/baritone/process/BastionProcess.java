@@ -142,6 +142,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         shelterNoLure = false;
         shelterKills = 0;
         shelterShy.clear();
+        lastHunter = null;
         goldSourceGone = false;
         chestsExhausted = false;
         chestsLooted = 0;
@@ -172,7 +173,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         evadeUntil = 0;
         stuckAvoid.clear();
         if (stuckAvoider == null) {
-            stuckAvoider = pos -> { Long until = stuckAvoid.get(pos); return until != null && until > ticks; };
+            stuckAvoider = this::avoidCell;
             AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().add(stuckAvoider);
         }
         goldKey = null;
@@ -190,6 +191,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long hurtAt = -100000, shelterShoveAt = -100000;
     private int shelterShoves;
     private final Map<java.util.UUID, Long> shelterShy = new HashMap<>();
+    private PiglinBrute lastHunter;
+    private long lastHunterAt = -100000;
 
     /** Walking our way this tick: a brute runs at a quarter of a block a tick, and strolls at half that. */
     private static boolean coming(LivingEntity e, Player me) {
@@ -256,6 +259,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
     /** Cells the planner keeps routing through although the bot cannot get past them (checked by canWalkThrough). */
     private final java.util.Map<BlockPos, Long> stuckAvoid = new java.util.concurrent.ConcurrentHashMap<>();
     private java.util.function.Predicate<BlockPos> stuckAvoider;
+
+    /** Asked by the path search, off the game thread, of every cell it would walk or fall through. */
+    private boolean avoidCell(BlockPos pos) {
+        Long until = stuckAvoid.get(pos);
+        if (until != null && until > ticks) return true;
+        // a hole dug for piglins is theirs: run 135 planned a way to the pickup hole down through it, and stood three
+        // minutes at the bottom among seven of them with no room to lay a block and climb out
+        for (BlockPos h : holes) if (pos.getX() == h.getX() && pos.getZ() == h.getZ() && pos.getY() <= h.getY() + 1 && pos.getY() >= h.getY() - 2) return true;
+        return false;
+    }
     private long travelSince;
     private String stallKey;
     private long stallSince;
@@ -454,6 +467,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             // And one that was given a slit and never came is left to stand until it does come
             if (me.distanceTo(b) < 12 && hunting(b, me) && (me.distanceTo(b) < (shy ? 4 : 8) || coming(b, me)) && (hunter == null || me.distanceTo(b) < me.distanceTo(hunter))) hunter = b;
         }
+        // sight comes and goes on a stair or in a doorway: one that was on us a second ago still is (run 135 walked
+        // on down a stair for six ticks between two glimpses, and the walls were two blocks short when it arrived)
+        if (hunter != null) { lastHunter = hunter; lastHunterAt = ticks; }
+        else if (lastHunter != null && lastHunter.isAlive() && ticks - lastHunterAt < 20 && me.distanceTo(lastHunter) < 12) hunter = lastHunter;
         if (sheltering && (me.isInLava() || shelterAt != null && me.position().distanceTo(shelterAt) > 3)) sheltering = false;
         if (me.getHealth() < hpSeen - 0.9f) hurtAt = ticks;
         hpSeen = me.getHealth();
@@ -1076,7 +1093,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (stuckAvoider == null) {
             // onLostControl drops the predicate; put it back or blacklisted moves would be planned again
-            stuckAvoider = pos -> { Long until = stuckAvoid.get(pos); return until != null && until > ticks; };
+            stuckAvoider = this::avoidCell;
             AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().add(stuckAvoider);
         }
         if (ticks < nudgeUntil && nudgeDest != null && ctx.player() != null && !ctx.player().isInLava()) {
@@ -3289,7 +3306,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     private static final double CAMP_THROW = 3.0; // run 75: 81 throws spent 5 ingots; a Q-throw carries ~2-3 blocks and we re-picked the rest
     private boolean camping;
     /** Surface cells of dug piglin holes (the hole is the two blocks below) and the one being dug. */
-    private final List<BlockPos> holes = new ArrayList<>();
+    private final List<BlockPos> holes = new java.util.concurrent.CopyOnWriteArrayList<>();
     private BlockPos digHole;
     private boolean holeDigging;
     private long holeRetry, lastBait;
