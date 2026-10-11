@@ -1661,7 +1661,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             dropFor = target;
             dropScan = ticks;
             BlockPos at = ctx.playerFeet();
-            dropPlan = BastionDrops.choose(ledges(me), at.getX(), at.getY(), at.getZ(), target.getX(), target.getY(), target.getZ(), me.getHealth(), BastionSettings.maxSafeDrop);
+            dropPlan = BastionDrops.choose(ledges(me), at.getX(), at.getY(), at.getZ(), target.getX(), target.getY(), target.getZ(), me.getHealth(), BastionSettings.maxSafeDrop, BastionSettings.lowHealth);
             dropSince = ticks;
         }
         if (dropPlan == null) return null;

@@ -26,6 +26,19 @@ public class BastionFallGoldTest {
     }
 
     @Test
+    public void aDropMustLeaveTheHealthWeFightWith() {
+        // in-game: 14 down at 19 hp is 11 damage, which lands us on 8 with brutes about
+        BastionDrops.Ledge deep = ledge(2, 70, 56, true), shallow = ledge(2, 70, 62, true);
+        assertNull(BastionDrops.choose(List.of(deep), 0, 70, 0, 6, 56, 0, 19, 3, 12));
+        // 8 down is 5 damage: 14 left, still above the 12 we keep
+        assertEquals(shallow, BastionDrops.choose(List.of(deep, shallow), 0, 70, 0, 6, 56, 0, 19, 3, 12));
+        assertTrue(BastionDrops.survivable(shallow, 19, 12));
+        assertFalse(BastionDrops.survivable(shallow, 16, 12));
+        // a smaller figure than the plain margin never loosens it
+        assertFalse(BastionDrops.survivable(deep, 16, 0));
+    }
+
+    @Test
     public void noDropWhenTargetIsNotBelow() {
         assertNull(BastionDrops.choose(List.of(ledge(2, 70, 58, true)), 0, 70, 0, 6, 70, 0, 20, 3));
     }

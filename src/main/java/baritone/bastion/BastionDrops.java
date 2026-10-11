@@ -24,7 +24,15 @@ public final class BastionDrops {
     }
 
     public static boolean survivable(Ledge l, float health) {
-        return l.landingSafe && damage(l.height()) <= health - MARGIN;
+        return survivable(l, health, MARGIN);
+    }
+
+    /**
+     * As above, but the fall must leave at least {@code keep} health. Run 114 took a 14-block drop at 19 hp, landed on 7
+     * among brutes that hit for more, and spent longer recovering than the stairs would have taken.
+     */
+    public static boolean survivable(Ledge l, float health, float keep) {
+        return l.landingSafe && damage(l.height()) <= health - Math.max(MARGIN, keep);
     }
 
     /**
@@ -32,14 +40,19 @@ public final class BastionDrops {
      * Only drops that save height worth the detour are taken; null when walking is as good.
      */
     public static Ledge choose(List<Ledge> ledges, int mx, int my, int mz, int tx, int ty, int tz, float health, int cap) {
+        return choose(ledges, mx, my, mz, tx, ty, tz, health, cap, MARGIN);
+    }
+
+    /** {@link #choose(List, int, int, int, int, int, int, float, int)} with the health the fall must leave. */
+    public static Ledge choose(List<Ledge> ledges, int mx, int my, int mz, int tx, int ty, int tz, float health, int cap, float keep) {
         Ledge best = null;
         double bestCost = Double.MAX_VALUE;
         for (Ledge l : ledges) {
-            if (l.height() <= cap || !survivable(l, health)) continue;
+            if (l.height() <= cap || !survivable(l, health, keep)) continue;
             // must actually bring us down toward the target, not past it
             if (l.landY < ty - 2) continue;
             double walk = Math.hypot(l.x - mx, l.z - mz) + 2.0 * Math.max(0, l.y - my);
-            double after = Math.hypot(l.x + l.dx - tx, l.z + l.dz - tz) + 2.0 * Math.max(0, ty - l.landY);
+            double after = Math.hypot(l.x + l.dx - tx, l.z + l.dz - tz) + 2.0 * Math.abs(l.landY - ty); // what is left to go down (or back up) after the landing
             double c = walk + after + 0.5 * damage(l.height());
             if (c < bestCost) { bestCost = c; best = l; }
         }

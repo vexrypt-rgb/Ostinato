@@ -230,6 +230,8 @@ public final class BastTest implements AbstractGameEventListener {
             if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) { baritone.bastion.BastionSettings.TARGETS.put("ender_pearl", 999); baritone.bastion.BastionSettings.exitWhenDone = false; }
             if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) for (int g = Integer.getInteger("ostinato.basttest.gold"); g > 0; g -= 64) run("give @p gold_ingot " + Math.min(64, g));
             say("BAST setup done; starting #bastion " + VARIANT);
+            // why a path was not found is only said in the debug chat (run 115: 11 minutes on the start plateau, no reason logged)
+            baritone.api.BaritoneAPI.getSettings().chatDebug.value = true;
             if (System.getProperty("ostinato.basttest.budget") != null) baritone.bastion.BastionSettings.timeBudget = Integer.getInteger("ostinato.basttest.budget");
             b.getCommandManager().execute("bastion " + VARIANT);
             state = 4;
