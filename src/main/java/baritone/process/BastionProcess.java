@@ -1371,12 +1371,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private PathingCommand waterPocket(Player me) {
         var in = baritone.getInputOverrideHandler();
         boolean under = me.isUnderWater();
-        if (ticks % 20 == 0 && (under || wSeekWall || wDoor != null)) System.out.println("WATERDBG t=" + ticks + " air=" + me.getAirSupply() + " seek=" + wSeekWall + " door=" + wDoor + " exit=" + wExit + " st=" + status);
-        if (!under && wTunnel == null && wDoor == null && !wSeekWall) return null;
+        if (ticks % 20 == 0 && (under || wSeekWall || wDoor != null)) System.out.println("WATERDBG t=" + ticks + " air=" + me.getAirSupply() + " seek=" + wSeekWall + " door=" + wDoor + " exit=" + wExit + " held=" + me.getMainHandItem().getItem() + " tries=" + doorTries + " st=" + status);
+        BlockState fdA = ctx.world().getBlockState(me.blockPosition());
+        // w23: a wet tick right after placing dropped the pocket, then this guard returned before it could be re-adopted
+        if (!under && wTunnel == null && wDoor == null && !wSeekWall && !(fdA.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && water(me.blockPosition().above(2)))) return null;
         if (me.level().dimension().identifier().getPath().equals("the_nether")) return null;
         BlockPos feet = me.blockPosition();
         // the door shows up a tick after the click (waterpocket w1: placed, never adopted, process walked off): adopt it
-        if (wDoor == null && !wLeaving && ctx.world().getBlockState(feet).getBlock() instanceof net.minecraft.world.level.block.DoorBlock && water(feet.above(2))) { wDoor = feet.immutable(); wSeekWall = false; logDirect("Bastion: water door pocket at " + feet.toShortString() + " air=" + me.getAirSupply()); }
+        BlockState fd0 = ctx.world().getBlockState(feet);
+        // w20: stood in a door's upper half, adopted it as the pocket and drowned waiting with the head in the water above
+        boolean lowerDoor = fd0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && fd0.getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER;
+        if (wDoor == null && !wLeaving && lowerDoor && water(feet.above(2))) { wDoor = feet.immutable(); wSeekWall = false; logDirect("Bastion: water door pocket at " + feet.toShortString() + " air=" + me.getAirSupply()); }
         if (wLeaving && !(ctx.world().getBlockState(feet).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) && !(ctx.world().getBlockState(feet.below()).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) && !(ctx.world().getBlockState(feet.below(2)).getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) wLeaving = false;
         boolean inPocket = wDoor != null && ctx.world().getBlockState(wDoor).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
                 && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(wDoor).expandTowards(0, 1, 0));
@@ -1410,7 +1415,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 Vec3 d = Vec3.atBottomCenterOf(feet.relative(dir)).subtract(me.position());
                 baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-d.x, d.z)), solid(feet.below()) ? 0 : 60), true);
                 in.setInputForceState(Input.MOVE_FORWARD, true);
-                in.setInputForceState(Input.SNEAK, !overDoor);
+                in.setInputForceState(Input.SNEAK, !overDoor && !solid(feet.below())); // walking the floor crouched crawls (w22: 1 block in 9 s)
                 if (overDoor) in.setInputForceState(Input.JUMP, true);
                 status = "water: to the wall toward " + wExit.toShortString();
                 return pause0();
@@ -1437,7 +1442,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 in.setInputForceState(Input.SNEAK, true);
                 return pause0();
             }
-            case WAIT -> { in.setInputForceState(Input.SNEAK, true); return pause0(); }
+            case WAIT -> {
+                if (under && me.getAirSupply() < 200) { wDoor = null; return pause0(); } // head stays wet: this is no pocket
+                in.setInputForceState(Input.SNEAK, true); return pause0();
+            }
             case TUNNEL -> {
                 BlockPos cur = wTunnel != null ? wTunnel : wDoor;
                 if (cur == null) cur = feet;
