@@ -718,7 +718,14 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 && heavies.stream().anyMatch(e -> e instanceof PiglinBrute b && me.distanceTo(e) < 10 && (b.isAggressive() || b.hasLineOfSight(me)))) {
             if (ticks - towerWaitTick > 20) towerWaitSince = ticks;
             towerWaitTick = ticks;
-            if (ticks - towerWaitSince < 600) {
+            // run 127: two brutes stood two and three blocks off for thirteen seconds, on a ledge level with the tower top
+            // and a gap between. The wait ran out, we stepped down between them and were hit. One that has stood within
+            // our reach for five seconds without landing a blow cannot reach us; we can reach it, which is what the tower
+            // is for. And with one that close, coming down is not the way out: wait longer
+            PathingCommand strike = ticks - towerWaitSince >= 100 ? towerStrike(me, heavies) : null;
+            if (strike != null) return strike;
+            boolean close = heavies.stream().anyMatch(e -> e instanceof PiglinBrute && me.distanceTo(e) < 5);
+            if (ticks - towerWaitSince < (close ? 1200 : 600)) {
                 pveP.hold = false;
                 status = "on tower, waiting out the brute";
                 return pause0();
@@ -2440,6 +2447,41 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
             lavaPos = spot.immutable();
             lavaTick = ticks;
+        }
+        return pause0();
+    }
+
+    /**
+     * From the tower: hit the brute that stands within our reach. Null with none there, and null while a piglin with a
+     * crossbow looks on: hitting a brute sets every piglin that sees it on us, and a crossbow reaches the tower.
+     */
+    private PathingCommand towerStrike(Player me, List<LivingEntity> heavies) {
+        Vec3 eye = me.getEyePosition(1.0F), aim = null;
+        LivingEntity t = null;
+        double best = 2.9;
+        for (LivingEntity e : heavies) {
+            if (!(e instanceof PiglinBrute) || !me.hasLineOfSight(e)) continue;
+            net.minecraft.world.phys.AABB bb = e.getBoundingBox();
+            Vec3 near = new Vec3(net.minecraft.util.Mth.clamp(eye.x, bb.minX, bb.maxX), net.minecraft.util.Mth.clamp(eye.y, bb.minY, bb.maxY), net.minecraft.util.Mth.clamp(eye.z, bb.minZ, bb.maxZ));
+            if (eye.distanceTo(near) < best) { best = eye.distanceTo(near); t = e; aim = near; }
+        }
+        if (t == null) return null;
+        if (!ctx.world().getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.Piglin.class, me.getBoundingBox().inflate(16),
+                p -> p.isAlive() && p.isHolding(Items.CROSSBOW) && p.hasLineOfSight(me)).isEmpty()) return null;
+        int slot = -1, rank = 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack s = me.getInventory().getItem(i);
+            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.getItem() instanceof net.minecraft.world.item.AxeItem ? 1 : 0;
+            if (r > rank) { rank = r; slot = i; }
+        }
+        status = "on tower, striking brute at " + String.format("%.1f", best);
+        // sneaking at the edge of a one-block column: we do not step off it turning to aim
+        baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+        if (slot >= 0 && me.getInventory().getSelectedSlot() != slot) { me.getInventory().setSelectedSlot(slot); return pause0(); }
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim.lerp(t.getBoundingBox().getCenter(), 0.2), ctx.playerRotations()), true);
+        if (me.getAttackStrengthScale(0.5f) >= 0.95f) {
+            ctx.minecraft().gameMode.attack((LocalPlayer) me, t);
+            me.swing(InteractionHand.MAIN_HAND);
         }
         return pause0();
     }
