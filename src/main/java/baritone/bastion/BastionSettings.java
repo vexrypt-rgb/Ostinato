@@ -17,6 +17,9 @@ public final class BastionSettings {
     public static int maxSafeDrop = 3;
     /** Health below which drops are capped at 2 and fights avoided where possible. */
     public static int lowHealth = 12;
+    /** Path cost multiplier within {@link #bruteAvoidRadius} blocks of a brute; 1 turns it off. */
+    public static double bruteAvoid = 2.5;
+    public static int bruteAvoidRadius = 7;
     /** Leave once the targets are met (otherwise keep bartering until out of gold). */
     /** Timed duel against a lone brute. Off: brute axes disable shields; leave, tower or kite instead. */
     public static boolean duel = false;
@@ -48,6 +51,7 @@ public final class BastionSettings {
                 case "keepingots": keepIngots = Math.max(0, Integer.parseInt(value)); return null;
                 case "maxdrop": maxSafeDrop = Math.max(1, Integer.parseInt(value)); return null;
                 case "lowhealth": lowHealth = Integer.parseInt(value); return null;
+                case "bruteavoid": bruteAvoid = Math.max(1, Double.parseDouble(value)); return null;
                 case "exit": exitWhenDone = Boolean.parseBoolean(value); return null;
                 case "exitdistance": exitDistance = Integer.parseInt(value); return null;
             case "timebudget": timeBudget = Math.max(30, Integer.parseInt(value)); return null;
@@ -65,6 +69,6 @@ public final class BastionSettings {
 
     public static String describe() {
         return "targets=" + TARGETS + " barters=" + maxConcurrentBarters + " keepIngots=" + keepIngots + " maxDrop=" + maxSafeDrop
-                + " lowHealth=" + lowHealth + " exit=" + exitWhenDone + " exitDistance=" + exitDistance + " timeBudget=" + timeBudget + " chestWait=" + chestWaitTicks + " goldCap=" + goldCap;
+                + " lowHealth=" + lowHealth + " bruteAvoid=" + bruteAvoid + " exit=" + exitWhenDone + " exitDistance=" + exitDistance + " timeBudget=" + timeBudget + " chestWait=" + chestWaitTicks + " goldCap=" + goldCap;
     }
 }

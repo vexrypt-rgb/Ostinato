@@ -33,6 +33,11 @@ public final class Favoring {
         for (Avoidance avoid : Avoidance.create(ctx)) {
             avoid.applySpherical(favorings);
         }
+        if (context.getBaritone() instanceof baritone.Baritone b) {
+            for (Avoidance avoid : b.getBastionProcess().avoid()) {
+                avoid.applySpherical(favorings);
+            }
+        }
         Helper.HELPER.logDebug("Favoring size: " + favorings.size());
     }
 

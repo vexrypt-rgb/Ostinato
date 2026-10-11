@@ -258,7 +258,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private int perchBase, perchX, perchZ;
     private boolean perchClimbing, perchUp, perchCapped;
     private Double savedBreakPenalty, savedPlacePenalty;
-    private long perchCooldown, waitSince;
+    private long perchCooldown, waitSince, walledSince;
     private long perchTick, perchStallSince;
     private String perchStallKey;
 
@@ -647,7 +647,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // two blocks (gravel/soul sand alternate): its attack box ends at its head, ours still reaches it, so we fight it from above.
         List<LivingEntity> heavies = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(THREAT_RANGE),
                 e -> e != me && (e instanceof PiglinBrute || e instanceof Zoglin) && e.isAlive() && (perching || !otherLevel(e, me))
-                        && !(ignored.getOrDefault(e.getUUID(), 0L) > ticks && !(e instanceof Mob m && m.isAggressive() && me.distanceTo(e) < 8)));
+                        // ignored means out of reach from where we stood: one within 8 on our own level is in reach again (run 118)
+                        && !(ignored.getOrDefault(e.getUUID(), 0L) > ticks && !(e instanceof Mob m && me.distanceTo(e) < 8 && (m.isAggressive() || Math.abs(e.getY() - me.getY()) <= 3.5))));
         boolean heavyComing = heavies.stream().anyMatch(e -> me.distanceTo(e) < 8 || me.distanceTo(e) < 12 && e instanceof Mob m && m.isAggressive());
         PveProcess pveP = baritone.getPveProcess();
         // a brute hits for ~6-13 through gold armour: low on health with one close, a speedrunner leaves with what they have
@@ -697,9 +698,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         if (brute != null && !perching && !headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 2) {
             // a tunnel (run 29: dug into the netherrack, no room to tower): wall it off, brutes do not dig
-            Direction dir = Direction.getApproximateNearest(brute.getX() - me.getX(), 0, brute.getZ() - me.getZ());
-            BlockPos feet = me.blockPosition(), c0 = feet.relative(dir), c1 = c0.above();
-            BlockPos cell = ctx.world().getBlockState(c0).canBeReplaced() ? c0 : ctx.world().getBlockState(c1).canBeReplaced() ? c1 : null;
+            // run 118: the side facing the brute was solid, we called that walled off and stood still while it walked round
+            // and hit us. Brutes do not dig but they do walk round: close the open side nearest the brute first, and
+            // only a cell shut on all four sides is walled off
+            BlockPos feet = me.blockPosition(), cell = null;
+            double facing = -Double.MAX_VALUE;
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                BlockPos c0 = feet.relative(d), c1 = c0.above();
+                BlockPos c = ctx.world().getBlockState(c0).canBeReplaced() ? c0 : ctx.world().getBlockState(c1).canBeReplaced() ? c1 : null;
+                double f = d.getStepX() * (brute.getX() - me.getX()) + d.getStepZ() * (brute.getZ() - me.getZ());
+                if (c != null && f > facing) { facing = f; cell = c; }
+            }
+            if (cell != null) walledSince = 0;
             if (cell != null && !brute.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(cell))) {
                 int b = clutchBlock(me);
                 if (b >= 0 && b < 9) {
@@ -714,8 +724,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     }
                 } else if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 6, ClickType.SWAP, me); return pause0(); }
             } else if (cell == null) {
-                status = "walled off from brute";
-                return pause0();
+                // a brute that cannot reach us forgets us in ten seconds; past that, sitting in the cell is only lost time
+                if (walledSince == 0) walledSince = ticks;
+                if (ticks - walledSince < 300) {
+                    status = "walled off from brute";
+                    return pause0();
+                }
             }
         }
         if (brute != null && !perching) {
@@ -1652,6 +1666,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         List<BastionDrops.Ledge> out = new ArrayList<>();
         BlockPos at = ctx.playerFeet();
         boolean[] safe = new boolean[1];
+        List<PiglinBrute> brutes = ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(32), PiglinBrute::isAlive);
         for (int dx = -10; dx <= 10; dx++) for (int dz = -10; dz <= 10; dz++) for (int dy = -1; dy <= 1; dy++) {
             BlockPos s = at.offset(dx, dy, dz);
             if (!ctx.world().hasChunkAt(s) || !floor(s.below()) || floor(s) || floor(s.above())) continue;
@@ -1661,9 +1676,27 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                 safe[0] = false;
                 int land = landing(o.getX(), o.getY(), o.getZ(), safe);
                 if (land == Integer.MIN_VALUE) continue;
-                out.add(new BastionDrops.Ledge(s.getX(), s.getY(), s.getZ(), d.getStepX(), d.getStepZ(), land, safe[0]));
+                BastionDrops.Ledge l = new BastionDrops.Ledge(s.getX(), s.getY(), s.getZ(), d.getStepX(), d.getStepZ(), land, safe[0]);
+                if (!nearBrute(l, brutes)) out.add(l);
             }
         }
+        return out;
+    }
+
+    private static boolean nearBrute(BastionDrops.Ledge l, List<PiglinBrute> brutes) {
+        for (PiglinBrute b : brutes) if (BastionDrops.landsNear(l, b.getX(), b.getY(), b.getZ(), BastionDrops.THREAT_CLEAR)) return true;
+        return false;
+    }
+
+    /**
+     * Brutes cost extra to walk near while a run is on, so routes go round them where there is a way round. Not the
+     * avoidance setting: that one counts every mob, and piglins are who we came to see.
+     */
+    public List<baritone.utils.pathing.Avoidance> avoid() {
+        if (!active || ctx.player() == null || ctx.world() == null || BastionSettings.bruteAvoid == 1) return List.of();
+        List<baritone.utils.pathing.Avoidance> out = new ArrayList<>();
+        for (PiglinBrute b : ctx.world().getEntitiesOfClass(PiglinBrute.class, ctx.player().getBoundingBox().inflate(48), PiglinBrute::isAlive))
+            out.add(new baritone.utils.pathing.Avoidance(b.blockPosition(), BastionSettings.bruteAvoid, BastionSettings.bruteAvoidRadius));
         return out;
     }
 
@@ -1680,6 +1713,12 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         if (dropPlan == null) return null;
         if (ticks - dropSince > 300) { dropPlan = null; dropScan = ticks + 200; return null; }
         BlockPos ledge = new BlockPos(dropPlan.x(), dropPlan.y(), dropPlan.z());
+        // brutes move while we walk to the ledge: the landing is checked again before we commit to it
+        if (ticks >= plannedFallUntil && nearBrute(dropPlan, ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(32), PiglinBrute::isAlive))) {
+            dropPlan = null;
+            dropScan = ticks;
+            return null;
+        }
         // run 115: one step out we still stood on the rim, in the cell beyond the ledge, and were sent back to the ledge;
         // the walk back and the walk off fought and we left the edge sideways, into a 10-block fall. Once the step
         // off has begun it is finished

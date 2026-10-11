@@ -35,6 +35,17 @@ public final class BastionDrops {
         return l.landingSafe && damage(l.height()) <= health - Math.max(MARGIN, keep);
     }
 
+    /** How close to a brute a drop may land: a brute covers this in about two seconds, and two hits kill. */
+    public static final double THREAT_CLEAR = 10;
+
+    /**
+     * Whether the landing of a drop is within {@code r} blocks (and six levels) of something at (bx, by, bz). Run 118 came
+     * down off a tower by a planned drop that landed six blocks from a brute.
+     */
+    public static boolean landsNear(Ledge l, double bx, double by, double bz, double r) {
+        return Math.abs(by - l.landY) <= 6 && Math.hypot(l.x + l.dx + 0.5 - bx, l.z + l.dz + 0.5 - bz) <= r;
+    }
+
     /**
      * Best ledge for getting from (mx, my, mz) to a target (tx, ty, tz) that sits below us: walk to the ledge, drop, walk on.
      * Only drops that save height worth the detour are taken; null when walking is as good.

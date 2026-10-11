@@ -26,6 +26,16 @@ public class BastionFallGoldTest {
     }
 
     @Test
+    public void aDropMayNotLandBesideABrute() {
+        // run 118: ledge at -435,81,-151 stepping north, landing at y=72; a brute stood six blocks from the landing
+        BastionDrops.Ledge l = new BastionDrops.Ledge(-435, 81, -151, 0, -1, 72, true);
+        assertTrue(BastionDrops.landsNear(l, -429.5, 72, -151.5, BastionDrops.THREAT_CLEAR));
+        assertTrue(BastionDrops.landsNear(l, -434.5, 69, -144.5, BastionDrops.THREAT_CLEAR));   // a level below still counts
+        assertFalse(BastionDrops.landsNear(l, -420.5, 72, -151.5, BastionDrops.THREAT_CLEAR));  // far along the floor
+        assertFalse(BastionDrops.landsNear(l, -434.5, 81, -150.5, BastionDrops.THREAT_CLEAR));  // up where we came from
+    }
+
+    @Test
     public void aDropMustLeaveTheHealthWeFightWith() {
         // in-game: 14 down at 19 hp is 11 damage, which lands us on 8 with brutes about
         BastionDrops.Ledge deep = ledge(2, 70, 56, true), shallow = ledge(2, 70, 62, true);
