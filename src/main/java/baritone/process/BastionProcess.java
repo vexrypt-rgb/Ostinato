@@ -300,16 +300,22 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // run 122: we landed on the rim of our own one-block pillar, our middle over the open air beside it. Looking
         // straight down from there the click reaches nothing, and we jumped on the spot for a minute. Get over the block
         // that holds us up first
+        // run 129: our own column was open to the sky but a shoulder was under the block over the next one. Every jump
+        // stopped a fifth of a block up, sixty ticks of it, until the brute arrived. Get the whole body under open air
         BlockPos foot = BlockPos.containing(me.getX(), me.getY() - 0.01, me.getZ());
-        if (me.onGround() && ctx.world().getBlockState(foot).getCollisionShape(ctx.world(), foot).isEmpty()) {
+        if (me.onGround()) {
             BlockPos hold = null;
-            double best = 1.3;
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    BlockPos p = foot.offset(dx, 0, dz);
-                    if (ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) continue;
-                    double d = Math.hypot(p.getX() + 0.5 - me.getX(), p.getZ() + 0.5 - me.getZ());
-                    if (d < best) { best = d; hold = p; }
+            if (!ctx.world().getBlockState(foot).getCollisionShape(ctx.world(), foot).isEmpty()) {
+                if (jumpBlocked(me) && Math.hypot(foot.getX() + 0.5 - me.getX(), foot.getZ() + 0.5 - me.getZ()) > 0.15) hold = foot;
+            } else {
+                double best = 1.3;
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        BlockPos p = foot.offset(dx, 0, dz);
+                        if (ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) continue;
+                        double d = Math.hypot(p.getX() + 0.5 - me.getX(), p.getZ() + 0.5 - me.getZ());
+                        if (d < best) { best = d; hold = p; }
+                    }
                 }
             }
             if (hold != null) {
@@ -346,6 +352,21 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (me.onGround() && Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z) < 0.08) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
         if (free) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+    }
+
+    /** Whether a block over any column our body overlaps would stop a jump short: the body is wider than half a block. */
+    private boolean jumpBlocked(Player me) {
+        net.minecraft.world.phys.AABB bb = me.getBoundingBox().deflate(1e-4, 0, 1e-4);
+        int y = BlockPos.containing(me.getX(), me.getY() + 0.01, me.getZ()).getY();
+        for (int x = (int) Math.floor(bb.minX); x <= (int) Math.floor(bb.maxX); x++) {
+            for (int z = (int) Math.floor(bb.minZ); z <= (int) Math.floor(bb.maxZ); z++) {
+                for (int dy = 2; dy <= 3; dy++) {
+                    BlockPos p = new BlockPos(x, y + dy, z);
+                    if (!ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Whether a plain right click on this block opens or uses it (a chest, a furnace, a crafting table) rather than placing against it. */
@@ -2392,8 +2413,15 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             boolean still = ctx.world().getBlockState(lavaPos).is(Blocks.LAVA);
             if (!still) {
                 if (ticks - lavaTick < 10) return pause0();
-                lavaPos = null;
-                return null;
+                // run 128: the click lands a tick after the aim is checked and the lava went a cell off. Nobody took it
+                // back, and the way out led through it. Look for where it did go
+                BlockPos found = null;
+                for (BlockPos p : BlockPos.betweenClosed(lavaPos.offset(-2, -2, -2), lavaPos.offset(2, 2, 2))) {
+                    if (ctx.world().getBlockState(p).is(Blocks.LAVA) && ctx.world().getFluidState(p).isSource()
+                            && (found == null || p.distSqr(lavaPos) < found.distSqr(lavaPos))) found = p.immutable();
+                }
+                lavaPos = found;
+                if (found == null) return null;
             }
             if (!heavies.isEmpty() && ticks - lavaTick < 120) return null;
             int b = hotbarItem(me, Items.BUCKET);
