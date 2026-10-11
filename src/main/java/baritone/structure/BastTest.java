@@ -18,7 +18,7 @@ public final class BastTest implements AbstractGameEventListener {
     private final Baritone b;
     private int state, wait, ticks;
     private net.minecraft.world.phys.Vec3 stallAt;
-    private int stallTick;
+    private int stallTick, stallCarried;
     private BlockPos target;
     private static final boolean REAL = System.getenv("BAST_REAL") != null;
     private int duelSummons;
@@ -297,7 +297,10 @@ public final class BastTest implements AbstractGameEventListener {
             }
             boolean ended = !b.getBastionProcess().isActive() && ticks > 40;
             // run 119 stood on one spot for eleven minutes: three minutes within three blocks is a stall, end the run there
-            if (stallAt == null || stallTick > ticks || mc.player.position().distanceTo(stallAt) > 3) { stallAt = mc.player.position(); stallTick = ticks; }
+            // trading from a pickup hole stands still for minutes and is not a stall (run 126): what we carry keeps changing
+            int carried = 0;
+            for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) carried += mc.player.getInventory().getItem(i).getCount();
+            if (stallAt == null || stallTick > ticks || mc.player.position().distanceTo(stallAt) > 3 || carried != stallCarried) { stallAt = mc.player.position(); stallTick = ticks; stallCarried = carried; }
             boolean stalled = ticks - stallTick > Integer.getInteger("ostinato.basttest.stallticks", 3600);
             if (stalled) say("BAST STALL t=" + ticks + " since=" + stallTick + " pos=" + mc.player.blockPosition().toShortString() + " st=" + b.getBastionProcess().status());
             if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended || stalled) {

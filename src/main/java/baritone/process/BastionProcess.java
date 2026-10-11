@@ -105,6 +105,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         EdgeCost.enabled = true;
         relaxUntil = 0;
         towerReleaseUntil = 0;
+        wallFailed.clear();
+        wallCell = null;
         query = variant == null || variant.isEmpty() ? "bastion_remnant" : variant;
         active = true;
         // walk around netherrack rather than dig through it: digging is slow and a speedrun has no time for it
@@ -268,6 +270,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private Double savedBreakPenalty;
     private Boolean savedKinematic;
     private long perchCooldown, waitSince, walledSince, relaxUntil, towerWaitSince, towerWaitTick = -100, towerReleaseUntil;
+    private final Map<BlockPos, Long> wallFailed = new HashMap<>();
+    private BlockPos wallCell;
+    private int wallTries;
     private long perchTick, perchStallSince;
     private String perchStallKey;
 
@@ -764,29 +769,39 @@ public final class BastionProcess extends BaritoneProcessHelper {
             // run 118: the side facing the brute was solid, we called that walled off and stood still while it walked round
             // and hit us. Brutes do not dig but they do walk round: close the open side nearest the brute first, and
             // only a cell shut on all four sides is walled off
+            // runs 124, 125: clicked at one cell for a second and more, it never closed, and we stood there until the brute
+            // arrived. A cell that will not take a block (nothing under it to place against, someone standing in it, clicks
+            // that do nothing) is passed over, and with only such cells left open we do not stand and wait
             BlockPos feet = me.blockPosition(), cell = null;
             double facing = -Double.MAX_VALUE;
+            boolean open = false;
             for (Direction d : Direction.Plane.HORIZONTAL) {
                 BlockPos c0 = feet.relative(d), c1 = c0.above();
                 BlockPos c = ctx.world().getBlockState(c0).canBeReplaced() ? c0 : ctx.world().getBlockState(c1).canBeReplaced() ? c1 : null;
+                if (c == null) continue;
+                open = true;
+                if (ctx.world().getBlockState(c.below()).canBeReplaced() || wallFailed.getOrDefault(c, 0L) > ticks
+                        || !ctx.world().getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(c)).isEmpty()) continue;
                 double f = d.getStepX() * (brute.getX() - me.getX()) + d.getStepZ() * (brute.getZ() - me.getZ());
-                if (c != null && f > facing) { facing = f; cell = c; }
+                if (f > facing) { facing = f; cell = c; }
             }
-            if (cell != null) walledSince = 0;
-            if (cell != null && !brute.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(cell))) {
+            if (open) walledSince = 0;
+            if (cell != null) {
                 int b = clutchBlock(me);
                 if (b >= 0 && b < 9) {
                     me.getInventory().setSelectedSlot(b);
                     BlockPos against = cell.below();
-                    if (!ctx.world().getBlockState(against).canBeReplaced()) {
-                        Vec3 hit = Vec3.atCenterOf(against).add(0, 0.5, 0);
-                        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
-                        ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, against, false));
-                        status = "walling off brute in tunnel";
-                        return pause0();
-                    }
+                    if (!cell.equals(wallCell)) { wallCell = cell.immutable(); wallTries = 0; }
+                    if (++wallTries > 8) wallFailed.put(wallCell, ticks + 100L);
+                    Vec3 hit = Vec3.atCenterOf(against).add(0, 0.5, 0);
+                    baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), hit, ctx.playerRotations()), true);
+                    boolean opens = clickOpens(against);
+                    if (opens) baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+                    if (!opens || me.isShiftKeyDown()) ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, against, false));
+                    status = "walling off brute in tunnel (" + cell.toShortString() + " try " + wallTries + ")";
+                    return pause0();
                 } else if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 6, ClickType.SWAP, me); return pause0(); }
-            } else if (cell == null) {
+            } else if (!open) {
                 // a brute that cannot reach us forgets us in ten seconds; past that, sitting in the cell is only lost time
                 if (walledSince == 0) walledSince = ticks;
                 if (ticks - walledSince < 300) {
