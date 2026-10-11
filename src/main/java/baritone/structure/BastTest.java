@@ -107,7 +107,7 @@ public final class BastTest implements AbstractGameEventListener {
                     if (start == null || start.getPieces().isEmpty()) continue;
                     String piece = String.valueOf(start.getPieces().get(0) instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece pe ? pe.getElement() : start.getPieces().get(0));
                     System.out.println("BAST candidate " + at + " " + piece);
-                    if (piece.contains("bastion/" + want)) { found[0] = at; break outer; }
+                    if (piece.contains("bastion/" + want)) { var bb = start.getBoundingBox(); found[0] = new BlockPos(at.getX(), (bb.minY() + bb.maxY()) / 2, at.getZ()); break outer; }
                 }
             }).join();
             target = found[0];
@@ -255,7 +255,7 @@ public final class BastTest implements AbstractGameEventListener {
         q.add(start); seen.add(start);
         while (!q.isEmpty() && seen.size() < 40000) {
             BlockPos p = q.poll();
-            if (Math.abs(p.getX() - target.getX()) <= 10 && Math.abs(p.getZ() - target.getZ()) <= 10) return true;
+            if (Math.abs(p.getX() - target.getX()) <= 10 && Math.abs(p.getZ() - target.getZ()) <= 10 && (target.getY() <= 0 || Math.abs(p.getY() - target.getY()) <= 20)) return true; // run 110: "connected" on the roof 40 above
             for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) for (int dy = 1; dy >= -3; dy--) {
                 BlockPos n = p.relative(d).above(dy);
                 if (!stand(lvl, n)) continue;
