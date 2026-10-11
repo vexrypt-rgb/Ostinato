@@ -613,10 +613,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "on tower, waiting out the brute";
             return pause0();
         }
-        PathingCommand dl = duel(me, heavies);
+        // brute axes disable shields (runs 98, 106): no duel unless asked for
+        PathingCommand dl = BastionSettings.duel ? duel(me, heavies) : null;
         if (dl != null) return dl;
-        if (bastion != null && !exiting && !perching && me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12)) {
-            logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp, leaving");
+        long pack = heavies.stream().filter(e -> e instanceof PiglinBrute && me.distanceTo(e) < 16).count();
+        // run 106: 9 brutes in a stables, hit down to 9 hp before leaving; leave on a pack, or hurt with one coming
+        if (bastion != null && !exiting && !perching && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
+            logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp (" + pack + " within 16), leaving");
             pveP.hold = false;
             perching = false;
             if (fighting) pveP.clearEnemies();
@@ -2194,10 +2197,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
      * full-cooldown sword fight, blocking with a shield while the cooldown refills.
      */
     private long skirmishLog, lastBlockTick = -100;
+    private long skirmishSeen = -1000;
     private PathingCommand skirmish(Player me, List<LivingEntity> th) {
         LivingEntity t = th.stream().min(java.util.Comparator.comparingDouble(me::distanceTo)).orElse(null);
         if (t == null) return null;
         long close = th.stream().filter(e -> me.distanceTo(e) < 8).count();
+        if (ticks - skirmishSeen > 100) { skirmishSeen = ticks; logDirect(String.format("Bastion: skirmish engaged %d piglin(s), nearest %.1f, hp %.0f, target hp %.0f", th.size(), me.distanceTo(t), me.getHealth(), t.getHealth())); }
         if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
         baritone.getPveProcess().hold = false;
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();

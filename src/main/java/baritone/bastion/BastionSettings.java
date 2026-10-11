@@ -18,6 +18,8 @@ public final class BastionSettings {
     /** Health below which drops are capped at 2 and fights avoided where possible. */
     public static int lowHealth = 12;
     /** Leave once the targets are met (otherwise keep bartering until out of gold). */
+    /** Timed duel against a lone brute. Off: brute axes disable shields; leave, tower or kite instead. */
+    public static boolean duel = false;
     public static boolean exitWhenDone = true;
     /** Distance from the bastion centre at which the exit counts as done. */
     public static int exitDistance = 72;
