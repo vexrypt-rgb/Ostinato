@@ -477,6 +477,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long lastCalcFail = -1000;
     private double[] throwPred;
     private BlockPos lastStuckDest;
+    private boolean lavaWithin(Player me, int r) {
+        for (BlockPos q : BlockPos.betweenClosed(me.blockPosition().offset(-r, -2, -r), me.blockPosition().offset(r, 1, r))) if (realLava(q)) return true;
+        return false;
+    }
     private int sameStuck;
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
@@ -634,7 +638,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (dl != null) return dl;
         long pack = heavies.stream().filter(e -> e instanceof PiglinBrute && me.distanceTo(e) < 16).count();
         // run 106: 9 brutes in a stables, hit down to 9 hp before leaving; leave on a pack, or hurt with one coming
-        if (bastion != null && !exiting && !perching && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
+        if (bastion != null && !exiting && (!perching || me.getY() < perchBase + 1.9) && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp (" + pack + " within 16), leaving");
             pveP.hold = false;
             perching = false;
@@ -646,7 +650,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // kite brutes: an aggressive one within 8, or any within 8 when below 16 hp, means walk away from it now
         LivingEntity brute = null;
         for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (me.distanceTo(e) < 5 || me.distanceTo(e) < 12 && (e.hasLineOfSight(me) || me.getHealth() < 16)) && (brute == null || me.distanceTo(e) < me.distanceTo(brute))) brute = e;
-        if (brute != null && !perching && me.distanceTo(brute) >= 4.5 && !me.isInLava() && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
+        if (brute != null && !perching && me.distanceTo(brute) >= 4.5 && !me.isInLava() && !lavaWithin(me, 3) && headroom(me, (int) Math.floor(me.getY() + 0.2)) && pillarBlocks(me) >= 3 && ticks > perchCooldown) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             perching = true;
@@ -697,7 +701,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // the clock starts on arrival, not detection (run 45 spent 3 of its 5 minutes on the approach)
         if (bastion != null && startTick == 0 && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40) startTick = Math.max(1, ticks);
-        if (!perching && !me.isInLava() && !me.isOnFire() && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
+        if (!perching && !me.isInLava() && !me.isOnFire() && !lavaWithin(me, 3) && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.onGround() && headroom(me, me.blockPosition().getY())) {
             perching = true;
             perchUp = false;
             perchCapped = false;
