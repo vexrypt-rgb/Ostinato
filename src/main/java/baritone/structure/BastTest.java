@@ -114,12 +114,12 @@ public final class BastTest implements AbstractGameEventListener {
             say("BAST target " + target);
             if (REAL) {
                 run("execute in minecraft:the_nether run forceload add " + (target.getX() + 90) + " " + target.getZ());
-                BlockPos[] spot = new BlockPos[2];
+                BlockPos[] spot = new BlockPos[3];
                 MinecraftServer sv2 = mc.getSingleplayerServer();
                 sv2.submit(() -> {
                     var lvl = sv2.getLevel(net.minecraft.resources.ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
-                    for (int half : new int[]{3, 1, 0}) for (int r = 0; r < 60 && spot[0] == null; r++) for (int dz = -r; dz <= r && spot[0] == null; dz++) {
-                        int x = target.getX() + 45 + r /* runs 74, 77: 90 out the spawn was often cut off from the bastion */, z = target.getZ() + dz;
+                    for (int half : new int[]{3, 1, 0}) for (int side = 0; side < 4 && spot[0] == null; side++) for (int r = 0; r < 60 && spot[0] == null; r++) for (int dz = -r; dz <= r && spot[0] == null; dz++) {
+                        int ax = 45 + r /* runs 74, 77: 90 out the spawn was often cut off from the bastion */, x = target.getX() + (side == 0 ? ax : side == 1 ? -ax : dz), z = target.getZ() + (side == 2 ? ax : side == 3 ? -ax : dz);
                         lvl.getChunk(x >> 4, z >> 4);
                         for (int y = 110; y > 40; y--) {
                             BlockPos q = new BlockPos(x, y, z);
@@ -144,11 +144,14 @@ public final class BastTest implements AbstractGameEventListener {
                                     if (Math.abs(kx - qq.getX()) <= 4 && Math.abs(kz - qq.getZ()) <= 4 && Math.abs(ky - qq.getY()) <= 3) { open = false; break; }
                                 }
                             }
-                            if (open) { spot[0] = q.above(); break; }
+                            if (open && spot[2] == null) spot[2] = q.above();
+                            // run 104: spawned with no walkable way into the bastion and spent 10 min failing paths; require one
+                            if (open && connected(lvl, q.above(), target)) { spot[0] = q.above(); break; }
+                            if (open) break;
                         }
                     }
                 }).join();
-                if (spot[0] == null) spot[0] = spot[1]; // no lava-free spot in range (lava9 crashed on null): take any open one
+                if (spot[0] == null) spot[0] = spot[2] != null ? spot[2] : spot[1]; // no lava-free spot in range (lava9 crashed on null): take any open one
                 say("BAST start " + spot[0]);
                 run("execute as @p in minecraft:the_nether run tp @p " + spot[0].getX() + " " + spot[0].getY() + " " + spot[0].getZ());
             } else run("execute as @p in minecraft:the_nether run tp @p " + target.getX() + " 80 " + target.getZ());
@@ -235,7 +238,7 @@ public final class BastTest implements AbstractGameEventListener {
                 say("BAST t=" + ticks + " hp=" + (int) p.getHealth() + " " + b.getBastionProcess().status() + " pos=" + p.blockPosition().toShortString());
             }
             boolean ended = !b.getBastionProcess().isActive() && ticks > 40;
-            if (ticks >= 12000 || ended) {
+            if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended) {
                 var inv = mc.player.getInventory(); java.util.Map<String,Integer> m = new java.util.TreeMap<>();
                 for (int i = 0; i < 36; i++) { var s = inv.getItem(i); if (!s.isEmpty()) m.merge(baritone.process.BastionProcess.itemIdPublic(s), s.getCount(), Integer::sum); }
                 var d = b.getStructureBehavior().find("bastion_remnant");
@@ -243,5 +246,32 @@ public final class BastTest implements AbstractGameEventListener {
                 state = 9; mc.execute(mc::stop);
             }
         }
+    }
+
+    /** Walkable flood fill (step up 1, drop up to 3, no lava next to the feet) from start to within 10 blocks of the bastion target. */
+    private static boolean connected(net.minecraft.server.level.ServerLevel lvl, BlockPos start, BlockPos target) {
+        java.util.ArrayDeque<BlockPos> q = new java.util.ArrayDeque<>();
+        java.util.HashSet<BlockPos> seen = new java.util.HashSet<>();
+        q.add(start); seen.add(start);
+        while (!q.isEmpty() && seen.size() < 40000) {
+            BlockPos p = q.poll();
+            if (Math.abs(p.getX() - target.getX()) <= 10 && Math.abs(p.getZ() - target.getZ()) <= 10) return true;
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) for (int dy = 1; dy >= -3; dy--) {
+                BlockPos n = p.relative(d).above(dy);
+                if (!stand(lvl, n)) continue;
+                if (dy == 1 && !lvl.getBlockState(p.above(2)).getCollisionShape(lvl, p.above(2)).isEmpty()) break;
+                if (dy < 0) { boolean clear = true; for (int k = 0; k > dy; k--) if (!lvl.getBlockState(p.relative(d).above(k + 1)).getCollisionShape(lvl, p).isEmpty()) clear = false; if (!clear) break; }
+                if (seen.add(n)) q.add(n);
+                break;
+            }
+        }
+        return false;
+    }
+
+    private static boolean stand(net.minecraft.server.level.ServerLevel lvl, BlockPos f) {
+        if (lvl.getBlockState(f.below()).getCollisionShape(lvl, f.below()).isEmpty()) return false;
+        if (!lvl.getBlockState(f).getCollisionShape(lvl, f).isEmpty() || !lvl.getBlockState(f.above()).getCollisionShape(lvl, f.above()).isEmpty()) return false;
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) if (lvl.getFluidState(f.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) return false;
+        return !lvl.getFluidState(f).is(net.minecraft.tags.FluidTags.LAVA);
     }
 }

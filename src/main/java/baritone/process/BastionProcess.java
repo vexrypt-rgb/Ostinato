@@ -473,6 +473,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long stuckSince;
     public int unstucks;
 
+    private long lastCalcFail = -1000;
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (stuckAvoider == null) {
@@ -525,8 +526,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // no path at all (in-game: a bridge bastion whose only way in is through netherrack, 10 minutes standing still):
         // the walk-around penalty only suits short detours, so allow digging once we are going nowhere
+        if (calcFailed) lastCalcFail = ticks;
+        boolean noPath = ticks - lastCalcFail < 100 && baritone.getPathingBehavior().getCurrent() == null;
         if (calcFailed || ticks - stuckSince > 100) BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = 2D;
-        if (ticks - stuckSince < 200) return cmd;
+        // run 104: path calc kept failing, ~20 s per target x 30 targets; a target with no path at all is dropped after 3 s
+        if (ticks - stuckSince < (noPath ? 60 : 200)) return cmd;
         if ((ticks - stuckSince) % 600 == 599) {
             // the same stale path for 30 s without a single step (run 33: 5 minutes on one movement): drop it outright
             baritone.getPathingBehavior().forceCancel();
@@ -556,7 +560,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (status != null && status.startsWith("loot") && lootTarget >= 0) badLoot.add(lootTarget);
         String gk = String.valueOf(cmd.goal);
         int times = stuckCount.merge(gk, 1, Integer::sum);
-        if (times >= 2) {
+        if (times >= (noPath ? 1 : 2)) {
             // the same target twice: it is the target, not the step. Give it up for a while and let the plan pick the next one
             if (chestTarget != null) { badChest.put(chestTarget, ticks + 3000); chestTarget = null; }
             if (goldTarget != null) { badGold.put(goldTarget, ticks + 3000); goldTarget = null; }
@@ -782,6 +786,23 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         PathingCommand cure = fireCure(me);
         if (cure != null) return cure;
+        // run 102: lava flowed over the spawn floor (1 deep, on the ground) and the bot stood still for 3 s; walk straight out to the nearest dry cell
+        if (me.isInLava() && me.onGround()) {
+            BlockPos dry = null;
+            for (BlockPos q : BlockPos.betweenClosed(me.blockPosition().offset(-3, -1, -3), me.blockPosition().offset(3, 1, 3))) {
+                if (realLava(q) || realLava(q.above()) || !floor(q.below()) || floor(q) || floor(q.above())) continue;
+                if (dry == null || me.position().distanceToSqr(Vec3.atBottomCenterOf(q)) < me.position().distanceToSqr(Vec3.atBottomCenterOf(dry))) dry = q.immutable();
+            }
+            if (dry != null) {
+                Vec3 d = Vec3.atBottomCenterOf(dry).subtract(me.position());
+                baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-d.x, d.z)), 0), true);
+                baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+                baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, true);
+                if (dry.getY() > me.getY() + 0.5 || me.horizontalCollision) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
+                status = "shallow lava: walking out to " + dry.toShortString();
+                return pause0();
+            }
+        }
         if (me.isInLava()) {
             // in lava: no planning, just step directly away from the nearest lava and jump (a path from here may never come)
             Vec3 away = Vec3.ZERO;
