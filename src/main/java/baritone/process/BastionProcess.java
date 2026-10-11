@@ -556,6 +556,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     stuckAvoid.put(dp.above(), ticks + 1500L);
                 }
                 status = "stuck on " + mv.getClass().getSimpleName() + " to " + mv.getDest() + ", avoiding it";
+                // run 107: 3 min on a Traverse at y=104 while standing at y=100; we were off the path and it never replanned
+                if (me.position().distanceTo(Vec3.atBottomCenterOf(mv.getSrc())) > 2.5) { baritone.getPathingBehavior().forceCancel(); status += " (off path, replanned)"; }
             }
         } catch (RuntimeException ignoredEx) { }
         // a drop we cannot reach (run 14: 2 minutes on one crying obsidian): forget that item at once
