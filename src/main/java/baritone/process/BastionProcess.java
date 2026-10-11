@@ -733,6 +733,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // up a tower with a brute below: stay up there; walking down to leave is what killed run 47
         if (bastion != null && me.onGround() && me.getY() >= perchBase + 1.9 && Math.abs(me.getX() - perchX - 0.5) < 1 && Math.abs(me.getZ() - perchZ - 0.5) < 1
                 && ticks >= towerReleaseUntil
+                // run 130: this caught the climb two blocks up, where the tower is only half built, and held us there
+                // "waiting" until the brute walked up and hit us (18 -> 8). The climb finishes first
+                && !(perching && perchClimbing)
                 // run 122: one brute idled 5-9 blocks off, out of sight, and we stood on the tower at full health for five
                 // minutes. Only a brute that is after us or can see us keeps us up there, and for half a minute at a stretch:
                 // one that has not come to the foot of the tower by then cannot get to us
@@ -748,6 +751,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             boolean close = heavies.stream().anyMatch(e -> e instanceof PiglinBrute && me.distanceTo(e) < 5);
             if (ticks - towerWaitSince < (close ? 1200 : 600)) {
                 pveP.hold = false;
+                // run 130: a minute up here at 10 hp, the food bar a point short of regenerating
+                if (me.getHealth() < 17 && me.getFoodData().getFoodLevel() < 18) {
+                    PathingCommand eat = eat(me);
+                    if (eat != null) return eat;
+                }
                 status = "on tower, waiting out the brute";
                 return pause0();
             }
