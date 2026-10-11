@@ -20,7 +20,12 @@ public final class BastTest implements AbstractGameEventListener {
     private net.minecraft.world.phys.Vec3 stallAt;
     private int stallTick, stallCarried;
     private BlockPos target;
-    private static final boolean REAL = System.getenv("BAST_REAL") != null;
+    /** -Dostinato.basttest.shelter=true: brutes sent at us on a flat arena, one set-up after another, to try the walling in. */
+    private static final boolean SHELTER = Boolean.getBoolean("ostinato.basttest.shelter");
+    private static final boolean REAL = System.getenv("BAST_REAL") != null && !SHELTER;
+    private static final String[] TRIALS = System.getProperty("ostinato.basttest.trials", "open,offcentre,ceiling,close,pair,pit,step,slab,above").split(",");
+    private int trial = -1, trialTick, trialHits, trialWalled, trialOut, trialBlocks;
+    private float trialHp, trialMin;
     private int duelSummons;
     private static BlockPos waterBase;
     private static final String VARIANT = System.getProperty("ostinato.basttest.variant", "any");
@@ -95,7 +100,10 @@ public final class BastTest implements AbstractGameEventListener {
                 say("BAST creating world");
                 CreateWorldScreen.openFresh(mc, () -> {});
                 wait = 80;
-            } else if (state == 1 && --wait <= 0 && mc.screen instanceof CreateWorldScreen) {
+            } else if (state == 1 && --wait <= 0 && mc.screen instanceof CreateWorldScreen cw) {
+                // -Dostinato.basttest.seed=<seed>: the same world, bastion and start again, to try a fix against what prompted it
+                String seed = System.getProperty("ostinato.basttest.seed");
+                if (seed != null) cw.getUiState().setSeed(seed);
                 for (var c : mc.screen.children()) {
                     if (c instanceof Button bt && bt.getMessage().getString().contains("Create New World")) {
                         state = 2;
@@ -158,7 +166,7 @@ public final class BastTest implements AbstractGameEventListener {
                 }
             }).join();
             target = found[0];
-            say("BAST target " + target);
+            say("BAST target " + target + " seed " + sv.getWorldData().worldGenOptions().seed());
             if (REAL) {
                 run("execute in minecraft:the_nether run forceload add " + (target.getX() + 90) + " " + target.getZ());
                 BlockPos[] spot = new BlockPos[3];
@@ -218,7 +226,7 @@ public final class BastTest implements AbstractGameEventListener {
             if (ticks < 260) return;
             run("clear @p");
             run("give @p iron_pickaxe");
-            if (!REAL) {
+            if (!REAL && !SHELTER) {
             run("execute at @p run fill ~-12 ~ ~-12 ~12 ~5 ~12 air replace lava");
             run("execute at @p run fill ~-10 ~-1 ~-10 ~10 ~-1 ~10 stone");
             run("execute at @p run fill ~3 ~-5 ~-1 ~7 ~-1 ~1 stone");
@@ -238,7 +246,7 @@ public final class BastTest implements AbstractGameEventListener {
             run("give @p lava_bucket");
             run("give @p bucket");
             run("gamemode survival @p");
-            if (!REAL) {
+            if (!REAL && !SHELTER) {
             run("execute at @p run summon piglin ~4 ~ ~3");
             run("execute at @p run summon piglin ~-4 ~ ~3");
             run("execute at @p run summon piglin_brute ~3 ~ ~-6");
@@ -253,8 +261,13 @@ public final class BastTest implements AbstractGameEventListener {
             if (System.getProperty("ostinato.basttest.budget") != null) baritone.bastion.BastionSettings.timeBudget = Integer.getInteger("ostinato.basttest.budget");
             baritone.bastion.BastionSettings.kinematic = Boolean.getBoolean("ostinato.basttest.kinematic");
             b.getCommandManager().execute("bastion " + VARIANT);
-            state = 4;
+            state = SHELTER ? 5 : 4;
             ticks = 0;
+            return;
+        }
+        if (state == 5) {
+            ticks++;
+            shelterTrials(mc);
             return;
         }
         if (state == 4) {
@@ -311,6 +324,68 @@ public final class BastTest implements AbstractGameEventListener {
                 state = 9; mc.execute(mc::stop);
             }
         }
+    }
+
+    private int netherrack(Minecraft mc) {
+        int n = 0;
+        for (int i = 0; i < 36; i++) if (mc.player.getInventory().getItem(i).is(net.minecraft.world.item.Items.NETHERRACK)) n += mc.player.getInventory().getItem(i).getCount();
+        return n;
+    }
+
+    /** One brute set-up after another on the arena; a line per second and a result line per trial. */
+    private void shelterTrials(Minecraft mc) {
+        var pl = mc.player;
+        var bp = b.getBastionProcess();
+        int ax = target.getX(), az = target.getZ();
+        String in = "execute in minecraft:the_nether run ";
+        if (pl.getHealth() <= 0) { say("BAST END died in trial " + (trial < 0 ? "-" : TRIALS[trial]) + " t=" + ticks + " st=" + bp.status()); state = 9; mc.execute(mc::stop); return; }
+        var brutes = mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.PiglinBrute.class, pl.getBoundingBox().inflate(40), x -> x.isAlive());
+        if (trial >= 0) {
+            trialTick++;
+            if (pl.getHealth() < trialHp - 1.5f) trialHits++;
+            trialHp = pl.getHealth();
+            trialMin = Math.min(trialMin, trialHp);
+            if (trialWalled < 0 && bp.walledIn()) trialWalled = trialTick;
+            if (trialWalled >= 0 && trialOut < 0 && !bp.walledIn() && !bp.status().startsWith("wall") && !bp.status().equals("eating")) trialOut = trialTick;
+            String bs = brutes.stream().map(x -> String.format("%.1f%s%s", pl.distanceTo(x), x.isAggressive() ? "A" : "q", x.hasLineOfSight(pl) ? "s" : "-")).toList().toString();
+            if (trialTick % 20 == 0 || trialTick < 60 && trialTick % 2 == 0)
+                System.out.println("BAST sh " + TRIALS[trial] + " t=" + trialTick + " hp=" + pl.getHealth() + " y=" + String.format("%.2f", pl.getY()) + " off=" + String.format("%.2f,%.2f", pl.getX() - Math.floor(pl.getX()) - 0.5, pl.getZ() - Math.floor(pl.getZ()) - 0.5)
+                        + " nr=" + netherrack(mc) + " keys=" + keysDesc() + " brutes=" + bs + " st=" + bp.status());
+            boolean over = trialOut >= 0 && trialTick > trialOut + 40 || trialTick >= Integer.getInteger("ostinato.basttest.trialticks", 1500);
+            if (!over) return;
+            say("BAST TRIAL " + TRIALS[trial] + " hits=" + trialHits + " minhp=" + trialMin + " walled=" + trialWalled + " out=" + trialOut + " blocks=" + (trialBlocks - netherrack(mc)) + " brutes=" + bs + " st=" + bp.status());
+        }
+        if (++trial >= TRIALS.length) { say("BAST END shelter trials done t=" + ticks); state = 9; mc.execute(mc::stop); return; }
+        String name = TRIALS[trial];
+        // a clean arena: stone floor two thick at y=199..200, air above, nobody about
+        run(in + "kill @e[type=minecraft:piglin_brute]");
+        run(in + "kill @e[type=minecraft:item]");
+        run(in + "fill " + (ax - 16) + " 201 " + (az - 16) + " " + (ax + 16) + " 208 " + (az + 16) + " air");
+        run(in + "fill " + (ax - 16) + " 199 " + (az - 16) + " " + (ax + 16) + " 200 " + (az + 16) + " stone");
+        run("effect give @p minecraft:instant_health 1 5 true");
+        run("effect give @p minecraft:saturation 1 5 true");
+        run("clear @p minecraft:netherrack");
+        run("give @p netherrack 64");
+        double px = ax + 0.5, py = 201, pz = az + 0.5;
+        java.util.List<String> spawn = new java.util.ArrayList<>();
+        switch (name) {
+            case "offcentre" -> { px = ax + 0.78; pz = az + 0.24; spawn.add((ax + 11) + " 201 " + az); }
+            case "ceiling" -> { run(in + "fill " + (ax - 16) + " 204 " + (az - 16) + " " + (ax + 16) + " 204 " + (az + 16) + " stone"); spawn.add((ax - 11) + " 201 " + az); }
+            case "close" -> spawn.add((ax + 4) + " 201 " + (az + 1));
+            case "pair" -> { spawn.add((ax + 10) + " 201 " + az); spawn.add((ax - 10) + " 201 " + (az + 1)); }
+            // a hole to the east of our cell, thirty deep; the brute comes from the south
+            case "pit" -> { run(in + "fill " + (ax + 1) + " 170 " + (az - 2) + " " + (ax + 3) + " 200 " + (az + 2) + " air"); spawn.add(ax + " 201 " + (az + 10)); }
+            // the west half of the arena one block lower, the brute on it
+            case "step" -> { run(in + "fill " + (ax - 16) + " 200 " + (az - 16) + " " + (ax - 1) + " 200 " + (az + 16) + " air"); spawn.add((ax - 10) + " 200 " + az); }
+            case "slab" -> { run(in + "setblock " + ax + " 201 " + az + " minecraft:stone_slab"); py = 201.5; spawn.add(ax + " 201 " + (az - 11)); }
+            // a brute on a platform two up, four blocks off: it sees us over any wall we can build from the ground
+            case "above" -> { run(in + "fill " + (ax + 4) + " 201 " + (az - 2) + " " + (ax + 8) + " 202 " + (az + 2) + " stone"); spawn.add((ax + 6) + " 203 " + az); }
+            default -> spawn.add((ax + 11) + " 201 " + az);
+        }
+        run(in + "tp @p " + px + " " + py + " " + pz);
+        for (String s : spawn) run(in + "summon minecraft:piglin_brute " + s);
+        trialTick = 0; trialHits = 0; trialWalled = -1; trialOut = -1; trialHp = 20; trialMin = 20; trialBlocks = 64;
+        say("BAST trial " + name + " set up");
     }
 
     /** Walkable flood fill (step up 1, drop up to 3, no lava next to the feet) from start to within 10 blocks of the bastion target. */
