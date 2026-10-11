@@ -43,6 +43,7 @@ import baritone.bastion.BastionDrops;
 import baritone.bastion.BastionGoals;
 import baritone.bastion.BastionLava;
 import baritone.bastion.EdgeCost;
+import baritone.bastion.ItemThrow;
 import baritone.bastion.LavaFlow;
 import baritone.bastion.BastionTrap;
 import baritone.api.pathing.goals.GoalBlock;
@@ -474,6 +475,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     public int unstucks;
 
     private long lastCalcFail = -1000;
+    private double[] throwPred;
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (stuckAvoider == null) {
@@ -783,6 +785,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 return pause0();
             }
             if ((!inDoor || !me.isOnFire()) && descentSteps <= 0) { doorPos = null; descentSteps = 0; }
+        }
+        if (throwPred != null && ticks == throwTick + 25) {
+            final double[] tp = throwPred; throwPred = null;
+            ctx.world().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, me.getBoundingBox().inflate(6), it -> it.getItem().is(Items.GOLD_INGOT))
+                .stream().min(java.util.Comparator.comparingDouble(it -> it.distanceToSqr(tp[0], tp[1], tp[2])))
+                .ifPresentOrElse(it -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, actual %.2f %.2f %.2f (err %.2f)", tp[0], tp[1], tp[2], it.getX(), it.getY(), it.getZ(), Math.sqrt(it.distanceToSqr(tp[0], tp[1], tp[2])))),
+                    () -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, ingot already taken", tp[0], tp[1], tp[2])));
         }
         PathingCommand cure = fireCure(me);
         if (cure != null) return cure;
@@ -2400,9 +2409,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 me.getInventory().setSelectedSlot(slot);
                 // aim at the far corner of the trap hole so the ingot lands on the piglin's side, not back at our feet
                 Vec3 far = new Vec3(caughtHole.getX() + 0.5 + 0.35 * (caughtHole.getX() - pickHole.getX()), caughtHole.getY() - 2, caughtHole.getZ() + 0.5 + 0.35 * (caughtHole.getZ() - pickHole.getZ()));
-                aimer.look(far, 0);
-                float farYaw = (float) Math.toDegrees(Math.atan2(-(far.x - me.getX()), far.z - me.getZ()));
-                if (Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 10 && safeDrop(me)) { admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
+                // simulate the ingot's flight (ItemThrow) and pick the pitch that lands it in that corner
+                ItemThrow.Floor fl = (fx, fz) -> {
+                    int bx = Mth.floor(fx), bz = Mth.floor(fz);
+                    for (int by = Mth.floor(me.getEyeY()); by > me.getBlockY() - 5; by--) if (floor(new BlockPos(bx, by, bz))) return by + 1;
+                    return me.getBlockY() - 5;
+                };
+                float[] aim = ItemThrow.aim(me.getX(), me.getEyeY(), me.getZ(), far.x, far.z, fl);
+                baritone.getLookBehavior().updateTarget(new Rotation(aim[0], aim[1]), true);
+                float farYaw = aim[0];
+                if (Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4 && safeDrop(me)) {
+                    throwPred = ItemThrow.land(me.getX(), me.getEyeY(), me.getZ(), me.getYRot(), me.getXRot(), fl); admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
                 status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
                 return pause0();
             }
