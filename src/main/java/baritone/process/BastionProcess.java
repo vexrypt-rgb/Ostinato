@@ -1324,7 +1324,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     // ---- underwater door pocket (overworld): breathe in a door, then swim up or tunnel out (shares FluidPocket with lava) ----
     private BlockPos wDoor, wExit, wTunnel;
-    private long wLog;
+    private long wLog = -1000;
+    private boolean wSeekWall;
+    private long wOpenTick = -100;
     private boolean water(BlockPos p) { return ctx.world().getFluidState(p).is(net.minecraft.tags.FluidTags.WATER); }
     private int surfaceDepth(Player me) {
         BlockPos e = BlockPos.containing(me.getEyePosition());
@@ -1357,19 +1359,44 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private PathingCommand waterPocket(Player me) {
         var in = baritone.getInputOverrideHandler();
         boolean under = me.isUnderWater();
-        if (!under && wTunnel == null && wDoor == null) return null;
+        if (!under && wTunnel == null && wDoor == null && !wSeekWall) return null;
         if (me.level().dimension().identifier().getPath().equals("the_nether")) return null;
         BlockPos feet = me.blockPosition();
+        // the door shows up a tick after the click (waterpocket w1: placed, never adopted, process walked off): adopt it
+        if (wDoor == null && !wSeekWall && ctx.world().getBlockState(feet).getBlock() instanceof net.minecraft.world.level.block.DoorBlock && water(feet.above(2))) { wDoor = feet.immutable(); logDirect("Bastion: water door pocket at " + feet.toShortString() + " air=" + me.getAirSupply()); }
         boolean inPocket = wDoor != null && ctx.world().getBlockState(wDoor).getBlock() instanceof net.minecraft.world.level.block.DoorBlock
                 && me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(wDoor).expandTowards(0, 1, 0));
         if (wTunnel != null && !under) inPocket = true; // in our own dry tunnel
-        if (!under && !inPocket) { wDoor = null; wTunnel = null; in.setInputForceState(Input.SNEAK, false); return null; }
+        if (!under && !inPocket && !wSeekWall) { wDoor = null; wTunnel = null; in.setInputForceState(Input.SNEAK, false); return null; }
         int doors = 0, slot = -1;
         for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.DOORS)) { doors += s.getCount(); if (slot < 0) slot = i; } }
         if (wExit == null || ticks % 40 == 0) wExit = findExit(feet);
         int surf = surfaceDepth(me);
         boolean floorOk = solid(feet.below()) && water(feet);
-        FluidPocket.Action a = FluidPocket.decide(me.getAirSupply(), me.getMaxAirSupply(), surf, inPocket, doors, floorOk, wExit != null, pickaxeSlot(me) >= 0);
+        FluidPocket.Action a; a = FluidPocket.decide(me.getAirSupply(), me.getMaxAirSupply(), surf, inPocket, doors, floorOk, wExit != null, pickaxeSlot(me) >= 0);
+        // the pocket is out in open water (w2): walk the bottom toward the exit and re-pocket against the wall there
+        if (wSeekWall && !inPocket && wExit != null && me.getAirSupply() > 60 && doors > 0) {
+            BlockState fs = ctx.world().getBlockState(feet);
+            if (fs.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
+                Direction toward = Math.abs(wExit.getX() - feet.getX()) >= Math.abs(wExit.getZ() - feet.getZ()) ? (wExit.getX() > feet.getX() ? Direction.EAST : Direction.WEST) : (wExit.getZ() > feet.getZ() ? Direction.SOUTH : Direction.NORTH);
+                if (solid(feet.relative(toward))) { wDoor = feet.immutable(); wSeekWall = false; logDirect("Bastion: water door pocket against the wall at " + feet.toShortString()); return pause0(); }
+                // w4: 17 s (and drowning) pushing out through our own closed door: open it first
+                if (!fs.getValue(net.minecraft.world.level.block.DoorBlock.OPEN) && ticks - wOpenTick > 10) {
+                    wOpenTick = ticks;
+                    ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(feet), Direction.UP, feet, false));
+                }
+            }
+            Direction dir = Math.abs(wExit.getX() - feet.getX()) >= Math.abs(wExit.getZ() - feet.getZ()) ? (wExit.getX() > feet.getX() ? Direction.EAST : Direction.WEST) : (wExit.getZ() > feet.getZ() ? Direction.SOUTH : Direction.NORTH);
+            if (solid(feet.relative(dir)) && solid(feet.below()) && water(feet)) { wSeekWall = false; a = FluidPocket.Action.DOOR; }
+            else {
+                Vec3 d = Vec3.atBottomCenterOf(feet.relative(dir)).subtract(me.position());
+                baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-d.x, d.z)), 0), true);
+                in.setInputForceState(Input.MOVE_FORWARD, true);
+                in.setInputForceState(Input.SNEAK, true);
+                status = "water: to the wall toward " + wExit.toShortString();
+                return pause0();
+            }
+        }
         if (ticks - wLog > 40) { wLog = ticks; logDirect("Bastion: water " + a + " air=" + me.getAirSupply() + " surface=" + surf + " doors=" + doors + " exit=" + (wExit == null ? "none" : wExit.toShortString()) + " at " + feet.toShortString()); }
         status = "water: " + a;
         in.setInputForceState(Input.SNEAK, false);
@@ -1397,7 +1424,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 int dx = Integer.signum(wExit.getX() - cur.getX()), dz = Integer.signum(wExit.getZ() - cur.getZ());
                 Direction dir = Math.abs(wExit.getX() - cur.getX()) >= Math.abs(wExit.getZ() - cur.getZ()) ? (dx > 0 ? Direction.EAST : Direction.WEST) : (dz > 0 ? Direction.SOUTH : Direction.NORTH);
                 BlockPos n = cur.relative(dir);
-                if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
+                if (water(n) && wTunnel == null) { wSeekWall = true; wDoor = null; status = "water: leaving the pocket for the wall"; logDirect("Bastion: water pocket is in open water, moving to the wall toward " + wExit.toShortString()); return pause0(); }
+if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                     wTunnel = n.immutable();
                     if (n.equals(wExit) || !water(n) && wExit.distSqr(n) <= 1) { logDirect("Bastion: water tunnel reached the exit at " + n.toShortString()); wDoor = null; wTunnel = null; return null; }
                     return pause0();
