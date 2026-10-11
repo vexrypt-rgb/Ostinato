@@ -128,6 +128,16 @@ public class PathExecutor implements IPathExecutor, Helper {
      * @return True if a movement just finished (and the player is therefore in a "stable" state, like,
      * not sneaking out over lava), false otherwise
      */
+    /**
+     * Whether a pause can be taken this tick, before anything is pressed for it. onTick's answer is a tick old by the
+     * time it is read: given in the air it says no, and on the tick we land the driver has us off the ground again
+     * before the question is put a second time. A process that asked to stop was carried on hop after hop (arena trial
+     * 4: walls laid one block a tick along seven blocks of sprint-jumping).
+     */
+    public boolean pausableNow() {
+        return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS) && ctx.player().onGround();
+    }
+
     public boolean onTick() {
         // A movement that succeeds immediately after a rewind to it would otherwise bounce between the two forever.
         if (tickDepth > 8) {

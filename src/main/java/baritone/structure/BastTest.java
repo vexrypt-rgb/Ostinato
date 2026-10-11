@@ -350,7 +350,7 @@ public final class BastTest implements AbstractGameEventListener {
             String bs = brutes.stream().map(x -> String.format("%.1f%s%s", pl.distanceTo(x), x.isAggressive() ? "A" : "q", x.hasLineOfSight(pl) ? "s" : "-")).toList().toString();
             if (trialTick % 20 == 0 || trialTick < 60 && trialTick % 2 == 0)
                 System.out.println("BAST sh " + TRIALS[trial] + " t=" + trialTick + " hp=" + pl.getHealth() + " y=" + String.format("%.2f", pl.getY()) + " off=" + String.format("%.2f,%.2f", pl.getX() - Math.floor(pl.getX()) - 0.5, pl.getZ() - Math.floor(pl.getZ()) - 0.5)
-                        + " nr=" + netherrack(mc) + " keys=" + keysDesc() + " brutes=" + bs + " st=" + bp.status());
+                        + " nr=" + netherrack(mc) + " drv=" + driverDesc() + " keys=" + keysDesc() + " brutes=" + bs + " st=" + bp.status());
             boolean over = trialOut >= 0 && trialTick > trialOut + 40 || trialTick >= Integer.getInteger("ostinato.basttest.trialticks", 1500);
             if (!over) return;
             say("BAST TRIAL " + TRIALS[trial] + " hits=" + trialHits + " minhp=" + trialMin + " walled=" + trialWalled + " out=" + trialOut + " blocks=" + (trialBlocks - netherrack(mc)) + " brutes=" + bs + " st=" + bp.status());
@@ -385,6 +385,8 @@ public final class BastTest implements AbstractGameEventListener {
         run(in + "tp @p " + px + " " + py + " " + pz);
         for (String s : spawn) run(in + "summon minecraft:piglin_brute " + s);
         trialTick = 0; trialHits = 0; trialWalled = -1; trialOut = -1; trialHp = 20; trialMin = 20; trialBlocks = 64;
+        // a fresh start for the process: nothing of the last trial's walls in its head
+        b.getCommandManager().execute("bastion " + VARIANT);
         say("BAST trial " + name + " set up");
     }
 

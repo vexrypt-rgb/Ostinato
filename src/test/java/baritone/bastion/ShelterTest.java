@@ -35,9 +35,13 @@ public class ShelterTest {
 
     /** Places until there is nothing left to place, checking every click is one the game would take. */
     private static List<Shelter.Place> build(World w, double feetY, double tx, double tz) {
+        return build(w, feetY, tx, tz, false);
+    }
+
+    private static List<Shelter.Place> build(World w, double feetY, double tx, double tz, boolean ring) {
         List<Shelter.Place> out = new ArrayList<>();
         for (int i = 0; i < 40; i++) {
-            Shelter.Place p = Shelter.next(w, 0, feetY, 0, tx, tz);
+            Shelter.Place p = ring ? Shelter.fort(w, 0, feetY, 0, tx, tz) : Shelter.next(w, 0, feetY, 0, tx, tz);
             if (p == null) return out;
             assertTrue("cell is free", w.open(p.x(), p.y(), p.z()) && !w.blocked(p.x(), p.y(), p.z()));
             assertTrue("clicked block is there", w.solid(p.ax(), p.ay(), p.az()));
@@ -131,6 +135,58 @@ public class ShelterTest {
         assertTrue(Shelter.roofed(w, 0, 64.5, 0));
         assertEquals(3, Shelter.high(64.5) - Shelter.low(64.5) + 1);
         assertEquals(14, placed.size());
+    }
+
+    @Test
+    public void theRingShutsTheCornersAndTopsTheWalls() {
+        World w = new World().floor(63, 4);
+        build(w, 64, 5, 0);
+        assertFalse(Shelter.fortified(w, 0, 64, 0));
+        List<Shelter.Place> ring = build(w, 64, 5, 0, true);
+        assertTrue(Shelter.fortified(w, 0, 64, 0));
+        // eight corner blocks, and three wall tops: the fourth already holds the roof
+        assertEquals(11, ring.size());
+        // the corners toward the brute first, from the floor up
+        assertEquals(1, ring.get(0).x());
+        assertEquals(64, ring.get(0).y());
+        assertEquals(1, ring.get(1).x());
+        for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) for (int y = 64; y <= 65; y++) assertEquals(x == 0 && z == 0, w.open(x, y, z));
+    }
+
+    @Test
+    public void theRingOnASlabIsAsHighAsTheWalls() {
+        World w = new World().floor(63, 4).set(0, 64, 0);
+        build(w, 64.5, 5, 0);
+        List<Shelter.Place> ring = build(w, 64.5, 5, 0, true);
+        assertTrue(Shelter.fortified(w, 0, 64.5, 0));
+        assertEquals(15, ring.size());
+    }
+
+    @Test
+    public void aCornerOverADropHangsFromTheWalls() {
+        World w = new World().floor(63, 4);
+        for (int x = 1; x <= 4; x++) for (int z = -4; z <= 4; z++) w.clear(x, 63, z);
+        build(w, 64, -5, 0);
+        List<Shelter.Place> ring = build(w, 64, -5, 0, true);
+        assertTrue(Shelter.fortified(w, 0, 64, 0));
+        Shelter.Place hung = ring.stream().filter(p -> p.x() == 1 && p.y() == 64 && p.z() == 1).findFirst().orElseThrow();
+        assertEquals(64, hung.ay());
+        assertEquals(11, ring.size());
+    }
+
+    @Test
+    public void theSlitIsAtEyeLevelInTheWallFacingTheBrute() {
+        assertArrayEquals(new int[]{1, 65, 0}, Shelter.slit(0, 65, 0, 5, 1));
+        assertArrayEquals(new int[]{0, 65, -1}, Shelter.slit(0, 65, 0, -1, -7));
+        assertEquals(65, Shelter.eye(64));
+        // a brute on our own floor: eye to eye
+        assertEquals(65, Shelter.slitLevel(64, 64 + 1.79));
+        // on a slab our standing eye is a level over its eye; sneaking, it is level with it
+        assertEquals(66, Shelter.eye(64.5));
+        assertEquals(65, Shelter.slitLevel(64.5, 64 + 1.79));
+        // one on a floor a block lower, or two higher: neither stance meets its eye, so we stand
+        assertEquals(65, Shelter.slitLevel(64, 63 + 1.79));
+        assertEquals(65, Shelter.slitLevel(64, 66 + 1.79));
     }
 
     @Test
