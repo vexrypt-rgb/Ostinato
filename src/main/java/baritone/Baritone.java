@@ -82,6 +82,7 @@ public class Baritone implements IBaritone {
     private final FarmProcess farmProcess;
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
+    private final PortalBuildProcess portalBuildProcess;
     private final PvpProcess pvpProcess;
     private final PveProcess pveProcess;
 
@@ -132,6 +133,7 @@ public class Baritone implements IBaritone {
             this.registerProcess(BackfillProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
+            this.portalBuildProcess      = this.registerProcess(PortalBuildProcess::new);
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.pveProcess              = this.registerProcess(PveProcess::new);
             VexBench.install(this);
@@ -262,6 +264,10 @@ public class Baritone implements IBaritone {
     @Override
     public CommandManager getCommandManager() {
         return this.commandManager;
+    }
+
+    public PortalBuildProcess getPortalBuildProcess() {
+        return this.portalBuildProcess;
     }
 
     @Override
