@@ -251,6 +251,7 @@ public final class BastTest implements AbstractGameEventListener {
             // why a path was not found is only said in the debug chat (run 115: 11 minutes on the start plateau, no reason logged)
             baritone.api.BaritoneAPI.getSettings().chatDebug.value = true;
             if (System.getProperty("ostinato.basttest.budget") != null) baritone.bastion.BastionSettings.timeBudget = Integer.getInteger("ostinato.basttest.budget");
+            baritone.bastion.BastionSettings.kinematic = Boolean.getBoolean("ostinato.basttest.kinematic");
             b.getCommandManager().execute("bastion " + VARIANT);
             state = 4;
             ticks = 0;

@@ -104,6 +104,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     public void start(String variant) {
         EdgeCost.enabled = true;
         relaxUntil = 0;
+        towerReleaseUntil = 0;
         query = variant == null || variant.isEmpty() ? "bastion_remnant" : variant;
         active = true;
         // walk around netherrack rather than dig through it: digging is slow and a speedrun has no time for it
@@ -266,7 +267,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean perchClimbing, perchUp, perchCapped;
     private Double savedBreakPenalty;
     private Boolean savedKinematic;
-    private long perchCooldown, waitSince, walledSince, relaxUntil;
+    private long perchCooldown, waitSince, walledSince, relaxUntil, towerWaitSince, towerWaitTick = -100, towerReleaseUntil;
     private long perchTick, perchStallSince;
     private String perchStallKey;
 
@@ -291,6 +292,29 @@ public final class BastionProcess extends BaritoneProcessHelper {
             ctx.playerController().windowClick(me.inventoryMenu.containerId, inInv, 7, ClickType.SWAP, me);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
+        // run 122: we landed on the rim of our own one-block pillar, our middle over the open air beside it. Looking
+        // straight down from there the click reaches nothing, and we jumped on the spot for a minute. Get over the block
+        // that holds us up first
+        BlockPos foot = BlockPos.containing(me.getX(), me.getY() - 0.01, me.getZ());
+        if (me.onGround() && ctx.world().getBlockState(foot).getCollisionShape(ctx.world(), foot).isEmpty()) {
+            BlockPos hold = null;
+            double best = 1.3;
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    BlockPos p = foot.offset(dx, 0, dz);
+                    if (ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty()) continue;
+                    double d = Math.hypot(p.getX() + 0.5 - me.getX(), p.getZ() + 0.5 - me.getZ());
+                    if (d < best) { best = d; hold = p; }
+                }
+            }
+            if (hold != null) {
+                float yaw = (float) Math.toDegrees(Math.atan2(-(hold.getX() + 0.5 - me.getX()), hold.getZ() + 0.5 - me.getZ()));
+                baritone.getLookBehavior().updateTarget(new Rotation(yaw, 90), true);
+                baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+                baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            }
+        }
         BlockPos below = me.blockPosition().below();
         boolean free = ctx.world().getBlockState(below).isAir();
         BlockPos support = free ? below.below() : below;
@@ -312,7 +336,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         BlockPos under = BlockPos.containing(me.getX(), me.getY() - 0.01, me.getZ());
         for (int i = 0; i < 3 && ctx.world().getBlockState(under).isAir(); i++) under = under.below();
         if (clickOpens(under)) baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
-        if (me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
+        // run 124: the first jump, taken at a sprint, came down in the next column under a ceiling and the tower was given
+        // up with the brute six blocks off. A tower goes straight up: come to a stand before jumping
+        if (me.onGround() && Math.hypot(me.getDeltaMovement().x, me.getDeltaMovement().z) < 0.08) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
         if (free) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
     }
@@ -680,10 +706,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // (in-game run 13 fought, perched and retreated at 12 hp and died in the tower)
         // up a tower with a brute below: stay up there; walking down to leave is what killed run 47
         if (bastion != null && me.onGround() && me.getY() >= perchBase + 1.9 && Math.abs(me.getX() - perchX - 0.5) < 1 && Math.abs(me.getZ() - perchZ - 0.5) < 1
-                && heavies.stream().anyMatch(e -> e instanceof PiglinBrute && me.distanceTo(e) < 10)) {
-            pveP.hold = false;
-            status = "on tower, waiting out the brute";
-            return pause0();
+                && ticks >= towerReleaseUntil
+                // run 122: one brute idled 5-9 blocks off, out of sight, and we stood on the tower at full health for five
+                // minutes. Only a brute that is after us or can see us keeps us up there, and for half a minute at a stretch:
+                // one that has not come to the foot of the tower by then cannot get to us
+                && heavies.stream().anyMatch(e -> e instanceof PiglinBrute b && me.distanceTo(e) < 10 && (b.isAggressive() || b.hasLineOfSight(me)))) {
+            if (ticks - towerWaitTick > 20) towerWaitSince = ticks;
+            towerWaitTick = ticks;
+            if (ticks - towerWaitSince < 600) {
+                pveP.hold = false;
+                status = "on tower, waiting out the brute";
+                return pause0();
+            }
+            towerReleaseUntil = ticks + 600;
+            perchCooldown = Math.max(perchCooldown, towerReleaseUntil);
         }
         // brute axes disable shields (runs 98, 106): no duel unless asked for
         PathingCommand dl = BastionSettings.duel ? duel(me, heavies) : null;
@@ -797,6 +833,15 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (!perchUp) perchClimbing = true;
             else if (me.onGround() && !perchCapped) perchClimbing = me.getY() < perchBase + 3.7;
             perchUp = true;
+            // run 123: the path carried us nine blocks on and two down before we stopped. The tower went up there, measured
+            // from here: too short, and the lava trap looked for its column in the wrong place. The tower is where we stand
+            BlockPos stand = BlockPos.containing(me.getX(), me.getY() - 0.01, me.getZ());
+            if (perchClimbing && me.onGround() && (me.blockPosition().getX() != perchX || me.blockPosition().getZ() != perchZ)
+                    && !ctx.world().getBlockState(stand).getCollisionShape(ctx.world(), stand).isEmpty()) {
+                perchBase = me.blockPosition().getY();
+                perchX = me.blockPosition().getX();
+                perchZ = me.blockPosition().getZ();
+            }
             if (perchClimbing && !headroom(me, perchBase) && me.getY() < perchBase + 2.2) {
                 // a ceiling stops the tower short: standing still on the floor is the worst place to meet a brute, so give up
                 perching = false;
@@ -842,6 +887,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
             }
             PathingCommand lava = lavaTrap(me, heavies);
             if (lava != null) return lava;
+            // run 123: ten seconds up here at 8 hp with the food bar at 16, so nothing came back, then down to the brute.
+            // Out of its reach is the time to eat
+            if (me.getHealth() < 17 && me.getFoodData().getFoodLevel() < 18 && lavaPos == null) {
+                PathingCommand eat = eat(me);
+                if (eat != null) return eat;
+            }
             pveP.hold = true;
             // sneaking at the edge of a one-block column: a brute's knockback cannot push us off
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
@@ -1126,18 +1177,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
             }
             // regeneration needs a full food bar: eat until it is
-            int food = foodSlot(me);
-            if (food >= 0) {
-                if (food >= 9) {
-                    ctx.playerController().windowClick(me.inventoryMenu.containerId, food, 6, ClickType.SWAP, me);
-                    return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
-                }
-                me.getInventory().setSelectedSlot(food);
-                baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
-                ctx.minecraft().options.keyUse.setDown(true);
-                status = "eating";
-                return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
-            }
+            PathingCommand eat = eat(me);
+            if (eat != null) return eat;
         }
         Map<String, Integer> have = counts(me);
         boolean done = BastionGoals.met(have, BastionSettings.TARGETS);
@@ -2385,6 +2426,21 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             lavaPos = spot.immutable();
             lavaTick = ticks;
         }
+        return pause0();
+    }
+
+    /** One tick of eating whatever food we carry, or null with none. */
+    private PathingCommand eat(Player me) {
+        int food = foodSlot(me);
+        if (food < 0) return null;
+        if (food >= 9) {
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, food, 6, ClickType.SWAP, me);
+            return pause0();
+        }
+        me.getInventory().setSelectedSlot(food);
+        baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        ctx.minecraft().options.keyUse.setDown(true);
+        status = "eating";
         return pause0();
     }
 
