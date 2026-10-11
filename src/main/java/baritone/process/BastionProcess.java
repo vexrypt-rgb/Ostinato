@@ -141,6 +141,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         shelterTearing = false;
         shelterNoLure = false;
         shelterKills = 0;
+        shelterShy.clear();
         goldSourceGone = false;
         chestsExhausted = false;
         chestsLooted = 0;
@@ -185,6 +186,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private boolean guardedAdded;
+    private float hpSeen;
+    private long hurtAt = -100000, shelterShoveAt = -100000;
+    private int shelterShoves;
+    private final Map<java.util.UUID, Long> shelterShy = new HashMap<>();
+
+    /** Walking our way this tick: a brute runs at a quarter of a block a tick, and strolls at half that. */
+    private static boolean coming(LivingEntity e, Player me) {
+        double dx = me.getX() - e.getX(), dz = me.getZ() - e.getZ(), d = Math.hypot(dx, dz);
+        return d > 0.01 && ((e.getX() - e.xo) * dx + (e.getZ() - e.zo) * dz) / d > 0.08;
+    }
 
     public void stop() {
         EdgeCost.enabled = false; EdgeCost.lavaSoon = java.util.Set.of(); EdgeCost.waterSoon = java.util.Set.of();
@@ -435,14 +446,29 @@ public final class BastionProcess extends BaritoneProcessHelper {
         for (PiglinBrute b : around) {
             if (nearest == null || me.distanceTo(b) < me.distanceTo(nearest)) nearest = b;
             // one to draw to the slit: near enough to notice us through it, and on a level it can be struck from
-            if (me.distanceTo(b) < 12 && Math.abs(b.getY() - me.getY()) < 2.5 && (mark == null || me.distanceTo(b) < me.distanceTo(mark))) mark = b;
-            if (me.distanceTo(b) < 12 && hunting(b, me) && (hunter == null || me.distanceTo(b) < me.distanceTo(hunter))) hunter = b;
+            boolean shy = shelterShy.getOrDefault(b.getUUID(), 0L) > ticks;
+            if (me.distanceTo(b) < 12 && Math.abs(b.getY() - me.getY()) < 2.5 && (!shy || me.distanceTo(b) < 5) && (mark == null || me.distanceTo(b) < me.distanceTo(mark))) mark = b;
+            // run 134: one stood twelve blocks off for two minutes, in plain view and never a step nearer, and four
+            // times the walls went up for it. Twelve is as far as a brute notices anything, and from there it is
+            // forty ticks away; the walls take twelve. So: one within eight, or one further off that is on its way.
+            // And one that was given a slit and never came is left to stand until it does come
+            if (me.distanceTo(b) < 12 && hunting(b, me) && (me.distanceTo(b) < (shy ? 4 : 8) || coming(b, me)) && (hunter == null || me.distanceTo(b) < me.distanceTo(hunter))) hunter = b;
         }
         if (sheltering && (me.isInLava() || shelterAt != null && me.position().distanceTo(shelterAt) > 3)) sheltering = false;
+        if (me.getHealth() < hpSeen - 0.9f) hurtAt = ticks;
+        hpSeen = me.getHealth();
+        // a grown piglin with its arms up at our side and a blow just taken: it is us it is after. Walls stop a sword
+        // and a bolt alike, and its anger is gone in half a minute (run 133 fought two of them from 16 hp to 5, and died)
+        Piglin pig = null;
+        if (ticks - hurtAt < 60) {
+            for (Piglin q : ctx.world().getEntitiesOfClass(Piglin.class, me.getBoundingBox().inflate(5), q -> q.isAlive() && !q.isBaby() && q.isAggressive())) {
+                if (pig == null || me.distanceTo(q) < me.distanceTo(pig)) pig = q;
+            }
+        }
         if (!sheltering) {
             // hurt with one about: the walls are where to eat and mend, if there is anything to mend with
             boolean hurt = me.getHealth() < 14 && nearest != null && (foodSlot(me) >= 0 || me.getFoodData().getFoodLevel() >= 18);
-            if (hunter == null && !hurt || me.isInLava() || ticks < shelterCooldown || pillarBlocks(me) < 12
+            if (hunter == null && !hurt && pig == null || me.isInLava() || ticks < shelterCooldown || pillarBlocks(me) < 12
                     // already up a tower: that is the older answer at work
                     || perching && me.getY() >= perchBase + 1.9) return null;
             if (shelterCell(me) == null) {
@@ -473,10 +499,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             // what one brute could not see from its post says nothing of the next (run 133: seven brutes stood at the
             // walls after the first, half a minute each, and no slit was opened for any of them)
             shelterNoLure = false;
+            shelterShoves = 0;
             perching = false;
             baritone.getPveProcess().hold = false;
             if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
-            logDirect("Bastion: " + (hunter != null ? "brute at " + String.format("%.1f", me.distanceTo(hunter)) + where(hunter, me) : "hurt (" + (int) me.getHealth() + " hp) with a brute about") + ", walling in");
+            logDirect("Bastion: " + (hunter != null ? "brute at " + String.format("%.1f", me.distanceTo(hunter)) + where(hunter, me)
+                    : pig != null ? "piglin on us at " + String.format("%.1f", me.distanceTo(pig)) + where(pig, me) + ", " + (int) me.getHealth() + " hp"
+                    : "hurt (" + (int) me.getHealth() + " hp) with a brute about") + ", walling in");
         }
         boolean hurtNow = me.getHealth() < shelterHp - 1.5f;
         if (hurtNow && shelterWalledAt != 0) logDirect("Bastion: hurt behind our own walls, " + (int) me.getHealth() + " hp" + (shelterSlit != null ? ", slit open" : ""));
@@ -534,7 +563,24 @@ public final class BastionProcess extends BaritoneProcessHelper {
         shelterLastCell = cell;
         if (!steady && me.onGround() && ticks - shelterSince > 8 && baritone.getPathingBehavior().getCurrent() != null) baritone.getPathingBehavior().secretInternalSegmentCancel();
         final double feetY = me.onGround() ? me.getY() : shelterAt.y;
-        double tx = toward0(hunter, nearest, me, true), tz = toward0(hunter, nearest, me, false);
+        // one of them standing where a wall goes: no block is laid in a cell with somebody in it, and run 133 gave the
+        // walls up twice over that with a piglin at its elbow. A blow of any kind throws it back a block or two, and
+        // the side it stood on is the first to be shut
+        LivingEntity intruder = null;
+        for (int[] sd : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+            net.minecraft.world.phys.AABB side = new net.minecraft.world.phys.AABB(cell.getX() + sd[0], feetY, cell.getZ() + sd[1], cell.getX() + sd[0] + 1, feetY + 1.8, cell.getZ() + sd[1] + 1);
+            if (!ctx.world().getBlockState(BlockPos.containing(cell.getX() + sd[0] + 0.5, feetY + 0.5, cell.getZ() + sd[1] + 0.5)).canBeReplaced()
+                    && !ctx.world().getBlockState(BlockPos.containing(cell.getX() + sd[0] + 0.5, feetY + 1.5, cell.getZ() + sd[1] + 0.5)).canBeReplaced()) continue;
+            // run 134 ended on a piglin we had been trading with, stood in our own cell with a brute six blocks off:
+            // until the walls have once been shut, whoever is in the way goes, friend or not. Its anger is half a
+            // minute behind walls; the brute is two blows
+            boolean anyone = shelterWalledAt == 0;
+            for (LivingEntity e : ctx.world().getEntitiesOfClass(LivingEntity.class, side, e -> e != me && e.isAlive()
+                    && (anyone || e instanceof PiglinBrute || e instanceof Mob m && m.isAggressive() && !(e instanceof Piglin q && q.isBaby())))) {
+                if (intruder == null || me.distanceTo(e) < me.distanceTo(intruder)) intruder = e;
+            }
+        }
+        double tx = toward0(intruder != null ? intruder : hunter, nearest != null ? nearest : pig, me, true), tz = toward0(intruder != null ? intruder : hunter, nearest != null ? nearest : pig, me, false);
         int weapon = weaponSlot(me);
         // a piglin with a crossbow that is after us and sees us: through the slit is the only way it can, and a bolt comes
         // the same way. One that is not after us is no more than a face at the window (run 132: fourteen times the slit
@@ -560,10 +606,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 // fifteen seconds and it has not once looked our way: it is over us or under us, or round a corner
                 shut = "the brute" + (mark != null ? where(mark, me) : "") + " cannot see the slit";
                 shelterNoLure = true;
+                if (mark != null) shelterShy.put(mark.getUUID(), ticks + 6000L);
             } else if (ticks - shelterSlitAt > 1200 && ticks - shelterStruckAt > 600) {
                 // a minute of it and half of that without a blow: it sees us and will not come, or cannot
                 shut = "the brute does not come to the slit";
                 shelterNoLure = true;
+                if (mark != null) shelterShy.put(mark.getUUID(), ticks + 6000L);
             }
             if (shut != null) {
                 logDirect("Bastion: " + shut + ", shutting it");
@@ -592,8 +640,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
         boolean sneak = off < 0.25;
         float yaw = me.getYRot();
         int slot = p == null ? -1 : shelterBlock(me, p.roof());
+        boolean shoving = intruder != null && !walled && shelterShoves < 6;
         if (!steady) {
             // nothing placed yet
+        } else if (shoving && ticks - shelterShoveAt >= 11) {
+            // eleven ticks apart: for ten after a blow nothing more is felt
+            Rotation rot = RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), intruder.getBoundingBox().getCenter(), ctx.playerRotations());
+            yaw = rot.getYaw();
+            baritone.getLookBehavior().updateTarget(rot, true);
+            ctx.minecraft().gameMode.attack((LocalPlayer) me, intruder);
+            me.swing(InteractionHand.MAIN_HAND);
+            shelterShoveAt = ticks;
+            if (shelterShoves++ == 0) logDirect("Bastion: " + intruder.getType().toShortString() + " in the way of the wall, knocking it back");
         } else if (slot >= 9) {
             ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
         } else if (slot >= 0) {
@@ -663,7 +721,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (!walled && !holed) {
             // blocks gone, or every open cell refuses them (a brute already stands in it): this is no shelter, and
             // standing still in it is the worst of both. The older answers get five seconds
-            shelterIdle = p == null ? shelterIdle + 1 : 0;
+            shelterIdle = p == null && !shoving ? shelterIdle + 1 : 0;
             if (p != null && slot < 0 || shelterIdle > 10) {
                 logDirect("Bastion: cannot close the walls" + (p != null ? " (out of blocks)" : "") + ", giving it up");
                 sheltering = false;
@@ -678,8 +736,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (lure && p != null && slot < 0) shelterNoLure = true;
         boolean angry = false;
         for (PiglinBrute b : around) angry |= b.isAggressive();
-        // a blow at a brute sets every grown piglin that saw it on us for half a minute
-        angry |= !ctx.world().getEntitiesOfClass(Piglin.class, me.getBoundingBox().inflate(16), q -> q.isAlive() && !q.isBaby() && q.isAggressive()).isEmpty();
+        // a blow at a brute sets every grown piglin that saw it on us for half a minute, and so does whatever got us
+        // hurt. Past that, one with its arms up is after a hoglin
+        angry |= (ticks - hurtAt < 700 || shelterStruckAt != 0 && ticks - shelterStruckAt < 700 || ticks - shelterShoveAt < 700)
+                && !ctx.world().getEntitiesOfClass(Piglin.class, me.getBoundingBox().inflate(16), q -> q.isAlive() && !q.isBaby() && q.isAggressive()).isEmpty();
         if (angry) shelterAngryAt = ticks;
         if (ring && shelterSlit == null && ticks >= shelterSlitHold && me.onGround() && me.getHealth() >= 14) {
             int[] w = Shelter.slit(cell.getX(), Shelter.slitLevel(feetY, mark.getEyeY()), cell.getZ(), mark.getX() - cell.getX() - 0.5, mark.getZ() - cell.getZ() - 0.5);
@@ -1309,7 +1369,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 }
             }
         }
-        if (brute != null && !perching) {
+        // with walls to hand, one that looks and does not come is left to look: the walls go up when it moves
+        if (brute != null && !perching && !wallsToHand) {
             pveP.hold = false;
             if (fighting) { pveP.clearEnemies(); fighting = false; }
             Vec3 away = me.position().subtract(brute.position()).multiply(1, 0, 1);
