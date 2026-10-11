@@ -182,6 +182,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         trapMode = "";
         craftStep = 0;
         baritone.getPveProcess().hold = false;
+        baritone.getPveProcess().driven = false;
         onLostControl(); // also drop the walk-through predicate and forced keys, not only when another process takes over
     }
 
@@ -294,9 +295,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
             }
         }
         baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90), true);
+        // run 114: towering from the top of a chest, every click opened the chest instead of placing and we jumped in
+        // place until the brutes came. Sneak the whole time the block under the crosshair is one a click opens
+        BlockPos under = BlockPos.containing(me.getX(), me.getY() - 0.01, me.getZ());
+        for (int i = 0; i < 3 && ctx.world().getBlockState(under).isAir(); i++) under = under.below();
+        if (clickOpens(under)) baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
         if (me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
         if (free) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+    }
+
+    /** Whether a plain right click on this block opens or uses it (a chest, a furnace, a crafting table) rather than placing against it. */
+    private boolean clickOpens(BlockPos p) {
+        BlockState s = ctx.world().getBlockState(p);
+        return s.getBlock() instanceof net.minecraft.world.level.block.EntityBlock || s.getMenuProvider(ctx.world(), p) != null;
     }
 
     /** The tower needs air over our head: under a ceiling the jump is blocked and the placement pointless. */
