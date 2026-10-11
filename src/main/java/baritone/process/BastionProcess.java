@@ -113,6 +113,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             savedFall = BaritoneAPI.getSettings().maxFallHeightNoWater.value;
             savedBucketFall = BaritoneAPI.getSettings().allowWaterBucketFall.value;
         }
+        // runs 119, 120: the kinematic driver sprinted (and jumped) through Descend/Fall steps of a winding way down and
+        // came off two blocks wide of the path, 20 -> 13 hp each time. Over lava that is the run; Baritone's own driver
+        // walks those steps. (experimentalMovement turns the driver on whatever this says.)
+        if (savedKinematic == null) savedKinematic = BaritoneAPI.getSettings().kinematicTravel.value;
+        BaritoneAPI.getSettings().kinematicTravel.value = savedKinematic && BastionSettings.kinematic;
         // water evaporates in the nether: a planned bucket fall there is a fall with no bucket
         BaritoneAPI.getSettings().allowWaterBucketFall.value = false;
         BaritoneAPI.getSettings().maxFallHeightNoWater.value = BastionSettings.maxSafeDrop;
@@ -171,6 +176,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (savedBreakPenalty != null) {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
             savedBreakPenalty = null;
+        }
+        if (savedKinematic != null) {
+            BaritoneAPI.getSettings().kinematicTravel.value = savedKinematic;
+            savedKinematic = null;
         }
         if (savedFall != null) {
             BaritoneAPI.getSettings().maxFallHeightNoWater.value = savedFall;
@@ -256,6 +265,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private int perchBase, perchX, perchZ;
     private boolean perchClimbing, perchUp, perchCapped;
     private Double savedBreakPenalty;
+    private Boolean savedKinematic;
     private long perchCooldown, waitSince, walledSince, relaxUntil;
     private long perchTick, perchStallSince;
     private String perchStallKey;
@@ -556,7 +566,20 @@ public final class BastionProcess extends BaritoneProcessHelper {
         boolean noPath = ticks - lastCalcFail < 100 && baritone.getPathingBehavior().getCurrent() == null;
         if (calcFailed || ticks - stuckSince > 100) BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = 2D;
         // run 104: path calc kept failing, ~20 s per target x 30 targets; a target with no path at all is dropped after 3 s
-        if (ticks - stuckSince < (noPath ? 60 : 200)) return cmd;
+        // runs 116, 121: an Ascend that needs a block placed where no face can be reached presses nothing, gives up after
+        // 4 s, and the replan picks it again. Three seconds without a step on a move that places is a stall already
+        boolean placeStall = false;
+        if (!noPath && ticks - stuckSince >= 60) {
+            try {
+                var cur0 = baritone.getPathingBehavior().getCurrent();
+                if (cur0 != null) {
+                    var mv0 = (baritone.pathing.movement.Movement) cur0.getPath().movements().get(Math.min(cur0.getPosition(), cur0.getPath().movements().size() - 1));
+                    mv0.resetBlockCache();
+                    placeStall = !mv0.toPlace(new baritone.utils.BlockStateInterface(ctx)).isEmpty();
+                }
+            } catch (RuntimeException ignoredEx) { }
+        }
+        if (ticks - stuckSince < (noPath || placeStall ? 60 : 200)) return cmd;
         if ((ticks - stuckSince) % 600 == 599) {
             // the same stale path for 30 s without a single step (run 33: 5 minutes on one movement): drop it outright
             baritone.getPathingBehavior().forceCancel();
@@ -676,7 +699,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // times the brutes won the race (two hits kill). A tower is out of reach in under two seconds: let it get up, and
         // only leave from the ground when it has had three seconds and is still low
         boolean towerFailed = perching && me.getY() < perchBase + 1.9 && ticks - perchTick > 60;
-        if (bastion != null && !exiting && !canTower && (!perching || towerFailed) && (pack >= 3 || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
+        if (bastion != null && !exiting && !canTower && (!perching || towerFailed) && (pack >= 3 && me.onGround() || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.distanceTo(e) < 12) || me.getHealth() < 16 && heavyComing)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp (" + pack + " within 16), leaving");
             pveP.hold = false;
             perching = false;
@@ -684,7 +707,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
             fighting = false;
             return exit(me, counts(me));
         }
-        if (exiting && bastion != null) return exit(me, counts(me));
+        // run 121: on the way out a brute closed from 11 blocks to 1 over four seconds while the exit path stood stalled,
+        // and nothing but the exit was allowed to act. Leaving does not outrank the tower
+        if (exiting && bastion != null && !canTower && !perching) return exit(me, counts(me));
         if (canTower) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
