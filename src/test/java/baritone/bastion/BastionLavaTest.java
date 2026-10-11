@@ -5,6 +5,7 @@ import org.junit.Test;
 import static baritone.bastion.BastionLava.Escape.*;
 import static baritone.bastion.BastionLava.choose;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class BastionLavaTest {
     @Test
@@ -56,5 +57,19 @@ public class BastionLavaTest {
         assertEquals(false, EdgeCost.deadly(2, -1)); // lava right below: a step, not a drop
         assertEquals(true, EdgeCost.deadly(6, -1));  // 6 of air onto lava
         assertEquals(true, EdgeCost.deadly(-1, -1)); // nothing in range: void
+    }
+
+    @Test
+    public void edgeCostsLeaveBridgesARoute() {
+        // run 119: the search gives up ("No path found") when no node gains ground for under 10x the heuristic, which is
+        // 3.563 per block. A bridged block cost walk + placement (20) + the edge penalty (25) = 49.6, over that limit,
+        // so on an outcrop over lava every way on was priced out
+        double limit = 10 * 3.563, walk = baritone.api.pathing.movement.ActionCosts.WALK_ONE_BLOCK_COST, place = 20;
+        assertTrue(walk + EdgeCost.edge(true, false) < limit);
+        assertTrue(walk + place + EdgeCost.edge(true, true) < limit);
+        // building a floor beside a ledge is never cheaper than walking the ledge
+        assertTrue(place + EdgeCost.edge(true, true) >= EdgeCost.edge(true, false));
+        assertEquals(0, EdgeCost.edge(false, true), 0);
+        assertEquals(0, EdgeCost.edge(false, false), 0);
     }
 }

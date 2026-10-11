@@ -103,6 +103,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     /** {@code variant} is a layout (housing, stables, treasure, bridge) or empty for any bastion. */
     public void start(String variant) {
         EdgeCost.enabled = true;
+        relaxUntil = 0;
         query = variant == null || variant.isEmpty() ? "bastion_remnant" : variant;
         active = true;
         // walk around netherrack rather than dig through it: digging is slow and a speedrun has no time for it
@@ -169,10 +170,6 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (savedBreakPenalty != null) {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
             savedBreakPenalty = null;
-        }
-        if (savedPlacePenalty != null) {
-            BaritoneAPI.getSettings().blockPlacementPenalty.value = savedPlacePenalty;
-            savedPlacePenalty = null;
         }
         if (savedFall != null) {
             BaritoneAPI.getSettings().maxFallHeightNoWater.value = savedFall;
@@ -257,8 +254,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean perching;
     private int perchBase, perchX, perchZ;
     private boolean perchClimbing, perchUp, perchCapped;
-    private Double savedBreakPenalty, savedPlacePenalty;
-    private long perchCooldown, waitSince, walledSince;
+    private Double savedBreakPenalty;
+    private long perchCooldown, waitSince, walledSince, relaxUntil;
     private long perchTick, perchStallSince;
     private String perchStallKey;
 
@@ -537,7 +534,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
             if (usefulSeen >= 0 && u > usefulSeen && ticks - throwTick < ADMIRE_TICKS + 600) lootPicked += u - usefulSeen;
             usefulSeen = u;
-        }        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
+        }        EdgeCost.enabled = ticks >= relaxUntil;
+        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
         Player me = ctx.player();
         boolean walking = cmd != null && (cmd.commandType == PathingCommandType.SET_GOAL_AND_PATH
                 || cmd.commandType == PathingCommandType.REVALIDATE_GOAL_AND_PATH || cmd.commandType == PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
@@ -608,6 +606,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (dropPlan != null) { dropPlan = null; dropScan = ticks + 400; }
             stuckCount.remove(gk);
             status += "; skipping target " + gk;
+            // run 119: the search explored 226k nodes and still found no path, because every way on cost more than it will
+            // pay per block gained. Our edge costs are a preference; with no path at all they stand down for a while
+            if (noPath && ticks >= relaxUntil) { relaxUntil = ticks + 600; status += " (no path: edge costs off for 30 s)"; }
         }
         logDirect("Bastion: " + status);
         unstucks++;
@@ -1854,12 +1855,6 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         }
         int r = BastionSettings.exitDistance + 8;
         status = "exiting";
-        // run 116: with brutes behind us the way out went up a step that needed a block placed and stalled there until
-        // they caught up; a longer run is cheaper than standing still to build
-        if (savedPlacePenalty == null) {
-            savedPlacePenalty = BaritoneAPI.getSettings().blockPlacementPenalty.value;
-            BaritoneAPI.getSettings().blockPlacementPenalty.value = Math.max(savedPlacePenalty, 80D);
-        }
         // a plain goal change lets the old path run to its end first (run 116: a second further toward the brutes, one axe hit)
         return new PathingCommand(new GoalXZ(c.getX() + (int) (dx / len * r), c.getZ() + (int) (dz / len * r)), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
     }

@@ -373,7 +373,7 @@ public enum Moves {
         @Override
         public double cost(CalculationContext context, int x, int y, int z) {
             double c = MovementTraverse.cost(context, x, y, z, x, z - 1);
-            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.penalty(context, x, y, z - 1);
+            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.traverse(context, x, y, z - 1);
         }
     },
 
@@ -386,7 +386,7 @@ public enum Moves {
         @Override
         public double cost(CalculationContext context, int x, int y, int z) {
             double c = MovementTraverse.cost(context, x, y, z, x, z + 1);
-            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.penalty(context, x, y, z + 1);
+            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.traverse(context, x, y, z + 1);
         }
     },
 
@@ -399,7 +399,7 @@ public enum Moves {
         @Override
         public double cost(CalculationContext context, int x, int y, int z) {
             double c = MovementTraverse.cost(context, x, y, z, x + 1, z);
-            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.penalty(context, x + 1, y, z);
+            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.traverse(context, x + 1, y, z);
         }
     },
 
@@ -412,7 +412,7 @@ public enum Moves {
         @Override
         public double cost(CalculationContext context, int x, int y, int z) {
             double c = MovementTraverse.cost(context, x, y, z, x - 1, z);
-            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.penalty(context, x - 1, y, z);
+            return c >= baritone.api.pathing.movement.ActionCosts.COST_INF ? c : c + baritone.bastion.EdgeCost.traverse(context, x - 1, y, z);
         }
     },
 

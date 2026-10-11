@@ -17,6 +17,8 @@ import net.minecraft.server.MinecraftServer;
 public final class BastTest implements AbstractGameEventListener {
     private final Baritone b;
     private int state, wait, ticks;
+    private net.minecraft.world.phys.Vec3 stallAt;
+    private int stallTick;
     private BlockPos target;
     private static final boolean REAL = System.getenv("BAST_REAL") != null;
     private int duelSummons;
@@ -293,7 +295,11 @@ public final class BastTest implements AbstractGameEventListener {
                 say("BAST t=" + ticks + " hp=" + (int) p.getHealth() + " " + b.getBastionProcess().status() + " pos=" + p.blockPosition().toShortString());
             }
             boolean ended = !b.getBastionProcess().isActive() && ticks > 40;
-            if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended) {
+            // run 119 stood on one spot for eleven minutes: three minutes within three blocks is a stall, end the run there
+            if (stallAt == null || stallTick > ticks || mc.player.position().distanceTo(stallAt) > 3) { stallAt = mc.player.position(); stallTick = ticks; }
+            boolean stalled = ticks - stallTick > Integer.getInteger("ostinato.basttest.stallticks", 3600);
+            if (stalled) say("BAST STALL t=" + ticks + " since=" + stallTick + " pos=" + mc.player.blockPosition().toShortString() + " st=" + b.getBastionProcess().status());
+            if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended || stalled) {
                 var inv = mc.player.getInventory(); java.util.Map<String,Integer> m = new java.util.TreeMap<>();
                 for (int i = 0; i < 36; i++) { var s = inv.getItem(i); if (!s.isEmpty()) m.merge(baritone.process.BastionProcess.itemIdPublic(s), s.getCount(), Integer::sum); }
                 var d = b.getStructureBehavior().find("bastion_remnant");

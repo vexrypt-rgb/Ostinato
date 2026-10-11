@@ -37,6 +37,22 @@ public final class EdgeCost {
 
     private EdgeCost() {}
 
+    /**
+     * A cell whose floor we build is all edge, and it is crossed sneaking, a block at a time. Run 119: the full
+     * {@link #PENALTY} on top of the placement cost priced every bridge out, and the search gave up ("No path found")
+     * on an outcrop for eleven minutes. Priced so that building beside a ledge is never cheaper than walking it.
+     */
+    public static final double BRIDGE_PENALTY = 6;
+
+    /** pure rule: what a cell beside a deadly drop adds to a move */
+    public static double edge(boolean deadlyBeside, boolean bridged) { return !deadlyBeside ? 0 : bridged ? BRIDGE_PENALTY : PENALTY; }
+
+    /** {@link #penalty} for a traverse into (x, y, z), which may have to build the floor there */
+    public static double traverse(CalculationContext c, int x, int y, int z) {
+        double p = penalty(c, x, y, z);
+        return p == PENALTY ? edge(true, !MovementHelper.canWalkOn(c, x, y - 1, z)) : p;
+    }
+
     public static double penalty(CalculationContext c, int x, int y, int z) {
         if (!enabled) return 0;
         double wp = waterPush(c, x, y, z);
