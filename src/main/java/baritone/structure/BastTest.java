@@ -44,6 +44,16 @@ public final class BastTest implements AbstractGameEventListener {
         }).join();
     }
 
+    /** The movement after the current one: a run-up for it starts during this one. */
+    private String nextDesc() {
+        try {
+            var cur = b.getPathingBehavior().getCurrent();
+            if (cur == null || cur.getPosition() + 1 >= cur.getPath().movements().size()) return "none";
+            var m = cur.getPath().movements().get(cur.getPosition() + 1);
+            return m.getClass().getSimpleName() + "->" + m.getDest().x + "," + m.getDest().y + "," + m.getDest().z;
+        } catch (Throwable t) { return "?"; }
+    }
+
     private String moveDesc() {
         try {
             var cur = b.getPathingBehavior().getCurrent();
@@ -255,7 +265,7 @@ public final class BastTest implements AbstractGameEventListener {
                         + " food=" + mc.player.getFoodData().getFoodLevel() + " lava=" + mc.player.isInLava() + " vc=" + mc.player.verticalCollision + " feetB=" + mc.level.getBlockState(mc.player.blockPosition()).getBlock() + " b2=" + mc.level.getBlockState(mc.player.blockPosition().below(2)).getBlock() + " head=" + mc.level.getBlockState(mc.player.blockPosition().above(2)).getBlock() + " vy=" + mc.player.getDeltaMovement().y + " using=" + mc.player.isUsingItem() + " sel=" + mc.player.getInventory().getSelectedSlot() + " fire=" + mc.player.isOnFire() + " held=" + mc.player.getMainHandItem().getItem() + " below=" + mc.level.getBlockState(mc.player.blockPosition().below()).getBlock()
                         + " dec=" + b.getPveProcess().lastDecision()
                         + " pos=" + mc.player.blockPosition().toShortString() + " fd=" + String.format("%.1f", mc.player.fallDistance)
-                        + " mv=" + moveDesc()
+                        + " mv=" + moveDesc() + " nx=" + nextDesc() + " yaw=" + Math.round(net.minecraft.util.Mth.wrapDegrees(Minecraft.getInstance().player.getYRot()))
                         + " brutes=" + br.size() + " nearest=" + br.stream().mapToDouble(x -> mc.player.distanceTo(x)).min().orElse(-1)
                         + " near=" + mc.level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, mc.player.getBoundingBox().inflate(16), x -> x != mc.player)
                                 .stream().map(x -> x.getType().toShortString() + "@" + (int) mc.player.distanceTo(x)).toList());

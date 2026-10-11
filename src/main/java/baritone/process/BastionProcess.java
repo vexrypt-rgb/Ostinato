@@ -902,7 +902,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 if (realLava(lp)) away = away.add(me.position().subtract(Vec3.atCenterOf(lp)));
             }
             // run 100: pressed into a tunnel wall for 4 s while burning (vc=true) and died; path to a clear cell instead
-            if (me.horizontalCollision) {
+            // run 112: lava on two sides, the summed "away" pointed at a lava fall a block on and it walked in: the ground
+            // ahead must be dry and there, or we path to a clear cell as well
+            boolean wetAhead = false;
+            if (away.horizontalDistanceSqr() > 0.01) {
+                Vec3 n = new Vec3(away.x, 0, away.z).normalize();
+                for (double step : new double[]{0.6, 1.2}) {
+                    BlockPos a = BlockPos.containing(me.getX() + n.x * step, me.getY() + 0.2, me.getZ() + n.z * step);
+                    wetAhead |= lavaAt(a) || lavaAt(a.above()) || lavaAt(a.below()) || !floor(a.below());
+                }
+            }
+            if (me.horizontalCollision || wetAhead) {
                 BlockPos safe = null;
                 for (BlockPos q : BlockPos.betweenClosed(me.blockPosition().offset(-4, -1, -4), me.blockPosition().offset(4, 1, 4))) {
                     if (!floor(q.below()) || floor(q) || floor(q.above()) || lavaNearPos(q)) continue;

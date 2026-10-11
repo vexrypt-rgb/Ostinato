@@ -212,8 +212,8 @@ public class MovementAscend extends Movement {
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }
-            if (ticksWithoutPlacement > 10) {
-                // After 10 ticks without placement, we might be standing in the way, move back
+            if (ticksWithoutPlacement > 10 && BackOff.allowed(ctx.player().getX(), ctx.player().getZ(), src.getX(), src.getZ())) {
+                // After 10 ticks without placement, we might be standing in the way, move back (but never off src)
                 state.setInput(Input.MOVE_BACK, true);
             }
 
