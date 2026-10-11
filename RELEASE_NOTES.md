@@ -14,6 +14,21 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 26.3 | `26.3` | 25 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## New in v1.20.0
+
+- **Nether portal at a lava pool** (all versions): `#portal build` makes a portal out of a lava pool with a
+  water bucket, an empty bucket and flint and steel, the way speedrunners do. It picks a shore where four
+  lava sources lie against solid ground (any side, mirrored where only one hand has room), sets the base
+  with water, raises the two shapes, casts the frame from the pool with the bucket, lights it and refills
+  the bucket. `#portal build enter` then walks in; `#portal find` only lists the shores; `#portal status`
+  and `#portal cancel` do what they say. Each step waits for the blocks it expects and digs out cobblestone
+  that set where obsidian should be. About 20 seconds with a pickaxe, about 30 without; a one-deep pool
+  needs the pickaxe.
+- **Humanized look on 1.21.4 and 1.16.1**: the hand-like aim the other lines already had (limited
+  acceleration, whole mouse steps) is there too, and the portal builder aims with it on every line.
+- Built in the dev client on every line: test pools in a flat world everywhere, natural lakes on 1.16.1 and
+  1.21.11. Walking into the portal (`enter`) and the recovery from a wrong flow were not played.
+
 ## New in v1.19.2
 
 A second review pass. Mostly fixes; the kinematic simulation learns a few blocks and potion effects.
