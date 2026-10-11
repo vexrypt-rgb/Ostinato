@@ -607,6 +607,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
         PathingCommand wp = waterPocket(me);
         if (wp != null) return wp;
+        // r112: burned 12 -> 0 while "exiting" from brutes, apples never eaten (the exit ran first); cure before everything
+        if (me.isAlive() && me.level().dimension().identifier().getPath().equals("the_nether")) {
+            PathingCommand cure = fireCure(me);
+            if (cure != null) return cure;
+        }
         // Bastions only exist in the nether; after a death the respawn lands in the overworld, so never walk there.
         if (!me.isAlive() || !me.level().dimension().identifier().getPath().equals("the_nether")) {
             if (fighting) baritone.getPveProcess().clearEnemies();
@@ -819,8 +824,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 .ifPresentOrElse(it -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, actual %.2f %.2f %.2f (err %.2f)", tp[0], tp[1], tp[2], it.getX(), it.getY(), it.getZ(), Math.sqrt(it.distanceToSqr(tp[0], tp[1], tp[2])))),
                     () -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, ingot already taken", tp[0], tp[1], tp[2])));
         }
-        PathingCommand cure = fireCure(me);
-        if (cure != null) return cure;
+
         // run 102: lava flowed over the spawn floor (1 deep, on the ground) and the bot stood still for 3 s; walk straight out to the nearest dry cell
         // run 111: 1-deep lava on netherrack, onGround flickered while jumping and pillar-out took over and failed: shallow = solid under the feet cell
         if (me.isInLava() && (me.onGround() || floor(me.blockPosition().below()) && !realLava(me.blockPosition().above()))) {
@@ -1387,9 +1391,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         FluidPocket.Action a; a = FluidPocket.decide(me.getAirSupply(), me.getMaxAirSupply(), surf, inPocket, doors, floorOk, wExit != null, pickaxeSlot(me) >= 0);
         // the pocket is out in open water (w2): walk the bottom toward the exit and re-pocket against the wall there
         // w4/w5: a first door mid-tank had to be left again through itself; go to the wall toward the exit before the first door
-        if (under && !inPocket && wDoor == null && wTunnel == null && wExit != null && doors > 0 && pickaxeSlot(me) >= 0 && me.getAirSupply() > 200 && !(ctx.world().getBlockState(feet).getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) wSeekWall = true;
-        if (wSeekWall && me.getAirSupply() <= 200 && !wLeaving) wSeekWall = false;
-        if (wSeekWall && !inPocket && wExit != null && (me.getAirSupply() > 200 || wLeaving) && doors > 0) {
+        if (under && !inPocket && wDoor == null && wTunnel == null && wExit != null && doors > 0 && pickaxeSlot(me) >= 0 && me.getAirSupply() > 120 && !(ctx.world().getBlockState(feet).getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) wSeekWall = true;
+        if (wSeekWall && me.getAirSupply() <= 120 && !wLeaving) wSeekWall = false;
+        if (wSeekWall && !inPocket && wExit != null && (me.getAirSupply() > 120 || wLeaving) && doors > 0) {
             BlockState fs = ctx.world().getBlockState(feet);
             if (fs.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
                 Direction toward = Math.abs(wExit.getX() - feet.getX()) >= Math.abs(wExit.getZ() - feet.getZ()) ? (wExit.getX() > feet.getX() ? Direction.EAST : Direction.WEST) : (wExit.getZ() > feet.getZ() ? Direction.SOUTH : Direction.NORTH);
@@ -2434,12 +2438,12 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         int slot = -1;
         for (int i = 0; i < 9 && slot < 0; i++) if ("fire_resistance".equals(itemId(me.getInventory().getItem(i)))) slot = i;
         // run 102: ate an apple standing in lava and burned 12 -> 0 while chewing; apples only once out of the lava
-        if (slot < 0 && me.getHealth() < 12 && !me.isInLava()) for (int i = 0; i < 9 && slot < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) slot = i;
+        if (slot < 0 && me.getHealth() < 14 && !me.isInLava()) for (int i = 0; i < 9 && slot < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) slot = i;
         if (slot < 0) {
             // pull one from the main inventory into hotbar slot 8
             for (int i = 9; i < 36; i++) {
                 ItemStack s = me.getInventory().getItem(i);
-                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 12 && !me.isInLava() && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
+                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 14 && !me.isInLava() && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
             }
             return null;
         }
