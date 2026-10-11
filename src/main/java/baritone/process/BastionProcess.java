@@ -170,6 +170,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
             BaritoneAPI.getSettings().blockBreakAdditionalPenalty.value = savedBreakPenalty;
             savedBreakPenalty = null;
         }
+        if (savedPlacePenalty != null) {
+            BaritoneAPI.getSettings().blockPlacementPenalty.value = savedPlacePenalty;
+            savedPlacePenalty = null;
+        }
         if (savedFall != null) {
             BaritoneAPI.getSettings().maxFallHeightNoWater.value = savedFall;
             BaritoneAPI.getSettings().allowWaterBucketFall.value = savedBucketFall;
@@ -253,7 +257,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean perching;
     private int perchBase, perchX, perchZ;
     private boolean perchClimbing, perchUp, perchCapped;
-    private Double savedBreakPenalty;
+    private Double savedBreakPenalty, savedPlacePenalty;
     private long perchCooldown, waitSince;
     private long perchTick, perchStallSince;
     private String perchStallKey;
@@ -535,7 +539,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
             usefulSeen = u;
         }        PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
         Player me = ctx.player();
-        if (cmd == null || cmd.commandType != PathingCommandType.SET_GOAL_AND_PATH || me == null) {
+        boolean walking = cmd != null && (cmd.commandType == PathingCommandType.SET_GOAL_AND_PATH
+                || cmd.commandType == PathingCommandType.REVALIDATE_GOAL_AND_PATH || cmd.commandType == PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+        if (!walking || me == null) {
             stuckAnchor = null;
             return cmd;
         }
@@ -713,7 +719,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (away.lengthSqr() < 0.01) away = new Vec3(1, 0, 0);
             evadeUntil = 0; // the evade step fought this one tick for tick in run 28
             status = "kiting brute at " + String.format("%.1f", me.distanceTo(brute));
-            return new PathingCommand(new GoalRunAway(14, brute.blockPosition()), PathingCommandType.SET_GOAL_AND_PATH);
+            // drops a path that ends near the brute instead of finishing it first; one that already runs clear is kept
+            return new PathingCommand(new GoalRunAway(14, brute.blockPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
             // a runner time-boxes the bastion: past the budget, leave with what we have
             logDirect("Bastion: time budget (" + BastionSettings.timeBudget + " s) used, leaving");
@@ -1798,7 +1805,14 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         }
         int r = BastionSettings.exitDistance + 8;
         status = "exiting";
-        return new PathingCommand(new GoalXZ(c.getX() + (int) (dx / len * r), c.getZ() + (int) (dz / len * r)), PathingCommandType.SET_GOAL_AND_PATH);
+        // run 116: with brutes behind us the way out went up a step that needed a block placed and stalled there until
+        // they caught up; a longer run is cheaper than standing still to build
+        if (savedPlacePenalty == null) {
+            savedPlacePenalty = BaritoneAPI.getSettings().blockPlacementPenalty.value;
+            BaritoneAPI.getSettings().blockPlacementPenalty.value = Math.max(savedPlacePenalty, 80D);
+        }
+        // a plain goal change lets the old path run to its end first (run 116: a second further toward the brutes, one axe hit)
+        return new PathingCommand(new GoalXZ(c.getX() + (int) (dx / len * r), c.getZ() + (int) (dz / len * r)), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
     }
 
     /** Opening a chest angers every piglin that can see us (gold armour does not help); brutes are hostile anyway. */

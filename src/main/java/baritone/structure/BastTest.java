@@ -45,6 +45,22 @@ public final class BastTest implements AbstractGameEventListener {
     }
 
     /** The movement after the current one: a run-up for it starts during this one. */
+    /** Which controller moved the player on the last path tick, and which inputs are forced right now. */
+    private String driverDesc() {
+        var cur = b.getPathingBehavior().getCurrent();
+        return cur == null ? "-" : cur.getLastDriver().name();
+    }
+
+    private String keysDesc() {
+        StringBuilder sb = new StringBuilder();
+        var in = b.getInputOverrideHandler();
+        baritone.api.utils.input.Input[] all = {baritone.api.utils.input.Input.MOVE_FORWARD, baritone.api.utils.input.Input.MOVE_BACK, baritone.api.utils.input.Input.MOVE_LEFT,
+                baritone.api.utils.input.Input.MOVE_RIGHT, baritone.api.utils.input.Input.JUMP, baritone.api.utils.input.Input.SNEAK, baritone.api.utils.input.Input.SPRINT};
+        String tags = "FBLRJSP";
+        for (int i = 0; i < all.length; i++) if (in.isInputForcedDown(all[i])) sb.append(tags.charAt(i));
+        return sb.length() == 0 ? "-" : sb.toString();
+    }
+
     private String nextDesc() {
         try {
             var cur = b.getPathingBehavior().getCurrent();
@@ -267,7 +283,7 @@ public final class BastTest implements AbstractGameEventListener {
                         + " food=" + mc.player.getFoodData().getFoodLevel() + " lava=" + mc.player.isInLava() + " vc=" + mc.player.verticalCollision + " feetB=" + mc.level.getBlockState(mc.player.blockPosition()).getBlock() + " b2=" + mc.level.getBlockState(mc.player.blockPosition().below(2)).getBlock() + " head=" + mc.level.getBlockState(mc.player.blockPosition().above(2)).getBlock() + " vy=" + mc.player.getDeltaMovement().y + " using=" + mc.player.isUsingItem() + " sel=" + mc.player.getInventory().getSelectedSlot() + " fire=" + mc.player.isOnFire() + " held=" + mc.player.getMainHandItem().getItem() + " below=" + mc.level.getBlockState(mc.player.blockPosition().below()).getBlock()
                         + " dec=" + b.getPveProcess().lastDecision()
                         + " pos=" + mc.player.blockPosition().toShortString() + " fd=" + String.format("%.1f", mc.player.fallDistance)
-                        + " mv=" + moveDesc() + " nx=" + nextDesc() + " yaw=" + Math.round(net.minecraft.util.Mth.wrapDegrees(Minecraft.getInstance().player.getYRot()))
+                        + " mv=" + moveDesc() + " nx=" + nextDesc() + " yaw=" + Math.round(net.minecraft.util.Mth.wrapDegrees(Minecraft.getInstance().player.getYRot())) + " drv=" + driverDesc() + " keys=" + keysDesc()
                         + " brutes=" + br.size() + " nearest=" + br.stream().mapToDouble(x -> mc.player.distanceTo(x)).min().orElse(-1)
                         + " near=" + mc.level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, mc.player.getBoundingBox().inflate(16), x -> x != mc.player)
                                 .stream().map(x -> x.getType().toShortString() + "@" + (int) mc.player.distanceTo(x)).toList());
