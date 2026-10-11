@@ -245,7 +245,11 @@ public class PathExecutor implements IPathExecutor, Helper {
                 ticksOnCurrent = 0;
             }
             sprintNextTick = true;
-            return false;
+            // A pause or a cancel is only taken when this says it is safe. "Never while a controller drives" meant a
+            // process that asked to stop was run on down the path until the driver happened to hand back: bastion run
+            // 123 asked to stop and tower, and was carried nine blocks first. On its feet the kinematic driver is no
+            // worse a place to stop than a Traverse
+            return lastDriver == Driver.KINEMATIC && ctx.player().onGround();
         }
         BetterBlockPos whereAmI = ctx.playerFeet();
         if (!movement.getValidPositions().contains(whereAmI)) {
