@@ -93,6 +93,17 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         this.human = true;
     }
 
+    private boolean ownMove;
+
+    /**
+     * {@link #human()}, and the movement keys act on the rotation the player really has this tick rather than on
+     * the one being turned to, as they do for a player whose view is still on its way.
+     */
+    public void humanMove() {
+        this.human = true;
+        this.ownMove = true;
+    }
+
     /**
      * Prototype (the frameLook setting): between ticks the view keeps moving toward the last aim goal, one small
      * mouse-count step per rendered frame, as a hand does, instead of arriving in one jump at the tick. The goal is
@@ -230,6 +241,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 this.target = null;
                 if (!this.human) { velYaw = 0; velPitch = 0; }
                 this.human = false;
+                this.ownMove = false;
                 break;
             }
             default:
@@ -272,7 +284,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void onPlayerRotationMove(RotationMoveEvent event) {
-        if (this.target != null) {
+        if (this.target != null && !this.ownMove) {
             final Rotation actual = this.processor.peekRotation(this.target.rotation);
             event.setYaw(actual.getYaw());
             event.setPitch(actual.getPitch());
