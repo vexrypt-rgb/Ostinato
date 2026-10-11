@@ -476,6 +476,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     private long lastCalcFail = -1000;
     private double[] throwPred;
+    private BlockPos lastStuckDest;
+    private int sameStuck;
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (stuckAvoider == null) {
@@ -558,6 +560,18 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 status = "stuck on " + mv.getClass().getSimpleName() + " to " + mv.getDest() + ", avoiding it";
                 // run 107: 3 min on a Traverse at y=104 while standing at y=100; we were off the path and it never replanned
                 if (me.position().distanceTo(Vec3.atBottomCenterOf(mv.getSrc())) > 2.5) { baritone.getPathingBehavior().forceCancel(); status += " (off path, replanned)"; }
+                // run 108: 5+ min on the same MovementFall of a "verified drop" (nudge refused: lava near the landing); after the
+                // same step stalls 3 times, drop the drop plan and replan from scratch
+                BlockPos sd = new BlockPos(mv.getDest().x, mv.getDest().y, mv.getDest().z);
+                sameStuck = sd.equals(lastStuckDest) ? sameStuck + 1 : 1;
+                lastStuckDest = sd;
+                if (sameStuck >= 3) {
+                    dropPlan = null; dropScan = ticks + 1200;
+                    stuckAvoid.put(sd, ticks + 6000L); stuckAvoid.put(sd.above(), ticks + 6000L);
+                    baritone.getPathingBehavior().forceCancel();
+                    sameStuck = 0;
+                    status += " (same step 3x: dropped the drop plan, replanned)";
+                }
             }
         } catch (RuntimeException ignoredEx) { }
         // a drop we cannot reach (run 14: 2 minutes on one crying obsidian): forget that item at once
