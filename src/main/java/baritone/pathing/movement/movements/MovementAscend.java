@@ -195,10 +195,9 @@ public class MovementAscend extends Movement {
             if (ticksWithoutPlacement > 80) return state.setStatus(MovementStatus.UNREACHABLE);
             // standing over the cell we must fill (overhanging the edge) blocks the placement: step back onto src first
             if (ctx.player().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
-                // ease back onto the centre of src by velocity, not by walking: walking "towards src" from its edge
-                // overshot and walked us off a cliff in-game (run 23, an 80-block fall)
-                net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
-                ctx.player().setDeltaMovement((src.getX() + 0.5 - ctx.player().getX()) * 0.3, v.y, (src.getZ() + 0.5 - ctx.player().getZ()) * 0.3);
+                // walking "towards src" from its edge overshot and walked us off a cliff in-game (run 23, an 80-block
+                // fall): go back with the keys, sneaking, which cannot leave the block we stand on
+                MovementHelper.moveTowardsWithoutRotation(ctx, state, src);
                 state.setInput(Input.SNEAK, true);
                 return state;
             }

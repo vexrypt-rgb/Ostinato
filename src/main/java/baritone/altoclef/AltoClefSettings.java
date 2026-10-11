@@ -127,11 +127,18 @@ public class AltoClefSettings {
 
     public boolean shouldAvoidWalkThroughForce(BlockPos pos) {
         synchronized (propertiesMutex) {
-            return _forceAvoidWalkThrough.stream().anyMatch(pred -> pred.test(pos));
+            // a plain loop: this is asked for every cell the pathfinder looks at
+            for (int i = 0; i < _forceAvoidWalkThrough.size(); i++) {
+                if (_forceAvoidWalkThrough.get(i).test(pos)) return true;
+            }
+            return false;
         }
     }
 
     public boolean shouldAvoidWalkThroughForce(int x, int y, int z) {
+        synchronized (propertiesMutex) {
+            if (_forceAvoidWalkThrough.isEmpty()) return false;
+        }
         return shouldAvoidWalkThroughForce(new BlockPos(x, y, z));
     }
 

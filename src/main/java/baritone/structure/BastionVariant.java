@@ -4,8 +4,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.util.Map;
@@ -26,15 +28,35 @@ final class BastionVariant {
     /** Null until most of the structure is loaded. Thresholds fitted to 24 server-labelled bastions (basalt count separates them). */
     static String classify(Level level, BlockPos at) {
         if (loaded(level, at) < 40) return null;
-        Map<String, Integer> f = features(level, at, 3);
-        int basalt = f.getOrDefault("polished_basalt", 0);
+        int basalt = polishedBasalt(level, at, 3);
         if (basalt >= 80) return "bridge";
         if (basalt >= 28) return "treasure";
         if (basalt >= 5) return "stables";
         return "housing";
     }
 
-    /** Block-name histogram (netherrack and air left out) plus the extents of the blackstone mass. */
+    /**
+     * Polished basalt in the window, section by section: the name histogram below reads three million blocks by name and
+     * froze the game for a moment each time a bastion came into view.
+     */
+    static int polishedBasalt(Level level, BlockPos at, int chunkRadius) {
+        int n = 0, cx = at.getX() >> 4, cz = at.getZ() >> 4;
+        for (int x = cx - chunkRadius; x <= cx + chunkRadius; x++) {
+            for (int z = cz - chunkRadius; z <= cz + chunkRadius; z++) {
+                ChunkAccess c = level.getChunk(x, z, ChunkStatus.FULL, false);
+                if (c == null) continue;
+                for (LevelChunkSection sec : c.getSections()) {
+                    if (sec == null || sec.hasOnlyAir() || !sec.maybeHas(s -> s.is(Blocks.POLISHED_BASALT))) continue;
+                    for (int y = 0; y < 16; y++) for (int dz = 0; dz < 16; dz++) for (int dx = 0; dx < 16; dx++) {
+                        if (sec.getBlockState(dx, y, dz).is(Blocks.POLISHED_BASALT)) n++;
+                    }
+                }
+            }
+        }
+        return n;
+    }
+
+    /** Block-name histogram (netherrack and air left out) plus the extents of the blackstone mass. Diagnostics only. */
     static Map<String, Integer> features(Level level, BlockPos at, int chunkRadius) {
         Map<String, Integer> h = new TreeMap<>();
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE, minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;

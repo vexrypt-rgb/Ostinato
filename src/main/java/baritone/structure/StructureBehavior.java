@@ -25,6 +25,9 @@ public final class StructureBehavior extends Behavior {
     public enum Mode { CLIENT, SERVER, BOTH }
 
     private static final int PER_TICK = 4;
+    private static final int SCAN_RADIUS = 10;
+    /** Chunks further than this from the player are dropped; they are scanned again if we come back. */
+    private static final int FORGET = 32;
 
     private final Map<Long, int[]> counts = new HashMap<>();
     private final Map<Long, long[]> sums = new HashMap<>();
@@ -144,7 +147,7 @@ public final class StructureBehavior extends Behavior {
     }
 
     private void scanClient() {
-        int r = Math.min(10, net.minecraft.client.Minecraft.getInstance().options.renderDistance().get());
+        int r = Math.min(SCAN_RADIUS, net.minecraft.client.Minecraft.getInstance().options.renderDistance().get());
         int cx = ctx.playerFeet().getX() >> 4, cz = ctx.playerFeet().getZ() >> 4;
         int done = 0;
         for (int d = 0; d <= r && done < PER_TICK; d++) {
@@ -197,8 +200,18 @@ public final class StructureBehavior extends Behavior {
 
     private synchronized void evaluate() {
         List<DetectedStructure> hits = new ArrayList<>();
+        int pcx = ctx.playerFeet().getX() >> 4, pcz = ctx.playerFeet().getZ() >> 4;
         for (long key : new ArrayList<>(counts.keySet())) {
             int cx = ChunkPos.getX(key), cz = ChunkPos.getZ(key);
+            // what is out of view was judged while it was in view: only chunks that can still change are looked at again,
+            // and chunks far behind are forgotten (this map grew all session and was walked whole every two seconds)
+            int far = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
+            if (far > FORGET) {
+                counts.remove(key);
+                sums.remove(key);
+                continue;
+            }
+            if (far > SCAN_RADIUS + 1) continue;
             int[] tot = new int[Cat.ALL.length];
             long[] sm = new long[Cat.ALL.length * 3];
             boolean any = false;
@@ -224,6 +237,10 @@ public final class StructureBehavior extends Behavior {
                 String variant = null;
                 if (h.id.equals("bastion_remnant")) {
                     if (hasVariant(at)) continue;
+                    // one classification a pass: every chunk of the bastion reports it, and each used to read the whole window again
+                    boolean dup = false;
+                    for (DetectedStructure o : hits) dup |= o.id.equals(h.id) && o.pos.distSqr(at) < 96 * 96;
+                    if (dup) continue;
                     variant = BastionVariant.classify(ctx.world(), at);
                 }
                 hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick, variant));

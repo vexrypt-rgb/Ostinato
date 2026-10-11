@@ -17,7 +17,7 @@ public final class BastionGoals {
     /** Worth walking over after a barter; the rest (quartz, leather, nether bricks, soul speed books...) is skipped. */
     public static final Set<String> BARTER_USEFUL = Set.of(
             "ender_pearl", "obsidian", "crying_obsidian", "string", "fire_resistance", "fire_charge", "iron_nugget",
-            "gravel", "soul_sand", "spectral_arrow", "water_bucket");
+            "gravel", "soul_sand", "spectral_arrow");
 
     public static boolean chestUseful(String id, boolean food) {
         return CHEST_USEFUL.contains(id) || food && !id.equals("rotten_flesh") && !id.equals("spider_eye") && !id.equals("poisonous_potato");
