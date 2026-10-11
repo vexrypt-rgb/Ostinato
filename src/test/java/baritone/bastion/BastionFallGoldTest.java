@@ -26,6 +26,16 @@ public class BastionFallGoldTest {
     }
 
     @Test
+    public void aFallPastThePlannedLandingIsNotPlanned() {
+        assertTrue(BastionDrops.planned(true, 1.0, 4.0, 5));
+        assertFalse(BastionDrops.planned(false, 1.0, 4.0, 5));
+        // run 120: a 5-block drop that missed its shelf, 22 to the floor
+        assertFalse(BastionDrops.planned(true, 3.0, 19.0, 5));
+        assertEquals(BastionDrops.Clutch.PLACE, BastionDrops.clutch(3.0, 19.0, false, BastionDrops.planned(true, 3.0, 19.0, 5), 18f, 3, true));
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(1.0, 4.0, false, BastionDrops.planned(true, 1.0, 4.0, 5), 18f, 3, true));
+    }
+
+    @Test
     public void aDropMayNotLandBesideABrute() {
         // run 118: ledge at -435,81,-151 stepping north, landing at y=72; a brute stood six blocks from the landing
         BastionDrops.Ledge l = new BastionDrops.Ledge(-435, 81, -151, 0, -1, 72, true);

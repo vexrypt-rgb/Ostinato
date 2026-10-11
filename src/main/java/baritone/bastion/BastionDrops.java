@@ -74,6 +74,14 @@ public final class BastionDrops {
 
     public enum Clutch { NONE, PLACE }
 
+    /**
+     * A fall stays the drop we chose only while it ends where we verified. Run 120 overshot a one-block shelf five down
+     * and fell 22 with the clutch stood down for a "planned" fall.
+     */
+    public static boolean planned(boolean inWindow, double fallen, double remaining, int plannedHeight) {
+        return inWindow && fallen + remaining <= plannedHeight + 1.5;
+    }
+
     /** Smallest fall damage worth a clutch (half-hearts). */
     public static final float MIN_CLUTCH_DAMAGE = 4;
 

@@ -141,6 +141,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         preferGold = null;
         dropPlan = null;
         plannedFallUntil = 0;
+        fallPlan = null;
         craftStep = 0;
         admiring.clear();
         bastion = null;
@@ -1237,7 +1238,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     // ---- gold crafting, verified drops, fall clutch ----
     private BlockPos preferGold;
     private BastionDrops.Ledge dropPlan;
-    private long dropScan = -1000, dropSince, plannedFallUntil;
+    private long dropScan = -1000, dropSince, plannedFallUntil, lipSince, lipTick = -10;
+    private BastionDrops.Ledge fallPlan;
     private BlockPos dropFor;
 
     private int countOf(Player me, net.minecraft.world.item.Item item) {
@@ -1703,6 +1705,16 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
 
     /** A verified drop toward a target far below, instead of the long stairs; null to path normally. */
     private PathingCommand drop(Player me, BlockPos target) {
+        if (fallPlan != null && me.onGround() && me.getY() < fallPlan.y() - 0.5) fallPlan = null;
+        // run 120: we walked off the ledge at full pace and the carry took us two blocks out, past the one-block shelf we
+        // had verified and down a 22-block shaft. In the air the pace is braked, so we come down in the column we checked
+        if (fallPlan != null && !me.onGround() && ticks < plannedFallUntil && me.getY() > fallPlan.landY()) {
+            double out = me.getDeltaMovement().x * fallPlan.dx() + me.getDeltaMovement().z * fallPlan.dz();
+            baritone.getLookBehavior().updateTarget(new Rotation((float) Math.toDegrees(Math.atan2(-fallPlan.dx(), fallPlan.dz())), 30), true);
+            if (out > 0.02) baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_BACK, true);
+            status = "taking verified drop (" + fallPlan.height() + ")";
+            return pause0();
+        }
         if (!me.onGround() || ctx.playerFeet().getY() - target.getY() < BastionSettings.maxSafeDrop + 3) { if (dropPlan != null && me.getY() < dropPlan.y() - 1) dropPlan = null; return null; }
         if (!target.equals(dropFor) || ticks - dropScan > 60 && dropPlan == null) {
             dropFor = target;
@@ -1730,9 +1742,15 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         }
         // on the ledge: walk off it; the clutch stands down for this fall
         if (!stepping) plannedFallUntil = ticks + 60;
+        fallPlan = dropPlan;
+        if (ticks - lipTick > 1) lipSince = ticks;
+        lipTick = ticks;
         float yaw = (float) Math.toDegrees(Math.atan2(-dropPlan.dx(), dropPlan.dz()));
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 30), true);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
+        // creep to the lip sneaking (a sneak stops at the edge), then step off from there: we leave at a crawl, not a walk
+        double along = (me.getX() - ledge.getX() - 0.5) * dropPlan.dx() + (me.getZ() - ledge.getZ() - 0.5) * dropPlan.dz();
+        if (along < 0.7 && ticks - lipSince < 60) baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
         status = "taking verified drop (" + dropPlan.height() + ")";
         return pause0();
     }
@@ -1751,7 +1769,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             remaining = i;
         }
         int slot = clutchBlock(me);
-        BastionDrops.Clutch d = BastionDrops.clutch(me.fallDistance, remaining + (me.getY() - feet.getY()), intoLava, ticks < plannedFallUntil,
+        BastionDrops.Clutch d = BastionDrops.clutch(me.fallDistance, remaining + (me.getY() - feet.getY()), intoLava,
+                BastionDrops.planned(ticks < plannedFallUntil && fallPlan != null, me.fallDistance, remaining + (me.getY() - feet.getY()), fallPlan == null ? 0 : fallPlan.height()),
                 me.getHealth(), BastionSettings.maxSafeDrop, slot >= 0);
         if (d != BastionDrops.Clutch.PLACE) return null;
         // the cell just below our feet, placed against any solid neighbour (the ledge we came off is usually one)
