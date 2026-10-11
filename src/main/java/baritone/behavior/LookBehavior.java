@@ -60,7 +60,64 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void updateTarget(Rotation rotation, boolean blockInteract) {
-        this.target = new Target(rotation, blockInteract);
+        // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
+        this.target = this.human ? new Target(rotation, Target.Mode.CLIENT) : new Target(rotation, blockInteract);
+    }
+
+    private boolean human;
+    private float velYaw, velPitch;
+    private final java.util.Random handNoise = new java.util.Random();
+
+    /**
+     * For this tick, the rotation that is sent is a hand's move from the last one: most of the way to the
+     * target, at most 60 degrees of yaw and 45 of pitch, in whole steps of the mouse at the current
+     * sensitivity. Call before {@link #updateTarget}.
+     */
+    public void human() {
+        this.human = true;
+    }
+
+    private boolean ownMove;
+
+    /**
+     * {@link #human()}, and the movement keys act on the rotation the player really has this tick rather than on
+     * the one being turned to, as they do for a player whose view is still on its way.
+     */
+    public void humanMove() {
+        this.human = true;
+        this.ownMove = true;
+    }
+
+    /**
+     * A hand does not jump to its target: the speed ramps up (limited acceleration), the move closes most of
+     * the gap each tick (so a long flick still lands in a few ticks), carries a little momentum past the
+     * target, and the wrist arc leaks a bit of pitch into a yaw sweep. Near the target a tremor of under a
+     * mouse count rides on top; the result is rounded to whole mouse counts.
+     */
+    private Rotation humanStep(Rotation want) {
+        float cy = ctx.player().rotationYaw, cp = ctx.player().rotationPitch;
+        float dy = net.minecraft.util.math.MathHelper.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
+        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.math.MathHelper.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.math.MathHelper.clamp(dp * 0.6f, -45f, 45f) : dp;
+        // acceleration limit scales with the size of the move: a flick may start hard, a nudge starts soft
+        float accY = 12f + Math.abs(dy) * 0.5f, accP = 9f + Math.abs(dp) * 0.5f;
+        float outY = velYaw + net.minecraft.util.math.MathHelper.clamp(wantY - velYaw, -accY, accY);
+        float outP = velPitch + net.minecraft.util.math.MathHelper.clamp(wantP - velPitch, -accP, accP);
+        if (Math.abs(dy) <= 1.5f) outY = dy; // fine aim lands exactly, never lags behind a moving target
+        if (Math.abs(dp) <= 1.5f) outP = dp;
+        // momentum carries a fast move slightly past; the next tick corrects it
+        if (Math.abs(dy) > 25f) outY += velYaw * 0.12f;
+        outP += outY * 0.06f * (float) Math.signum(dp == 0 ? 1 : dp) * (Math.abs(dy) > 10f ? 1 : 0);
+        double tremor = Math.abs(dy) < 6.0 ? 0.08 : 0.0;
+        outY += (float) (handNoise.nextGaussian() * tremor);
+        outP += (float) (handNoise.nextGaussian() * tremor);
+        velYaw = outY;
+        velPitch = outP;
+        double f = ctx.minecraft().gameSettings.mouseSensitivity * 0.6 + 0.2;
+        float step = (float) (f * f * f * 8.0 * 0.15); // degrees per mouse count, as MouseHelper turns the player
+        outY = Math.round(outY / step) * step;
+        outP = Math.round(outP / step) * step;
+        return new Rotation(cy + outY, net.minecraft.util.math.MathHelper.clamp(cp + outP, -90f, 90f));
     }
 
     @Override
@@ -90,7 +147,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     this.prevRotation = new Rotation(ctx.player().rotationYaw, ctx.player().rotationPitch);
                 }
 
-                final Rotation actual = this.processor.peekRotation(this.target.rotation);
+                final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 ctx.player().rotationYaw = actual.getYaw();
                 ctx.player().rotationPitch = actual.getPitch();
                 break;
@@ -100,7 +157,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 while (this.smoothYawBuffer.size() > Baritone.settings().smoothLookTicks.value) {
                     this.smoothYawBuffer.removeFirst();
                 }
-                if (this.target.mode == Target.Mode.CLIENT && Baritone.settings().smoothLook.value) {
+                if (!this.human && this.target.mode == Target.Mode.CLIENT && Baritone.settings().smoothLook.value) {
                     ctx.player().rotationYaw = (float) this.smoothYawBuffer.stream().mapToDouble(d -> d).average().orElse(ctx.player().rotationYaw);
                 }
                 // Reset the player's rotations back to their original values
@@ -111,6 +168,12 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
+                if (!this.human) {
+                    this.velYaw = 0;
+                    this.velPitch = 0;
+                }
+                this.human = false;
+                this.ownMove = false;
                 break;
             }
             default:
@@ -153,7 +216,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void onPlayerRotationMove(RotationMoveEvent event) {
-        if (this.target != null) {
+        if (this.target != null && !this.ownMove) {
             final Rotation actual = this.processor.peekRotation(this.target.rotation);
             event.setYaw(actual.getYaw());
             event.setPitch(actual.getPitch());
@@ -301,6 +364,11 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         public Target(Rotation rotation, boolean blockInteract) {
             this.rotation = rotation;
             this.mode = Mode.resolve(blockInteract);
+        }
+
+        public Target(Rotation rotation, Mode mode) {
+            this.rotation = rotation;
+            this.mode = mode;
         }
 
         enum Mode {

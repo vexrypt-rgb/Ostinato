@@ -81,6 +81,7 @@ public class Baritone implements IBaritone {
     private final FarmProcess farmProcess;
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
+    private final PortalBuildProcess portalBuildProcess;
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -129,6 +130,7 @@ public class Baritone implements IBaritone {
             this.registerProcess(BackfillProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
+            this.portalBuildProcess      = this.registerProcess(PortalBuildProcess::new);
         }
 
         this.worldProvider = new WorldProvider(this);
@@ -218,6 +220,10 @@ public class Baritone implements IBaritone {
     @Override
     public FarmProcess getFarmProcess() {
         return this.farmProcess;
+    }
+
+    public PortalBuildProcess getPortalBuildProcess() {
+        return this.portalBuildProcess;
     }
 
     @Override

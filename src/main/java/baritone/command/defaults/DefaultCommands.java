@@ -53,6 +53,7 @@ public final class DefaultCommands {
                 new TunnelCommand(baritone),
                 new RenderCommand(baritone),
                 new FarmCommand(baritone),
+                new PortalCommand(baritone),
                 new FollowCommand(baritone),
                 new ExploreFilterCommand(baritone),
                 new ReloadAllCommand(baritone),
