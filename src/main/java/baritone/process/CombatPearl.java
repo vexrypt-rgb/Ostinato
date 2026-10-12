@@ -11,9 +11,9 @@ import baritone.api.utils.RotationUtils;
 import static baritone.process.CombatAim.press;
 
 /**
- * The two pearl plays that get us up to a foe out of reach: a throw that lands on the ledge they stand on, and the
- * pearl-and-wind-charge lift under a mace. Both keep their progress in {@link CombatPhase}, where the mace play and
- * the reset read it too.
+ * The pearl plays that get us to a foe out of reach: a throw that lands on the ledge they stand on, the
+ * pearl-and-wind-charge lift under a mace, and a throw onto a foe that running does not catch. They keep their
+ * progress in {@link CombatPhase}, where the mace play and the reset read it too.
  */
 final class CombatPearl {
     /** What the process does for us: hotbar and the tick's decision label. */
@@ -28,17 +28,120 @@ final class CombatPearl {
     private final CombatAim aimer;
     private final CombatTargeting targeting;
     private final CombatPhase phase;
+    private final CombatPolicy.Pearls p;
     private final Hands hands;
+    private int chaseTick, slowSecs;
+    /** Ticks left to the turn of a chase throw that has begun, 0 when none has. */
+    private int aimLeft;
+    private double chaseFrom = -1;
     /** Set by {@link #lift} and {@link #strike}: true when it took the tick, even if it took it by returning null. */
     boolean handled;
 
-    CombatPearl(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, Hands hands) {
+    CombatPearl(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatPhase phase, CombatPolicy.Pearls p, Hands hands) {
         this.ctx = ctx;
         this.inv = inv;
         this.aimer = aimer;
         this.targeting = targeting;
         this.phase = phase;
+        this.p = p;
         this.hands = hands;
+    }
+
+    /** The chase rule on its own, in a class that loads without the game. */
+    static final class Chase {
+        private Chase() {}
+
+        /**
+         * A pearl to catch the foe: it is out of reach of a run that has stopped gaining for {@code after} seconds, or it
+         * has stopped at a distance to eat, and the landing is something we can afford.
+         */
+        static boolean go(double dist, double lo, double hi, int slowSecs, int after, boolean foeEating, float hp, double minHp, boolean los, boolean grounded) {
+            return los && grounded && hp >= minHp && dist > lo && dist < hi && (slowSecs >= after || foeEating);
+        }
+
+        /** Seconds in a row the run has not been gaining: one more when the last second closed less than {@code gain}, none when it closed that or we are near. */
+        static int slow(int slowSecs, double before, double now, double gain, double lo) {
+            return now > lo && before - now < gain ? slowSecs + 1 : 0;
+        }
+
+        /**
+         * The pearl leaves the hand facing the throw and on the ground: Projectile.shootFromRotation adds the thrower's
+         * own rise or fall to a throw made in the air, and the flight worked out here has none.
+         */
+        static boolean release(boolean faced, boolean grounded) {
+            return faced && grounded;
+        }
+    }
+
+    /** The throw that lands us on a foe that is getting away; null when it isn't the moment or no throw lands there. */
+    PathingCommand chase(Player me, LivingEntity target, double dist, boolean los, boolean foeEating, int pearlSlot, float myHp) {
+        if (me.tickCount < chaseTick || chaseFrom < 0) { // a new fight, or respawned under the old stamps
+            chaseTick = me.tickCount;
+            chaseFrom = dist;
+            slowSecs = 0;
+        }
+        if (me.tickCount - chaseTick >= 20) {
+            slowSecs = Chase.slow(slowSecs, chaseFrom, dist, p.chaseGain, p.chaseLo);
+            chaseTick = me.tickCount;
+            chaseFrom = dist;
+        }
+        // a throw begins on the ground; once it has begun the turn goes on through the hop the run was in the middle of
+        if (pearlSlot < 0 || phase.pearlCool > 0 || phase.macePhase != 0 || phase.pearlStage != 0 || me.isFallFlying()
+                || !Chase.go(dist, p.chaseLo, p.chaseHi, slowSecs, p.chaseAfter, foeEating, myHp, p.chaseHp, los, me.onGround() || aimLeft > 0)) {
+            aimLeft = 0;
+            return null;
+        }
+        Vec3 eye = me.getEyePosition(), tv = foeEating ? Vec3.ZERO : targeting.velocity(target).multiply(1, 0, 1);
+        Vec3 own = new Vec3(me.getX() - me.xo, 0, me.getZ() - me.zo); // a thrown pearl keeps the thrower's own motion
+        float bestYaw = 0, bestPitch = 0;
+        double bestErr = 1e9;
+        for (int lead = 0; lead <= 40; lead += 10) { // aim at where the foe will be: the flight time is not known before the pitch is
+            Vec3 at = target.position().add(tv.scale(lead));
+            float yaw = RotationUtils.calcRotationFromVec3d(eye, at, ctx.playerRotations()).getYaw();
+            double yr = Math.toRadians(yaw);
+            for (float pitch = -50; pitch <= 10; pitch += 1.5f) {
+                double pr = Math.toRadians(pitch);
+                Vec3 v = new Vec3(-Math.sin(yr) * Math.cos(pr), -Math.sin(pr), Math.cos(yr) * Math.cos(pr)).scale(1.5).add(own);
+                Vec3 pos = eye;
+                for (int t = 1; t <= 80; t++) {
+                    Vec3 next = pos.add(v);
+                    net.minecraft.world.phys.BlockHitResult hit = ctx.world().clip(new net.minecraft.world.level.ClipContext(pos, next,
+                            net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.ANY, me));
+                    if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                        // a top face of solid ground at the foe's level, nothing liquid: anything else is not somewhere to arrive
+                        Vec3 land = hit.getLocation(), there = target.position().add(tv.scale(t));
+                        double err = Math.hypot(land.x - there.x, land.z - there.z);
+                        if (hit.getDirection() == net.minecraft.core.Direction.UP && ctx.world().getFluidState(hit.getBlockPos()).isEmpty()
+                                && Math.abs(land.y - target.getY()) <= 2.5 && err < bestErr) {
+                            bestErr = err;
+                            bestYaw = yaw;
+                            bestPitch = pitch;
+                        }
+                        break;
+                    }
+                    pos = next;
+                    v = v.scale(0.99).add(0, -0.03, 0);
+                }
+            }
+        }
+        if (bestErr > p.chaseErr) {
+            aimLeft = 0;
+            return null;
+        }
+        if (!hands.select(me, pearlSlot)) return hands.decide("swap");
+        if (!Chase.release(aimer.face(bestYaw, bestPitch, 2.5f), me.onGround())) {
+            // the look is a turn of several ticks and the run hops: let go here and the next hop takes the aim away again
+            if (aimLeft == 0) aimLeft = p.chaseAim;
+            else if (--aimLeft == 0) {
+                phase.pearlCool = p.chaseRetry;
+                return null;
+            }
+            return hands.decide("pearl");
+        }
+        press(ctx.minecraft().options.keyUse);
+        phase.pearlCool = p.chaseRest;
+        slowSecs = aimLeft = 0;
+        return hands.decide("pearl");
     }
 
     /** The throw that carries us up to a foe well above; null when it isn't the moment. */
@@ -146,7 +249,7 @@ final class CombatPearl {
         handled = false;
         // pearl strike: lob a pearl so it peaks above the target, pop it mid-air with a wind charge to teleport there, then drop the mace
         if (mace >= 0 && (wind >= 0 || phase.pearlStage == 2) && phase.macePhase == 0 && (phase.pearlStage > 0 || phase.pearlCool == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 7 && dist < 22
-                && inv.slotOf(me, Items.ENDER_PEARL) >= 0 && target.onGround() && !overhead)) {
+                && inv.spare(me, Items.ENDER_PEARL, p.keep.get()) >= 0 && target.onGround() && !overhead)) {
             handled = true;
             if (phase.pearlStage == 0) {
                 float bestPitch = 0;

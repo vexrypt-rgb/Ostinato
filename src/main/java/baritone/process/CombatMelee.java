@@ -32,22 +32,27 @@ final class CombatMelee {
     int groundedJumps;
 
     // this tick's facts, set by prepare()
-    boolean inReach, chase, duel, canJump, axeTime, targetReady, falling, rushed, immune, run, hurry;
+    boolean inReach, chase, duel, canJump, axeTime, targetReady, falling, rushed, immune, run, hurry, foeArmed;
     float cd;
+    /** Ticks until the foe's next swing is due by the gap it has kept so far; under zero it is overdue. */
+    int foeDueIn;
+    private int shieldWaited, selectWaited;
 
     private final CombatInventory inv;
     private final CombatSwing swing;
     private final CombatTargeting targeting;
     private final CombatShield shield;
     private final CombatMovement movement;
+    private final CombatPolicy.Melee p;
     private final Hands hands;
 
-    CombatMelee(CombatInventory inv, CombatSwing swing, CombatTargeting targeting, CombatShield shield, CombatMovement movement, Hands hands) {
+    CombatMelee(CombatInventory inv, CombatSwing swing, CombatTargeting targeting, CombatShield shield, CombatMovement movement, CombatPolicy.Melee p, Hands hands) {
         this.inv = inv;
         this.swing = swing;
         this.targeting = targeting;
         this.shield = shield;
         this.movement = movement;
+        this.p = p;
         this.hands = hands;
     }
 
@@ -78,6 +83,16 @@ final class CombatMelee {
         // the tick the use key comes up, an attack click is still swallowed by the item in use
         this.immune = target.hurtTime > 1 || me.tickCount - shield.lastShieldTick < (shield.counter ? 2 : 3)
                 || tgShield && inv.best(me, AXES) >= 0; // a sword into a raised shield is a wasted cooldown
+        // no axe to break it with: the charged swing is kept for when it comes down, for as many ticks as shieldWait says
+        if (tgShield && inv.best(me, AXES) < 0 && shieldWaited < p.shieldWait.get()) {
+            shieldWaited++;
+            this.immune = true;
+        } else if (!tgShield) {
+            shieldWaited = 0;
+        }
+        var held = target.getMainHandItem();
+        this.foeArmed = target instanceof Player && (held.is(net.minecraft.tags.ItemTags.SWORDS) || held.is(net.minecraft.tags.ItemTags.AXES)
+                || held.getItem() == Items.MACE || held.getItem() == Items.TRIDENT || CombatInventory.isSpear(held));
         this.falling = !me.onGround() && me.getDeltaMovement().y < -0.05;
         this.canJump = me.onGround() && !me.isInWater() && !me.isInLava() && !me.onClimbable();
         this.hurry = me.getCurrentItemAttackStrengthDelay() < 14;
@@ -87,8 +102,9 @@ final class CombatMelee {
         // Same fight, t544: jumped fully charged and hung in the air for the fall while its axe, due, landed first.
         // With its next swing due inside the jump, the charged swing goes now.
         int swingAge = me.tickCount - shield.targetSwingTick;
-        this.rushed = !hurry && !targetEating && cd >= 0.95f
-                && swingAge >= (shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20) - 6;
+        int swingGap = shield.swingGap > 0 ? shield.swingGap : target instanceof Player tp ? (int) tp.getCurrentItemAttackStrengthDelay() : 20;
+        this.rushed = !hurry && !targetEating && cd >= 0.95f && swingAge >= swingGap - 6;
+        this.foeDueIn = swingGap - swingAge;
         return null;
     }
 
@@ -96,7 +112,7 @@ final class CombatMelee {
         if (!inReach) movement.steer(me, target, dist, chase, critArmed);
         else if (dist < 1.4) hands.key(Input.MOVE_BACK); // sword: too close, make space
         // its reach is measured centre to centre, a little shorter than ours: recharge just outside it
-        else if (duel && cd < 0.75f && dist < 2.9) hands.key(Input.MOVE_BACK);
+        else if ((duel || foeArmed && p.spaceAny.get() > 0) && cd < (float) p.spaceCharge.real() && dist < p.duelSpace.real()) hands.key(Input.MOVE_BACK);
         if (me.hurtTime == me.hurtDuration - 1 && canJump) hands.key(Input.JUMP); // jump reset
 
         if (axeTime && inReach && me.tickCount - shield.lastShieldTick >= 2) { // an axe disables a raised shield whatever the charge
@@ -116,12 +132,20 @@ final class CombatMelee {
         }
         // 1740 fight tick 334: swung on the first tick with y speed below zero, before the move
         // that makes fallDistance positive. Vanilla wants fallDistance > 0, so it was a plain 1.56.
-        if (critArmed && falling && me.fallDistance > 0 && inReach && cd >= 0.9f && !immune) {
+        if (critArmed && falling && me.fallDistance > 0 && inReach && cd >= (float) p.critCharge.real() && !immune) {
             hands.hit(me);
             hands.crit();
             critArmed = false;
             return hands.decide("hit");
         }
+        // hit-select: its swing is due any tick now. Taken first, it leaves the foe slowed and out of its sprint for ours.
+        int select = p.hitSelect.get();
+        if (select > 0 && foeArmed && me.onGround() && inReach && cd >= 0.9f && !immune && me.hurtTime == 0
+                && foeDueIn >= -2 && foeDueIn <= select && selectWaited < select) {
+            selectWaited++;
+            return hands.decide("select");
+        }
+        if (me.hurtTime > 0 || foeDueIn > select || foeDueIn < -2) selectWaited = 0;
         if ((run || shield.counter) && inReach && cd >= 0.9f && !immune) {
             hands.hit(me);
             return hands.decide("hit");
@@ -146,13 +170,13 @@ final class CombatMelee {
         }
         boolean diving = !target.onGround() && targeting.velocity(target).y < -0.2 && target.getY() > me.getY() + 1.5;
         // The fall starts six ticks after the jump. A mace or axe jumped at 0.55 landed before it was charged.
-        float jumpCd = Math.max(0.55f, 1 - 6f / me.getCurrentItemAttackStrengthDelay());
+        float jumpCd = Math.max((float) p.jumpCharge.real(), 1 - 6f / me.getCurrentItemAttackStrengthDelay());
         if (!(breached && hurry) && !duel && !diving && !run && !shield.counter && !(rushed && inReach) && canJump && dist <= REACH + 0.8 && cd >= jumpCd && !immune && groundedJumps < 4) {
             hands.key(Input.JUMP);
             groundedJumps++;
             return hands.decide("jump");
         }
-        if (me.onGround() && inReach && cd >= (duel ? 0.9f : 0.95f) && !immune && (duel || !canJump || groundedJumps >= 4 || rushed)) {
+        if (me.onGround() && inReach && cd >= (duel ? (float) p.duelCharge.real() : 0.95f) && !immune && (duel || !canJump || groundedJumps >= 4 || rushed)) {
             boolean sprint = me.isSprinting();
             hands.hit(me);
             if (sprint) {

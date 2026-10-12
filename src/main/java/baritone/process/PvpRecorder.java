@@ -163,6 +163,7 @@ public final class PvpRecorder {
         if (e.isSprinting()) fl.append('P');
         if (e.fallDistance > 1.5) fl.append('F');
         if (e.isInWater()) fl.append('W');
+        if (e.isOnFire()) fl.append('N');
         var v = e.getDeltaMovement();
         return f(e.getX()) + "," + f(e.getY()) + "," + f(e.getZ()) + "," + f(v.x) + "," + f(v.y) + "," + f(v.z) + ","
                 + f(e.getYRot()) + "," + f(e.getXRot()) + "," + f(e.getHealth()) + "," + f(e.getAbsorptionAmount()) + ","

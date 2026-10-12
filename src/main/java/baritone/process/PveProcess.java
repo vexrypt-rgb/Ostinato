@@ -131,6 +131,7 @@ public final class PveProcess extends BaritoneProcessHelper {
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
         inv.closeAbandoned(me);
+        if (!inv.wear(me)) inv.freshShield(me);
         baritone.getInputOverrideHandler().clearAllKeys();
         ticks++;
         float hp = me.getHealth() + me.getAbsorptionAmount();

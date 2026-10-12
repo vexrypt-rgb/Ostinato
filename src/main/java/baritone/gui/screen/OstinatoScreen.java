@@ -93,6 +93,9 @@ public final class OstinatoScreen extends Screen {
             } else if (name.equals("pathHudAnchor")) {
                 k = Kind.CYCLE;
                 opts = new String[]{"RIGHT", "LEFT", "TOP_RIGHT", "TOP_LEFT"};
+            } else if (name.equals("acsHudAnchor")) {
+                k = Kind.CYCLE;
+                opts = new String[]{"TOP_LEFT", "LEFT", "TOP_RIGHT", "RIGHT"};
             } else if (Number.class.isAssignableFrom(c)) {
                 r = SettingRanges.get(name);
                 k = r != null ? Kind.SLIDER : Kind.NUMBER;

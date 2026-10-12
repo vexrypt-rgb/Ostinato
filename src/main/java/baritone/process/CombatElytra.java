@@ -66,10 +66,10 @@ final class CombatElytra {
         net.minecraft.world.entity.EquipmentSlot chestSlot = net.minecraft.world.entity.EquipmentSlot.CHEST;
         Item worn = me.getItemBySlot(chestSlot).getItem();
         if (mace >= 0 && worn != Items.ELYTRA && phase.macePhase == 0 && phase.maceCool == 0 && me.onGround() && los && dist > 6 && dist < 40 && !overhead
-                && (rocket >= 0 || wind >= 0) && inv.slotOf(me, Items.ELYTRA) >= 0) {
+                && (rocket >= 0 || wind >= 0) && inv.wings(me) >= 0) {
             // the wings are not on the chest: put them on from the hotbar (the chestplate goes where they were)
             phase.chestSaved = worn;
-            int wings = inv.toHotbar(me, inv.slotOf(me, Items.ELYTRA));
+            int wings = inv.toHotbar(me, inv.wings(me));
             if (wings >= 0) inv.invSwap(me, 6, wings);
             return hands.decide("elytra");
         }
