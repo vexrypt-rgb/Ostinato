@@ -27,6 +27,7 @@ import baritone.api.command.exception.ICommandException;
 import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.api.command.manager.ICommandManager;
 import baritone.api.command.registry.Registry;
+import baritone.api.utils.Helper;
 import baritone.command.argument.ArgConsumer;
 import baritone.command.argument.CommandArguments;
 import baritone.command.defaults.DefaultCommands;
@@ -47,6 +48,7 @@ public class CommandManager implements ICommandManager {
 
     private final Registry<ICommand> registry = new Registry<>();
     private final Baritone baritone;
+    private volatile java.util.function.BiFunction<ICommand, String, java.util.Optional<String>> guard;
 
     public CommandManager(Baritone baritone) {
         this.baritone = baritone;
@@ -81,10 +83,45 @@ public class CommandManager implements ICommandManager {
     @Override
     public boolean execute(Tuple<String, List<ICommandArgument>> expanded) {
         ExecutionWrapper execution = this.from(expanded);
-        if (execution != null) {
+        if (execution != null && allowedByGuard(execution.command, expanded)) {
             execution.execute();
         }
         return execution != null;
+    }
+
+    @Override
+    public void setExecutionGuard(java.util.function.BiFunction<ICommand, String, java.util.Optional<String>> guard) {
+        this.guard = guard;
+    }
+
+    /** The guard's verdict; a guard that throws is reported and the command runs, so Ostinato keeps working. */
+    private boolean allowedByGuard(ICommand command, Tuple<String, List<ICommandArgument>> expanded) {
+        java.util.function.BiFunction<ICommand, String, java.util.Optional<String>> g = guard;
+        if (g == null) {
+            return true;
+        }
+        StringBuilder line = new StringBuilder(expanded.getA());
+        for (ICommandArgument arg : expanded.getB()) {
+            line.append(' ').append(arg.getValue());
+        }
+        return guardAllows(g, command, line.toString(), Helper.HELPER::logDirect);
+    }
+
+    static boolean guardAllows(java.util.function.BiFunction<ICommand, String, java.util.Optional<String>> guard,
+                               ICommand command, String line, java.util.function.Consumer<String> log) {
+        if (guard == null) {
+            return true;
+        }
+        try {
+            java.util.Optional<String> refusal = guard.apply(command, line);
+            if (refusal != null && refusal.isPresent()) {
+                log.accept("Not run: " + refusal.get());
+                return false;
+            }
+        } catch (Throwable t) {
+            log.accept("Command guard failed (" + t + "); running the command anyway");
+        }
+        return true;
     }
 
     @Override

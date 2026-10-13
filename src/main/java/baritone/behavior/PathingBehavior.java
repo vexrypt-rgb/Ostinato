@@ -157,7 +157,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     private void tickPath() {
         pausedThisTick = false;
-        if (pauseRequestedLastTick && safeToCancel) {
+        if (pauseRequestedLastTick && (safeToCancel || current != null && current.pausableNow())) {
             pauseRequestedLastTick = false;
             if (unpausedLastTick) {
                 baritone.getInputOverrideHandler().clearAllKeys();

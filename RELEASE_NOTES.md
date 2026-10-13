@@ -10,9 +10,30 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | Minecraft | Branch | Java |
 | --- | --- | --- |
 | 1.21.11 | `main` | 21 |
+| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 |
 | 1.21.4 | `1.21.4` | 21 |
 | 26.3 | `26.3` | 25 |
 | 1.16.1 | `1.16.1` | 8 |
+
+## New in v1.21.0 (1.21.11)
+
+This release brings the 1.21.11 line's feature branches together, and lets Ostinato share the controls with
+other mods through Conductor.
+
+- **Autotune Combat System** (`#pvp`, setting `pvpAutotune`, off by default): learns the combat timing numbers and
+  the healing, totem and reserve numbers on its own, one at a time, against the baseline, keeping a change only
+  when it does better and never when the damage-taken guard is breached. `#pvp tune` shows and sets them; the HUD
+  card shows what it is trying. Gear is picked by wear as well as tier, and spares replace worn pieces before they
+  break. Learned values are not yet claimed as improvements: the learners have run live against one bot only.
+- **Bastions** (`#bastion`, `#structures`): bastion layouts recognised from loaded blocks; fights with brutes from
+  behind walls, towers and slits; piglin bartering camps; lava and fire recovery; water-pocket escapes; and a
+  lava-flow forecast priced into paths.
+- **Command execution guard** (API): `ICommandManager.setExecutionGuard` lets another mod be asked before any
+  command runs, from chat, the GUI or code. Conductor's Ostinato module uses it so that `#goto`, `#mine` and the
+  other movement commands take Conductor's movement lease: they wait for, or are refused by, a module that holds
+  it, and a higher-priority module (a fight, an escape) can stop them safely. With no guard set nothing changes.
+- **Use with Conductor** (optional): install Conductor and its Ostinato module next to this jar; see the Conductor
+  release notes. Ostinato works exactly as before without them.
 
 ## New in v1.20.0
 

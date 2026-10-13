@@ -56,8 +56,10 @@ public final class SettingRanges {
     private static final Map<String, Range> RANGES = new HashMap<>();
 
     static {
-        r(0, 1, 0.05, "selectionOpacity", "cachedChunksOpacity", "freecamGhostOpacity", "pathCutoffFactor", "backtrackCostFavoringCoefficient");
+        r(0, 1, 0.05, "selectionOpacity", "cachedChunksOpacity", "freecamGhostOpacity", "pathCutoffFactor", "backtrackCostFavoringCoefficient",
+                "acsHudOpacity");
         r(0.1, 1, 0.05, "pathingMapLoadFactor");
+        r(0, 6, 1, "acsHudScale");
         r(1, 20, 1, "smoothLookTicks", "maxFallHeightNoWater");
         r(1, 5, 0.01, "costHeuristic");
         r(0, 10, 0.5, "jumpPenalty", "walkOnWaterOnePenalty", "blockBreakAdditionalPenalty");

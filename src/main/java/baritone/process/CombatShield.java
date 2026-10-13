@@ -140,10 +140,15 @@ final class CombatShield {
         // 224436 expert adaptive: the shield came down at 0.78 charge, six ticks before each of its swings.
         // Its next swing is due one observed swing gap after the last: be behind a warmed-up shield for it, then answer.
         int since = me.tickCount - targetSwingTick;
-        int gap = swingGap > 0 ? swingGap : p.defaultGap; // a sword recharges in 12.5 ticks
-        boolean due = target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && since >= gap - p.dueEarly && since < gap + p.dueLate && dist < p.dueDist;
+        boolean due = swingDue(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS), since, dist);
         // raise early enough for the shield's warm-up, hold until the swing is nearly ready
-        return holding ? (cd < p.holdCharge || due) && blockTicks < p.holdMaxTicks : (cd < p.raiseCharge || due) && since > 2;
+        return holding ? (cd < (float) p.holdCharge.real() || due) && blockTicks < p.holdMaxTicks.get() : (cd < (float) p.raiseCharge.real() || due) && since > 2;
+    }
+
+    /** A sword's next swing is due: {@code since} ticks after its last is inside the window around the gap, and it is near enough to land. */
+    boolean swingDue(boolean foeSword, int since, double dist) {
+        int gap = swingGap > 0 ? swingGap : p.defaultGap; // a sword recharges in 12.5 ticks
+        return foeSword && since >= gap - p.dueEarly.get() && since < gap + p.dueLate.get() && dist < p.dueDist.real();
     }
 
     /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */

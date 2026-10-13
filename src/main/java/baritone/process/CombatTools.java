@@ -16,7 +16,7 @@ import static baritone.process.CombatGeometry.*;
 
 /**
  * The kit's side tools, tried in order once nothing more pressing has the tick: a cobweb at the foe's feet, a
- * healing or harming potion, the soul-sand fire the bow shoots through, a crossbow bolt, a thrown trident. Each
+ * potion that harms, the soul-sand fire the bow shoots through, a crossbow bolt, a thrown trident. Each
  * keeps its own cooldown; the process only asks {@link #run} and acts on the command it returns.
  */
 final class CombatTools {
@@ -35,19 +35,21 @@ final class CombatTools {
     private final CombatAim aimer;
     private final CombatTargeting targeting;
     private final CombatExplosives explosives;
+    private final CombatPotions potions;
     private final Hands hands;
     private LivingEntity target; // set on each run(); the routines below read the fight's target from it
-    private int webCool, potCool, chargeTicks;
+    private int webCool, chargeTicks;
     private int fireCool, fireStage, fireTicks;
     private BlockPos firePos;
     private int xbAdvance, xbWait;
 
-    CombatTools(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatExplosives explosives, Hands hands) {
+    CombatTools(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatTargeting targeting, CombatExplosives explosives, CombatPotions potions, Hands hands) {
         this.ctx = ctx;
         this.inv = inv;
         this.aimer = aimer;
         this.targeting = targeting;
         this.explosives = explosives;
+        this.potions = potions;
         this.hands = hands;
     }
 
@@ -75,26 +77,8 @@ final class CombatTools {
                 explosives.place(me, Items.COBWEB, target.blockPosition().below());
                 return hands.decide("web");
             }
-            if (potCool > 0) potCool--;
-            if (potCool == 0) {
-                int heal = inv.potion(me, MobEffects.INSTANT_HEALTH), harm = inv.potion(me, MobEffects.INSTANT_DAMAGE);
-                if (heal >= 0 && me.getHealth() <= 9) {
-                    if (!hands.select(me, heal)) return hands.decide("swap");
-                    if (!aimer.face(me.getYRot(), 90f, 2.5f)) return hands.decide("pot");
-                    press(ctx.minecraft().options.keyUse);
-                    potCool = 12;
-                    return hands.decide("pot");
-                }
-                if (harm >= 0 && los && dist > 3 && dist < 12) {
-                    Vec3 at = target.position().add(tv().scale(dist / 0.5)).add(0, 0.2, 0);
-                    Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at.add(0, dist * 0.12, 0), ctx.playerRotations());
-                    if (!hands.select(me, harm)) return hands.decide("swap");
-                    if (!aimer.face(r.getYaw(), r.getPitch(), 2.5f)) return hands.decide("pot");
-                    press(ctx.minecraft().options.keyUse);
-                    potCool = 25;
-                    return hands.decide("pot");
-                }
-            }
+            PathingCommand pot = potions.harm(me, target, dist, los);
+            if (pot != null) return pot;
             // soul sand + flint and steel + any bow: shoot through the fire to set the target alight
             if (inv.slotOf(me, Items.SOUL_SAND) >= 0 && inv.slotOf(me, Items.FLINT_AND_STEEL) >= 0 && inv.slotOf(me, Items.BOW) >= 0
                     && inv.slotOf(me, Items.ARROW) >= 0 && los && dist > (fireStage > 0 ? 6 : 11) && dist < 22 && (fireStage > 0 || (fireCool == 0 && target.onGround() && me.onGround() && !target.isOnFire()))) {

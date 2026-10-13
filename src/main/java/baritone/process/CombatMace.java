@@ -181,19 +181,23 @@ final class CombatMace {
             }
             Vec3 ahead = target.position().add(targeting.velocity(target).multiply(fallTicks, 0, fallTicks));
             boolean moving = !spearKit && targeting.velocity(target).horizontalDistance() > 0.1;
+            boolean crit = !spearKit && p.smashCrit.get() > 0;
+            // a sprint ends only on a tick with no forward key, and the server hears of it a tick before the swing
+            boolean unsprint = crit && Smash.unsprint(me.getDeltaMovement().y, fallTicks, p.critLead);
+            boolean coast = unsprint && me.isSprinting();
             if (around || moving) {
                 Vec3 to = (around ? ahead.subtract(facing.scale(1.6)) : ahead).subtract(me.position()).multiply(1, 0, 1);
                 if (to.horizontalDistance() > 0.15) {
                     float rel = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-to.x, to.z)) - me.getYRot());
-                    if (Math.abs(rel) < 67.5f) hands.key(Input.MOVE_FORWARD);
+                    if (Math.abs(rel) < 67.5f && !coast) hands.key(Input.MOVE_FORWARD);
                     else if (Math.abs(rel) > 112.5f) hands.key(Input.MOVE_BACK);
                     if (rel > 22.5f && rel < 157.5f) hands.key(Input.MOVE_RIGHT);
                     else if (rel < -22.5f && rel > -157.5f) hands.key(Input.MOVE_LEFT);
-                    if (around || to.horizontalDistance() > 2.5) hands.key(Input.SPRINT);
+                    if (!unsprint && (around || to.horizontalDistance() > 2.5)) hands.key(Input.SPRINT);
                 }
             } else if (!quiet) {
-                hands.key(Input.MOVE_FORWARD);
-                hands.key(Input.SPRINT);
+                if (!coast) hands.key(Input.MOVE_FORWARD);
+                if (!unsprint) hands.key(Input.SPRINT);
             } else if (!me.isSprinting() && (horizontalBoxDist(me, target) > 2.2 || me.getDeltaMovement().horizontalDistance() < 0.08)) {
                 hands.key(Input.MOVE_FORWARD);
             }
@@ -233,8 +237,8 @@ final class CombatMace {
                 return hands.decide("lunge");
             }
             // 1740 fight ticks 249-277: the swap back to the mace zeroes a 33-tick cooldown and the
-            // hop lands 28 ticks later at 0.78, so a 0.99 gate never opened. The fall bonus scales
-            // with the charge: swing on the last tick before the ground with whatever is there.
+            // hop lands 28 ticks later at 0.78, so a 0.99 gate never opened. The fall bonus is added
+            // whatever the charge: swing on the last tick before the ground with whatever is there.
             boolean landing = !ctx.world().noCollision(me, me.getBoundingBox().move(0, -1.3, 0));
             float sc = me.getAttackStrengthScale(0f);
             // 234854 mace easy defensive: it launched after our hop and the dive met it ten blocks up at 0.5 charge,
@@ -243,7 +247,8 @@ final class CombatMace {
             // 235231 ticks 606/952: passing it just under the apex smashed for 5 with nothing fallen yet.
             boolean passing = !spearKit && !target.onGround() && me.fallDistance >= 4 && me.getY() + me.getDeltaMovement().y * 2 < target.getY() + 0.5;
             if (me.fallDistance > 1.5 && me.getDeltaMovement().y < -0.05
-                    && (spearKit ? sc >= 0.99f : sc >= p.smashCharge || (landing || passing) && sc >= p.landingCharge) && target.hurtTime <= 0
+                    && (spearKit ? sc >= 0.99f : Smash.swing(sc, Smash.charge((float) p.smashCharge.real(), crit), (float) p.landingCharge.real(),
+                    landing || passing, crit && me.isSprinting())) && target.hurtTime <= 0
                     && exactReach(me, target) <= REACH - 0.05
                     // 1745 fight tick 91: the aim was off on the landing tick, hands.hit() did not click, and the
                     // hop was written off as spent.
@@ -257,14 +262,14 @@ final class CombatMace {
                 if (!spearKit) hands.look(lead);
                 if (clicked || spearKit) {
                     phase.macePhase = 0;
-                    phase.maceCool = p.hitCool;
+                    phase.maceCool = p.hitCool.get();
                     if (!spearKit && me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                 }
             } else if (me.onGround() && (spearKit || phase.maceTicks > 4) || phase.maceTicks > (spearKit ? 40 : 80)) {
                 // A hop that did not smash must not restart. Walk into the jab band first.
                 if (me.getOffhandItem().getItem() != Items.SHIELD) inv.toOffhand(me, Items.SHIELD);
                 phase.macePhase = 0;
-                phase.maceCool = spearKit ? 300 : p.missCool; // 300 after every missed hop left 8 smashes in a 90s round
+                phase.maceCool = spearKit ? 300 : p.missCool.get(); // 300 after every missed hop left 8 smashes in a 90s round
             }
             return hands.decide("mace");
         }
@@ -352,5 +357,30 @@ final class CombatMace {
             return hands.decide("mace");
         }
         return null;
+    }
+
+    /** The dive's swing and its critical hit: no game objects, so it is checked without the game. */
+    static final class Smash {
+
+        /** The game gives the critical hit above 0.9 of the charge it reads half a tick on from ours. */
+        static final float CRIT = 0.9f;
+
+        /** The charge the dive waits for: its own, and not under the critical hit's when that is what it is after. */
+        static float charge(float smash, boolean crit) {
+            return crit ? Math.max(smash, CRIT) : smash;
+        }
+
+        /**
+         * Swing now: at the charge waited for, unless the critical hit is wanted and a sprint would lose it; and on the
+         * last tick of the fall with whatever charge the last tick asks, sprint or no sprint.
+         */
+        static boolean swing(float sc, float need, float last, boolean lastTick, boolean sprintInTheWay) {
+            return lastTick && sc >= last || sc >= need && !sprintInTheWay;
+        }
+
+        /** Come out of the sprint: falling, and the fall is within {@code lead} ticks of the foe. */
+        static boolean unsprint(double vy, int fallTicks, int lead) {
+            return vy < 0 && fallTicks <= lead;
+        }
     }
 }

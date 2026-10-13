@@ -20,7 +20,7 @@ package baritone.gui.model;
 
 import java.util.Locale;
 
-/** String formatting for the path-status HUD. Pure Java. */
+/** String formatting for the path-status and autotune HUD cards. Pure Java. */
 public final class HudFormat {
 
     private HudFormat() {}
@@ -43,6 +43,41 @@ public final class HudFormat {
             return "";
         }
         return Math.round(ticks) + " t";
+    }
+
+    /** A difference in per cent with its sign: "+4.2%", "-12.5%", "+130%"; "--" when unknown. */
+    public static String signedPct(double pct) {
+        if (Double.isNaN(pct) || Double.isInfinite(pct)) {
+            return "--";
+        }
+        double p = Math.max(-999, Math.min(999, pct));
+        return String.format(Locale.ROOT, Math.abs(p) < 99.95 ? "%+.1f%%" : "%+.0f%%", p);
+    }
+
+    /** Damage per tick as damage per second at 20 TPS: "2.84", or "--" when unknown. */
+    public static String perSecond(double perTick) {
+        if (Double.isNaN(perTick) || Double.isInfinite(perTick) || perTick < 0) {
+            return "--";
+        }
+        return String.format(Locale.ROOT, "%.2f", perTick * 20);
+    }
+
+    /**
+     * Screen pixels per unit for a HUD card of the given width: the largest whole number that keeps the card within
+     * about a sixth of the screen's width and is not above the GUI scale, but never less than 2: a card's unit is half
+     * the size its small print is read at.
+     */
+    public static int cardScale(int screenWidthPx, int cardWidth, int guiScale) {
+        int fit = cardWidth > 0 ? (int) (screenWidthPx * 0.17 / cardWidth) : 1;
+        return Math.max(2, Math.min(guiScale, fit));
+    }
+
+    /**
+     * Scale for a card's small print when the card is drawn at {@code px} screen pixels per unit: about half, moved
+     * to where one font pixel covers a whole number of screen pixels, so the letters stay even at odd scales.
+     */
+    public static float finePrint(int px) {
+        return px <= 1 ? 1f : Math.round(px / 2f) / (float) px;
     }
 
     public static String distance(double blocks) {

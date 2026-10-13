@@ -56,6 +56,8 @@ public final class DefaultCommands {
                 new FollowCommand(baritone),
                 new PvpCommand(baritone),
                 new PveCommand(baritone),
+                new BastionCommand(baritone),
+                new StructuresCommand(baritone),
                 new PickupCommand(baritone),
                 new ExploreFilterCommand(baritone),
                 new ReloadAllCommand(baritone),
