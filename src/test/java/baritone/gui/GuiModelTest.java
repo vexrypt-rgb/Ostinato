@@ -89,6 +89,26 @@ public class GuiModelTest {
         assertEquals("1.5km", HudFormat.distance(1500));
         assertEquals("Block 57 67 70", HudFormat.goal("GoalBlock", new int[]{57, 67, 70}, "whatever"));
         assertEquals("XZ 100 -20", HudFormat.goal("GoalXZ", null, "GoalXZ{x=100,z=-20}"));
+        assertEquals("+4.2%", HudFormat.signedPct(4.24));
+        assertEquals("-12.5%", HudFormat.signedPct(-12.5));
+        assertEquals("+0.0%", HudFormat.signedPct(0));
+        assertEquals("+130%", HudFormat.signedPct(130.4));
+        assertEquals("+100%", HudFormat.signedPct(99.96));
+        assertEquals("-999%", HudFormat.signedPct(-5000));
+        assertEquals("--", HudFormat.signedPct(Double.NaN));
+        assertEquals("2.84", HudFormat.perSecond(0.142));
+        assertEquals("--", HudFormat.perSecond(Double.POSITIVE_INFINITY));
+        assertEquals(2, HudFormat.cardScale(1920, 132, 4));
+        assertEquals(3, HudFormat.cardScale(2560, 132, 4));
+        assertEquals(4, HudFormat.cardScale(3840, 132, 6));
+        assertEquals(2, HudFormat.cardScale(1280, 132, 3));
+        assertEquals("never below two pixels a unit", 2, HudFormat.cardScale(1920, 132, 1));
+        assertEquals("never above the GUI scale", 2, HudFormat.cardScale(3840, 132, 2));
+        assertEquals(0.5f, HudFormat.finePrint(2), 0);
+        assertEquals(2 / 3f, HudFormat.finePrint(3), 0);
+        assertEquals(0.5f, HudFormat.finePrint(4), 0);
+        assertEquals(0.6f, HudFormat.finePrint(5), 0);
+        assertEquals(1f, HudFormat.finePrint(1), 0);
     }
 
     @Test

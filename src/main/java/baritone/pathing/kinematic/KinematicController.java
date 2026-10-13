@@ -59,6 +59,20 @@ public final class KinematicController {
     private static final double PLACE_BRAKE = 4.5;
     /** Rollout bound: falls, hazards and climbing off the path are checked separately, so plans may cut corners wider. */
     private static final double WIDE = 1.1;
+    /**
+     * A path that winds down passes under itself in plan view, so a point belongs to a stretch of the line only at that
+     * stretch's level: from a little under its lower end to a jump above its higher end.
+     */
+    static final double LEVEL_BELOW = 0.6, LEVEL_ABOVE = 2.3;
+    /** How far past where a rollout has got to its next tick may be placed on the line; a tick moves well under a block. */
+    static final double REACH_AHEAD = 2.0;
+    /**
+     * Further than this in one flight hurts. Every step down a path is short enough to take, but a sprint carries past
+     * the landings of a staircase of them and they add up: 1 + 2 + 3 was one fall of six in bastion run 123.
+     */
+    static final double SAFE_FALL = 3.01;
+    /** The height the rollout's flight started from, to tell how far it has fallen when it lands. */
+    private double simTop;
 
     private final IPlayerContext ctx;
     private final ClientWorld world;
@@ -118,7 +132,7 @@ public final class KinematicController {
         }
         ClientWorld.readPlayer(ctx, real);
 
-        double[] here = project(real.x, real.z);
+        double[] here = project(line, real.x, real.y, real.z, Double.MAX_VALUE);
         double end = line.get(line.size() - 1)[3];
         double handback = endsAtPlace ? PLACE_HANDBACK : HANDBACK;
         if (here[1] > WIDE + 0.2) {
@@ -259,6 +273,7 @@ public final class KinematicController {
      */
     private double rollout(float yawOffset, int delay, boolean shortAim, double s0) {
         sim.copyFrom(real);
+        simTop = real.y + (real.onGround ? 0 : ctx.player().fallDistance);
         double s = s0, score = Double.NaN;
         int ground = 0, bumps = 0;
         boolean wasBumping = real.collidedH;
@@ -281,8 +296,8 @@ public final class KinematicController {
                 bumps++; // grazing a wall or trunk cancels sprint (and the sprint-jump boost) in vanilla
             }
             wasBumping = sim.collidedH;
-            double[] pr = project(sim.x, sim.z);
-            if (pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
+            double[] pr = project(line, sim.x, sim.y, sim.z, s + REACH_AHEAD);
+            if (hardLanding() || pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
                 return -1e9;
             }
             s = Math.max(s, pr[0]);
@@ -300,6 +315,17 @@ public final class KinematicController {
         return settles(cam, camVel, s) ? score : -1e9;
     }
 
+    /** Call after every rollout tick: whether the rollout just touched down from further up than is safe. */
+    private boolean hardLanding() {
+        if (!sim.onGround) {
+            simTop = Math.max(simTop, sim.y);
+            return false;
+        }
+        boolean hard = simTop - sim.y > SAFE_FALL;
+        simTop = sim.y;
+        return hard;
+    }
+
     /** Still airborne at the end of the horizon: make sure the last jump lands on the path rather than in a gap. */
     private boolean settles(float cam, float camVel, double s) {
         float[] vel = new float[1];
@@ -311,8 +337,8 @@ public final class KinematicController {
                 want = cam;
             }
             sim.tick(want, true, true, false);
-            double[] pr = project(sim.x, sim.z);
-            if (pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
+            double[] pr = project(line, sim.x, sim.y, sim.z, s + REACH_AHEAD);
+            if (hardLanding() || pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
                 return false;
             }
             s = Math.max(s, pr[0]);
@@ -497,10 +523,22 @@ public final class KinematicController {
     }
 
     /** Nearest point on the polyline: {arc length, horizontal distance}. */
-    private double[] project(double x, double z) {
+    /**
+     * Only stretches at the point's own level count, and none that start past {@code sMax}. In plan view alone, a spot in
+     * the air beside a winding way down lies "on" the stretch that passes underneath, further along and lower: running
+     * straight off the edge then scored as progress, and the driver kept steering there (bastion runs 119-121, ten blocks
+     * wide of the path and thirteen above it). With no stretch at its level the point is off the line: distance MAX_VALUE.
+     */
+    static double[] project(List<double[]> line, double x, double y, double z, double sMax) {
         double bestS = 0, bestD = Double.MAX_VALUE;
         for (int i = 0; i + 1 < line.size(); i++) {
             double[] a = line.get(i), b = line.get(i + 1);
+            if (a[3] > sMax) {
+                break;
+            }
+            if (y < Math.min(a[1], b[1]) - LEVEL_BELOW || y > Math.max(a[1], b[1]) + LEVEL_ABOVE) {
+                continue;
+            }
             double dx = b[0] - a[0], dz = b[2] - a[2];
             double len2 = dx * dx + dz * dz;
             double t = len2 == 0 ? 0 : ((x - a[0]) * dx + (z - a[2]) * dz) / len2;
@@ -512,7 +550,7 @@ public final class KinematicController {
                 bestS = a[3] + (b[3] - a[3]) * t;
             }
         }
-        return new double[]{bestS, Math.sqrt(bestD)};
+        return new double[]{bestS, bestD == Double.MAX_VALUE ? Double.MAX_VALUE : Math.sqrt(bestD)};
     }
 
     private double[] pointAt(double s) {

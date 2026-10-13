@@ -2056,6 +2056,30 @@ public final class Settings {
     /** Where the path status card sits: {@code RIGHT}, {@code LEFT}, {@code TOP_RIGHT} or {@code TOP_LEFT}. */
     public final Setting<String> pathHudAnchor = new Setting<>("RIGHT");
 
+    /**
+     * Let the Autotune Combat System move the combat timing values on its own while {@code #pvp} fights, one at a
+     * time. In turns with the value it trusts it fights under a neighbouring one, and keeps the neighbour only when
+     * the fights show it deals more damage without taking more, or takes less without dealing less. Off, every value
+     * stays at its baseline. What it has learned is kept for each kit in {@code baritone/autotune.txt} and read back
+     * the next time; {@code #pvp tune} shows it and {@code #pvp tune reset} forgets it.
+     */
+    public final Setting<Boolean> pvpAutotune = new Setting<>(false);
+
+    /** Show the Autotune Combat System card on the HUD while {@code #pvp} is fighting. Hidden while F3 is open. */
+    public final Setting<Boolean> renderAcsHud = new Setting<>(true);
+
+    /** Where the Autotune card sits: {@code TOP_LEFT}, {@code LEFT}, {@code TOP_RIGHT} or {@code RIGHT}. */
+    public final Setting<String> acsHudAnchor = new Setting<>("TOP_LEFT");
+
+    /** How solid the Autotune card's background is, from 0 (text only) to 1. */
+    public final Setting<Float> acsHudOpacity = new Setting<>(0.4f);
+
+    /**
+     * How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the
+     * largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.
+     */
+    public final Setting<Integer> acsHudScale = new Setting<>(0);
+
     /** Accent color of the Ostinato settings screen and path status card. */
     public final Setting<Color> guiAccentColor = new Setting<>(new Color(79, 209, 197));
 

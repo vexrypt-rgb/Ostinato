@@ -62,8 +62,8 @@ public final class SettingCategorizer {
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
-        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault");
-        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor");
+        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune");
+        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
         rule("^swarm", SWARM);

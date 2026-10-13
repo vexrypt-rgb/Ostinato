@@ -37,7 +37,13 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Random;
 import java.util.function.Predicate;
 
@@ -75,6 +81,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     public PvpProcess(Baritone baritone) {
         super(baritone);
+        recall();
     }
 
     public void attack(Predicate<LivingEntity> filter, String label) {
@@ -154,9 +161,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
+        // a new player object in the level we were in is a respawn: when it is immediate the client never ticks at 0 health
+        if (outcomeMe != null && me != outcomeMe && (me.level() == outcomeMe.level() || outcomeMe.getHealth() <= 0)) outcome.died();
+        outcomeMe = me;
         inv.closeAbandoned(me);
         checkEnemyReset(me);
         if (filter == null && enemies.isEmpty()) {
+            outcome.interrupt("lost");
+            remember(false);
             recorder.end(me, "lost");
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
@@ -165,9 +177,14 @@ public final class PvpProcess extends BaritoneProcessHelper {
         boolean respawned = lastHealth >= 0 && lastHealth < 5 && hp > lastHealth + 8;
         if (respawned) inv.resetBreaks();
         lastHealth = hp;
-        // Bench respawn drops the kit before the kit is re-equipped. Do not swing naked.
+        // Bench respawn drops the kit before the kit is re-equipped. Do not swing naked: nothing worn at all, since
+        // a helmet that broke in the fight leaves the head bare too and the fight goes on.
         if (Integer.getInteger("ostinato.vexbench", 0) > 0 && (respawned
-                || me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty())) {
+                || me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                && me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).isEmpty()
+                && me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).isEmpty()
+                && me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).isEmpty())) {
+            outcome.interrupt("lost");
             if (recorder.active()) recorder.end(me, respawned ? "death" : "lost");
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
@@ -178,18 +195,53 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (target != prevTarget) {
             spears.retarget();
             spears.spearReleaseNext = false;
+            if (prevTarget != null && prevTarget.isDeadOrDying()) outcome.foeDied(prevTarget.getId(), eyeToBox(me, prevTarget));
         }
         if (target != null && me.tickCount % 5 == 0 && phase.macePhase == 0) target = targeting.retarget(me, target);
         baritone.getInputOverrideHandler().clearAllKeys();
         if (target == null) {
             if (prevTarget != null && prevTarget.isDeadOrDying()) recorder.markWin();
+            outcome.interrupt("lost");
+            remember(false);
             recorder.end(me, "lost");
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        survival.keepTotem(me);
+        // before anything is decided, so a whole tick is fought under one setting. The tuner only names another one
+        // when a window has closed, which happens after a tick's decisions; the kit is read once for both of them
+        tuneKit = outcome.idle() ? kit(me) : outcome.kit();
+        tuneLag = lagBand(me);
+        tuneContext = CombatOutcome.context(tuneKit, target instanceof Player, tuneLag);
+        boolean auto = Baritone.settings().pvpAutotune.value;
+        if (auto != tuner.on()) {
+            tuner.on(auto);
+            fights.on(auto);
+            if (!auto) { // off is the baselines, whatever was trusted or on trial
+                policy.tuned.forEach(CombatPolicy.Tuned::reset);
+                policy.whole.forEach(CombatPolicy.Tuned::reset);
+            }
+        }
+        if (auto) {
+            boolean opening = outcome.opening();
+            for (int i = 0; i < policy.tuned.size(); i++) policy.tuned.get(i).set(tuner.value(tuneContext, i, opening));
+            // a fight is fought whole under one value of these: they move only between two
+            if (outcome.between()) {
+                for (int i = 0; i < policy.whole.size(); i++) policy.whole.get(i).set(fights.value(tuneContext, i));
+            }
+        }
+        boolean totemInHand = survival.keepTotem(me);
+        if (!totemInHand && !inv.wear(me)) inv.freshShield(me);
+        String gear = inv.took();
+        if (gear != null) recorder.note("gear " + gear);
         targeting.track(target);
-        if (!recorder.active()) recorder.begin(me, target, label);
+        if (!recorder.active()) {
+            recorder.begin(me, target, label);
+            notedLag = -1;
+        }
+        if (tuneLag != notedLag) { // at the start of every fight and whenever the band moves
+            recorder.note(lag.note());
+            notedLag = tuneLag;
+        }
         tickDec = "-";
         brokeNote = inv.noteBreaks(me);
         if (!brokeNote.isEmpty()) {
@@ -218,6 +270,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
             // only a charge in progress blocks a bite, and at HP <= 5 the charge is dropped for
             // the apple. Blocking every bite within 14 blocks left a spear kit unable to heal.
             boolean charging = inv.spearSlot(me) >= 0 && spears.spearUseTicks > 0;
+            if (totemInHand) return decide("totem"); // the hand is the totem's until the offhand has its own
+            // a potion heals at once where an apple takes 32 ticks: when both are carried the potion is for the low moment
+            PathingCommand potted = potions.heal(me, target, survival.eatTicks);
+            if (potted != null) return potted;
+            PathingCommand wet = buckets.water(me, survival.eatTicks, phase.macePhase == 0 && !me.isFallFlying());
+            if (wet != null) return wet;
             PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
             if (ate != null) return ate;
 
@@ -230,6 +288,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (hp <= 6 && !survival.canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
                 return decide("flee", survival.flee(me, target, dist));
             }
+            boolean free = phase.macePhase == 0 && phase.pearlStage == 0 && !me.isFallFlying() && !charging;
+            PathingCommand boosted = potions.boost(me, target, dist, free);
+            if (boosted != null) return boosted;
+            PathingCommand mended = mending.tend(me, dist, targetEating, free);
+            if (mended != null) return mended;
+            if (mending.leave(me, dist, free)) return decide("leave", survival.flee(me, target, dist));
 
             // A spear that raises its shield here never steps into the 2-4 jab band.
             // 1654 bench: a mace's 33-tick cooldown kept the shield up for 405 of 1800 ticks, and
@@ -253,6 +317,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (dive != null) return dive;
             PathingCommand guarded = shield.guard(me, target, dist, blockMelee);
             if (guarded != null) return guarded;
+            PathingCommand burnt = buckets.lava(me, target, dist, los, free);
+            if (burnt != null) return burnt;
 
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
             if (explosives.crystal(me, target)) {
@@ -303,13 +369,161 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (spear >= 0) return spears.pass(me, target, dist, los, spear, hr, er, targetEating);
             return melee.exchange(me, target, dist);
         } finally {
-            recorder.tick(me, target, eyeToBox(me, target),
+            double seen = eyeToBox(me, target);
+            recorder.tick(me, target, seen,
                     targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
                             + (ctx.minecraft().gui.screen() != null ? " scr=" + ctx.minecraft().gui.screen().getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + click.clickKind,
                     tickDec + brokeNote, attacks);
             click.clickKind = '-';
+            // after the tick's row, so a window's line is stamped with the tick that closed it
+            lag.tick(me.tickCount, target.getId(), target.hurtTime, target.hurtDuration, attacks != outcomeAttacks, target.isOnFire());
+            stakes(me);
+            outcome.tick(target.getId(), target instanceof Player, life(target), target.hurtTime, target.hurtDuration, life(me), seen,
+                    attacks != outcomeAttacks, tuneKit, policy.setting(), tuneLag);
+            outcomeAttacks = attacks;
+            if (tuner.urgent() || fights.urgent()) remember(true); // a verdict is the one thing not to lose
+        }
+    }
+
+    /**
+     * The lag band this tick is fought in. The measure is the last server's until we are on another, and the
+     * server's own figure for us is read each tick: it is what there is before our first hits have landed.
+     */
+    private int lagBand(Player me) {
+        net.minecraft.client.multiplayer.ClientPacketListener net = ctx.minecraft().getConnection();
+        if (net != lagServer) {
+            lag.reset();
+            lagServer = net;
+        }
+        net.minecraft.client.multiplayer.PlayerInfo info = net == null ? null : net.getPlayerInfo(me.getUUID());
+        lag.reported(info == null ? -1 : info.getLatency());
+        return lag.band();
+    }
+
+    /** Health and absorption as {@link CombatOutcome} counts them: nothing once dead. */
+    private static float life(LivingEntity e) {
+        return e.getHealth() > 0 ? e.getHealth() + e.getAbsorptionAmount() : 0;
+    }
+
+    /** What we carry into the fight, for {@link CombatOutcome} to keep unlike fights apart. */
+    private String kit(Player me) {
+        StringBuilder sb = new StringBuilder();
+        if (inv.best(me, SWORDS) >= 0) sb.append("sword+");
+        if (inv.best(me, AXES) >= 0) sb.append("axe+");
+        if (inv.slotOf(me, Items.MACE) >= 0) sb.append("mace+");
+        if (inv.spearSlot(me) >= 0) sb.append("spear+");
+        if (me.getOffhandItem().getItem() == Items.SHIELD || inv.slotOf(me, Items.SHIELD) >= 0) sb.append("shield+");
+        return sb.length() == 0 ? "bare" : sb.substring(0, sb.length() - 1);
+    }
+
+    /** Tells the observer what the tick's fight is fought for: whose health is how much, under which stance, and what we carry to stay alive with. */
+    private void stakes(Player me) {
+        int apples = inv.count(me, Items.GOLDEN_APPLE) + inv.count(me, Items.ENCHANTED_GOLDEN_APPLE);
+        int heals = inv.potions(me, MobEffects.INSTANT_HEALTH), totems = inv.count(me, Items.TOTEM_OF_UNDYING);
+        String carried = (apples > 0 ? "+apple" : "") + (heals > 0 ? "+heal" : "") + (totems > 0 ? "+totem" : "")
+                + (inv.count(me, Items.ENDER_PEARL) > 0 ? "+pearl" : "");
+        outcome.stakes(me.getMaxHealth(), target.getMaxHealth(), policy.stance(), carried.isEmpty() ? "" : carried.substring(1), apples + heals + totems);
+    }
+
+    /**
+     * {@code #pvp tune}: show the tuned numbers, what the fights under each setting were worth and what the autotune
+     * has made of them, or move one number by hand ({@code [name] <value>} in the number's own unit, the shield's
+     * due-late window when no name is given; refused while {@code pvpAutotune} is on). {@code reset} puts them all
+     * back at their baselines and forgets what the autotune learned, the saved file with it; {@code clear} forgets
+     * the tallies. The numbers a fight is fought whole under are shown and moved the same way.
+     */
+    public String tune(String arg) {
+        boolean auto = Baritone.settings().pvpAutotune.value;
+        List<CombatPolicy.Tuned> all = new java.util.ArrayList<>(policy.tuned);
+        all.addAll(policy.whole);
+        if ("reset".equals(arg)) {
+            tuner.clear();
+            fights.clear();
+            all.forEach(CombatPolicy.Tuned::reset);
+            remember(true);
+        } else if ("clear".equals(arg)) {
+            outcome.clear();
+        } else if (arg != null) {
+            String[] parts = arg.trim().split("\\s+");
+            CombatPolicy.Tuned t = parts.length == 1 ? policy.shield.dueLate : null;
+            for (CombatPolicy.Tuned k : all) {
+                if (parts.length == 2 && (k.name.equalsIgnoreCase(parts[0]) || k.name.substring(k.name.indexOf('.') + 1).equalsIgnoreCase(parts[0]))) t = k;
+            }
+            String usage = "pvp tune [[name] value | reset | clear], names: " + all.stream().map(k -> k.name).collect(java.util.stream.Collectors.joining(" "));
+            if (t == null) return usage;
+            try {
+                int v = (int) Math.round(Double.parseDouble(parts[parts.length - 1]) * t.per);
+                if (auto) return t.name + " stays " + t.show(t.get()) + ": the autotune is moving it (pvpAutotune false to move it by hand)";
+                if (!t.set(v)) return t.name + " stays " + t.show(t.get()) + ": " + parts[parts.length - 1] + " is outside " + t.show(t.min) + ".." + t.show(t.max);
+            } catch (NumberFormatException e) {
+                return usage;
+            }
+        }
+        StringBuilder sb = new StringBuilder("setting " + policy.setting() + ", autotune " + (auto ? "on" : "off")
+                + (policy.stance().equals(CombatPolicy.BASE) ? "" : ", per fight " + policy.stance()));
+        for (CombatPolicy.Tuned t : all) {
+            sb.append('\n').append(t.name).append('=').append(t.show(t.get())).append(" (baseline ").append(t.show(t.base)).append(", ")
+                    .append(t.show(t.min)).append("..").append(t.show(t.max)).append(", step ").append(t.show(t.step)).append(')');
+        }
+        for (String line : outcome.report()) sb.append('\n').append(line);
+        for (String line : tuner.report()) sb.append('\n').append(line);
+        for (String line : fights.report()) sb.append('\n').append(line);
+        return sb.toString();
+    }
+
+    /** What the autotune is doing for the kit and foe at hand, for the HUD card. */
+    public AcsStatus acs() {
+        AcsStatus st = tuner.status(tuneContext);
+        fights.status(tuneContext, st);
+        st.fighting = target != null;
+        st.lag = tuneLag;
+        if (st.knob >= 0) st.value = policy.tuned.get(st.knob).get();
+        st.windowTicks = outcome.open();
+        CombatOutcome.Tally total = tuneContext == null ? null : outcome.total(tuneContext, policy.setting());
+        if (total != null) {
+            st.windows = total.windows;
+            st.dealtRate = total.dealtRate();
+            st.takenRate = total.takenRate();
+        }
+        return st;
+    }
+
+    /**
+     * Writes what the autotune has learned to its file, so it is there next session: at once when asked to, otherwise
+     * when something has changed and the last writing is a minute old. A failure is noted once and costs nothing but
+     * the memory.
+     */
+    private void remember(boolean now) {
+        if (!tuner.dirty() && !fights.dirty()) return;
+        long ms = System.currentTimeMillis();
+        if (!now && ms - rememberedAt < 60_000) return;
+        rememberedAt = ms;
+        try {
+            Path tmp = tunerFile.resolveSibling(tunerFile.getFileName() + ".tmp");
+            Files.createDirectories(tunerFile.getParent());
+            List<String> lines = tuner.save();
+            lines.addAll(fights.save());
+            Files.write(tmp, lines, StandardCharsets.UTF_8);
+            Files.move(tmp, tunerFile, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            if (!rememberFailed) recorder.note("acs-file not written: " + e);
+            rememberFailed = true;
+        }
+        tuner.saved(); // not again until there is something new to write
+        fights.saved();
+    }
+
+    /** Reads back what an earlier session learned. Nothing read is in force while {@code pvpAutotune} is off. */
+    private void recall() {
+        try {
+            if (!Files.isRegularFile(tunerFile)) return;
+            List<String> lines = Files.readAllLines(tunerFile, StandardCharsets.UTF_8);
+            tuner.load(lines);
+            fights.load(lines);
+        } catch (IOException | RuntimeException e) {
+            // an unreadable file is a first session
         }
     }
 
@@ -326,7 +540,28 @@ public final class PvpProcess extends BaritoneProcessHelper {
     });
     private final CombatPhase phase = new CombatPhase();
     private final CombatSwing swing = new CombatSwing();
-    private final CombatTools tools = new CombatTools(ctx, inv, aimer, targeting, explosives, new CombatTools.Hands() {
+    private final CombatPolicy policy = new CombatPolicy();
+    private final CombatPotions potions = new CombatPotions(ctx, inv, aimer, targeting, policy.pots, new CombatPotions.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+    });
+    private final CombatMending mending = new CombatMending(inv, aimer, policy.mend, new CombatMending.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public void note(String line) { recorder.note(line); }
+    });
+    private final CombatBuckets buckets = new CombatBuckets(ctx, inv, aimer, policy.buckets, new CombatBuckets.Hands() {
+        public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+        public void key(Input in) { PvpProcess.this.key(in); }
+        public void use(boolean down) { PvpProcess.this.use(down); }
+        public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
+        public void note(String line) { recorder.note(line); }
+    });
+    private final CombatTools tools = new CombatTools(ctx, inv, aimer, targeting, explosives, potions, new CombatTools.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void use(boolean down) { PvpProcess.this.use(down); }
@@ -334,7 +569,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
         public void attacked() { attacks++; }
     });
-    private final CombatSurvival survival = new CombatSurvival(ctx, inv, aimer, explosives, phase, new CombatSurvival.Hands() {
+    private final CombatSurvival survival = new CombatSurvival(ctx, inv, aimer, explosives, phase, policy.heal, policy.totems, new CombatSurvival.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void use(boolean down) { PvpProcess.this.use(down); }
@@ -344,7 +579,25 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void gappleEaten() { gapples++; }
         public void abortCharge() { spears.abortCharge(); }
     });
-    private final CombatPolicy policy = new CombatPolicy();
+    /** Where the autotune keeps what it has learned from one session to the next. */
+    private final Path tunerFile = baritone.getDirectory().resolve("autotune.txt");
+    private long rememberedAt;
+    private boolean rememberFailed;
+    /** Moves the policy's tuned numbers between windows while {@code pvpAutotune} is on. Off, it is never asked. */
+    private final CombatTuner tuner = new CombatTuner(policy.tuned, recorder::note);
+    /** Moves the numbers a fight is fought whole under, between two fights, while it is on. Off, it is never asked either. */
+    private final CombatFightTuner fights = new CombatFightTuner(policy.whole, recorder::note, new Random());
+    /** Counts what the fights are worth under each setting of them. Reads only: no decision looks at it. */
+    private final CombatOutcome outcome = new CombatOutcome(recorder::note, new CombatOutcome.Listener() {
+        public void window(String context, String setting, CombatOutcome.Tally window, String end) { tuner.window(context, setting, window, end); }
+        public void fight(CombatOutcome.Fight fight) { fights.fight(fight); }
+    });
+    private String tuneKit, tuneContext; // this tick's kit and what its windows are kept under
+    private final CombatLag lag = new CombatLag();
+    private Object lagServer; // the connection the measure was made on
+    private int tuneLag, notedLag = -1; // this tick's lag band, and the last one the fight log was told of
+    private Player outcomeMe;
+    private int outcomeAttacks;
     private final CombatShield shield = new CombatShield(ctx, inv, aimer, targeting, defense, phase, policy.shield, new CombatShield.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
@@ -359,7 +612,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public void attacked() { attacks++; }
     });
-    private final CombatMelee melee = new CombatMelee(inv, swing, targeting, shield, movement, new CombatMelee.Hands() {
+    private final CombatMelee melee = new CombatMelee(inv, swing, targeting, shield, movement, policy.melee, new CombatMelee.Hands() {
         public void key(Input in) { PvpProcess.this.key(in); }
         public boolean hit(Player me) { return PvpProcess.this.hit(me); }
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
@@ -388,7 +641,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         public PathingCommand decide(String d, PathingCommand cmd) { return PvpProcess.this.decide(d, cmd); }
         public int eatTicks() { return survival.eatTicks; }
     });
-    private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, new CombatPearl.Hands() {
+    private final CombatPearl pearls = new CombatPearl(ctx, inv, aimer, targeting, phase, policy.pearls, new CombatPearl.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void look(Vec3 at) { PvpProcess.this.look(at); }
         public PathingCommand decide(String d) { return PvpProcess.this.decide(d); }
@@ -427,7 +680,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private PathingCommand special(Player me, double dist, boolean los) {
         if (phase.maceCool > 0) phase.maceCool--;
-        int mace = inv.slotOf(me, Items.MACE), wind = inv.slotOf(me, Items.WIND_CHARGE);
+        int mace = inv.mace(me, target), wind = inv.slotOf(me, Items.WIND_CHARGE);
         if (phase.windCool > 0) phase.windCool--;
         boolean overhead = !target.onGround() && target.getY() > me.getY() + 3;
         // Spear kit still jabs. Wind is only a knock-in just outside the band, or the hop under a mace smash.
@@ -453,7 +706,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (covered != null) return covered;
         PathingCommand feet = winds.feet(me, target, dist, los, wind);
         if (feet != null) return feet;
-        int pearlSlot = inv.slotOf(me, Items.ENDER_PEARL);
+        int pearlSlot = inv.spare(me, Items.ENDER_PEARL, policy.pearls.keep.get()); // the ones kept back are the escape's
         float myHp = me.getHealth() + me.getAbsorptionAmount();
         PathingCommand dropped = maces.drop(me, target, los, mace, wind);
         if (dropped != null) return dropped;
@@ -463,6 +716,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (pearls.handled) return lifted;
         PathingCommand struck = pearls.strike(me, target, dist, los, overhead, mace, wind);
         if (pearls.handled) return struck;
+        PathingCommand chased = pearls.chase(me, target, dist, los, target.isUsingItem() && target.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD), pearlSlot, myHp);
+        if (chased != null) return chased;
         PathingCommand winged = elytra.run(me, target, dist, los, overhead, mace, wind);
         if (winged != null) return winged;
         if (mace >= 0) return maces.run(me, target, dist, los, overhead, mace, wind);
@@ -569,6 +824,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     @Override
     public void onLostControl() {
+        outcome.interrupt("lost");
+        remember(true);
+        outcomeMe = null;
         recorder.end(ctx.player(), "lost");
         filter = null;
         enemies.clear();
@@ -577,6 +835,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         shield.axeHeld = shield.flicked = false;
         shield.swingGap = shield.unseenBlock = click.probeTick = 0;
         tools.reset();
+        potions.reset();
+        buckets.reset();
+        mending.reset();
         inv.resetBreaks();
         inv.closeScreen();
         shield.lastShieldTick = shield.lastAxeTick = -1000; // tickCount restarts with the respawned player

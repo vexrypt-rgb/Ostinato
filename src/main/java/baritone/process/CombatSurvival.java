@@ -33,21 +33,26 @@ final class CombatSurvival {
     }
 
     int eatTicks, fleeTicks;
+    private int handTicks;
 
     private final IPlayerContext ctx;
     private final CombatInventory inv;
     private final CombatAim aimer;
     private final CombatExplosives explosives;
     private final CombatPhase phase;
+    private final CombatPolicy.Heal heal;
+    private final CombatPolicy.Totems totems;
     private final Hands hands;
     private LivingEntity target; // set on each entry point; the routines below read the fight's target from it
 
-    CombatSurvival(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatExplosives explosives, CombatPhase phase, Hands hands) {
+    CombatSurvival(IPlayerContext ctx, CombatInventory inv, CombatAim aimer, CombatExplosives explosives, CombatPhase phase, CombatPolicy.Heal heal, CombatPolicy.Totems totems, Hands hands) {
         this.ctx = ctx;
         this.inv = inv;
         this.aimer = aimer;
         this.explosives = explosives;
         this.phase = phase;
+        this.heal = heal;
+        this.totems = totems;
         this.hands = hands;
     }
 
@@ -77,13 +82,15 @@ final class CombatSurvival {
         // two critical sword hits (4.52 each) take 9.04: the line to eat at, when the foe gives room, is two hits, not one
         // far from the foe the bite is cheap, so top up earlier: a bite that starts at 9 with the foe in reach is a coin flip
         boolean roomy = eyeToBox(me, target) > 6;
-        boolean critical = me.getHealth() <= (roomy ? 12 : 9) && (eatTicks > 0 || !pressed);
+        int apples = inv.count(me, Items.GOLDEN_APPLE) + inv.count(me, Items.ENCHANTED_GOLDEN_APPLE);
+        boolean few = apples > 0 && apples <= heal.keep.get(); // the last ones are for the near line
+        boolean critical = me.getHealth() <= (roomy && !few ? heal.eatFar.real() : heal.eatNear.real()) && (eatTicks > 0 || !pressed);
         boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
         if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
             hands.use(false);
             eatTicks = 0;
         } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
-            && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= 11 && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
+            && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= heal.eatSafe.real() && !few && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
                 && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
             if (charging) {
                 hands.use(false);
@@ -152,8 +159,38 @@ final class CombatSurvival {
         return true;
     }
 
-    void keepTotem(Player me) {
-        if (me.getHealth() > 8 && !explosives.fighting() || me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) return;
-        inv.toOffhand(me, Items.TOTEM_OF_UNDYING);
+    /** The totem rules on their own, in a class that loads without the game. */
+    static final class Totem {
+        private Totem() {}
+
+        /** A totem is wanted on us when low, and all through a fight with explosives, where one blast is a whole health bar. */
+        static boolean wanted(float hp, boolean explosives, double wantAt) {
+            return hp <= wantAt || explosives;
+        }
+
+        /**
+         * A totem saves from either hand, and the hotbar takes one tick where the offhand swap takes two with the
+         * inventory open. With the offhand empty and a blast near, or next to no health left, the one in the hotbar
+         * is held until the offhand has its own: the second crystal of a pair comes inside those two ticks.
+         */
+        static boolean inHand(boolean offhand, int hotbar, boolean blastNear, float hp, double handAt) {
+            return !offhand && hotbar >= 0 && (blastNear || hp <= handAt);
+        }
+    }
+
+    /** Keep a totem on us. True while the hand itself is given to one, which is then all this tick does. */
+    boolean keepTotem(Player me) {
+        boolean off = me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING;
+        if (off || !Totem.wanted(me.getHealth(), explosives.fighting(), totems.wantAt.real())) {
+            handTicks = 0;
+            return false;
+        }
+        int hot = inv.hotbarOf(me, Items.TOTEM_OF_UNDYING);
+        // the swap is two ticks; a hand still on the totem after ten means the swap is not happening, and the fight goes on
+        boolean hand = handTicks < 10 && Totem.inHand(false, hot, explosives.blastThreat(me), me.getHealth(), totems.handAt.real()) && hands.select(me, hot);
+        if (hand) handTicks++;
+        // the offhand takes one from the main inventory when there is one, so the one in the hand is there for the next pop
+        inv.toOffhand(me, Items.TOTEM_OF_UNDYING, true);
+        return hand;
     }
 }

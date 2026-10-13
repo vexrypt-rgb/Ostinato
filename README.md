@@ -17,17 +17,18 @@ version of `main`.
 
 | Minecraft | Branch | Java | Status |
 | --- | --- | --- | --- |
-| 1.21.4 | `main` | 21 | Primary. Pairs with TenorClef `:1.21.4`. |
+| 26.3 | `main` | 25 | Primary line. Not a TenorClef pairing. |
+| 1.21.11 | `1.21.11` | 21 | Previous main line. TenorClef's 1.21.11 module is not a release target. |
+| 1.21.11 (Conductor module edition) | `conductor-module` | 21 | Ostinato plus its Conductor module. |
+| 1.21.4 | `1.21.4` | 21 | Pairs with TenorClef `:1.21.4`. |
 | 1.16.1 | `1.16.1` | 8 | Legacy. Pairs with TenorClef `:1.16.1`. Gradle 4.9; do not build with JDK 21. |
-| 1.21.11 | `1.21.11` | 21 | Experimental. TenorClef's 1.21.11 module is not a release target. |
-| 26.3 | `26.3` | 25 | Upstream 26.x line. Not a TenorClef pairing. |
 
-Do not point a 1.21.4 TenorClef build at a jar from `1.21.11` or `26.3`. See
+Do not point a 1.21.4 TenorClef build at a jar from `1.21.11` or `main` (26.3). See
 [TenorClef's wiring guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md).
 
 ## Build
 
-Java 21 is required on `main`.
+Java 25 is required on `main` (26.3). The `1.21.11` and `1.21.4` branches need Java 21.
 
 On Windows:
 
@@ -51,7 +52,7 @@ Keep the trees as siblings. Build Ostinato first, then TenorClef.
 
 | TenorClef module | Ostinato branch | Typical staged jar |
 | --- | --- | --- |
-| `:1.21.4` | `main` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-1.21.4.jar` |
+| `:1.21.4` | `1.21.4` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-1.21.4.jar` |
 | `:1.16.1` | `1.16.1` | `libs/baritone-unoptimized-fabric-1.16.1.jar` |
 | `:1.21.11` | `1.21.11` | experimental; TenorClef does not yet compile this module |
 

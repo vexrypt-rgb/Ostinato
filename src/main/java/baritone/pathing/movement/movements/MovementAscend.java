@@ -191,14 +191,28 @@ public class MovementAscend extends Movement {
         BlockState jumpingOnto = BlockStateInterface.get(ctx, positionToPlace);
         if (!MovementHelper.canWalkOn(ctx, positionToPlace, jumpingOnto)) {
             ticksWithoutPlacement++;
+            // checked first: the back-off below returned early forever when we never stopped overlapping the cell (run 44: 4 minutes)
+            if (ticksWithoutPlacement > 80) return state.setStatus(MovementStatus.UNREACHABLE);
+            // standing over the cell we must fill (overhanging the edge) blocks the placement: step back onto src first
+            if (ctx.player().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
+                // walking "towards src" from its edge overshot and walked us off a cliff in-game (run 23, an 80-block
+                // fall): go back with the keys, sneaking, which cannot leave the block we stand on
+                MovementHelper.moveTowardsWithoutRotation(ctx, state, src);
+                state.setInput(Input.SNEAK, true);
+                return state;
+            }
+            if (ticksWithoutPlacement > 80) {
+                // no face we can see and reach: fail so the path is replanned instead of waiting here forever
+                return state.setStatus(MovementStatus.UNREACHABLE);
+            }
             if (MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), false, true) == PlaceResult.READY_TO_PLACE) {
                 state.setInput(Input.SNEAK, true);
                 if (ctx.player().isCrouching()) {
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }
-            if (ticksWithoutPlacement > 10) {
-                // After 10 ticks without placement, we might be standing in the way, move back
+            if (ticksWithoutPlacement > 10 && BackOff.allowed(ctx.player().getX(), ctx.player().getZ(), src.getX(), src.getZ())) {
+                // After 10 ticks without placement, we might be standing in the way, move back (but never off src)
                 state.setInput(Input.MOVE_BACK, true);
             }
 
