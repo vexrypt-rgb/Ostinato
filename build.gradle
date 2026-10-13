@@ -152,6 +152,9 @@ sourceSets {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    // Conductor's contract (pure Java, no dependencies), for baritone.conductor.OstinatoModule only. Conductor
+    // provides these classes at runtime; without Conductor they are never loaded. See libs/README.md.
+    compileOnly files('libs/conductor-contract-0.5.0.jar')
 }
 
 jar {

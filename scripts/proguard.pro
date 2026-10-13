@@ -44,6 +44,10 @@
     public <fields>;
 }
 
+# the Conductor module is found by name through META-INF/services; Conductor provides its contract at runtime
+-keep class baritone.conductor.** { *; }
+-dontwarn conductor.contract.**
+
 # need to keep mixin names
 -keep class baritone.launch.** { *; }
 
