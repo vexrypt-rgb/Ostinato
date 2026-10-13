@@ -39,7 +39,7 @@ public final class BastTest implements AbstractGameEventListener {
     private void say(String m) {
         System.out.println(m);
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) mc.execute(() -> mc.gui.getChat().addMessage(net.minecraft.network.chat.Component.literal(m)));
+        if (mc.player != null) mc.execute(() -> baritone.api.BaritoneAPI.getSettings().logger.value.accept(net.minecraft.network.chat.Component.literal(m)));
     }
 
     private void run(String cmd) {
@@ -95,16 +95,16 @@ public final class BastTest implements AbstractGameEventListener {
     public void onTick(TickEvent e) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.getSingleplayerServer() == null) {
-            if (state == 0 && mc.screen instanceof TitleScreen) {
+            if (state == 0 && mc.gui.screen() instanceof TitleScreen) {
                 state = 1;
                 say("BAST creating world");
                 CreateWorldScreen.openFresh(mc, () -> {});
                 wait = 80;
-            } else if (state == 1 && --wait <= 0 && mc.screen instanceof CreateWorldScreen cw) {
+            } else if (state == 1 && --wait <= 0 && mc.gui.screen() instanceof CreateWorldScreen cw) {
                 // -Dostinato.basttest.seed=<seed>: the same world, bastion and start again, to try a fix against what prompted it
                 String seed = System.getProperty("ostinato.basttest.seed");
                 if (seed != null) cw.getUiState().setSeed(seed);
-                for (var c : mc.screen.children()) {
+                for (var c : mc.gui.screen().children()) {
                     if (c instanceof Button bt && bt.getMessage().getString().contains("Create New World")) {
                         state = 2;
                         bt.onPress(new net.minecraft.client.input.InputWithModifiers() {
@@ -158,7 +158,7 @@ public final class BastTest implements AbstractGameEventListener {
                     BlockPos at = r.getFirst();
                     if (want.equals("any")) { found[0] = at; break outer; }
                     var chunk = level.getChunk(at.getX() >> 4, at.getZ() >> 4, net.minecraft.world.level.chunk.status.ChunkStatus.STRUCTURE_STARTS);
-                    var start = level.structureManager().getStartForStructure(net.minecraft.core.SectionPos.of(at), h.get().value(), chunk);
+                    var start = level.structureManager().getStartForStructure(h.get().value(), chunk);
                     if (start == null || start.getPieces().isEmpty()) continue;
                     String piece = String.valueOf(start.getPieces().get(0) instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece pe ? pe.getElement() : start.getPieces().get(0));
                     System.out.println("BAST candidate " + at + " " + piece);
@@ -166,7 +166,7 @@ public final class BastTest implements AbstractGameEventListener {
                 }
             }).join();
             target = found[0];
-            say("BAST target " + target + " seed " + sv.getWorldData().worldGenOptions().seed());
+            say("BAST target " + target + " seed " + sv.overworld().getSeed());
             if (REAL) {
                 run("execute in minecraft:the_nether run forceload add " + (target.getX() + 90) + " " + target.getZ());
                 BlockPos[] spot = new BlockPos[3];

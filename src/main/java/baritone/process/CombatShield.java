@@ -66,11 +66,16 @@ final class CombatShield {
     }
 
     /** Per-tick read of the foe: has it answered our shield with a flick, and when did it last swing. Runs before the block. */
+    private boolean targetWasSwinging;
+
     void observe(Player me, LivingEntity target) {
         // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
         if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
                 && me.getCooldowns().isOnCooldown(me.getOffhandItem())) flicked = true;
-        if (target.swinging && target.swingTime == 0) { // before the block: a held shield returns early
+        boolean swingNow = target.isSwinging();
+        boolean swingStart = swingNow && !targetWasSwinging;
+        targetWasSwinging = swingNow;
+        if (swingStart) { // before the block: a held shield returns early
             int sinceLast = me.tickCount - targetSwingTick;
             if (sinceLast >= 6 && sinceLast <= 40) swingGap = sinceLast;
             targetSwingTick = me.tickCount;

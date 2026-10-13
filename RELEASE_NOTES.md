@@ -9,13 +9,15 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 
 | Minecraft | Branch | Java |
 | --- | --- | --- |
-| 1.21.11 | `main` | 21 |
+| 26.3 | `main` | 25 |
+| 1.21.11 | `1.21.11` | 21 |
 | 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 |
 | 1.21.4 | `1.21.4` | 21 |
-| 26.3 | `26.3` | 25 |
 | 1.16.1 | `1.16.1` | 8 |
 
-## New in v1.21.0 (1.21.11)
+## New in v1.21.0 (26.3 and 1.21.11)
+
+`main` is now the Minecraft 26.3 line (Java 25); 1.21.11 continues on branch `1.21.11`.
 
 This release brings the 1.21.11 line's feature branches together, and lets Ostinato share the controls with
 other mods through Conductor.

@@ -38,7 +38,6 @@ import net.minecraft.server.packs.repository.ServerPacksSource;
 import net.minecraft.server.packs.resources.CloseableResourceManager;
 import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import net.minecraft.tags.TagLoader;
-import net.minecraft.world.RandomSequences;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -60,7 +59,6 @@ import net.minecraft.world.phys.Vec3;
 import sun.misc.Unsafe;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -262,8 +260,8 @@ public final class BlockOptionalMeta {
         private static Unsafe unsafe = getUnsafe();
         private static CompletableFuture<RegistryAccess> registryAccess = load();
 
-        public ServerLevelStub(MinecraftServer $$0, Executor $$1, LevelStorageSource.LevelStorageAccess $$2, ServerLevelData $$3, ResourceKey<Level> $$4, LevelStem $$5, boolean $$6, long $$7, List<CustomSpawner> $$8, boolean $$9, @Nullable RandomSequences $$10) {
-            super($$0, $$1, $$2, $$3, $$4, $$5, $$6, $$7, $$8, $$9, $$10);
+        public ServerLevelStub(MinecraftServer $$0, Executor $$1, LevelStorageSource.LevelStorageAccess $$2, ServerLevelData $$3, ResourceKey<Level> $$4, LevelStem $$5, boolean $$6, long $$7, List<CustomSpawner> $$8, boolean $$9) {
+            super($$0, $$1, $$2, $$3, $$4, $$5, $$6, $$7, $$8, $$9);
         }
 
         @Override
@@ -307,23 +305,24 @@ public final class BlockOptionalMeta {
             // Simplified from {@link net.minecraft.server.WorldLoader#load()}
             CloseableResourceManager closeableResourceManager = new MultiPackResourceManager(
                 PackType.SERVER_DATA,
-                List.of(ServerPacksSource.createVanillaPackSource())
+                List.of(ServerPacksSource.createVanillaPackSource().fullResources())
             );
             LayeredRegistryAccess<RegistryLayer> baseLayeredRegistry = RegistryLayer.createRegistryAccess();
             List<Registry.PendingTags<?>> pendingTags = TagLoader.loadTagsForExistingRegistries(
                 closeableResourceManager, baseLayeredRegistry.getLayer(RegistryLayer.STATIC)
             );
             List<HolderLookup.RegistryLookup<?>> worldGenRegistryLookupList = TagLoader.buildUpdatedLookups(
-                baseLayeredRegistry.getAccessForLoading(RegistryLayer.WORLDGEN),
+                baseLayeredRegistry.getAccessForLoading(RegistryLayer.WORLD),
                 pendingTags
             );
             LayeredRegistryAccess<RegistryLayer> layeredRegistryAccess = baseLayeredRegistry.replaceFrom(
-                RegistryLayer.WORLDGEN,
+                RegistryLayer.WORLD,
                 RegistryDataLoader.load(
                     closeableResourceManager,
                     worldGenRegistryLookupList,
-                    RegistryDataLoader.WORLDGEN_REGISTRIES
-                )
+                    RegistryDataLoader.WORLD_REGISTRIES,
+                    ForkJoinPool.commonPool()
+                ).join()
             );
             return ReloadableServerRegistries.reload(
                 layeredRegistryAccess,

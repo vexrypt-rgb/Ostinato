@@ -29,7 +29,7 @@ import baritone.gui.screen.Theme;
 import baritone.process.AcsStatus;
 import baritone.process.PvpProcess;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.Locale;
 
@@ -52,7 +52,7 @@ public final class AcsHud {
 
     private AcsHud() {}
 
-    public static void render(GuiGraphics ms) {
+    public static void render(GuiGraphicsExtractor ms) {
         if (failed) {
             return;
         }
@@ -66,11 +66,11 @@ public final class AcsHud {
         }
     }
 
-    private static void render0(GuiGraphics ms) {
+    private static void render0(GuiGraphicsExtractor ms) {
         Minecraft mc = Minecraft.getInstance();
         IBaritone ib = BaritoneAPI.getProvider().getPrimaryBaritone();
-        if (!Baritone.settings().renderAcsHud.value || mc.getDebugOverlay().showDebugScreen() || mc.options.hideGui || mc.player == null
-                || mc.screen instanceof OstinatoScreen || !(ib instanceof Baritone)) {
+        if (!Baritone.settings().renderAcsHud.value || mc.getDebugOverlay().showDebugScreen() || mc.player == null
+                || mc.gui.screen() instanceof OstinatoScreen || !(ib instanceof Baritone)) {
             FADE.snap(0);
             return;
         }
@@ -137,7 +137,7 @@ public final class AcsHud {
         return st.phase == AcsStatus.Phase.OFF ? H_OFF : st.whole().isEmpty() ? H : H + H_WHOLE;
     }
 
-    static void draw(GuiGraphics ms, AcsStatus st, float x0, float y0, int accent, float opacity, long now) {
+    static void draw(GuiGraphicsExtractor ms, AcsStatus st, float x0, float y0, int accent, float opacity, long now) {
         boolean on = st.phase != AcsStatus.Phase.OFF, trial = st.phase == AcsStatus.Phase.TRIAL;
         float x1 = x0 + W, y1 = y0 + height(st), bx0 = x0 + 7, bx1 = x1 - 7;
         // glass: a faint light rim under a dark fill, the two together as solid as the setting asks
@@ -205,7 +205,7 @@ public final class AcsHud {
     }
 
     /** The values the tuner can stand on, as stops on a rail: the baseline, the trusted one, the one on trial, the one in force. */
-    private static void track(GuiGraphics ms, AcsStatus st, float tx0, float tx1, float cy, int accent, long now) {
+    private static void track(GuiGraphicsExtractor ms, AcsStatus st, float tx0, float tx1, float cy, int accent, long now) {
         int[] stops = st.stops();
         int n = stops.length;
         GuiDraw.rect(ms, tx0, cy - 0.25f, tx1, cy + 0.25f, RAIL);
@@ -246,7 +246,7 @@ public final class AcsHud {
         }
     }
 
-    private static void tile(GuiGraphics ms, float x, float y, float w, float opacity, String label, String big, int bigCol, String small) {
+    private static void tile(GuiGraphicsExtractor ms, float x, float y, float w, float opacity, String label, String big, int bigCol, String small) {
         GuiDraw.round(ms, x, y, x + w, y + 21, 2.5f, (0x14 + Math.round(0x34 * opacity)) << 24);
         GuiDraw.text(ms, label, x + 4, y + 3, fine, LABEL, true, false);
         GuiDraw.text(ms, small, x + w - 4 - GuiDraw.width(small, fine, false), y + 3, fine, Theme.MUTED, true, false);

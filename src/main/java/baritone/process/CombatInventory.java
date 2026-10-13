@@ -2,7 +2,7 @@ package baritone.process;
 
 import baritone.api.utils.IPlayerContext;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -510,7 +510,7 @@ final class CombatInventory {
             // taken up, set down where the worn piece is, which comes up in its stead, and that one set down where the first lay
             int from = at < 9 ? 36 + at : at, had = worn[place[at]];
             String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(me.getInventory().getItem(at).getItem()).getPath();
-            if (invClicks(me, 0, ClickType.PICKUP, from, 5 + place[at], from)) {
+            if (invClicks(me, 0, ContainerInput.PICKUP, from, 5 + place[at], from)) {
                 woreAt[place[at]] = me.tickCount;
                 took = "change " + name + " left=" + had;
             }
@@ -518,7 +518,7 @@ final class CombatInventory {
         }
         // a quick move sends a piece of armour to its own place on the body when that place is bare
         String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(me.getInventory().getItem(at).getItem()).getPath();
-        if (invClick(me, at < 9 ? 36 + at : at, 0, ClickType.QUICK_MOVE)) {
+        if (invClick(me, at < 9 ? 36 + at : at, 0, ContainerInput.QUICK_MOVE)) {
             woreAt[place[at]] = me.tickCount;
             took = "wear " + name;
         }
@@ -539,28 +539,28 @@ final class CombatInventory {
 
     /** A swap through the inventory screen: opened on one tick, clicked on a later one, then closed. */
     boolean invSwap(Player me, int menuSlot, int button) {
-        return invClick(me, menuSlot, button, ClickType.SWAP);
+        return invClick(me, menuSlot, button, ContainerInput.SWAP);
     }
 
     /** A click through the inventory screen: opened on one tick, clicked on a later one, then closed. */
-    private boolean invClick(Player me, int menuSlot, int button, ClickType type) {
+    private boolean invClick(Player me, int menuSlot, int button, ContainerInput type) {
         return invClicks(me, button, type, menuSlot);
     }
 
     /** The same click on one place after another, all on the one tick the screen is open for. */
-    private boolean invClicks(Player me, int button, ClickType type, int... menuSlots) {
+    private boolean invClicks(Player me, int button, ContainerInput type, int... menuSlots) {
         net.minecraft.client.Minecraft mc = ctx.minecraft();
-        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
-            if (mc.screen == null) {
+        if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen)) {
+            if (mc.gui.screen() == null) {
                 opened = new net.minecraft.client.gui.screens.inventory.InventoryScreen(me);
-                mc.setScreen(opened);
+                mc.gui.setScreen(opened);
                 invTick = me.tickCount;
             }
             return false;
         }
         if (me.tickCount <= invTick) return false;
         for (int menuSlot : menuSlots) ctx.playerController().windowClick(me.inventoryMenu.containerId, menuSlot, button, type, me);
-        mc.setScreen(null);
+        mc.gui.setScreen(null);
         opened = null;
         return true;
     }
@@ -572,7 +572,7 @@ final class CombatInventory {
      */
     void closeAbandoned(Player me) {
         if (opened == null) return;
-        if (ctx.minecraft().screen != opened) {
+        if (ctx.minecraft().gui.screen() != opened) {
             opened = null;
         } else if (me.tickCount > invTick + 1 || me.tickCount < invTick) {
             closeScreen();
@@ -581,7 +581,7 @@ final class CombatInventory {
 
     /** Close the screen a swap opened, if it is still up. */
     void closeScreen() {
-        if (opened != null && ctx.minecraft().screen == opened) ctx.minecraft().setScreen(null);
+        if (opened != null && ctx.minecraft().gui.screen() == opened) ctx.minecraft().gui.setScreen(null);
         opened = null;
     }
 }

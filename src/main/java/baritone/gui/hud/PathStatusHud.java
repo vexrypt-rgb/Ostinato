@@ -27,7 +27,7 @@ import baritone.gui.render.Icons;
 import baritone.gui.screen.OstinatoScreen;
 import baritone.gui.screen.Theme;
 import baritone.gui.tasks.game.TaskService;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.Minecraft;
 
 import java.util.Locale;
@@ -46,7 +46,7 @@ public final class PathStatusHud {
 
     private PathStatusHud() {}
 
-    public static void render(GuiGraphics ms, float partialTicks) {
+    public static void render(GuiGraphicsExtractor ms, float partialTicks) {
         if (failed) {
             return;
         }
@@ -60,10 +60,10 @@ public final class PathStatusHud {
         }
     }
 
-    private static void render0(GuiGraphics ms) {
+    private static void render0(GuiGraphicsExtractor ms) {
         Minecraft mc = Minecraft.getInstance();
-        if (!Baritone.settings().renderPathHud.value || mc.getDebugOverlay().showDebugScreen() || mc.options.hideGui || mc.player == null
-                || mc.screen instanceof OstinatoScreen) {
+        if (!Baritone.settings().renderPathHud.value || mc.getDebugOverlay().showDebugScreen() || mc.player == null
+                || mc.gui.screen() instanceof OstinatoScreen) {
             FADE.snap(0);
             return;
         }
@@ -106,7 +106,7 @@ public final class PathStatusHud {
         draw(ms, st.active() ? st : (task != null ? st : last), x0, y0, Theme.accent(), task);
     }
 
-    static void draw(GuiGraphics ms, PathStatus st, float x0, float y0, int accent, String task) {
+    static void draw(GuiGraphicsExtractor ms, PathStatus st, float x0, float y0, int accent, String task) {
         float x1 = x0 + W, y1 = y0 + H + (task != null ? TASK_H : 0);
         GuiDraw.shadow(ms, x0, y0, x1, y1, 4, 6, 0x60);
         GuiDraw.roundBorder(ms, x0, y0, x1, y1, 4, 0xB0303A4E, 0xD0141925, 0xC80B0E14);
@@ -175,7 +175,7 @@ public final class PathStatusHud {
         }
     }
 
-    private static void tile(GuiGraphics ms, float x, float y, float w, String label, String big, String small) {
+    private static void tile(GuiGraphicsExtractor ms, float x, float y, float w, String label, String big, String small) {
         GuiDraw.round(ms, x, y, x + w, y + 21, 2.5f, 0x0FFFFFFF);
         GuiDraw.text(ms, label, x + 5, y + 3.5f, 0.5f, Theme.DIM, false, false);
         float bw = GuiDraw.text(ms, big, x + 5, y + 10, Theme.TEXT, true);

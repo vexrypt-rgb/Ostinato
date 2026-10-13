@@ -44,11 +44,12 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -899,7 +900,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
             result = ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
         }
         if (swings(result)) {
-            ctx.player().swing(InteractionHand.MAIN_HAND);
+            ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
         }
         cooldown = 3 + rand.nextInt(3);
         onTarget = 0;
@@ -908,7 +909,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
     /** Whether a click was one the hand swings for. */
     private static boolean swings(InteractionResult result) {
         return result instanceof InteractionResult.Success
-                && ((InteractionResult.Success) result).swingSource() == InteractionResult.SwingSource.CLIENT;
+                && ((InteractionResult.Success) result).swingSource() == InteractionResult.SwingSource.PREDICTED;
     }
 
     /** Takes a source block up with an empty bucket. Any of the given cells will do. */
@@ -958,7 +959,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
                 result = ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
             }
             if (swings(result)) {
-                ctx.player().swing(InteractionHand.MAIN_HAND);
+                ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
             }
             cooldown = 3 + rand.nextInt(3);
             onTarget = 0;
@@ -1293,7 +1294,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
                         to = h;
                     }
                 }
-                ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, to, ClickType.SWAP, ctx.player());
+                ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, to, ContainerInput.SWAP, ctx.player());
                 cooldown = 4;
                 return false;
             }

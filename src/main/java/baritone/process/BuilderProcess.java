@@ -51,7 +51,6 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
-import net.minecraft.util.Tuple;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -379,10 +378,10 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     @Override
     public void buildOpenSchematic() {
         if (SchematicaHelper.isSchematicaPresent()) {
-            Optional<Tuple<IStaticSchematic, BlockPos>> schematic = SchematicaHelper.getOpenSchematic();
+            Optional<Pair<IStaticSchematic, BlockPos>> schematic = SchematicaHelper.getOpenSchematic();
             if (schematic.isPresent()) {
-                IStaticSchematic raw = schematic.get().getA();
-                BlockPos origin = schematic.get().getB();
+                IStaticSchematic raw = schematic.get().first();
+                BlockPos origin = schematic.get().second();
                 ISchematic schem = applyMapArtAndSelection(origin, raw);
                 this.build(raw.toString(), schem, origin);
             } else {
@@ -398,10 +397,10 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         if (LitematicaHelper.isLitematicaPresent()) {
             //if java.lang.NoSuchMethodError is thrown see comment in SchematicPlacementManager
             if (LitematicaHelper.hasLoadedSchematic(i)) {
-                Tuple<IStaticSchematic, Vec3i> schematic = LitematicaHelper.getSchematic(i);
-                Vec3i correctedOrigin = schematic.getB();
-                ISchematic schematic2 = applyMapArtAndSelection(correctedOrigin, schematic.getA());
-                build(schematic.getA().toString(), schematic2, correctedOrigin);
+                Pair<IStaticSchematic, Vec3i> schematic = LitematicaHelper.getSchematic(i);
+                Vec3i correctedOrigin = schematic.second();
+                ISchematic schematic2 = applyMapArtAndSelection(correctedOrigin, schematic.first());
+                build(schematic.first().toString(), schematic2, correctedOrigin);
             } else {
                 logDirect(String.format("List of placements has no entry %s", i + 1));
             }
@@ -442,7 +441,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         return state;
     }
 
-    private Optional<Tuple<BetterBlockPos, Rotation>> toBreakNearPlayer(BuilderCalculationContext bcc) {
+    private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayer(BuilderCalculationContext bcc) {
         BetterBlockPos center = ctx.playerFeet();
         BetterBlockPos pathStart = baritone.getPathingBehavior().pathStart();
         for (int dx = -5; dx <= 5; dx++) {
@@ -463,7 +462,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                         BetterBlockPos pos = new BetterBlockPos(x, y, z);
                         Optional<Rotation> rot = RotationUtils.reachable(ctx, pos, ctx.playerController().getBlockReachDistance());
                         if (rot.isPresent()) {
-                            return Optional.of(new Tuple<>(pos, rot.get()));
+                            return Optional.of(new Pair<>(pos, rot.get()));
                         }
                     }
                 }
@@ -727,7 +726,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             }
             // build repeat time
             layer = 0;
-            origin = new BlockPos(origin).offset(repeat);
+            origin = new BlockPos(origin.getX(), origin.getY(), origin.getZ()).offset(repeat);
             if (!Baritone.settings().buildRepeatSneaky.value) {
                 schematic.reset();
             }
@@ -738,12 +737,12 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             trim();
         }
 
-        Optional<Tuple<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayer(bcc);
+        Optional<Pair<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayer(bcc);
         if (toBreak.isPresent() && isSafeToCancel && ctx.player().onGround()) {
             // we'd like to pause to break this block
             // only change look direction if it's safe (don't want to fuck up an in progress parkour for example
-            Rotation rot = toBreak.get().getB();
-            BetterBlockPos pos = toBreak.get().getA();
+            Rotation rot = toBreak.get().second();
+            BetterBlockPos pos = toBreak.get().first();
             baritone.getLookBehavior().updateTarget(rot, true);
             MovementHelper.switchToBestToolFor(ctx, bcc.get(pos));
             if (ctx.player().isCrouching()) {
@@ -835,16 +834,12 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     }
 
     private boolean isDefaultState(final BlockState state) {
-        final List<PropertyContainer> propertyContainers = state.getValues().entrySet().stream().map(PROPERTY_ENTRY_TO_STRING_FUNCTION).toList();
-        for (final PropertyContainer container : propertyContainers) {
-            if (container.getPropertyKey().equals("part") && container.getPropertyValue().equals("head")) {
-                return false;
-            }
-            if (container.getPropertyKey().equals("half") && container.getPropertyValue().equals("upper")) {
-                return false;
-            }
-        }
-        return true;
+        // 26.x: getValues() streams Property.Value records instead of returning a map
+        return state.getValues().noneMatch(v -> {
+            String key = v.property().getName();
+            String value = v.valueName();
+            return (key.equals("part") && value.equals("head")) || (key.equals("half") && value.equals("upper"));
+        });
     }
 
 
@@ -1287,10 +1282,8 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         if (!ignoreDirection && ignoredProps.isEmpty()) {
             return first.equals(second); // early return if no properties are being ignored
         }
-        Map<Property<?>, Comparable<?>> map1 = first.getValues();
-        Map<Property<?>, Comparable<?>> map2 = second.getValues();
-        for (Property<?> prop : map1.keySet()) {
-            if (map1.get(prop) != map2.get(prop)
+        for (Property<?> prop : first.getProperties()) {
+            if (first.getValue(prop) != second.getValue(prop)
                     && !(ignoreDirection && ORIENTATION_PROPS.contains(prop))
                     && !ignoredProps.contains(prop.getName())) {
                 return false;

@@ -305,7 +305,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         int weapon = inv.weapon(me);
         if (weapon >= 0) select(me, weapon);
         use(false);
-        boolean low = prof.kind == MobProfile.Kind.BOMB || target instanceof net.minecraft.world.entity.monster.EnderMan;
+        boolean low = prof.kind == MobProfile.Kind.BOMB || target instanceof net.minecraft.world.entity.monster.Enderman;
         look(low ? new Vec3(target.getX(), target.getY() + 0.3, target.getZ()) : swing.swingPoint(me, target, target.getDeltaMovement()));
         double er = exactReach(me, target);
         float charge = me.getAttackStrengthScale(0.5f);
@@ -321,7 +321,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         boolean recharging = charge < CHARGED;
         // a hard hitter in our face: the recharge is spent behind the shield rather than stepping back into its reach
         // (an axe knocks the shield down for seconds, so guarding against one only costs us swings)
-        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.EnderMan)
+        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.Enderman)
                 && !target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES) && shieldUp(me, target)) {
             return decide("guard");
         }

@@ -54,7 +54,7 @@ final class CombatSwing {
     boolean spearRayHits(Player me, LivingEntity target) {
         ItemStack st = me.getMainHandItem();
         if (!isSpear(st) || me.cannotAttackWithItem(st, 0)) return false;
-        net.minecraft.world.item.component.AttackRange range = me.entityAttackRange();
+        net.minecraft.world.item.component.AttackRange range = me.getAttackRangeWith(st);
         net.minecraft.world.phys.HitResult hit = range.getClosesetHit(me, 1.0f, e -> e == target);
         if (!(hit instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != target) return false;
         double along = me.getEyePosition().distanceTo(er.getLocation());

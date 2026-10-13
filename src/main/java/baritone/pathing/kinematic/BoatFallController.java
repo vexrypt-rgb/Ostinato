@@ -128,7 +128,7 @@ public final class BoatFallController {
         if (boat != null) {
             look.updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(boat.getX(), boat.getY() + 0.3, boat.getZ()), ctx.playerRotations()), true);
             if (boatTicks % 4 == 3) {
-                Minecraft.getInstance().gameMode.interact(player, boat, InteractionHand.MAIN_HAND);
+                Minecraft.getInstance().gameMode.interact(player, boat, new net.minecraft.world.phys.EntityHitResult(boat), InteractionHand.MAIN_HAND);
             }
             return pathPosition;
         }

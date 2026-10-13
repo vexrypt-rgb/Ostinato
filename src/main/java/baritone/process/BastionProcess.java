@@ -30,7 +30,7 @@ import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.entity.monster.piglin.PiglinBrute;
 import net.minecraft.world.entity.monster.Zoglin;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.BlockHitResult;
@@ -332,7 +332,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (inInv < 0) inInv = i;
         }
         if (!onHotbar && inInv >= 0) {
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, inInv, 7, ClickType.SWAP, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, inInv, 7, ContainerInput.SWAP, me);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         // run 122: we landed on the rim of our own one-block pillar, our middle over the open air beside it. Looking
@@ -557,14 +557,14 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     return pause0();
                 }
                 int pk = pickaxeSlot(me);
-                if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 6, ClickType.SWAP, me); return pause0(); }
+                if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 6, ContainerInput.SWAP, me); return pause0(); }
                 if (pk >= 0) me.getInventory().setSelectedSlot(pk);
                 Vec3 c = Vec3.atCenterOf(b);
                 baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, c, ctx.playerRotations()), true);
                 Direction face = Direction.getApproximateNearest(eye.x - c.x, eye.y - c.y, eye.z - c.z);
                 if (!b.equals(shelterDig)) { shelterDig = b; ctx.playerController().clickBlock(b, face); }
                 else ctx.playerController().onPlayerDamageBlock(b, face);
-                me.swing(InteractionHand.MAIN_HAND);
+                me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                 status = "taking the walls down";
                 return pause0();
             }
@@ -666,11 +666,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             yaw = rot.getYaw();
             baritone.getLookBehavior().updateTarget(rot, true);
             ctx.minecraft().gameMode.attack((LocalPlayer) me, intruder);
-            me.swing(InteractionHand.MAIN_HAND);
+            me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
             shelterShoveAt = ticks;
             if (shelterShoves++ == 0) logDirect("Bastion: " + intruder.getType().toShortString() + " in the way of the wall, knocking it back");
         } else if (slot >= 9) {
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ContainerInput.SWAP, me);
         } else if (slot >= 0) {
             BlockPos c = new BlockPos(p.x(), p.y(), p.z()), against = new BlockPos(p.ax(), p.ay(), p.az());
             Vec3 hit = Vec3.atCenterOf(against).add(p.fx() * 0.5, p.fy() * 0.5, p.fz() * 0.5);
@@ -691,7 +691,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 } else {
                     ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.getApproximateNearest(p.fx(), p.fy(), p.fz()), against, false));
                     shelterPlaced.add(c);
-                    me.swing(InteractionHand.MAIN_HAND);
+                    me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                 }
             }
         }
@@ -779,13 +779,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
             Vec3 eye = me.getEyePosition(1.0F);
             if (!ctx.world().getBlockState(shelterSlit).canBeReplaced()) {
                 int pk = pickaxeSlot(me);
-                if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 6, ClickType.SWAP, me); return pause0(); }
+                if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 6, ContainerInput.SWAP, me); return pause0(); }
                 if (pk >= 0) me.getInventory().setSelectedSlot(pk);
                 baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(shelterSlit), ctx.playerRotations()), true);
                 Direction face = Direction.getApproximateNearest(cell.getX() - shelterSlit.getX(), 0, cell.getZ() - shelterSlit.getZ());
                 if (!shelterSlit.equals(shelterDig)) { shelterDig = shelterSlit; ctx.playerController().clickBlock(shelterSlit, face); }
                 else ctx.playerController().onPlayerDamageBlock(shelterSlit, face);
-                me.swing(InteractionHand.MAIN_HAND);
+                me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                 status = "walled in, opening a slit";
                 return pause0();
             }
@@ -801,7 +801,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim, ctx.playerRotations()), true);
                 if (me.getAttackStrengthScale(0.5f) >= 0.95f) {
                     ctx.minecraft().gameMode.attack((LocalPlayer) me, t);
-                    me.swing(InteractionHand.MAIN_HAND);
+                    me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                     shelterStruckAt = ticks;
                     if (t != shelterMark) shelterStrikes = 0;
                     shelterMark = t;
@@ -856,7 +856,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         int slot = -1, rank = 0;
         for (int i = 0; i < 9; i++) {
             ItemStack s = me.getInventory().getItem(i);
-            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.getItem() instanceof net.minecraft.world.item.AxeItem ? 1 : 0;
+            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.is(net.minecraft.tags.ItemTags.AXES) ? 1 : 0;
             if (r > rank) { rank = r; slot = i; }
         }
         return slot;
@@ -908,7 +908,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     /** The tower needs air over our head: under a ceiling the jump is blocked and the placement pointless. */
     private boolean headroom(Player me, int base) {
         for (int i = 2; i <= 5; i++) {
-            if (ctx.world().getBlockState(new BlockPos(me.blockPosition().getX(), base + i, me.blockPosition().getZ())).blocksMotion()) return false;
+            if (ctx.world().getBlockState(new BlockPos(me.blockPosition().getX(), base + i, me.blockPosition().getZ())).isSolid()) return false;
         }
         return true;
     }
@@ -1062,7 +1062,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             aimer.look(victim.getEyePosition(), 0);
             if (++aimTicks >= 4) {
                 net.minecraft.client.Minecraft.getInstance().gameMode.attack((LocalPlayer) me, victim);
-                me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                me.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                 angered = true;
             }
             return pause;
@@ -1105,7 +1105,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (nudgeDest.getX() == ctx.player().blockPosition().getX() && nudgeDest.getZ() == ctx.player().blockPosition().getZ() && solid(under) && !lavaNearPos(under.below())) {
                 int pk = pickaxeSlot(ctx.player());
                 if (pk >= 0 && pk < 9) ctx.player().getInventory().setSelectedSlot(pk);
-                else if (pk >= 9) ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, pk, 7, ClickType.SWAP, ctx.player());
+                else if (pk >= 9) ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, pk, 7, ContainerInput.SWAP, ctx.player());
                 baritone.getLookBehavior().updateTarget(new Rotation(ctx.player().getYRot(), 90), true);
                 if (!under.equals(holeTarget)) { holeTarget = under; ctx.playerController().clickBlock(under, Direction.UP); }
                 else ctx.playerController().onPlayerDamageBlock(under, Direction.UP);
@@ -1376,7 +1376,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     if (!opens || me.isShiftKeyDown()) ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, Direction.UP, against, false));
                     status = "walling off brute in tunnel (" + cell.toShortString() + " try " + wallTries + ")";
                     return pause0();
-                } else if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 6, ClickType.SWAP, me); return pause0(); }
+                } else if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 6, ContainerInput.SWAP, me); return pause0(); }
             } else if (!open) {
                 // a brute that cannot reach us forgets us in ten seconds; past that, sitting in the cell is only lost time
                 if (walledSince == 0) walledSince = ticks;
@@ -1514,7 +1514,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 int gap = -1;
                 for (int i = 0; i < 36 && gap < 0; i++) if (me.getInventory().getItem(i).is(Items.GOLDEN_APPLE) || me.getInventory().getItem(i).is(Items.ENCHANTED_GOLDEN_APPLE)) gap = i;
                 if (gap >= 0 && me.getHealth() < 12 && !me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)) {
-                    if (gap >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, gap, 6, ClickType.SWAP, me); return pause0(); }
+                    if (gap >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, gap, 6, ContainerInput.SWAP, me); return pause0(); }
                     me.getInventory().setSelectedSlot(gap);
                     baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
                     ctx.minecraft().options.keyUse.setDown(true);
@@ -1598,7 +1598,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
                 // holding jump keeps us bobbing at the surface where no door cell is found (lava8-10): with a door, sink instead
                 boolean haveDoor = false;
-                for (int i = 0; i < 36 && !haveDoor; i++) haveDoor = me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS);
+                for (int i = 0; i < 36 && !haveDoor; i++) haveDoor = me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.WOODEN_DOORS);
                 if (!haveDoor || shore != null && me.position().distanceTo(Vec3.atBottomCenterOf(shore)) < 1.6) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
                 status = "step away from lava";
                 return pause0();
@@ -1656,7 +1656,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
                     }
                     baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(f), ctx.playerRotations()), true);
                     ctx.playerController().clickBlock(f, net.minecraft.core.Direction.UP);
-                    me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    me.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                     status = "putting out fire";
                     return pause0();
                 }
@@ -1915,10 +1915,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
         int w = me.inventoryMenu.containerId;
         if (craftStep == 0) craftFrom = held < 9 ? held + 36 : held;
         switch (craftStep) {
-            case 0 -> c.windowClick(w, craftFrom, 0, ClickType.PICKUP, me);
-            case 1 -> c.windowClick(w, 1, 1, ClickType.PICKUP, me);
-            case 2 -> c.windowClick(w, craftFrom, 0, ClickType.PICKUP, me);
-            default -> c.windowClick(w, 0, 0, ClickType.QUICK_MOVE, me);
+            case 0 -> c.windowClick(w, craftFrom, 0, ContainerInput.PICKUP, me);
+            case 1 -> c.windowClick(w, 1, 1, ContainerInput.PICKUP, me);
+            case 2 -> c.windowClick(w, craftFrom, 0, ContainerInput.PICKUP, me);
+            default -> c.windowClick(w, 0, 0, ContainerInput.QUICK_MOVE, me);
         }
         craftStep = (craftStep + 1) % 4;
         status = "craft ingots";
@@ -1949,7 +1949,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         int steps = BastionLava.descentSteps(clean, solid);
         int doors = 0;
-        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.DOORS)) doors += s.getCount(); }
+        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.WOODEN_DOORS)) doors += s.getCount(); }
         // the pocket we stand in already used its door: the rest of the descent needs one per break
         descentSteps = BastionLava.canDescend(steps, doors + 1, pickaxeSlot(me) >= 0) ? steps : -1;
         descentDone = 0;
@@ -1964,7 +1964,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (floor(seal)) { descentSteps = -1; logDirect("Bastion: sealed under the lava, digging out"); return null; }
             int b = clutchBlock(me);
             if (b < 0) { descentSteps = -1; return null; }
-            if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 7, ClickType.SWAP, me); return pause0(); }
+            if (b >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, b, 7, ContainerInput.SWAP, me); return pause0(); }
             me.getInventory().setSelectedSlot(b);
             // sneaking, so the click on the door top places the block instead of opening the door
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
@@ -1978,7 +1978,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (floor(below) && !(ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) {
             int pick = pickaxeSlot(me);
             if (pick < 0) { descentSteps = -1; return null; }
-            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
+            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ContainerInput.SWAP, me); return pause0(); }
             me.getInventory().setSelectedSlot(pick);
             baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90), true);
             // mine that exact block: the crosshair would hit the door we stand in first
@@ -1997,9 +1997,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // the block is gone (our old door went with it): next tick, a door in the cell we drop into
         int slot = -1;
-        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
+        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.WOODEN_DOORS)) slot = i;
         if (slot < 0) { descentSteps = -1; return null; }
-        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me); return pause0(); }
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ContainerInput.SWAP, me); return pause0(); }
         me.getInventory().setSelectedSlot(slot);
         placeDoor(me, below);
         if (ctx.world().getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
@@ -2098,7 +2098,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (wTunnel != null && !under) inPocket = true; // in our own dry tunnel
         if (!under && !inPocket && !wSeekWall) { wDoor = null; wTunnel = null; in.setInputForceState(Input.SNEAK, false); return null; }
         int doors = 0, slot = -1;
-        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.DOORS)) { doors += s.getCount(); if (slot < 0) slot = i; } }
+        for (int i = 0; i < 36; i++) { ItemStack s = me.getInventory().getItem(i); if (s.is(net.minecraft.tags.ItemTags.WOODEN_DOORS)) { doors += s.getCount(); if (slot < 0) slot = i; } }
         // w13: re-scanning mid-tunnel took our own dug cell for the exit; keep the exit once pocketed
         if (wExit == null || ticks % 40 == 0 && wDoor == null && wTunnel == null) wExit = findExit(feet);
         int surf = wTunnel != null ? -1 : surfaceDepth(me); // w17: the dry tunnel read as "surface 0" and it tried to swim up
@@ -2138,7 +2138,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             case SWIM_UP -> { in.setInputForceState(Input.JUMP, true); return pause0(); }
             case SINK -> { in.setInputForceState(Input.SNEAK, true); return pause0(); } // crouch sinks faster
             case DOOR -> {
-                if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me); return pause0(); }
+                if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ContainerInput.SWAP, me); return pause0(); }
                 // w6: pressed against the wall the door's slab overlaps our hitbox and placement is refused; centre first
                 double ox = feet.getX() + 0.5 - me.getX(), oz = feet.getZ() + 0.5 - me.getZ();
                 if (false && (Math.abs(ox) > 0.12 || Math.abs(oz) > 0.12) && centreTicks++ < 30) {
@@ -2183,7 +2183,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                     if (!solid(t)) continue;
                     if (fluidNextTo(t, cur, cur.above(), n, n.above())) { if (wExit != null) wBadExit.add(wExit); wExit = null; status = "water: tunnel blocked by fluid"; return pause0(); }
                     int pk = pickaxeSlot(me);
-                    if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 7, ClickType.SWAP, me); return pause0(); }
+                    if (pk >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pk, 7, ContainerInput.SWAP, me); return pause0(); }
                     me.getInventory().setSelectedSlot(pk);
                     baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vec3.atCenterOf(t), ctx.playerRotations()), true);
                     if (!t.equals(holeTarget)) { holeTarget = t; ctx.playerController().clickBlock(t, dir.getOpposite()); }
@@ -2219,7 +2219,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             if (lavaAt(c) && under.isFaceSturdy(ctx.world(), c.below(), Direction.UP) && (lavaAt(c.above()) || ctx.world().getBlockState(c.above()).canBeReplaced())) { cell = c; break; }
         }
         int slot = -1;
-        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.DOORS)) slot = i;
+        for (int i = 0; i < 36 && slot < 0; i++) if (me.getInventory().getItem(i).is(net.minecraft.tags.ItemTags.WOODEN_DOORS)) slot = i;
         double shoreDist = shore == null ? -1 : Math.sqrt(feet.distSqr(shore));
         BastionLava.Escape esc = BastionLava.choose(shoreDist, depth, me.getHealth(), slot >= 0, cell != null, pillarBlocks(me) > 0);
         if (!me.isInLava()) lavaSince = -1; else if (lavaSince < 0) lavaSince = ticks;
@@ -2227,7 +2227,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         if (esc == BastionLava.Escape.SWIM && slot >= 0 && cell != null && lavaSince >= 0 && ticks - lavaSince > 20) esc = BastionLava.Escape.DOOR;
         if (esc != BastionLava.Escape.DOOR) return null;
         if (slot >= 9) {
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ContainerInput.SWAP, me);
             return pause0();
         }
         me.getInventory().setSelectedSlot(slot);
@@ -2442,7 +2442,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                 Vec3 hit = Vec3.atCenterOf(against).add(Vec3.atLowerCornerOf(dir.getOpposite().getUnitVec3i()).scale(0.5));
                 if (me.getEyePosition(1.0F).distanceTo(hit) > ctx.playerController().getBlockReachDistance()) continue;
                 if (slot >= 9) {
-                    ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ClickType.SWAP, me);
+                    ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 7, ContainerInput.SWAP, me);
                     return pause0();
                 }
                 me.getInventory().setSelectedSlot(slot);
@@ -2644,7 +2644,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             HitResult h = RayTraceUtils.rayTraceTowards(me, rot, ctx.playerController().getBlockReachDistance(), false);
             if (h instanceof BlockHitResult bh && bh.getBlockPos().equals(next)) {
                 ctx.playerController().processRightClickBlock((LocalPlayer) me, ctx.world(), InteractionHand.MAIN_HAND, bh);
-                me.swing(InteractionHand.MAIN_HAND);
+                me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
                 chestClickTick = ticks;
                 openedChest = next;
             }
@@ -2699,7 +2699,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         for (int i = 0; i < n; i++) {
             ItemStack s = cm.getSlot(i).getItem();
             if (s.isEmpty() || !BastionGoals.chestUseful(itemId(s), s.has(DataComponents.FOOD)) || !roomFor(me, s)) continue;
-            ctx.playerController().windowClick(cm.containerId, i, 0, ClickType.QUICK_MOVE, me);
+            ctx.playerController().windowClick(cm.containerId, i, 0, ContainerInput.QUICK_MOVE, me);
             lastTake = ticks;
             status = "looting chest: " + itemId(s);
             return pause0();
@@ -2923,7 +2923,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         luring = false;
         int hot = pick < 9 ? pick : -1;
         if (hot < 0) {
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ContainerInput.SWAP, me);
             return pause;
         }
         me.getInventory().setSelectedSlot(hot);
@@ -3048,7 +3048,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         int slot = -1, rank = 0;
         for (int i = 0; i < 9; i++) {
             ItemStack s = me.getInventory().getItem(i);
-            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.getItem() instanceof net.minecraft.world.item.AxeItem ? 1 : 0;
+            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.is(net.minecraft.tags.ItemTags.AXES) ? 1 : 0;
             if (r > rank) { rank = r; slot = i; }
         }
         status = "on tower, striking brute at " + String.format("%.1f", best);
@@ -3058,7 +3058,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim.lerp(t.getBoundingBox().getCenter(), 0.2), ctx.playerRotations()), true);
         if (me.getAttackStrengthScale(0.5f) >= 0.95f) {
             ctx.minecraft().gameMode.attack((LocalPlayer) me, t);
-            me.swing(InteractionHand.MAIN_HAND);
+            me.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         }
         return pause0();
     }
@@ -3068,7 +3068,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         int food = foodSlot(me);
         if (food < 0) return null;
         if (food >= 9) {
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, food, 6, ClickType.SWAP, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, food, 6, ContainerInput.SWAP, me);
             return pause0();
         }
         me.getInventory().setSelectedSlot(food);
@@ -3159,10 +3159,10 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             int best = -1, rank = 0;
             for (int i = 0; i < 36; i++) {
                 ItemStack s = me.getInventory().getItem(i);
-                int r = s.getItem() instanceof net.minecraft.world.item.AxeItem ? 2 : s.is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
+                int r = s.is(net.minecraft.tags.ItemTags.AXES) ? 2 : s.is(net.minecraft.tags.ItemTags.SWORDS) ? 1 : 0;
                 if (r > rank) { rank = r; best = i; }
             }
-            if (best >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, best, 0, ClickType.SWAP, me); best = 0; }
+            if (best >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, best, 0, ContainerInput.SWAP, me); best = 0; }
             if (best >= 0) me.getInventory().setSelectedSlot(best);
             logDirect("Bastion: duel start vs brute at " + b.blockPosition().toShortString());
         }
@@ -3179,7 +3179,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             if (me.isUsingItem()) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(me);
             me.setSprinting(true);
             net.minecraft.client.Minecraft.getInstance().gameMode.attack((LocalPlayer) me, b);
-            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
             duelHits++;
             status = "duel: hit " + duelHits;
             return pause0();
@@ -3221,7 +3221,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         int best = -1, rank = 0;
         for (int i = 0; i < 9; i++) {
             ItemStack s = me.getInventory().getItem(i);
-            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.getItem() instanceof net.minecraft.world.item.AxeItem ? 1 : 0;
+            int r = s.is(net.minecraft.tags.ItemTags.SWORDS) ? 2 : s.is(net.minecraft.tags.ItemTags.AXES) ? 1 : 0;
             if (r > rank) { rank = r; best = i; }
         }
         if (best >= 0 && me.getInventory().getSelectedSlot() != best) { me.getInventory().setSelectedSlot(best); status = "skirmish: draw"; return pause0(); }
@@ -3233,7 +3233,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             mc.options.keyUse.setDown(false);
             if (me.isUsingItem()) mc.gameMode.releaseUsingItem(me);
             mc.gameMode.attack((LocalPlayer) me, t);
-            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            me.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
             status = "skirmish: hit";
             return pause0();
         }
@@ -3265,7 +3265,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             // pull one from the main inventory into hotbar slot 8
             for (int i = 9; i < 36; i++) {
                 ItemStack s = me.getInventory().getItem(i);
-                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 14 && !me.isInLava() && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ClickType.SWAP, me); return pause0(); }
+                if ("fire_resistance".equals(itemId(s)) || me.getHealth() < 14 && !me.isInLava() && s.is(Items.GOLDEN_APPLE)) { ctx.playerController().windowClick(me.inventoryMenu.containerId, i, 8, ContainerInput.SWAP, me); return pause0(); }
             }
             return null;
         }
@@ -3372,7 +3372,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             if (feet.getX() == digHole.getX() && feet.getZ() == digHole.getZ()) { logDirect("Bastion: hole dig aborted (standing on it)"); digHole = null; holeRetry = ticks + 600; return null; }
             int pick = pickaxeSlot(me);
             if (pick < 0) { logDirect("Bastion: hole dig aborted (no pickaxe)"); digHole = null; holeRetry = ticks + 6000; return null; }
-            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ClickType.SWAP, me); return pause0(); }
+            if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ContainerInput.SWAP, me); return pause0(); }
             me.getInventory().setSelectedSlot(pick);
             // sneak: never step into the hole we are digging
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
@@ -3557,7 +3557,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
      */
     private boolean safeDrop(Player me) {
         if (me.getInventory().getSelectedSlot() != selAtTickStart || !me.getMainHandItem().is(Items.GOLD_INGOT)) return false;
-        ((LocalPlayer) me).drop(false);
+        ctx.minecraft().gameMode.dropItem((LocalPlayer) me, false);
         return true;
     }
     private long lastWatched = -1000;
@@ -3592,7 +3592,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             // shift-click only equips into an empty armour slot; otherwise it never lands and we loop on "equip gold"
             var eq = st.get(net.minecraft.core.component.DataComponents.EQUIPPABLE);
             if (eq == null || !me.getItemBySlot(eq.slot()).isEmpty()) continue;
-            ctx.playerController().windowClick(me.inventoryMenu.containerId, i < 9 ? i + 36 : i, 0, ClickType.QUICK_MOVE, me);
+            ctx.playerController().windowClick(me.inventoryMenu.containerId, i < 9 ? i + 36 : i, 0, ContainerInput.QUICK_MOVE, me);
             return true;
         }
         return false;
@@ -3608,7 +3608,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         int s = goldSlot(me);
         if (s < 0) return -1;
         if (s < 9) return s;
-        ctx.playerController().windowClick(me.inventoryMenu.containerId, s, 8, ClickType.SWAP, me);
+        ctx.playerController().windowClick(me.inventoryMenu.containerId, s, 8, ContainerInput.SWAP, me);
         return -1;
     }
 

@@ -28,7 +28,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.effect.MobEffects;
@@ -263,7 +263,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
                     && (tv().x * gap.x + tv().z * gap.z) / gap.horizontalDistance() > 0.1;
             // Horizontal only. A mace hop makes the 3D gap > 4.5 while they are about to land.
             boolean overhead = !target.onGround() && target.getY() > me.getY() + 1.0;
-            boolean safe = horizontalBoxDist(me, target) > 4.5 && target.onGround() && !target.swinging || targetEating;
+            boolean safe = horizontalBoxDist(me, target) > 4.5 && target.onGround() && !target.isSwinging() || targetEating;
             // Eating through their dive is the D9 in the logs. Drop the apple and shield it.
             // 0650 bench: 720 eat ticks, 282 right after spear_back. Killing blows were on eat
             // or spear_back, never on spear_charge. A charge holds the use key on the spear, so
@@ -372,7 +372,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             double seen = eyeToBox(me, target);
             recorder.tick(me, target, seen,
                     targeting.others(me, target) + " m" + phase.macePhase + " p" + phase.pearlStage + " f" + survival.fleeTicks + " e" + survival.eatTicks + " s" + me.getInventory().getSelectedSlot()
-                            + (ctx.minecraft().screen != null ? " scr=" + ctx.minecraft().screen.getClass().getSimpleName() : "")
+                            + (ctx.minecraft().gui.screen() != null ? " scr=" + ctx.minecraft().gui.screen().getClass().getSimpleName() : "")
                             + (me.getCooldowns().isOnCooldown(me.getOffhandItem()) ? " offcd" : "")
                             + (ctx.minecraft().options.keyUse.isDown() ? " use" : "") + " k" + click.clickKind,
                     tickDec + brokeNote, attacks);

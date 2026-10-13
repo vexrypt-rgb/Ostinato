@@ -110,7 +110,7 @@ final class CombatSurvival {
 
     int foodTicks;
 
-    /** Where an ordinary edible item is (not a golden apple, not one that hurts), hotbar or not. Best saturation first. */
+    /** An ordinary edible item (not a golden apple, not one that hurts), pulled into the hotbar. Best saturation first. */
     private int foodSlot(Player me) {
         int best = -1;
         float bestScore = -1;
@@ -127,7 +127,9 @@ final class CombatSurvival {
                 best = i;
             }
         }
-        return best;
+        if (best < 0) return -1;
+        if (best < 9) return best;
+        return inv.slotOf(me, me.getInventory().getItem(best).getItem());
     }
 
     private boolean bite(Player me, LivingEntity target, int slot) {

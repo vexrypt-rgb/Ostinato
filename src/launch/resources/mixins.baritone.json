@@ -19,6 +19,7 @@
     "MixinFireworkRocketEntity",
     "MixinIngameGui",
     "MixinItemStack",
+    "MixinLevelExtractor",
     "MixinLivingEntity",
     "MixinLootContextBuilder",
     "MixinLootTable",
