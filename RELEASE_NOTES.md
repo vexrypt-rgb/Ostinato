@@ -14,6 +14,18 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 | 26.3 | `26.3` | 25 |
 | 1.16.1 | `1.16.1` | 8 |
 
+## Module edition (branch `conductor-module`)
+
+This branch builds Ostinato as a **Conductor module**: one Fabric jar, `ostinato-mc1.21.11-unoptimized-fabric-<v>-module.jar`, that is Ostinato plus `baritone.conductor.OstinatoModule`. Install it with Conductor in place of the plain jar, not alongside it.
+
+- **Your movement commands take Conductor's movement lease.** `#goto`, `#mine`, `#follow`, ... wait while a lower-priority module is stopped with proof, and are refused (with the reason) by a higher one.
+- **Modules can take over safely.** A higher-priority module can take over a running task.
+- **Modules can run any Ostinato command** through Conductor's `EngineCommands`.
+- **No Conductor, no change.** Without Conductor nothing loads the module, and the jar works like the plain build.
+- **Unoptimized only:** Conductor needs the class names that the standalone and api builds rename.
+
+The plain Fabric line is kept on its own branch, without any Conductor code. Conductor's contract is a compile-only jar in `libs/` (see `libs/README.md`).
+
 ## New in v1.21.0 (1.21.11)
 
 This release brings the 1.21.11 line's feature branches together, and lets Ostinato share the controls with
