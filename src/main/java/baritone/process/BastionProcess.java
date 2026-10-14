@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.bastion.BastionScript;
 import baritone.bastion.BastionPriors;
 import baritone.bastion.BastionRouteResolver;
 import baritone.bastion.BastionRoutes;
@@ -1799,6 +1800,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
             // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
             PathingCommand bt0 = barterOnTheWay(me, near);
             if (bt0 != null) return bt0;
+            PathingCommand rs = runRoute(me, near);
+            if (rs != null) return rs;
             PathingCommand c = lootChests(me, near);
             if (c != null) return c;
         }
@@ -2609,7 +2612,266 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         planStep.clear();
         for (BastionRouteResolver.Target t : targets) { ordered.add(t.point()); if (t.step() != null) planStep.put(new BlockPos(t.point().x(), t.point().y(), t.point().z()), t.step()); }
         plan = ordered;
-        if (!route.equals(loggedRoute)) { loggedRoute = route; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
+        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
+    }
+
+    // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
+    private int routeIdx, opLeft = -1, opThrowMark;
+    private BastionScript.Runner scriptRun;
+    private BastionRoutes.Step scriptStep;
+    private BlockPos scriptAt, opLava;
+    private int sfx = 1, sfz = 0;
+    private PathingCommand opCmd;
+
+    /** True while the plan still holds an unlooted chest or unmined gold block claimed by this step. */
+    private boolean stepHasTargets(BastionRoutes.Step s) {
+        for (Map.Entry<BlockPos, BastionRoutes.Step> e : planStep.entrySet()) {
+            if (e.getValue() != s || looted.contains(e.getKey()) || badChest.getOrDefault(e.getKey(), 0L) > ticks || badGold.getOrDefault(e.getKey(), 0L) > ticks) continue;
+            if (!ctx.world().hasChunkAt(e.getKey())) return true;
+            net.minecraft.world.level.block.state.BlockState st = ctx.world().getBlockState(e.getKey());
+            if (st.is(Blocks.CHEST) || st.is(Blocks.GOLD_BLOCK)) return true;
+        }
+        return false;
+    }
+
+    /** Walk the route: block steps are left to lootChests while they have targets; scripted steps run their ops here. */
+    private PathingCommand runRoute(Player me, List<LivingEntity> near) {
+        if (route.isEmpty() || !BastionSettings.scriptedRoutes) return null;
+        while (routeIdx < route.size()) {
+            BastionRoutes.Step s = route.get(routeIdx);
+            List<BastionScript.Op> ops = BastionScript.ops(s);
+            if (ops.isEmpty()) {
+                if (stepHasTargets(s)) return null;
+                routeIdx++;
+                continue;
+            }
+            if (scriptStep != s) {
+                scriptStep = s;
+                scriptRun = new BastionScript.Runner(ops);
+                scriptAt = me.blockPosition();
+                int dx = bastion.pos.getX() - scriptAt.getX(), dz = bastion.pos.getZ() - scriptAt.getZ();
+                if (Math.abs(dx) >= Math.abs(dz)) { sfx = dx >= 0 ? 1 : -1; sfz = 0; } else { sfx = 0; sfz = dz >= 0 ? 1 : -1; }
+                opLeft = -1; opLava = null;
+                logDirect("Bastion: step " + s + " (" + ops.size() + " ops, facing " + sfx + "," + sfz + ")");
+            }
+            if (scriptRun.done()) {
+                logDirect("Bastion: step " + s + " done" + (scriptRun.skipped() > 0 ? ", " + scriptRun.skipped() + " ops skipped" : ""));
+                routeIdx++;
+                scriptStep = null;
+                continue;
+            }
+            BastionScript.Op op = scriptRun.current();
+            int idx = scriptRun.index();
+            opCmd = null;
+            BastionScript.Result r = execOp(me, near, s, op);
+            scriptRun.report(r);
+            if (scriptRun.index() != idx) opLeft = -1;
+            status = "route " + s + " op " + (idx + 1) + "/" + ops.size() + " " + op.kind() + (r == BastionScript.Result.FAILED ? " (failed, skipping)" : "");
+            return opCmd != null ? opCmd : pause0();
+        }
+        return null;
+    }
+
+    private BlockPos opCell(BastionScript.Op op) {
+        int[] w = BastionScript.toWorld(sfx, sfz, op.f(), op.r(), op.u());
+        return scriptAt.offset(w[0], w[1], w[2]);
+    }
+
+    private BastionScript.Result execOp(Player me, List<LivingEntity> near, BastionRoutes.Step s, BastionScript.Op op) {
+        switch (op.kind()) {
+            case MOVE: {
+                BlockPos c = opCell(op);
+                if (me.blockPosition().equals(c)) return BastionScript.Result.DONE;
+                opCmd = new PathingCommand(new GoalBlock(c), PathingCommandType.SET_GOAL_AND_PATH);
+                return BastionScript.Result.WORKING;
+            }
+            case MOVE_TARGET: {
+                BlockPos t = routeTarget(me, s);
+                if (t == null) return BastionScript.Result.FAILED;
+                if (Math.hypot(me.getX() - (t.getX() + 0.5), me.getZ() - (t.getZ() + 0.5)) < 1.5 && Math.abs(me.getY() - t.getY()) < 2) return BastionScript.Result.DONE;
+                opCmd = new PathingCommand(new GoalNear(t, 1), PathingCommandType.SET_GOAL_AND_PATH);
+                return BastionScript.Result.WORKING;
+            }
+            case PLACE: return placeCell(me, opCell(op));
+            case MINE: return mineCell(me, opCell(op));
+            case PILLAR: return pillarStep(me, op.n());
+            case THROW: {
+                int ingots = ingotCount(me);
+                if (opLeft < 0) { opLeft = op.n() == 0 ? ingots / 2 : op.n(); opThrowMark = distractions; }
+                opLeft -= distractions - opThrowMark;
+                opThrowMark = distractions;
+                if (opLeft <= 0 || ingots <= 0) return BastionScript.Result.DONE;
+                Piglin p = nearestUndistracted(me, near);
+                if (p == null) for (LivingEntity e : near) if (e instanceof Piglin q && !q.isBaby() && q.isAlive() && me.distanceTo(q) <= 16 && (p == null || me.distanceTo(q) < me.distanceTo(p))) p = q;
+                if (p == null) return BastionScript.Result.DONE;
+                opCmd = distract(me, p);
+                return BastionScript.Result.WORKING;
+            }
+            case PUSH_ITEMS: {
+                for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(4), i -> i.getItem().is(Items.GOLD_BLOCK))) {
+                    BlockPos c = i.blockPosition();
+                    if (c.equals(me.blockPosition()) || c.equals(me.blockPosition().above()) || !ctx.world().getBlockState(c).canBeReplaced()) continue;
+                    BastionScript.Result r = placeCell(me, c);
+                    return r == BastionScript.Result.DONE ? BastionScript.Result.WORKING : r;
+                }
+                return BastionScript.Result.DONE;
+            }
+            case BLOCK_LAVA: {
+                if (opLeft < 0) opLeft = op.n();
+                if (opLeft <= 0) return BastionScript.Result.DONE;
+                BlockPos best = null;
+                BlockPos at = me.blockPosition();
+                for (BlockPos b : BlockPos.betweenClosed(at.offset(-5, -3, -5), at.offset(5, 1, 5))) {
+                    if (!ctx.world().getFluidState(b).is(net.minecraft.tags.FluidTags.LAVA) || !ctx.world().getFluidState(b).isSource()) continue;
+                    if (best == null || b.distSqr(at) < best.distSqr(at)) best = b.immutable();
+                }
+                if (best == null) return BastionScript.Result.DONE;
+                BastionScript.Result r = placeCell(me, best);
+                if (r == BastionScript.Result.DONE) { opLeft--; return opLeft <= 0 ? BastionScript.Result.DONE : BastionScript.Result.WORKING; }
+                return r;
+            }
+            case LAVA_ON_PIGLIN: return lavaOnStraggler(me, near);
+            case WEAR_GOLD: {
+                if (wearingGold(me)) return BastionScript.Result.DONE;
+                return wearGold(me) ? BastionScript.Result.WORKING : BastionScript.Result.FAILED;
+            }
+            case UNSTICK: {
+                for (LivingEntity e : near) {
+                    if (!(e instanceof Piglin p) || !p.isAlive() || me.distanceTo(p) > 6 || !stuck(me, p)) continue;
+                    BlockPos pb = p.blockPosition();
+                    Direction d = Direction.getApproximateNearest(me.getX() - p.getX(), 0, me.getZ() - p.getZ());
+                    BlockPos c = pb.relative(d);
+                    if (ctx.world().getBlockState(c).canBeReplaced()) c = pb.below();
+                    return mineCell(me, c) == BastionScript.Result.DONE ? BastionScript.Result.DONE : BastionScript.Result.WORKING;
+                }
+                return BastionScript.Result.DONE;
+            }
+            default: return BastionScript.Result.FAILED;
+        }
+    }
+
+    /** World target of a MOVE_TARGET step. */
+    private BlockPos routeTarget(Player me, BastionRoutes.Step s) {
+        BlockPos at = me.blockPosition();
+        if (s == BastionRoutes.Step.TAKE_THIRD_BASALT_BRIDGE) {
+            // basalt bridge columns between us and the centre; lateral offset along our right-hand axis
+            List<BlockPos> tops = new ArrayList<>();
+            for (BlockPos b : BlockPos.betweenClosed(at.offset(-20, -6, -20), at.offset(20, 6, 20))) {
+                if (!ctx.world().getBlockState(b).is(Blocks.BASALT) && !ctx.world().getBlockState(b).is(Blocks.POLISHED_BASALT)) continue;
+                if (!ctx.world().getBlockState(b.above()).isAir()) continue;
+                tops.add(b.immutable());
+            }
+            if (tops.isEmpty()) return null;
+            List<Integer> lat = new ArrayList<>();
+            for (BlockPos b : tops) { int l = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()); if (!lat.contains(l)) lat.add(l); }
+            int want = BastionScript.thirdFromLeft(lat);
+            BlockPos best = null;
+            for (BlockPos b : tops) if (-sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()) == want && (best == null || b.distSqr(at) < best.distSqr(at))) best = b;
+            return best == null ? null : best.above();
+        }
+        if (s == BastionRoutes.Step.CROSS_BRICK_BRIDGE) {
+            BlockPos best = null;
+            for (BlockPos b : BlockPos.betweenClosed(at.offset(-24, -6, -24), at.offset(24, 8, 24))) {
+                if (!(ctx.world().getBlockState(b).getBlock() instanceof net.minecraft.world.level.block.StairBlock) || !ctx.world().getBlockState(b.above()).isAir()) continue;
+                if (b.distSqr(bastion.pos) >= at.distSqr(bastion.pos)) continue; // stairs on the far side of the bridge
+                if (best == null || b.distSqr(at) < best.distSqr(at)) best = b.immutable();
+            }
+            return best == null ? bastion.pos : best.above();
+        }
+        return bastion.pos;
+    }
+
+    /** Place a throwaway block into the cell from any solid neighbour face in reach. */
+    private BastionScript.Result placeCell(Player me, BlockPos cell) {
+        if (!ctx.world().getBlockState(cell).canBeReplaced()) return BastionScript.Result.DONE;
+        if (me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(cell))) return BastionScript.Result.FAILED;
+        int slot = shelterBlock(me, false);
+        if (slot < 0) return BastionScript.Result.FAILED;
+        Vec3 eye = me.getEyePosition(1.0F);
+        BlockPos sup = null; Direction face = null; Vec3 aim = null;
+        for (Direction d : Direction.values()) {
+            BlockPos n = cell.relative(d);
+            if (!solid(n)) continue;
+            Vec3 a = Vec3.atCenterOf(n).add(d.getOpposite().getStepX() * 0.5, d.getOpposite().getStepY() * 0.5, d.getOpposite().getStepZ() * 0.5);
+            if (eye.distanceTo(a) > 4.4) continue;
+            if (aim == null || eye.distanceTo(a) < eye.distanceTo(aim)) { sup = n; face = d.getOpposite(); aim = a; }
+        }
+        if (aim == null) {
+            if (eye.distanceTo(Vec3.atCenterOf(cell)) > 4.4) { opCmd = new PathingCommand(new GoalNear(cell, 2), PathingCommandType.SET_GOAL_AND_PATH); return BastionScript.Result.WORKING; }
+            return BastionScript.Result.FAILED;
+        }
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 8, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(slot);
+        baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true); // do not open a chest or door we click on
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim, ctx.playerRotations()), true);
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(sup) && h.getDirection() == face)
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Mine the cell with the pickaxe; never one that opens onto lava. */
+    private BastionScript.Result mineCell(Player me, BlockPos cell) {
+        net.minecraft.world.level.block.state.BlockState st = ctx.world().getBlockState(cell);
+        if (st.isAir() || st.canBeReplaced() && st.getFluidState().isEmpty()) return BastionScript.Result.DONE;
+        if (!st.getFluidState().isEmpty() || lavaBeside(cell)) return BastionScript.Result.FAILED;
+        Vec3 eye = me.getEyePosition(1.0F);
+        if (eye.distanceTo(Vec3.atCenterOf(cell)) > 4.4) { opCmd = new PathingCommand(new GoalNear(cell, 2), PathingCommandType.SET_GOAL_AND_PATH); return BastionScript.Result.WORKING; }
+        int pick = pickaxeSlot(me);
+        if (pick < 0) return BastionScript.Result.FAILED;
+        if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(pick);
+        Rotation rot = RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(cell), ctx.playerRotations());
+        baritone.getLookBehavior().updateTarget(rot, true);
+        if (ctx.isLookingAt(cell)) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Jump-place under ourselves until we stand n above where the step began. */
+    private BastionScript.Result pillarStep(Player me, int n) {
+        if (me.blockPosition().getY() >= scriptAt.getY() + n && me.onGround()) return BastionScript.Result.DONE;
+        if (!headroom(me, me.blockPosition().getY())) return BastionScript.Result.FAILED;
+        int slot = shelterBlock(me, false);
+        if (slot < 0) return BastionScript.Result.FAILED;
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 8, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(slot);
+        baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90), true);
+        if (me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
+        else if (me.getY() - Math.floor(me.getY()) > 0.15 || me.getDeltaMovement().y < 0) {
+            BlockPos under = BlockPos.containing(me.getX(), me.getY() - 0.2, me.getZ());
+            if (ctx.world().getBlockState(under).canBeReplaced() && solid(under.below())) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        }
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Pour lava under the nearest hostile piglin within 6, then scoop it back up. */
+    private BastionScript.Result lavaOnStraggler(Player me, List<LivingEntity> near) {
+        Vec3 eye = me.getEyePosition(1.0F);
+        if (opLava != null) {
+            if (!realLava(opLava)) { opLava = null; return BastionScript.Result.DONE; }
+            int b = slotOf(me, Items.BUCKET);
+            if (b < 0 || b >= 9) { opLava = null; return BastionScript.Result.DONE; }
+            me.getInventory().setSelectedSlot(b);
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(opLava), ctx.playerRotations()), true);
+            if (ticks % 4 == 0) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            return BastionScript.Result.WORKING;
+        }
+        LivingEntity t = null;
+        for (LivingEntity e : near) if ((e instanceof Piglin p && p.isAggressive() || e instanceof net.minecraft.world.entity.monster.hoglin.Hoglin) && e.isAlive()
+                && me.distanceTo(e) > 2 && me.distanceTo(e) < 6 && (t == null || me.distanceTo(e) < me.distanceTo(t))) t = e;
+        if (t == null) return BastionScript.Result.DONE;
+        int lb = slotOf(me, Items.LAVA_BUCKET);
+        if (lb < 0 || lb >= 9) return BastionScript.Result.FAILED;
+        BlockPos fl = t.blockPosition().below();
+        if (!solid(fl)) return BastionScript.Result.WORKING;
+        me.getInventory().setSelectedSlot(lb);
+        Vec3 a = Vec3.atCenterOf(fl).add(0, 0.5, 0);
+        if (eye.distanceTo(a) > 4.4) return BastionScript.Result.WORKING;
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, a, ctx.playerRotations()), true);
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(fl) && h.getDirection() == Direction.UP) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            opLava = fl.above();
+        }
+        return BastionScript.Result.WORKING;
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {

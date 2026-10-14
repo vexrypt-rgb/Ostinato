@@ -70,17 +70,20 @@ public final class BastionRouteResolver {
             case TRIPLE_CHESTS: return highest(chests, 3);
             case MIDDLE_BOTTOM_CHEST: { List<Point> c = new ArrayList<>(chests); c.sort(Comparator.comparingInt(Point::y).thenComparingDouble(p -> p.horiz(cx, cz))); return c.isEmpty() ? c : c.subList(0, 1); }
             case UPPER_CHESTS: { List<Point> r = new ArrayList<>(); for (Point p : chests) if (p.y() > cy) r.add(p); return r; }
-            // ---- housing (Couriway videos)
-            case LOOT_TOP_LARGE: return paired(highest(chests, 4), true);
-            case LOOT_TOP_SINGLE: return highest(paired(chests, false), 1);
-            case LOOT_TOP_TRIPLE: return highest(within(chests, cx, cz, TREASURE_CORE), 3);
-            case LOOT_ARMOR_CHEST: return highest(within(chests, cx, cz, TREASURE_CORE), 1);
-            case LOOT_LEFT_RAMPART_TRIPLE: return highest(chests, 3);
-            case MINE_WALL_GOLD: case GOLD_ELEVATOR: { List<Point> c = largestCluster(gold); return c; }
-            case T_TUNNEL_GOLD: case HOUSING_BACKUP_GOLD: return gold;
-            case HOUSING_BOTTOM_CHEST: { List<Point> c = new ArrayList<>(chests); c.sort(Comparator.comparingInt(Point::y)); return c.isEmpty() ? c : c.subList(0, 1); }
+            // ---- housing: picks follow the game's bastion/units templates (26.3 jar):
+            //   ramparts_0 (tall rampart): double + single side by side at mid height = the top triple
+            //   wall_base: a double chest low in the wall next to 9 low gold blocks (the strip-tunnel wall gold) + 3 high
+            //   connected_wall: 4 low gold + 1 halfway up (backup gold); center_pieces: one single among soul sand
+            case LOOT_TOP_LARGE: case LOOT_ARMOR_CHEST: { List<Point> t = topTriple(chests); return t.size() == 3 ? new ArrayList<>(t.subList(0, 2)) : highest(paired(chests, true), 2); }
+            case LOOT_TOP_SINGLE: { List<Point> t = topTriple(chests); return t.size() == 3 ? new ArrayList<>(t.subList(2, 3)) : highest(paired(chests, false), 1); }
+            case LOOT_TOP_TRIPLE: { List<Point> t = topTriple(chests); return t.isEmpty() ? highest(chests, 3) : t; }
+            case LOOT_LEFT_RAMPART_TRIPLE: return topTriple(chests);
+            case HOUSING_BOTTOM_CHEST: { List<Point> d = paired(chests, true); d.sort(Comparator.comparingInt(Point::y)); return d.isEmpty() ? lowestOne(chests) : pairOf(d.get(0), d); }
             case CORNER_CHEST: return nearest(chests, at, 1);
-            case OUTSIDE_CHESTS: { List<Point> r = new ArrayList<>(); for (Point p : chests) if (p.horiz(cx, cz) > TREASURE_CORE) r.add(p); return r; }
+            case MINE_WALL_GOLD: case GOLD_ELEVATOR: return largestCluster(lowGold(gold));
+            case T_TUNNEL_GOLD: return lowGold(gold);
+            case HOUSING_BACKUP_GOLD: return gold;
+            case OUTSIDE_CHESTS: { List<Point> o = new ArrayList<>(); for (Point p : chests) if (p.horiz(cx, cz) > TREASURE_CORE) o.add(p); return o; }
             default: return List.of();
         }
     }
@@ -130,6 +133,41 @@ public final class BastionRouteResolver {
             if (has == paired) o.add(p);
         }
         return o;
+    }
+
+    /** Gold within one block of the lowest gold: the floor-level wall gold of wall_base / connected_wall. */
+    static List<Point> lowGold(List<Point> gold) {
+        int m = lowest(gold);
+        List<Point> o = new ArrayList<>();
+        for (Point p : gold) if (p.y() <= m + 1) o.add(p);
+        return o;
+    }
+
+    static List<Point> lowestOne(List<Point> ps) {
+        List<Point> o = new ArrayList<>(ps);
+        o.sort(Comparator.comparingInt(Point::y));
+        return o.isEmpty() ? o : new ArrayList<>(o.subList(0, 1));
+    }
+
+    static List<Point> pairOf(Point p, List<Point> paired) {
+        List<Point> o = new ArrayList<>(List.of(p));
+        for (Point q : paired) if (q != p && q.y() == p.y() && Math.abs(q.x() - p.x()) + Math.abs(q.z() - p.z()) == 1) { o.add(q); break; }
+        return o;
+    }
+
+    /** The highest double + single at the same height within 6 blocks (ramparts_0): [pair a, pair b, single], or empty. */
+    static List<Point> topTriple(List<Point> chests) {
+        List<Point> pairs = paired(chests, true), singles = paired(chests, false);
+        List<Point> best = List.of();
+        for (Point a : pairs) {
+            List<Point> pr = pairOf(a, pairs);
+            if (pr.size() < 2) continue;
+            for (Point s : singles) {
+                if (s.y() != a.y() || Math.abs(s.x() - a.x()) > 6 || Math.abs(s.z() - a.z()) > 6) continue;
+                if (best.isEmpty() || a.y() > best.get(0).y()) best = List.of(pr.get(0), pr.get(1), s);
+            }
+        }
+        return best;
     }
 
     /** 0 if the points spread more along x, 1 along z. */

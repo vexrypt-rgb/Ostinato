@@ -61,28 +61,6 @@ public class BastionRouteResolverTest {
     }
 
     @Test
-    public void housingBeginner() {
-        Point top1 = c(0, 90, 0), top2 = c(1, 90, 0), topSingle = c(8, 89, 8), bottom = c(5, 40, 5), outer = c(40, 50, 0);
-        Point w1 = g(0, 50, 2), w2 = g(1, 50, 2), w3 = g(2, 50, 2);
-        List<Target> t = BastionRouteResolver.resolve("housing", BastionRoutes.housing(BastionRoutes.HousingVariant.BEGINNER), 0, 60, 0, 0, 92, 0,
-                List.of(top1, top2, topSingle, bottom, outer, w1, w2, w3));
-        assertEquals(Step.LOOT_TOP_LARGE, t.get(0).step());
-        assertEquals(Step.LOOT_TOP_SINGLE, stepOf(t, topSingle));
-        assertEquals(Step.MINE_WALL_GOLD, stepOf(t, w2));
-        assertEquals(Step.HOUSING_BOTTOM_CHEST, stepOf(t, bottom));
-    }
-
-    @Test
-    public void housingLavaOutsideChestLast() {
-        Point armor = c(0, 90, 0), corner = c(2, 55, 2), outer = c(40, 50, 0), gb = g(1, 50, 1);
-        List<Target> t = BastionRouteResolver.resolve("housing", BastionRoutes.housing(BastionRoutes.HousingVariant.LAVA), 0, 60, 0, 0, 92, 0,
-                List.of(armor, corner, outer, gb));
-        assertEquals(Step.LOOT_ARMOR_CHEST, t.get(0).step());
-        assertEquals(Step.GOLD_ELEVATOR, stepOf(t, gb));
-        assertEquals(Step.OUTSIDE_CHESTS, stepOf(t, outer));
-    }
-
-    @Test
     public void tacticStepsClaimNothingAndGoldStepsAreGated() {
         List<Point> pts = List.of(g(0, 60, 0), c(1, 60, 1));
         assertTrue(BastionRouteResolver.select("treasure", Step.PILLAR_3_HUG, 0, 60, 0, new int[]{0, 60, 0}, pts).isEmpty());
@@ -91,5 +69,45 @@ public class BastionRouteResolverTest {
         assertTrue(BastionRouteResolver.breaksGold(Step.MINE_GOLD_SIDE_1));
         assertFalse(BastionRouteResolver.breaksGold(Step.LOOT_DOUBLE));
         assertTrue(BastionRouteResolver.resolve("treasure", BastionRoutes.treasure(true, false, false), 0, 60, 0, 0, 60, 0, List.of()).isEmpty());
+    }
+
+    /** Housing pieces placed from the 26.3 bastion/units templates (positions inside each template plus an offset). */
+    static List<Point> housingFromTemplates() {
+        List<Point> p = new ArrayList<>();
+        int[] ro = {-30, 40, -8};   // ramparts_0
+        for (int[] c : new int[][]{{7, 17, 7}, {7, 17, 8}, {7, 17, 12}}) p.add(c(ro[0] + c[0], ro[1] + c[1], ro[2] + c[2]));
+        int[] wo = {10, 40, -8};    // wall_base
+        for (int[] c : new int[][]{{2, 4, 5}, {3, 4, 5}}) p.add(c(wo[0] + c[0], wo[1] + c[1], wo[2] + c[2]));
+        for (int[] g : new int[][]{{5, 3, 10}, {5, 3, 11}, {6, 3, 11}, {6, 3, 12}, {7, 3, 10}, {7, 4, 9}, {7, 4, 11}, {7, 4, 13}, {8, 4, 12}, {9, 17, 10}, {9, 18, 12}, {10, 17, 12}})
+            p.add(g(wo[0] + g[0], wo[1] + g[1], wo[2] + g[2]));
+        int[] co = {-10, 40, 20};   // connected_wall
+        for (int[] g : new int[][]{{3, 4, 9}, {6, 3, 11}, {6, 4, 11}, {7, 3, 11}, {7, 16, 3}}) p.add(g(co[0] + g[0], co[1] + g[1], co[2] + g[2]));
+        p.add(c(-5 + 8, 41, -5 + 3)); // center_0 single
+        return p;
+    }
+
+    @Test
+    public void housingPicksMatchTemplates() {
+        List<Point> pts = housingFromTemplates();
+        List<Target> t = BastionRouteResolver.resolve("housing", BastionRoutes.housing(BastionRoutes.HousingVariant.BEGINNER), 0, 50, 0, -23, 60, 0, pts);
+        assertEquals(Step.LOOT_TOP_LARGE, stepOf(t, c(-23, 57, -1)));
+        assertEquals(Step.LOOT_TOP_LARGE, stepOf(t, c(-23, 57, 0)));
+        assertEquals(Step.LOOT_TOP_SINGLE, stepOf(t, c(-23, 57, 4)));
+        assertEquals(Step.HOUSING_BOTTOM_CHEST, stepOf(t, c(12, 44, -3)));
+        assertEquals(Step.HOUSING_BOTTOM_CHEST, stepOf(t, c(13, 44, -3)));
+        // the 9 low wall_base gold = strip-tunnel wall gold; connected_wall low gold = T-tunnel; high gold = backup
+        long wall = t.stream().filter(x -> x.step() == Step.MINE_WALL_GOLD).count();
+        assertEquals(9, wall);
+        assertEquals(Step.T_TUNNEL_GOLD, stepOf(t, g(-4, 43, 31)));
+        assertEquals(Step.HOUSING_BACKUP_GOLD, stepOf(t, g(19, 57, 2)));
+        assertEquals(Step.HOUSING_BACKUP_GOLD, stepOf(t, g(-3, 56, 23)));
+        assertEquals(pts.size(), t.size());
+    }
+
+    @Test
+    public void housingIntermediateTopTripleTogether() {
+        List<Target> t = BastionRouteResolver.resolve("housing", BastionRoutes.housing(BastionRoutes.HousingVariant.INTERMEDIATE), 0, 50, 0, -23, 60, 0, housingFromTemplates());
+        for (int i = 0; i < 3; i++) assertEquals(Step.LOOT_TOP_TRIPLE, t.get(i).step());
+        assertEquals(9, t.stream().filter(x -> x.step() == Step.GOLD_ELEVATOR).count());
     }
 }
