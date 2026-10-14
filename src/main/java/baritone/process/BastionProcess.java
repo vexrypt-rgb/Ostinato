@@ -1342,7 +1342,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // run 121: on the way out a brute closed from 11 blocks to 1 over four seconds while the exit path stood stalled,
         // and nothing but the exit was allowed to act. Leaving does not outrank the tower
-        if (exiting && bastion != null && !canTower && !perching) return exit(me, counts(me));
+        // r147: on the way out the exit path dug into lava at y87 and this early return skipped the lava walk-out; burned 20 -> 0 in 4 s
+        if (exiting && bastion != null && !canTower && !perching && !me.isInLava() && !me.isOnFire()) return exit(me, counts(me));
         if (canTower) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
