@@ -314,6 +314,10 @@ public final class KinematicController {
     }
 
     /** Ostinato: mid-air over a narrow landing: 1 hold forward toward its middle, -1 brake, 0 coast. */
+    static boolean needsStepUp(double floor, double feetY) {
+        return floor > feetY + 0.1;
+    }
+
     static int airArrive(double d, double speed) {
         if (d > 0.3) return speed < 0.25 ? 1 : 0;
         return speed > 0.08 ? -1 : 0;
@@ -331,9 +335,18 @@ public final class KinematicController {
         InputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot()));
+        if (narrowEnd && !real.onGround) {
+            // Ostinato: in flight onto a candle, pot or rod: braking now drops short of it; steer for its middle instead
+            int a = airArrive(d, speed);
+            in.setInputForceState(Input.MOVE_FORWARD, a > 0 && diff < 60);
+            in.setInputForceState(Input.MOVE_BACK, a < 0);
+            return newPos;
+        }
         in.setInputForceState(Input.MOVE_FORWARD, speed < want && diff < 60 && d > 0.12);
         in.setInputForceState(Input.MOVE_BACK, speed > want + 0.07 && d < 1.0);
-        in.setInputForceState(Input.JUMP, real.onGround && to[1] > real.y + 0.1 && d < 1.3);
+        // Ostinato: the floor there is the real support top (a candle holds the feet 0.625 under the cell floor):
+        // measured from the cell floor, standing on the candle read as a step still to climb, and it jumped off
+        in.setInputForceState(Input.JUMP, real.onGround && needsStepUp(to[1] - to[4], real.y) && d < 1.3);
         return newPos;
     }
 

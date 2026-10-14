@@ -14,6 +14,12 @@ public class NarrowArriveTest {
     }
 
     @Test
+    public void standingOnACandleIsNotAStepUp() {
+        assertEquals(false, KinematicController.needsStepUp(151 - KinematicController.dropFor(6 / 16.0), 150.375));
+        assertEquals(true, KinematicController.needsStepUp(152, 151));
+    }
+
+    @Test
     public void farAndSlowKeepsGoing() {
         assertEquals(1, KinematicController.airArrive(1.0, 0.1));
     }
