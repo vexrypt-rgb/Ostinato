@@ -190,4 +190,9 @@ public final class BastionPriors {
     public static boolean leaveOnHeavy(boolean hoglin) {
         return !hoglin;
     }
+
+    /** Eat a golden apple: hurt, no regeneration running, a hoglin within melee range. */
+    public static boolean eatGapple(float hp, boolean regen, int hoglinsWithin4) {
+        return hp < 10 && !regen && hoglinsWithin4 > 0;
+    }
 }

@@ -22,4 +22,12 @@ public class HoglinHeavyTest {
         assertFalse(BastionPriors.leaveOnHeavy(true)); // s1161-b05
         assertTrue(BastionPriors.leaveOnHeavy(false));
     }
+
+    @Test
+    public void gappleWhenLowWithHoglinOnUs() {
+        assertTrue(BastionPriors.eatGapple(9, false, 1)); // s1161-b06
+        assertFalse(BastionPriors.eatGapple(9, true, 1));
+        assertFalse(BastionPriors.eatGapple(15, false, 2));
+        assertFalse(BastionPriors.eatGapple(5, false, 0));
+    }
 }

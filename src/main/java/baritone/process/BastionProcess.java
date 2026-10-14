@@ -1463,6 +1463,21 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // the clock starts on arrival, not detection (run 45 spent 3 of its 5 minutes on the approach)
         if (bastion != null && startTick == 0 && Math.hypot(me.getPosX() - bastion.pos.getX(), me.getPosZ() - bastion.pos.getZ()) < 40) startTick = Math.max(1, ticks);
+        if (hogHeavy && !perching && ticks % 40 == 0) logDirect("Bastion: hoglin heavy, perch check walls=" + wallsToHand + " lava=" + (me.isInLava() || lavaWithin(me, 3)) + " fire=" + me.isBurning() + " cd=" + (ticks < perchCooldown) + " coming=" + heavyComing + " blocks=" + pillarBlocks(me) + " ground=" + me.isOnGround() + " head=" + headroom(me, me.getPosition().getY()) + " heavies=" + heavies.size());
+        if (ticks < cureUntil && me.isHandActive() && (me.getActiveItemStack().getItem() == Items.GOLDEN_APPLE || me.getActiveItemStack().getItem() == Items.ENCHANTED_GOLDEN_APPLE)) { ctx.minecraft().gameSettings.keyBindUseItem.setPressed(true); status = "eating a golden apple"; return pause0(); }
+        // s1161-b06: two hoglins took us from 11 to 0 while fighting; eat a golden apple when low with one at melee range
+        if (!me.isHandActive() && BastionPriors.eatGapple(me.getHealth(), me.isPotionActive(net.minecraft.potion.Effects.REGENERATION), ctx.world().getEntitiesWithinAABB(HoglinEntity.class, me.getBoundingBox().grow(4), h -> h.isAlive()).size())) {
+            int gap = -1;
+            for (int i = 0; i < 9 && gap < 0; i++) if (me.inventory.getStackInSlot(i).getItem() == Items.GOLDEN_APPLE || me.inventory.getStackInSlot(i).getItem() == Items.ENCHANTED_GOLDEN_APPLE) gap = i;
+            for (int i = 9; i < 36 && gap < 0; i++) if (me.inventory.getStackInSlot(i).getItem() == Items.GOLDEN_APPLE || me.inventory.getStackInSlot(i).getItem() == Items.ENCHANTED_GOLDEN_APPLE) { ctx.playerController().windowClick(me.container.windowId, i, 7, ClickType.SWAP, me); return pause0(); }
+            if (gap >= 0) {
+                me.inventory.currentItem = gap; cureUntil = ticks + 40;
+                ctx.minecraft().gameSettings.keyBindUseItem.setPressed(true);
+                logDirect("Bastion: eating a golden apple at " + (int) me.getHealth() + " hp with a hoglin on us");
+                status = "drinking/eating for fire";
+                return pause0();
+            }
+        }
         if (!perching && !wallsToHand && !me.isInLava() && !me.isBurning() && !lavaWithin(me, 3) && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.isOnGround() && headroom(me, me.getPosition().getY())) {
             perching = true;
             perchUp = false;
