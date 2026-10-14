@@ -131,6 +131,27 @@ public final class ClientWorld implements PlayerSim.World {
         return left < 0 ? -1 : left;
     }
 
+    /**
+     * Ostinato: the enchantment protection a fall meets, as feather_falling.json (3 a level, boots) and
+     * protection.json (1 a level, each armour piece) give it. Other protections do not cover falls.
+     */
+    public static int fallEpf(IPlayerContext ctx) {
+        int feather = 0;
+        int[] prot = new int[4];
+        int k = 0;
+        for (net.minecraft.world.entity.EquipmentSlot slot : new net.minecraft.world.entity.EquipmentSlot[]{
+                net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST,
+                net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET}) {
+            net.minecraft.world.item.enchantment.ItemEnchantments en = ctx.player().getItemBySlot(slot).getEnchantments();
+            for (net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> e : en.keySet()) {
+                if (e.is(net.minecraft.world.item.enchantment.Enchantments.PROTECTION)) prot[k] = en.getLevel(e);
+                if (slot == net.minecraft.world.entity.EquipmentSlot.FEET && e.is(net.minecraft.world.item.enchantment.Enchantments.FEATHER_FALLING)) feather = en.getLevel(e);
+            }
+            k++;
+        }
+        return MovementTech.fallEpf(feather, prot);
+    }
+
     /** Ostinato: Player.isMobilityRestricted (Blindness) stops and forbids a sprint in LocalPlayer.aiStep. */
     public static boolean sprintAllowed(IPlayerContext ctx) {
         return !ctx.player().isMobilityRestricted();

@@ -24,6 +24,7 @@ import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
 import baritone.pathing.kinematic.ClientWorld;
+import baritone.pathing.kinematic.MovementTech;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.BoatUtil;
@@ -219,7 +220,9 @@ public class CalculationContext {
         this.heuristicScale = Math.min(1, walkCostScale);
         this.jumpBoostLive = ClientWorld.jumpBoostLive(baritone.getPlayerContext());
         this.jumpBoostLevels = ClientWorld.plainGravity(baritone.getPlayerContext()) ? ClientWorld.jumpBoostLasting(baritone.getPlayerContext()) : 0;
-        this.fallDamageFactor = ClientWorld.resistanceFactor(baritone.getPlayerContext());
+        this.fallDamageFactor = ClientWorld.resistanceFactor(baritone.getPlayerContext())
+                // Ostinato: Feather Falling 3 EPF a level, Protection 1 a level a piece, capped at 20, 4% a point
+                * MovementTech.epfFactor(ClientWorld.fallEpf(baritone.getPlayerContext()));
         this.slowFalling = player.hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
                 && !player.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION);
         this.slowFallTicks = slowFalling ? ClientWorld.slowFallTicks(baritone.getPlayerContext()) : -1;

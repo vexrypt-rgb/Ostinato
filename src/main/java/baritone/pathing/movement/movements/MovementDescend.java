@@ -264,7 +264,8 @@ public class MovementDescend extends Movement {
                 return false; // falling onto a half slab is really glitchy, and can cause more fall damage than we'd expect
             }
             // Ostinato: under Slow Falling that lasts the whole fall, the fall distance is reset every tick: no height hurts
-            boolean slowFallSafe = context.slowFallTicks >= 0 && EffectReach.slowFallTicks(fallHeight) + 20 <= context.slowFallTicks;
+            boolean slowFallSafe = context.slowFallTicks >= 0 && EffectReach.slowFallTicks(fallHeight) + 20 <= context.slowFallTicks
+                    || context.fallDamageFactor <= 0; // Ostinato: Resistance V and up: no fall hurts
             if (reachedMinimum && (unprotectedFallHeight <= context.maxFallHeightNoWater + 1 || slowFallSafe)) {
                 // fallHeight = 4 means onto.up() is 3 blocks down, which is the max
                 res.x = destX;
@@ -359,12 +360,14 @@ public class MovementDescend extends Movement {
      * Everything that protects us gets its say first, a fall that hurts never beats one that doesn't.
      */
     private static void hurtingFall(CalculationContext context, int destX, int destZ, int newY, int blocks, double tentativeCost, BlockState onto, MutableMoveResult res) {
-        if (!context.experimental || blocks > ExperimentalMovement.MAX_HURT_FALL) {
+        // Ostinato: the 23 block bound is 20 hp unprotected; Feather Falling, Protection and Resistance stretch it
+        int maxHurt = context.safeFall + (int) Math.ceil((ExperimentalMovement.MAX_HURT_FALL - ExperimentalMovement.SAFE_FALL) / Math.max(context.fallDamageFactor, 0.2));
+        if (!context.experimental || blocks > maxHurt) {
             return;
         }
-        int damage = ExperimentalMovement.fallDamage(blocks, context.safeFall); // Ostinato: Jump Boost
-        // Ostinato: Resistance takes 20% a level off what is left (LivingEntity.getDamageAfterMagicAbsorb)
-        damage = (int) Math.ceil(damage * context.fallDamageFactor - 1e-9);
+        int raw = ExperimentalMovement.fallDamage(blocks, context.safeFall); // Ostinato: Jump Boost
+        // Ostinato: Resistance, then Feather Falling and Protection (MovementTech.fallDamage); health is a float, no rounding
+        double damage = raw * context.fallDamageFactor;
         if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
             return;
         }
@@ -376,7 +379,7 @@ public class MovementDescend extends Movement {
         res.y = newY + 1;
         res.z = destZ;
         res.cost = tentativeCost + damage * context.fallDamageCost;
-        res.damage = damage;
+        res.damage = (int) Math.ceil(damage - 1e-9); // Ostinato: whole hp for the callers that count them
     }
 
     @Override

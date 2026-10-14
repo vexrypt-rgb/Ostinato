@@ -19,6 +19,7 @@ package baritone.pathing.movement.movements;
 
 import baritone.pathing.kinematic.BsiWorld;
 import baritone.pathing.kinematic.EffectReach;
+import baritone.pathing.kinematic.MovementTech;
 import baritone.pathing.kinematic.JumpTemplates;
 
 import baritone.Baritone;
@@ -292,7 +293,8 @@ public class MovementParkour extends Movement {
                 if (slowTakeoff(factorBlock(context, x, y, z)) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
                     break; // Ostinato: off honey or soul sand, only what the sim lands from the run-up there is
                 }
-                if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)) {
+                if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)
+                        && iceRunOutSafe(context, destX, y, destZ, xDiff, zDiff, landingOn)) { // Ostinato: ice slides on
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
@@ -432,6 +434,33 @@ public class MovementParkour extends Movement {
         for (int c = 3; c <= top; c++) {
             if (!MovementHelper.fullyPassable(context, x, y + c, z)) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Ostinato: a landing on ice (friction 0.98, blue ice 0.989) keeps sliding: from a jump's ~0.3 a tick that is
+     * v / (1 - friction * 0.91), 2.6 to 2.8 blocks (MovementTech.slideDistance), and the landing only lets go of sprint.
+     * Every cell it can slide into has to be floor with room, or a wall that stops it; a hole or a drop does not.
+     */
+    static boolean iceRunOutSafe(CalculationContext context, int x, int y, int z, int xDiff, int zDiff, BlockState landingOn) {
+        float f = landingOn.getBlock().getFriction();
+        if (!MovementTech.slippery(f)) {
+            return true;
+        }
+        int cells = (int) Math.ceil(MovementTech.slideDistance(0.3, f) - 0.5);
+        for (int k = 1; k <= cells; k++) {
+            int cx = x + xDiff * k, cz = z + zDiff * k;
+            if (!MovementHelper.fullyPassable(context, cx, y, cz) || !MovementHelper.fullyPassable(context, cx, y + 1, cz)) {
+                return true; // a wall: the slide stops against it
+            }
+            BlockState floor = context.get(cx, y - 1, cz);
+            if (!MovementHelper.canWalkOn(context, cx, y - 1, cz, floor) || MovementHelper.avoidWalkingInto(context.get(cx, y, cz))) {
+                return false;
+            }
+            if (!MovementTech.slippery(floor.getBlock().getFriction())) {
+                return true; // off the ice, plain friction stops it within a block
             }
         }
         return true;
