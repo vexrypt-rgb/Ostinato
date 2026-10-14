@@ -154,6 +154,7 @@ public final class PkTest implements AbstractGameEventListener {
             }
             if (state == 1) { state = 2; wait = 100; return; }
             if (state == 2) { if (--wait <= 0) setup(mc); return; }
+            if (state == 3 && hopLeft > 0) { hop(mc); return; }
             if (state == 3) { tick++; if (wait > 0) { wait--; return; } if (resume) { resume = false; nextStep(); return; }
                 if (reissue) { reissue = false; forget(); b.getCustomGoalProcess().setGoalAndPath(goal()); say("PK repath " + step().pos().toShortString()); } runTick(mc); return; }
             if (state == 4 && --wait <= 0) { state = 5; mc.stop(); }
@@ -201,6 +202,7 @@ public final class PkTest implements AbstractGameEventListener {
                         case "cmd" -> steps.add(new Step("cmd", 0, 0, 0, 0, line.substring(4).trim()));
                         case "tag" -> steps.add(new Step("tag", 0, 0, 0, 0, a.length > 1 ? a[1] : ""));
                         case "wait" -> steps.add(new Step("wait", 0, 0, 0, Integer.parseInt(a[1]), ""));
+                        case "hop" -> steps.add(new Step("hop", 0, Integer.parseInt(a[2]), 0, Integer.parseInt(a[1]), a.length > 3 ? a[3] : ""));
                         case "tp", "goal" -> steps.add(new Step(a[0], (int) Math.floor(Double.parseDouble(a[1])), (int) Math.floor(Double.parseDouble(a[2])), (int) Math.floor(Double.parseDouble(a[3])), 0, ""));
                         case "near" -> steps.add(new Step("near", Integer.parseInt(a[1]), Integer.parseInt(a[2]), Integer.parseInt(a[3]), a.length > 4 ? Integer.parseInt(a[4]) : 2, ""));
                         default -> say("PK bad goal line " + line);
@@ -210,7 +212,7 @@ public final class PkTest implements AbstractGameEventListener {
         } else {
             plateGoals(mc);
         }
-        goalCount = (int) steps.stream().filter(st -> st.kind.equals("goal") || st.kind.equals("near")).count();
+        goalCount = (int) steps.stream().filter(st -> st.kind.equals("goal") || st.kind.equals("near") || st.kind.equals("hop")).count();
         say("PK course " + goalCount + " goals: " + steps.stream().map(st -> st.kind + (st.kind.equals("cmd") ? "" : " " + st.pos().toShortString())).toList());
         if (goalCount == 0) { say("PK BLOCKER no goals"); end(); return; }
         state = 3;
@@ -243,6 +245,42 @@ public final class PkTest implements AbstractGameEventListener {
 
     private Step step() { return steps.get(stepIdx); }
 
+    // "hop <ticks> <landY>": tick-exact headhitter momentum, no planner: hold W + sprint facing +z, press jump afresh on
+    // every landing (the 3-tick hh cycle under a 2-high ceiling), log each tick, and report whether the far pad was reached
+    private int hopLeft, hopT, hopLand, hopOk, hopTried;
+    private double hopTop;
+    private boolean hopJump;
+    private String hopPattern = ""; // optional tick-exact inputs: J = jump pressed that tick, . = not
+
+    private void hop(Minecraft mc) {
+        var p = mc.player;
+        var o = mc.options;
+        p.setYRot(0f);
+        p.setXRot(0f);
+        boolean og = p.onGround();
+        hopJump = hopPattern.isEmpty() ? og && !hopJump : hopT < hopPattern.length() && hopPattern.charAt(hopT) == 'J';
+        o.keyUp.setDown(true);
+        o.keySprint.setDown(true);
+        o.keyJump.setDown(hopJump);
+        Vec3 v = p.getDeltaMovement();
+        hopTop = Math.max(hopTop, Math.abs(v.z));
+        say(String.format("PK HOP %s t=%d z=%.4f y=%.4f vz=%.4f vy=%.4f og=%b jump=%b", drillTag, hopT, p.getZ(), p.getY(), v.z, v.y, og, hopJump));
+        hopT++;
+        boolean reached = og && p.getZ() >= 2.7 && p.getY() >= hopLand - 0.01;
+        boolean fell = p.getY() < hopLand - 1.5;
+        if (reached || fell || --hopLeft <= 0) {
+            hopLeft = 0;
+            o.keyUp.setDown(false);
+            o.keySprint.setDown(false);
+            o.keyJump.setDown(false);
+            hopTried++;
+            if (reached) hopOk++;
+            say(String.format("PK HOPRESULT %s %s z=%.3f y=%.3f maxVz=%.4f (%d/%d)", drillTag, reached ? "REACHED" : "FAIL", p.getZ(), p.getY(), hopTop, hopOk, hopTried));
+            wait = 20;
+            resume = true;
+        }
+    }
+
     private void nextStep() {
         while (true) {
             stepIdx++; goalFails = 0;
@@ -251,6 +289,7 @@ public final class PkTest implements AbstractGameEventListener {
             if (st.kind.equals("cmd")) { run(st.text); continue; }
             if (st.kind.equals("tag")) { drillTag = st.text; say("PK section " + drillTag); continue; }
             if (st.kind.equals("wait")) { wait = st.r; resume = true; return; }
+            if (st.kind.equals("hop")) { hopLeft = st.r; hopT = 0; hopPattern = st.text; hopLand = st.y; hopTop = 0; hopJump = false; b.getPathingBehavior().cancelEverything(); return; }
             if (st.kind.equals("tp")) { tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; continue; }
             goalNo++;
             lastGood = null;
