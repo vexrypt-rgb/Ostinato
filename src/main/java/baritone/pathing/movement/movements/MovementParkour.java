@@ -91,6 +91,15 @@ public class MovementParkour extends Movement {
         return new MovementParkour(context.getBaritone(), src, dist, direction, res.y > src.y);
     }
 
+    /** Ostinato: honey halves a jump (about 0.4 blocks high): nothing can be jumped up onto from it. */
+    public static boolean lowJump(BlockState standingOn) {
+        return lowJump(standingOn.getBlock().getJumpFactor());
+    }
+
+    static boolean lowJump(float jumpFactor) {
+        return jumpFactor < 0.9f;
+    }
+
     public static void cost(CalculationContext context, int x, int y, int z, Direction dir, MutableMoveResult res) {
         if (!context.allowParkour || disabled) {
             return;
@@ -172,7 +181,7 @@ public class MovementParkour extends Movement {
             // check for ascend landing position
             BlockState destInto = context.bsi.get0(destX, y, destZ);
             if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && context.allowParkourAscend && context.canSprint && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
+                if (i <= 3 && context.allowParkourAscend && context.canSprint && !lowJump(standingOn) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
                     res.z = destZ;
