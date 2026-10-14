@@ -96,7 +96,11 @@ public class MovementParkour extends Movement {
 
     /** Ostinato: a takeoff block that slows the run-up or the jump (honey, soul sand). */
     static boolean slowTakeoff(BlockState standingOn) {
-        return standingOn.getBlock().getSpeedFactor() < 1 || standingOn.getBlock().getJumpFactor() < 1;
+        return slowTakeoff(standingOn.getBlock().getSpeedFactor(), standingOn.getBlock().getJumpFactor());
+    }
+
+    static boolean slowTakeoff(float speedFactor, float jumpFactor) {
+        return speedFactor < 1 || jumpFactor < 1;
     }
 
     /** Ostinato: fly a straight jump of distance i from the run-up actually there, in the sim, against the real blocks. */

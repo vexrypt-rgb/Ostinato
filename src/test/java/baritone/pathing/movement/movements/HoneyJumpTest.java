@@ -44,6 +44,40 @@ public class HoneyJumpTest {
     }
 
     @Test
+    public void honeyAndSoulSandAreSlowTakeoffs() {
+        assertTrue(MovementParkour.slowTakeoff(0.4f, 0.5f));  // honey
+        assertTrue(MovementParkour.slowTakeoff(0.4f, 1f));    // soul sand
+        assertFalse(MovementParkour.slowTakeoff(1f, 1f));     // stone
+    }
+
+    @Test
+    public void soulSandSlowsTheRunUpInTheSim() {
+        assertTrue(runUp(0.4f) < runUp(1f) * 0.7); // vanilla: the 0.4 drag only hits the carried speed, the fresh push moves in full
+    }
+
+    private static double runUp(final float speed) {
+        PlayerSim s = new PlayerSim(new PlayerSim.World() {
+            @Override
+            public void collect(double a, double b, double c, double d, double e, double f, List<double[]> out) {
+                if (b < 0) out.add(new double[]{-50, -1, -50, 50, 0, 50});
+            }
+
+            @Override
+            public float slipperiness(int x, int y, int z) {
+                return 0.6f;
+            }
+
+            @Override
+            public float speedFactor(int x, int y, int z) {
+                return speed;
+            }
+        });
+        s.x = 0.5; s.z = 0.5; s.onGround = true; s.vy = -0.0784000015258789;
+        for (int t = 0; t < 20; t++) s.tick(-90f, true, true, false);
+        return s.x - 0.5;
+    }
+
+    @Test
     public void onlyHoneysFactorIsALowJump() {
         assertTrue(MovementParkour.lowJump(0.5f));
         assertFalse(MovementParkour.lowJump(1f));
