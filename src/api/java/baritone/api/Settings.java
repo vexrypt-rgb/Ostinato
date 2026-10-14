@@ -904,6 +904,22 @@ public final class Settings {
     public final Setting<Boolean> humanLookEverywhere = new Setting<>(false);
 
     /**
+     * Ostinato: a human mouse profile that drives every humanized camera turn (headSteering, mining, PvP,
+     * humanLookEverywhere) with a model of your own hand: reaction time, Fitts' law timing, velocity profile with
+     * submovements and overshoot, curvature and tremor, fitted by tools/human-mouse/HumanMouseFit.java from
+     * mouse-capture recordings. A path to the profile JSON (relative paths resolve against the game directory), or
+     * "example" for the bundled synthetic profile. Empty, or a file that can't be read, keeps the built-in curve.
+     */
+    public final Setting<String> humanMouseProfile = new Setting<>("");
+
+    /**
+     * Ostinato: when a new, unexpected look target appears (a mob showing up, being hit, a new threat in a fight), the
+     * camera waits a human reaction time before turning, sampled from the humanMouseProfile (its surprise-target fit)
+     * or a built-in 230 ms median. Never applies to planned movement: path following, headSteering, mining, parkour.
+     */
+    public final Setting<Boolean> humanReactionDelay = new Setting<>(true);
+
+    /**
      * Same as {@link #smoothLook} but for elytra flying.
      */
     public final Setting<Boolean> elytraSmoothLook = new Setting<>(false);

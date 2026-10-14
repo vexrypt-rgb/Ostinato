@@ -130,7 +130,9 @@ public final class MineController {
         Optional<Rotation> reach = RotationUtils.reachable(ctx, target, ctx.playerController().getBlockReachDistance());
         final BlockPos tgt = target;
         Rotation rot = reach.orElseGet(() -> RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(tgt), ctx.playerRotations()));
-        baritone.getLookBehavior().human();
+        // Ostinato: the block's angular width conditions a humanMouseProfile move (near blocks are big targets)
+        double blockDist = Math.max(0.6, ctx.playerHead().distanceTo(VecUtils.getBlockPosCenter(tgt)));
+        baritone.getLookBehavior().humanAim((float) Math.toDegrees(2 * Math.atan(0.5 / blockDist)), 0.5f);
         baritone.getLookBehavior().updateTarget(rot, true);
         boolean aimed = ctx.isLookingAt(target) || ctx.playerRotations().isReallyCloseTo(rot);
         in.setInputForceState(Input.CLICK_LEFT, aimed);

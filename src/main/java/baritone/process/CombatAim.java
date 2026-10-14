@@ -22,6 +22,9 @@ final class CombatAim {
     private final IPlayerContext ctx;
     private final Random rng;
     private double wanderY, wanderP, wanderVy, wanderVp;
+    // Ostinato: humanReactionDelay, when the last fight look was and where it pointed
+    private int lastLookTick = Integer.MIN_VALUE / 2;
+    private float lastAimYaw, lastAimPitch;
 
     CombatAim(Baritone baritone, IPlayerContext ctx, Random rng) {
         this.baritone = baritone;
@@ -32,6 +35,7 @@ final class CombatAim {
     /** Look at the point; {@code targetSpeed} is the target's horizontal speed in blocks per tick (wander grows with it). */
     void look(Vec3 at, double targetSpeed) {
         Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
+        noticeSurprise(r);
         if (HUMANIZE) {
             // a hand on a mouse never tracks perfectly: a slow wander around the aim point, bigger when the target moves fast
             double energy = 0.5 + Math.min(1.0, targetSpeed * 3);
@@ -42,6 +46,24 @@ final class CombatAim {
             r = new Rotation(r.getYaw() + (float) wanderY, Mth.clamp(r.getPitch() + (float) wanderP, -90f, 90f));
         }
         aim(r, true);
+    }
+
+    /**
+     * Ostinato: a target that is new (no fight look for a second) or that jumped far from the last aim (a new threat,
+     * a switch after being hit) is a surprise, so the hand waits a reaction time before turning (humanReactionDelay).
+     * A target already near the crosshair is not a surprise.
+     */
+    private void noticeSurprise(Rotation r) {
+        Player me = ctx.player();
+        if (me == null) return;
+        int t = me.tickCount;
+        boolean fresh = t - lastLookTick > 20;
+        boolean jumped = !fresh && Math.hypot(Mth.wrapDegrees(r.getYaw() - lastAimYaw), r.getPitch() - lastAimPitch) > 60;
+        boolean offView = Math.hypot(Mth.wrapDegrees(r.getYaw() - me.getYRot()), r.getPitch() - me.getXRot()) > 10;
+        if (HUMANIZE && (fresh || jumped) && offView) baritone.getLookBehavior().surprise();
+        lastLookTick = t;
+        lastAimYaw = r.getYaw();
+        lastAimPitch = r.getPitch();
     }
 
     /** Whether our view is within {@code deg} degrees of looking at the point. */
@@ -56,7 +78,7 @@ final class CombatAim {
     }
 
     void aim(Rotation r, boolean blockInteract) {
-        baritone.getLookBehavior().human();
+        baritone.getLookBehavior().humanReactive(); // Ostinato: reactive, so a surprise hold applies
         baritone.getLookBehavior().updateTarget(r, blockInteract);
     }
 

@@ -26,6 +26,9 @@ import baritone.api.event.events.*;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.behavior.look.ForkableRandom;
+import baritone.api.utils.Helper;
+import baritone.behavior.look.HumanMouseModel;
+import baritone.behavior.look.ReactionGate;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 
 import java.util.ArrayDeque;
@@ -91,6 +94,46 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      */
     public void human() {
         this.human = true;
+    }
+
+    // Ostinato: conditioning for the humanMouseProfile model, for this tick's look; reset after every tick
+    private float aimWidthDeg = 3f, aimUrgency = 0.5f;
+
+    /**
+     * Ostinato: {@link #human()} with what a profile-driven move is conditioned on: the target's angular width
+     * (a nearby block is easy to hit, a far one needs care) and urgency (0 calm .. 1 hurried). Without a
+     * humanMouseProfile this is the same as {@link #human()}.
+     */
+    public void humanAim(float targetWidthDeg, float urgency) {
+        this.human = true;
+        this.aimWidthDeg = Math.max(0.2f, targetWidthDeg);
+        this.aimUrgency = Math.max(0f, Math.min(1f, urgency));
+    }
+
+    // Ostinato: humanReactionDelay. Only reactive looks (combat aim) can be held; every other look cancels a hold.
+    private final ReactionGate reaction = new ReactionGate();
+    private final java.util.Random reactionRng = new java.util.Random();
+    private boolean reactive;
+
+    /** Ostinato: {@link #human()} for a look that reacts to the world (combat aim), so a surprise hold applies to it. */
+    public void humanReactive() {
+        this.human = true;
+        this.reactive = true;
+    }
+
+    /**
+     * Ostinato: a new, unexpected look target just appeared (a mob showing up, being hit, a new threat): with
+     * humanReactionDelay on, the camera holds for a reaction time sampled from the human mouse profile (or a
+     * built-in 230 ms median) before turning. Never call this for planned looks.
+     */
+    public void surprise() {
+        HumanMouseModel m = ctx.player() == null ? null : humanProfile();
+        reaction.surprise(Baritone.settings().humanReactionDelay.value, m, reactionRng);
+    }
+
+    /** Ostinato: whether a surprise reaction hold is running. */
+    public boolean reacting() {
+        return reaction.holding();
     }
 
     private boolean ownMove;
@@ -164,6 +207,14 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * mouse count rides on top; the result is rounded to whole mouse counts as before.
      */
     private Rotation humanStep(Rotation want) {
+        if (reaction.hold(this.reactive)) { // Ostinato: surprise reaction delay, reactive looks only
+            velYaw = 0;
+            velPitch = 0;
+            plan = null;
+            return new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
+        }
+        Rotation profiled = profileStep(want); // Ostinato: a fitted human mouse profile, when one is set
+        if (profiled != null) return profiled;
         float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
         float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
@@ -182,10 +233,114 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         outP += (float) (handNoise.nextGaussian() * tremor);
         velYaw = outY;
         velPitch = outP;
-        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
-        float step = (float) (f * f * f * 8.0 * 0.15); // degrees per mouse count, as MouseHandler turns the player
+        float step = degreesPerCount(); // degrees per mouse count, as MouseHandler turns the player
         outY = Math.round(outY / step) * step;
         outP = Math.round(outP / step) * step;
+        return new Rotation(cy + outY, net.minecraft.util.Mth.clamp(cp + outP, -90f, 90f));
+    }
+
+    /** Degrees the camera turns per raw mouse count at the current sensitivity, as MouseHandler does it. */
+    private float degreesPerCount() {
+        double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
+        return (float) (f * f * f * 8.0 * 0.15);
+    }
+
+    // ---- Ostinato: humanMouseProfile, a generative model of the user's own mouse (see HumanMouseModel) ----
+    private HumanMouseModel profile;
+    private String profileSetting, profileStamp;
+    private int profileCheckTick = Integer.MIN_VALUE / 2;
+    private HumanMouseModel.Movement plan;
+    private float planYaw0, planPitch0, planGoalYaw, planGoalPitch;
+    private double planT;
+    private final java.util.Random planRng = new java.util.Random();
+
+    /** The profile named by the setting, reloaded when the setting or the file changes; null for the built-in curve. */
+    private HumanMouseModel humanProfile() {
+        String path = Baritone.settings().humanMouseProfile.value;
+        path = path == null ? "" : path.trim();
+        if (path.isEmpty()) {
+            profile = null;
+            profileSetting = null;
+            profileStamp = null;
+            return null;
+        }
+        int tick = ctx.player().tickCount;
+        if (path.equals(profileSetting) && Math.abs(tick - profileCheckTick) < 100) return profile;
+        profileCheckTick = tick;
+        boolean changed = !path.equals(profileSetting);
+        profileSetting = path;
+        try {
+            if (path.equalsIgnoreCase("example")) {
+                if (!"example".equals(profileStamp)) {
+                    try (java.io.InputStream in = LookBehavior.class.getResourceAsStream("/assets/baritone/ostinato/human-mouse-example.json")) {
+                        if (in == null) throw new java.io.FileNotFoundException("bundled example profile");
+                        profile = HumanMouseModel.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    profileStamp = "example";
+                    Helper.HELPER.logDirect("Human mouse: using the bundled synthetic example profile");
+                }
+                return profile;
+            }
+            java.nio.file.Path file = java.nio.file.Paths.get(path);
+            if (!file.isAbsolute()) file = ctx.minecraft().gameDirectory.toPath().resolve(file);
+            String stamp = file + "@" + java.nio.file.Files.getLastModifiedTime(file).toMillis();
+            if (!stamp.equals(profileStamp)) {
+                profile = HumanMouseModel.load(file);
+                profileStamp = stamp;
+                Helper.HELPER.logDirect("Human mouse: loaded " + file.getFileName() + " (" + profile.templateCount() + " recorded movements"
+                        + (profile.isSynthetic() ? ", synthetic" : "") + ")");
+            }
+        } catch (Exception e) {
+            if (changed || profile != null) Helper.HELPER.logDirect("Human mouse: can't use profile " + path + " (" + e.getMessage() + "); using the built-in curve");
+            profile = null;
+            profileStamp = null;
+        }
+        return profile;
+    }
+
+    /**
+     * One tick of a profile-driven move: a whole movement is generated from the model when a new aim starts (no
+     * reaction delay: it starts this tick), then played back tick by tick against the camera; when the target
+     * moves away from the planned end, the move is re-planned from where the camera is.
+     * Returns null when no profile is in use.
+     */
+    private Rotation profileStep(Rotation want) {
+        HumanMouseModel m = humanProfile();
+        if (m == null) {
+            plan = null;
+            return null;
+        }
+        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        float cy = p.getYRot(), cp = p.getXRot();
+        float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
+        float step = degreesPerCount();
+        if (plan != null) {
+            double moved = Math.hypot(net.minecraft.util.Mth.wrapDegrees(want.getYaw() - planGoalYaw), want.getPitch() - planGoalPitch);
+            if (moved > Math.max(1.0, 0.2 * Math.hypot(dy, dp))) plan = null;
+        }
+        float outY, outP;
+        if (plan == null && Math.abs(dy) <= 1.5f && Math.abs(dp) <= 1.5f) {
+            outY = dy; // fine aim lands exactly, as the built-in curve does
+            outP = dp;
+        } else {
+            if (plan == null) {
+                plan = m.generate(dy / step, dp / step, aimWidthDeg / step, aimUrgency, planRng);
+                planYaw0 = cy;
+                planPitch0 = cp;
+                planGoalYaw = want.getYaw();
+                planGoalPitch = want.getPitch();
+                planT = 0;
+            }
+            planT += 50;
+            double[] pos = plan.at(planT);
+            outY = net.minecraft.util.Mth.wrapDegrees((float) (planYaw0 + pos[0] * step) - cy);
+            outP = (float) (planPitch0 + pos[1] * step) - cp;
+            if (planT >= plan.durationMs()) plan = null;
+        }
+        outY = Math.round(outY / step) * step;
+        outP = Math.round(outP / step) * step;
+        velYaw = outY;
+        velPitch = outP;
         return new Rotation(cy + outY, net.minecraft.util.Mth.clamp(cp + outP, -90f, 90f));
     }
 
@@ -239,8 +394,12 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
-                if (!this.human) { velYaw = 0; velPitch = 0; }
+                if (!this.human) { velYaw = 0; velPitch = 0; plan = null; reaction.cancel(); }
+                else if (!this.reactive) reaction.cancel(); // a planned look this tick: no hold carries over
+                this.reactive = false;
                 this.human = false;
+                this.aimWidthDeg = 3f; // Ostinato
+                this.aimUrgency = 0.5f;
                 this.ownMove = false;
                 break;
             }
