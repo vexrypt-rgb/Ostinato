@@ -63,6 +63,8 @@ public final class BastionPriors {
         switch (layout) {
             case "housing": return 5;
             case "treasure": return 4; // 2 near the top of the right rampart + a double on the left
+            case "bridge": return 2; // each rampart has at least a single
+            case "stables": return 1; // middle lower section, bottom front
             default: return 0;
         }
     }
@@ -93,5 +95,65 @@ public final class BastionPriors {
         if (basaltMidWall) return new int[]{-1, 1};
         if (chainLanterns) return new int[]{1, -1};
         return null;
+    }
+    // ---- Bridge (ch. 4): all gold is in the chalice at the end of the bridge; mine it all first, then trade at a triple rampart.
+    public enum Rampart { SINGLE, DOUBLE, TRIPLE }
+
+    /** Chests in a rampart section. */
+    public static int chests(Rampart r) {
+        return r == Rampart.SINGLE ? 1 : r == Rampart.DOUBLE ? 2 : 3;
+    }
+
+    /** Bridge ramparts are 50% single / 50% triple each: expected chests over both. */
+    public static double bridgeExpectedChests() {
+        return 2 * (0.5 * 1 + 0.5 * 3);
+    }
+
+    public enum BridgeStep { MINE_CHALICE, TRADE_LEFT_TRIPLE, TRADE_RIGHT_TRIPLE, TRADE_SINGLE, LOOT_OTHER }
+
+    /** Bridge route: whole chalice first, then trade at a triple (left preferred if both) while looting; a double
+     * single trades at a single rampart. */
+    public static List<BridgeStep> bridgeRoute(boolean leftTriple, boolean rightTriple) {
+        BridgeStep trade = leftTriple ? BridgeStep.TRADE_LEFT_TRIPLE : rightTriple ? BridgeStep.TRADE_RIGHT_TRIPLE : BridgeStep.TRADE_SINGLE;
+        return List.of(BridgeStep.MINE_CHALICE, trade, BridgeStep.LOOT_OTHER);
+    }
+
+    // ---- Stables (ch. 4): upper ramparts (3 sections, each single/double/triple), lower ramparts (left/right good or bad gap).
+
+    /** Gold blocks behind chiseled polished blackstone about halfway down a triple upper rampart. */
+    public static int stablesTripleGoldBlocks(Rampart upper) {
+        return upper == Rampart.TRIPLE ? 4 : 0;
+    }
+
+    /** Upper rampart identification: a lantern at the front means a double; tallest is the triple; a diagonal
+     * hallway is the single. */
+    public static Rampart stablesUpper(boolean lanternFront, boolean tallest) {
+        if (tallest) return Rampart.TRIPLE;
+        return lanternFront ? Rampart.DOUBLE : Rampart.SINGLE;
+    }
+
+    /** Lower side gap: good = many piglins and hidden gold at the bottom; bad = a single chest near the bottom.
+     * Cues: probe block open (true) means good; outside top gap 1 tall = good, 2 tall = bad; smooth back wall = good.
+     * Returns null when no cue is known. */
+    public static Boolean stablesGapGood(Boolean probeOpen, int outsideGapHeight, Boolean smoothBack) {
+        if (probeOpen != null) return probeOpen;
+        if (outsideGapHeight == 1) return true;
+        if (outsideGapHeight == 2) return false;
+        return smoothBack;
+    }
+
+    /** The middle lower section always has a chest at the very bottom front. */
+    public static int stablesGuaranteedChests() {
+        return 1;
+    }
+
+    public enum StablesStep { TOP_OF_MIDDLE_STAIRS, GOOD_GAP_GOLD, TRIPLE_GOLD, TRIPLE_CHESTS, MIDDLE_BOTTOM_CHEST, UPPER_CHESTS }
+
+    /** Stables route: start at the top of the middle stairs; take a good gap's gold if there is one, else a triple's
+     * 4 gold blocks; then chests. */
+    public static List<StablesStep> stablesRoute(boolean anyGoodGap, boolean anyTriple) {
+        if (anyGoodGap) return List.of(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.GOOD_GAP_GOLD, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
+        if (anyTriple) return List.of(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.TRIPLE_GOLD, StablesStep.TRIPLE_CHESTS, StablesStep.MIDDLE_BOTTOM_CHEST);
+        return List.of(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
     }
 }
