@@ -1368,7 +1368,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // times the brutes won the race (two hits kill). A tower is out of reach in under two seconds: let it get up, and
         // only leave from the ground when it has had three seconds and is still low
         boolean towerFailed = perching && me.getPosY() < perchBase + 1.9 && ticks - perchTick > 60;
-        if (bastion != null && !exiting && !canTower && (!perching || towerFailed) && (pack >= 3 && me.isOnGround() && me.getHealth() < 16 /* runs 117, 119, 128: left for good at full health, with nothing */ || me.getHealth() < BastionSettings.lowHealth && heavies.stream().anyMatch(e -> me.getDistance(e) < 12) || me.getHealth() < 16 && heavyComing)) {
+        // s1161-b05: hoglins (heavies since b04) made it leave the bastion for good at 15 hp; only brutes/zoglins do that
+        List<LivingEntity> leavers = heavies.stream().filter(e -> BastionPriors.leaveOnHeavy(e instanceof HoglinEntity)).collect(java.util.stream.Collectors.toList());
+        boolean leaverComing = leavers.stream().anyMatch(e -> me.getDistance(e) < 8 || me.getDistance(e) < 12 && e instanceof MobEntity && ((MobEntity) e).isAggressive());
+        if (bastion != null && !exiting && !canTower && (!perching || towerFailed) && (pack >= 3 && me.isOnGround() && me.getHealth() < 16 /* runs 117, 119, 128: left for good at full health, with nothing */ || me.getHealth() < BastionSettings.lowHealth && leavers.stream().anyMatch(e -> me.getDistance(e) < 12) || me.getHealth() < 16 && leaverComing)) {
             logDirect("Bastion: brute close at " + (int) me.getHealth() + " hp (" + pack + " within 16), leaving");
             pveP.hold = false;
             perching = false;

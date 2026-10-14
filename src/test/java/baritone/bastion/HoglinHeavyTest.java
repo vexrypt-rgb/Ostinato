@@ -16,4 +16,10 @@ public class HoglinHeavyTest {
         assertTrue(BastionPriors.hoglinsHeavy(1, 10));
         assertFalse(BastionPriors.hoglinsHeavy(0, 2));
     }
+
+    @Test
+    public void hoglinsNeverMakeUsLeave() {
+        assertFalse(BastionPriors.leaveOnHeavy(true)); // s1161-b05
+        assertTrue(BastionPriors.leaveOnHeavy(false));
+    }
 }

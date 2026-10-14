@@ -185,4 +185,9 @@ public final class BastionPriors {
     public static boolean hoglinsHeavy(int adultsWithin8, float hp) {
         return adultsWithin8 >= 2 || adultsWithin8 >= 1 && hp < 12;
     }
+
+    /** A heavy that makes us leave the bastion for good: brutes and zoglins, never hoglins (we perch or fight those). */
+    public static boolean leaveOnHeavy(boolean hoglin) {
+        return !hoglin;
+    }
 }
