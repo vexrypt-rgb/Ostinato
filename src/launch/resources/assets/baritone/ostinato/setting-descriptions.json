@@ -314,5 +314,7 @@
  "renderAcsHud": "Show the Autotune Combat System card on the HUD while #pvp is fighting. Hidden while F3 is open.",
  "acsHudAnchor": "Where the Autotune card sits: TOP_LEFT, LEFT, TOP_RIGHT or RIGHT.",
  "acsHudOpacity": "How solid the Autotune card's background is, from 0 (text only) to 1.",
- "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale."
+ "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.",
+ "pathingFarSegmentWeight": "Ostinato: explicit weighted A* for far segments. When the segment's start is at least pathingFarSegmentDistance blocks (by the goal heuristic) from the goal, A* orders its open set by g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly, Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).",
+ "pathingFarSegmentDistance": "Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for pathingFarSegmentWeight to apply."
 }

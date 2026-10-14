@@ -540,6 +540,20 @@ public final class Settings {
      */
     public final Setting<Double> costHeuristic = new Setting<>(3.563);
 
+    /**
+     * Ostinato: explicit weighted A* for far segments. When the segment's start is at least
+     * {@link #pathingFarSegmentDistance} blocks (by the goal heuristic) from the goal, A* orders its open set by
+     * g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly,
+     * Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).
+     */
+    public final Setting<Double> pathingFarSegmentWeight = new Setting<>(1.0);
+
+    /**
+     * Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for
+     * {@link #pathingFarSegmentWeight} to apply.
+     */
+    public final Setting<Integer> pathingFarSegmentDistance = new Setting<>(128);
+
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**
      * The maximum number of times it will fetch outside loaded or cached chunks before assuming that
