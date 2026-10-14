@@ -135,19 +135,19 @@ public class MovementAscend extends Movement {
         double walk;
         if (jumpingToBottomSlab) {
             if (jumpingFromBottomSlab) {
-                walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST); // we hit space immediately on entering this action
+                walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST * context.walkCostScale) /* Ostinato */; // we hit space immediately on entering this action
                 walk += context.jumpPenalty;
             } else {
-                walk = WALK_ONE_BLOCK_COST; // we don't hit space we just walk into the slab
+                walk = WALK_ONE_BLOCK_COST * context.walkCostScale; // Ostinato: scaled. we don't hit space we just walk into the slab
             }
         } else {
             // jumpingFromBottomSlab must be false
             if (toPlace.is(Blocks.SOUL_SAND)) {
-                walk = WALK_ONE_OVER_SOUL_SAND_COST;
+                walk = WALK_ONE_OVER_SOUL_SAND_COST * context.walkCostScale; // Ostinato
             } else if (toPlace.is(Blocks.MAGMA_BLOCK)) {
-                walk = SNEAK_ONE_BLOCK_COST;
+                walk = SNEAK_ONE_BLOCK_COST * context.walkCostScale; // Ostinato
             } else {
-                walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST);
+                walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST * context.walkCostScale) /* Ostinato */;
             }
             walk += context.jumpPenalty;
         }

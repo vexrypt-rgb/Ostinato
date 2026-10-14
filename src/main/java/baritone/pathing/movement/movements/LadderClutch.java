@@ -140,6 +140,11 @@ final class LadderClutch {
     // the best way to clutch from this exact state. mask has bit k set if the cell k above the floor is air with something
     // to hang a climbable on. earliest click wins (it's the most room to retry), then the lowest cell
     static Plan pick(double y0, double v0, double fall0, int floor, int mask, int firstPlace, double reach) {
+        return pick(y0, v0, fall0, floor, mask, firstPlace, reach, SAFE_FALL);
+    }
+
+    /** Ostinato: with the safe fall the player has (3 plus a block a Jump Boost level), less the same 0.05. */
+    static Plan pick(double y0, double v0, double fall0, int floor, int mask, int firstPlace, double reach, double safeFall) {
         double[] ys = new double[MAX_TICKS];
         double[] vs = new double[MAX_TICKS];
         int n = 0;
@@ -157,11 +162,11 @@ final class LadderClutch {
                     continue;
                 }
                 Landing stingy = play(y0, v0, fall0, floor, floor + k, p, SLOP);
-                if (stingy.fall() > SAFE_FALL) {
+                if (stingy.fall() > safeFall) {
                     continue;
                 }
                 Landing generous = play(y0, v0, fall0, floor, floor + k, p, -SLOP);
-                if (generous.fall() <= SAFE_FALL) {
+                if (generous.fall() <= safeFall) {
                     return new Plan(k, p, Math.max(stingy.ticks(), generous.ticks()), Math.max(stingy.fall(), generous.fall()));
                 }
             }
@@ -175,13 +180,18 @@ final class LadderClutch {
     // pick from a fall off a ledge. A* asks this for every column it falls down, and the answer is only the drop, which
     // cells have something to hang on, and your reach, so remember it
     static Plan plan(int drop, int mask, double reach) {
+        return plan(drop, mask, reach, 3);
+    }
+
+    /** Ostinato: {@code safeFall} in whole blocks, as CalculationContext.safeFall. */
+    static Plan plan(int drop, int mask, double reach, int safeFall) {
         if (drop > MAX_DROP || drop < 1) {
             return null;
         }
-        long key = ((long) drop << 24) | ((long) mask << 16) | Math.round(reach * 10);
+        long key = ((long) safeFall << 40) | ((long) drop << 24) | ((long) mask << 16) | Math.round(reach * 10);
         Plan p = MEMO.get(key);
         if (p == null) {
-            p = pick(drop, WALK_OFF_VY, 0, 0, mask, FIRST_PLACE, reach);
+            p = pick(drop, WALK_OFF_VY, 0, 0, mask, FIRST_PLACE, reach, SAFE_FALL + (safeFall - 3));
             MEMO.put(key, p == null ? NONE : p);
         }
         return p == NONE || p == null ? null : p;

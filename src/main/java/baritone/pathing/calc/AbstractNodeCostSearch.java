@@ -171,7 +171,7 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     protected PathNode getNodeAtPosition(int x, int y, int z, long hashCode) {
         PathNode node = map.get(hashCode);
         if (node == null) {
-            node = new PathNode(x, y, z, goal);
+            node = new PathNode(x, y, z, goal, context.heuristicScale); // Ostinato: Speed
             map.put(hashCode, node);
         }
         return node;

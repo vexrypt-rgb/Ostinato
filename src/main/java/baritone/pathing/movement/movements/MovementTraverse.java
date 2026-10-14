@@ -110,6 +110,9 @@ public class MovementTraverse extends Movement {
                     WC += (SNEAK_ONE_BLOCK_COST - WALK_ONE_BLOCK_COST) / 2;
                 }
             }
+            if (!water) {
+                WC *= context.walkCostScale; // Ostinato: Speed and Slowness (not in water, where they do nothing)
+            }
             double hardness1 = MovementHelper.getMiningDurationTicks(context, destX, y, destZ, pb1, false);
             if (hardness1 >= COST_INF) {
                 return COST_INF;
@@ -151,7 +154,7 @@ public class MovementTraverse extends Movement {
                     return COST_INF;
                 }
                 double hardness2 = MovementHelper.getMiningDurationTicks(context, destX, y + 1, destZ, pb0, true); // only include falling on the upper block to break
-                double WC = throughWater ? context.waterWalkSpeed : WALK_ONE_BLOCK_COST;
+                double WC = throughWater ? context.waterWalkSpeed : WALK_ONE_BLOCK_COST * context.walkCostScale; // Ostinato
                 for (int i = 0; i < 5; i++) {
                     int againstX = destX + HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[i].getStepX();
                     int againstY = y - 1 + HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[i].getStepY();

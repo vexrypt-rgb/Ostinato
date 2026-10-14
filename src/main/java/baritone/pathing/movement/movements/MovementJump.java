@@ -179,7 +179,7 @@ public class MovementJump extends Movement {
         c.y = y;
         c.z = z;
         c.options.clear();
-        if (!context.allowParkour) {
+        if (!context.allowParkour || context.jumpBoostLive > 0) { // Ostinato: templates are plain-jump
             return c.options;
         }
         for (int i = 0; i < FRAMES.length; i++) {
@@ -222,7 +222,7 @@ public class MovementJump extends Movement {
                 if (ceiling && !headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz)) {
                     continue;
                 }
-                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
+                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST * context.walkCostScale /* Ostinato */ + context.jumpPenalty) * context.jumpBias;
                 int ddx = dx, ddy = y + t.dy, ddz = dz;
                 // one option per landing block (the cheapest): the planner only has a fixed number of jump slots
                 int same = -1;

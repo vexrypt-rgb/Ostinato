@@ -18,6 +18,7 @@
 package baritone.pathing.movement.movements;
 
 import baritone.pathing.kinematic.BsiWorld;
+import baritone.pathing.kinematic.EffectReach;
 import baritone.pathing.kinematic.JumpTemplates;
 
 import baritone.Baritone;
@@ -64,6 +65,8 @@ public class MovementParkour extends Movement {
     /** Backed up a block for the 4 block gap's run-up. */
     private boolean ranUp;
     private final boolean ascend;
+    /** Ostinato: how far up the landing is, 0 to 2 (2 only on Jump Boost). */
+    private final int rise;
     /** Blocks laid in front of the edge before the jump: one turns a 5 block gap into a 4 block one, two a 6 block gap. */
     private final int ext;
     /** The extension is down and the player has backed up to run at the jump; only then does the run-up begin. */
@@ -71,11 +74,13 @@ public class MovementParkour extends Movement {
     private PlayerSim sim;
     private ClientWorld simWorld;
 
-    private MovementParkour(IBaritone baritone, BetterBlockPos src, int dist, Direction dir, boolean ascend) {
-        super(baritone, src, src.relative(dir, dist).above(ascend ? 1 : 0), EMPTY, src.relative(dir, dist).below(ascend ? 0 : 1));
+    private MovementParkour(IBaritone baritone, BetterBlockPos src, int dist, Direction dir, int rise) {
+        // Ostinato: rise was a boolean ascend (0 or 1); Jump Boost can land 2 up
+        super(baritone, src, src.relative(dir, dist).above(rise), EMPTY, src.relative(dir, dist).above(rise - 1));
         this.direction = dir;
         this.dist = dist;
-        this.ascend = ascend;
+        this.ascend = rise > 0;
+        this.rise = rise;
         this.ext = dist > 5 ? dist - 5 : 0;
     }
 
@@ -91,7 +96,7 @@ public class MovementParkour extends Movement {
         MutableMoveResult res = new MutableMoveResult();
         cost(context, src.x, src.y, src.z, direction, res);
         int dist = Math.abs(res.x - src.x) + Math.abs(res.z - src.z);
-        return new MovementParkour(context.getBaritone(), src, dist, direction, res.y > src.y);
+        return new MovementParkour(context.getBaritone(), src, dist, direction, Math.max(0, Math.min(2, res.y - src.y))); // Ostinato
     }
 
     /** Ostinato: a takeoff block that slows the run-up or the jump (honey, soul sand). */
@@ -196,6 +201,18 @@ public class MovementParkour extends Movement {
         } else {
             maxJump = 3;
         }
+        // Ostinato: Jump Boost that lasts the plan out carries further and higher. Only what PlayerSim lands from a
+        // standstill at this ground speed is allowed, and the head room the higher jump needs is checked on the way
+        BlockState factor = factorBlock(context, x, y, z);
+        int boost = context.jumpBoostLevels;
+        boolean boosted = boost > 0 && context.canSprint && !slowTakeoff(factor) && !lowJump(factor)
+                && !standingOn.is(Blocks.MAGMA_BLOCK) && standingOn.getBlock() != Blocks.SOUL_SAND;
+        if (boosted && maxJump == 4 && hasRunUp(context, x, y, z, xDiff, zDiff) && EffectReach.lands(boost, context.planSpeedScale, 5, 0, true)) {
+            maxJump = 5;
+        }
+        if (!boostHeadroom(context, x, y, z)) {
+            return;
+        }
 
         // check parkour jumps from smallest to largest for obstacles/walls and landing positions
         int verifiedMaxJump = 1; // i - 1 (when i = 2)
@@ -209,10 +226,14 @@ public class MovementParkour extends Movement {
                 res.x = destX;
                 res.y = y;
                 res.z = destZ;
-                res.cost = costFromJumpDistance(i) + context.jumpPenalty;
+                res.cost = costFromJumpDistance(i) * context.walkCostScale + context.jumpPenalty; // Ostinato: scaled
                 return;
             }
 
+            // Ostinato: under Jump Boost the head goes higher over every column of the jump
+            if (!boostHeadroom(context, destX, y, destZ)) {
+                break;
+            }
             // check head/feet
             if (!MovementHelper.fullyPassable(context, destX, y + 1, destZ)) {
                 break;
@@ -224,11 +245,24 @@ public class MovementParkour extends Movement {
             // check for ascend landing position
             BlockState destInto = context.bsi.get0(destX, y, destZ);
             if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z)) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
+                if ((i <= 3 && (context.planSpeedScale >= 1 || EffectReach.lands(boost, context.planSpeedScale, i, 1, false))
+                        || boosted && EffectReach.lands(boost, context.planSpeedScale, i, 1, false)) // Ostinato: Slowness and Jump Boost, by the sim
+                        && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z)) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
                     res.z = destZ;
-                    res.cost = i * SPRINT_ONE_BLOCK_COST + context.jumpPenalty;
+                    res.cost = i * SPRINT_ONE_BLOCK_COST * context.walkCostScale + context.jumpPenalty; // Ostinato: scaled
+                    return;
+                }
+                // Ostinato: Jump Boost II and up can land two blocks up, on a two block wall with room on top
+                if (boosted && context.allowParkourAscend && MovementHelper.canWalkOn(context, destX, y + 1, destZ)
+                        && MovementHelper.fullyPassable(context, destX, y + 2, destZ) && MovementHelper.fullyPassable(context, destX, y + 3, destZ)
+                        && checkOvershootSafety(context.bsi, destX + xDiff, y + 2, destZ + zDiff)
+                        && EffectReach.lands(boost, context.planSpeedScale, i, 2, false)) {
+                    res.x = destX;
+                    res.y = y + 2;
+                    res.z = destZ;
+                    res.cost = i * SPRINT_ONE_BLOCK_COST * context.walkCostScale + context.jumpPenalty;
                     return;
                 }
                 break;
@@ -242,7 +276,7 @@ public class MovementParkour extends Movement {
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
-                    res.cost = costFromJumpDistance(i) + context.jumpPenalty;
+                    res.cost = costFromJumpDistance(i) * context.walkCostScale + context.jumpPenalty; // Ostinato: scaled
                     return;
                 }
                 break;
@@ -252,6 +286,9 @@ public class MovementParkour extends Movement {
             if ((landingOn.getBlock() != Blocks.FARMLAND && MovementHelper.canWalkOn(context, destX, y - 1, destZ, landingOn))
                     || (Math.min(16, context.frostWalker + 2) >= i && MovementHelper.canUseFrostWalker(context, landingOn))
             ) {
+                if (context.planSpeedScale < 1 && i >= 3 && !EffectReach.lands(boost, context.planSpeedScale, i, 0, false)) {
+                    break; // Ostinato: under Slowness (Turtle Master) the plain reach is gone: only what the sim lands
+                }
                 if (slowTakeoff(factorBlock(context, x, y, z)) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
                     break; // Ostinato: off honey or soul sand, only what the sim lands from the run-up there is
                 }
@@ -259,7 +296,7 @@ public class MovementParkour extends Movement {
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
-                    res.cost = costFromJumpDistance(i) + context.jumpPenalty;
+                    res.cost = costFromJumpDistance(i) * context.walkCostScale + context.jumpPenalty; // Ostinato: scaled
                     return;
                 }
                 break;
@@ -383,6 +420,23 @@ public class MovementParkour extends Movement {
         return isCatchableLadder(state, dir) || MovementHelper.fullyPassable(context, x, y, z, state);
     }
 
+    /**
+     * Ostinato: with Jump Boost on the feet rise past the plain 1.25, so the head (1.8 up) reaches cells the plain
+     * jump never touches: every column of the jump needs them open, or the jump is cut short against the ceiling.
+     */
+    static boolean boostHeadroom(CalculationContext context, int x, int y, int z) {
+        if (context.jumpBoostLive <= 0) {
+            return true;
+        }
+        int top = (int) Math.floor(EffectReach.apex(context.jumpBoostLive) + 1.8 + 1e-6);
+        for (int c = 3; c <= top; c++) {
+            if (!MovementHelper.fullyPassable(context, x, y + c, z)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static boolean checkOvershootSafety(BlockStateInterface bsi, int x, int y, int z) {
         // we're going to walk into these two blocks after the landing of the parkour anyway, so make sure they aren't avoidWalkingInto
         return !MovementHelper.avoidWalkingInto(bsi.get0(x, y, z)) && !MovementHelper.avoidWalkingInto(bsi.get0(x, y + 1, z));
@@ -425,7 +479,7 @@ public class MovementParkour extends Movement {
     protected Set<BetterBlockPos> calculateValidPositions() {
         Set<BetterBlockPos> set = new HashSet<>();
         for (int i = ext > 0 ? -7 : 0; i <= dist; i++) { // an extended jump backs up along the line it came from
-            for (int y = 0; y < 2; y++) {
+            for (int y = 0; y < 2 + rise; y++) { // Ostinato: up to the landing two up
                 set.add(src.relative(direction, i).above(y));
             }
         }

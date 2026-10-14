@@ -17,6 +17,8 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.pathing.kinematic.EffectReach;
+
 import baritone.Baritone;
 import baritone.utils.ExperimentalMovement;
 import baritone.altoclef.AltoClefSettings;
@@ -137,7 +139,7 @@ public class MovementDescend extends Movement {
         }
 
         // we walk half the block plus 0.3 to get to the edge, then we walk the other 0.2 while simultaneously falling (math.max because of how it's in parallel)
-        double walk = WALK_OFF_BLOCK_COST;
+        double walk = WALK_OFF_BLOCK_COST * context.walkCostScale; // Ostinato: Speed and Slowness
         if (fromDown == Blocks.SOUL_SAND) {
             // use this ratio to apply the soul sand speed penalty to our 0.8 block distance
             walk *= WALK_ONE_OVER_SOUL_SAND_COST / WALK_ONE_BLOCK_COST;
@@ -199,7 +201,9 @@ public class MovementDescend extends Movement {
             boolean reachedMinimum = fallHeight >= context.minFallHeight;
             BlockState ontoBlock = context.get(destX, newY, destZ);
             int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight); // equal to fallHeight - y + effectiveFallHeight, which is equal to -newY + effectiveFallHeight, which is equal to effectiveFallHeight - newY
-            double tentativeCost = WALK_OFF_BLOCK_COST + FALL_N_BLOCKS_COST[unprotectedFallHeight] + frontBreak + costSoFar;
+            // Ostinato: walk-off scaled by Speed/Slowness; under Slow Falling the fall takes its own (much longer) time
+            double tentativeCost = WALK_OFF_BLOCK_COST * context.walkCostScale
+                    + (context.slowFalling ? EffectReach.slowFallTicks(unprotectedFallHeight) : FALL_N_BLOCKS_COST[unprotectedFallHeight]) + frontBreak + costSoFar;
             if (reachedMinimum && MovementHelper.isWater(ontoBlock)) {
                 if (!MovementHelper.canWalkThrough(context, destX, newY, destZ, ontoBlock)) {
                     return false;
@@ -259,7 +263,9 @@ public class MovementDescend extends Movement {
             if (MovementHelper.isBottomSlab(ontoBlock)) {
                 return false; // falling onto a half slab is really glitchy, and can cause more fall damage than we'd expect
             }
-            if (reachedMinimum && unprotectedFallHeight <= context.maxFallHeightNoWater + 1) {
+            // Ostinato: under Slow Falling that lasts the whole fall, the fall distance is reset every tick: no height hurts
+            boolean slowFallSafe = context.slowFallTicks >= 0 && EffectReach.slowFallTicks(fallHeight) + 20 <= context.slowFallTicks;
+            if (reachedMinimum && (unprotectedFallHeight <= context.maxFallHeightNoWater + 1 || slowFallSafe)) {
                 // fallHeight = 4 means onto.up() is 3 blocks down, which is the max
                 res.x = destX;
                 res.y = newY + 1;
@@ -328,7 +334,7 @@ public class MovementDescend extends Movement {
                 }
             }
         }
-        LadderClutch.Plan plan = mask == 0 ? null : LadderClutch.plan(startY - landY, mask, context.blockReach);
+        LadderClutch.Plan plan = mask == 0 ? null : LadderClutch.plan(startY - landY, mask, context.blockReach, context.safeFall) /* Ostinato: Jump Boost */;
         if (plan == null) {
             return COST_INF;
         }
@@ -357,6 +363,8 @@ public class MovementDescend extends Movement {
             return;
         }
         int damage = ExperimentalMovement.fallDamage(blocks, context.safeFall); // Ostinato: Jump Boost
+        // Ostinato: Resistance takes 20% a level off what is left (LivingEntity.getDamageAfterMagicAbsorb)
+        damage = (int) Math.ceil(damage * context.fallDamageFactor - 1e-9);
         if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
             return;
         }

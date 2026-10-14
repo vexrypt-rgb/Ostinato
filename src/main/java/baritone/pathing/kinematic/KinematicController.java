@@ -73,6 +73,8 @@ public final class KinematicController {
      * the landings of a staircase of them and they add up: 1 + 2 + 3 was one fall of six in bastion run 123.
      */
     static final double SAFE_FALL = 3.01;
+    /** Ostinato: SAFE_FALL plus a block a Jump Boost level (ClientWorld.safeFall), read with the player. */
+    private double safeFall = SAFE_FALL;
     /** The height the rollout's flight started from, to tell how far it has fallen when it lands. */
     private double simTop;
 
@@ -138,6 +140,7 @@ public final class KinematicController {
             return -1;
         }
         ClientWorld.readPlayer(ctx, real);
+        safeFall = SAFE_FALL + ClientWorld.safeFall(ctx) - 3; // Ostinato
 
         double[] here = project(line, real.x, real.y, real.z, Double.MAX_VALUE);
         double end = line.get(line.size() - 1)[3];
@@ -441,7 +444,7 @@ public final class KinematicController {
             simTop = Math.max(simTop, sim.y);
             return false;
         }
-        boolean hard = simTop - sim.y > SAFE_FALL;
+        boolean hard = simTop - sim.y > safeFall; // Ostinato: Jump Boost raises it
         simTop = sim.y;
         return hard;
     }
@@ -494,6 +497,7 @@ public final class KinematicController {
         }
         world.reset();
         ClientWorld.readPlayer(ctx, real);
+        safeFall = SAFE_FALL + ClientWorld.safeFall(ctx) - 3; // Ostinato
         real.sprinting = true;
         float yaw = (float) Math.toDegrees(Math.atan2(-(tx - real.x), tz - real.z));
         double[] closed = new double[2];

@@ -82,6 +82,55 @@ public final class ClientWorld implements PlayerSim.World {
         return Math.max(0, (int) Math.floor(safe + 1e-6));
     }
 
+    /**
+     * Ostinato: the ground speed to plan with: {@link #walkScale}, less a Speed that runs out within
+     * {@link #EFFECT_PLAN_TICKS}. A Slowness about to end stays in: planning slower than we go is only pessimistic.
+     */
+    public static double planSpeedScale(IPlayerContext ctx) {
+        double s = walkScale(ctx);
+        net.minecraft.world.effect.MobEffectInstance sp = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.SPEED);
+        if (sp != null && !lasting(ctx, net.minecraft.world.effect.MobEffects.SPEED)) s /= 1 + 0.2F * (sp.getAmplifier() + 1);
+        return near(s, 1);
+    }
+
+    /** Ostinato: Jump Boost levels (amplifier + 1) on now, 0 for none. */
+    public static int jumpBoostLive(IPlayerContext ctx) {
+        net.minecraft.world.effect.MobEffectInstance e = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.JUMP_BOOST);
+        return e == null ? 0 : e.getAmplifier() + 1;
+    }
+
+    /** Ostinato: Jump Boost levels to plan a jump on: 0 unless it lasts {@link #EFFECT_PLAN_TICKS} more. */
+    public static int jumpBoostLasting(IPlayerContext ctx) {
+        return lasting(ctx, net.minecraft.world.effect.MobEffects.JUMP_BOOST) ? jumpBoostLive(ctx) : 0;
+    }
+
+    /**
+     * Ostinato: what is left of a fall's damage after Resistance, LivingEntity.getDamageAfterMagicAbsorb: 5 of 25
+     * a level off (fall damage is not in bypasses_resistance), so V and up take none. 1 if it may run out first.
+     */
+    public static double resistanceFactor(IPlayerContext ctx) {
+        net.minecraft.world.effect.MobEffectInstance e = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.RESISTANCE);
+        if (e == null || !lasting(ctx, net.minecraft.world.effect.MobEffects.RESISTANCE)) return 1;
+        return resistanceFactor(e.getAmplifier());
+    }
+
+    /** Ostinato: vanilla's (25 - 5 * (amplifier + 1)) / 25, never below 0. */
+    public static double resistanceFactor(int amplifier) {
+        return Math.max(0, 25 - (amplifier + 1) * 5) / 25.0;
+    }
+
+    /**
+     * Ostinato: how many ticks of a fall Slow Falling is sure to cover if the fall starts within
+     * {@link #EFFECT_PLAN_TICKS}: -1 without it. Fall distance is reset every tick under it, so no such fall hurts.
+     */
+    public static int slowFallTicks(IPlayerContext ctx) {
+        net.minecraft.world.effect.MobEffectInstance e = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING);
+        if (e == null) return -1;
+        if (e.isInfiniteDuration()) return Integer.MAX_VALUE;
+        int left = e.getDuration() - EFFECT_PLAN_TICKS;
+        return left < 0 ? -1 : left;
+    }
+
     /** Ostinato: Player.isMobilityRestricted (Blindness) stops and forbids a sprint in LocalPlayer.aiStep. */
     public static boolean sprintAllowed(IPlayerContext ctx) {
         return !ctx.player().isMobilityRestricted();

@@ -217,7 +217,7 @@ public class MovementClimbJump extends Movement {
                         continue templates;
                     }
                 }
-                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
+                double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST * context.walkCostScale /* Ostinato */ + context.jumpPenalty) * context.jumpBias;
                 int same = -1;
                 for (int k = 0; k < c.options.size() && same < 0; k++) {
                     Option o = c.options.get(k);

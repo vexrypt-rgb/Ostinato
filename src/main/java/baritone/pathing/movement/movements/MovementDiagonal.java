@@ -250,7 +250,7 @@ public class MovementDiagonal extends Movement {
                 multiplier *= SPRINT_MULTIPLIER;
             }
         }
-        res.cost = multiplier * SQRT_2;
+        res.cost = multiplier * SQRT_2 * (water ? 1 : context.walkCostScale); // Ostinato: Speed and Slowness
         if (descend) {
             res.cost += Math.max(FALL_N_BLOCKS_COST[1], CENTER_AFTER_FALL_COST);
             res.y = y - 1;

@@ -17,6 +17,8 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.pathing.kinematic.ClientWorld;
+
 import baritone.utils.BoatUtil;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
@@ -501,7 +503,7 @@ public class MovementFall extends Movement {
         BlockHitResult hit = ctx.objectMouseOver() instanceof BlockHitResult b && b.getType() == HitResult.Type.BLOCK ? b : null;
         int aimed = hit == null ? -1 : aimedCell(bsi, hit, mask);
         if (aimed >= 0) {
-            LadderClutch.Plan now = LadderClutch.pick(pos.y, mot.y, player.fallDistance, dest.y, 1 << aimed, 0, reach);
+            LadderClutch.Plan now = LadderClutch.pick(pos.y, mot.y, player.fallDistance, dest.y, 1 << aimed, 0, reach, LadderClutch.SAFE_FALL + ClientWorld.safeFall(ctx) - 3);
             boolean roomy = item != Items.LADDER || gap(dest.above(aimed), hit.getDirection().getOpposite(), pos) >= LadderClutch.LADDER_CLEARANCE + 0.01;
             if (now != null && now.place() == 0 && roomy) {
                 inv.pickClutchItem(true);
@@ -515,7 +517,7 @@ public class MovementFall extends Movement {
                 return true;
             }
         }
-        LadderClutch.Plan plan = LadderClutch.pick(pos.y, mot.y, player.fallDistance, dest.y, mask, 1, reach);
+        LadderClutch.Plan plan = LadderClutch.pick(pos.y, mot.y, player.fallDistance, dest.y, mask, 1, reach, LadderClutch.SAFE_FALL + ClientWorld.safeFall(ctx) - 3) /* Ostinato: Jump Boost */;
         if (plan == null) {
             clutchGaveUp = true;
             return false;

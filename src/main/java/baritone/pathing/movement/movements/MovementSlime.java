@@ -112,7 +112,7 @@ public class MovementSlime extends Movement {
         c.y = y;
         c.z = z;
         c.options.clear();
-        if (!context.allowParkour || !MovementHelper.canWalkOn(context, x, y - 1, z) || context.get(x, y - 1, z).getBlock() == Blocks.SLIME_BLOCK) {
+        if (!context.allowParkour || context.jumpBoostLive > 0 /* Ostinato: plain-jump bounces */ || !MovementHelper.canWalkOn(context, x, y - 1, z) || context.get(x, y - 1, z).getBlock() == Blocks.SLIME_BLOCK) {
             return c.options;
         }
         for (int dir = 0; dir < DIRS.length; dir++) {

@@ -106,6 +106,20 @@ public class CalculationContext {
     public int maxFallHeightNoWater;
     /** Ostinato: blocks a fall can take without damage, 3 plain. */
     public int safeFall = 3;
+    // Ostinato: potion effects, each counted only if it lasts the plan out (see ClientWorld.EFFECT_PLAN_TICKS).
+    /** Multiplies walking and sprinting costs: 1 / the ground speed scale of Speed and Slowness. */
+    public double walkCostScale = 1;
+    /** Multiplies the goal heuristic: walkCostScale where that is below 1, so the heuristic stays admissible. */
+    public double heuristicScale = 1;
+    /** The ground speed scale jumps are flown at in the sim. */
+    public double planSpeedScale = 1;
+    /** Jump Boost levels to plan longer and higher jumps on, and the levels on now (head room). */
+    public int jumpBoostLevels, jumpBoostLive;
+    /** What is left of fall damage after Resistance. */
+    public double fallDamageFactor = 1;
+    /** Ticks of falling Slow Falling covers, -1 without it; and whether it is on at all (falls are slower). */
+    public int slowFallTicks = -1;
+    public boolean slowFalling;
     public final int maxFallHeightBucket;
     public final double waterWalkSpeed;
     public final double breakBlockAdditionalCost;
@@ -157,7 +171,9 @@ public class CalculationContext {
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
         // the longer jumps are rolled out at the plain walk, and under Slowness they fall short
-        boolean fullPace = ClientWorld.fullPace(baritone.getPlayerContext());
+        boolean fullPace = ClientWorld.fullPace(baritone.getPlayerContext())
+                // Ostinato: and the template jumps were flown at the plain jump height: Jump Boost bonks them early
+                && ClientWorld.jumpBoostLive(baritone.getPlayerContext()) == 0;
         // only the kinematic controller can build the hop speed a 4 block gap needs
         this.allowParkourFourGap = ExperimentalMovement.kinematicTravel() && fullPace;
         this.allowNeos = ExperimentalMovement.allowNeos() && fullPace;
@@ -197,6 +213,16 @@ public class CalculationContext {
         // Ostinato: Jump Boost raises the safe fall distance a block per level (only while it lasts the plan out)
         this.safeFall = ClientWorld.safeFall(baritone.getPlayerContext());
         this.maxFallHeightNoWater += Math.max(0, safeFall - ExperimentalMovement.SAFE_FALL);
+        // Ostinato: the rest of the effects
+        this.planSpeedScale = ClientWorld.planSpeedScale(baritone.getPlayerContext());
+        this.walkCostScale = planSpeedScale > 0 ? 1 / planSpeedScale : 1;
+        this.heuristicScale = Math.min(1, walkCostScale);
+        this.jumpBoostLive = ClientWorld.jumpBoostLive(baritone.getPlayerContext());
+        this.jumpBoostLevels = ClientWorld.plainGravity(baritone.getPlayerContext()) ? ClientWorld.jumpBoostLasting(baritone.getPlayerContext()) : 0;
+        this.fallDamageFactor = ClientWorld.resistanceFactor(baritone.getPlayerContext());
+        this.slowFalling = player.hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                && !player.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION);
+        this.slowFallTicks = slowFalling ? ClientWorld.slowFallTicks(baritone.getPlayerContext()) : -1;
         this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
         float waterSpeedMultiplier = 1.0f;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {

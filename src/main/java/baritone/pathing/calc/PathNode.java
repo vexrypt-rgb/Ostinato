@@ -66,9 +66,14 @@ public final class PathNode {
     public int heapPosition;
 
     public PathNode(int x, int y, int z, Goal goal) {
+        this(x, y, z, goal, 1);
+    }
+
+    /** Ostinato: with the heuristic scaled (Speed makes every walk cheaper than the plain heuristic allows). */
+    public PathNode(int x, int y, int z, Goal goal, double heuristicScale) {
         this.previous = null;
         this.cost = ActionCosts.COST_INF;
-        double originalCost = goal.heuristic(x, y, z);
+        double originalCost = goal.heuristic(x, y, z) * heuristicScale; // Ostinato
         if (Double.isNaN(originalCost)) {
             throw new IllegalStateException(goal + " calculated implausible heuristic");
         }
