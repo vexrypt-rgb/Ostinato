@@ -139,6 +139,7 @@ public final class KinematicController {
             return -1;
         }
         boolean arriving = end - here[0] < handback;
+        narrowEnd = narrowAt(line.get(line.size() - 1));
         double moved = (real.x - lastX) * (real.x - lastX) + (real.z - lastZ) * (real.z - lastZ);
         lastX = real.x;
         lastZ = real.z;
@@ -267,6 +268,24 @@ public final class KinematicController {
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_LEFT, strafe > 0);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_RIGHT, strafe < 0);
         return newPos;
+    }
+
+    // Ostinato: the stretch ends on a block narrower than a full one (real collision shape), see arrive
+    private boolean narrowEnd;
+
+    private boolean narrowAt(double[] to) {
+        BlockPos feet = BlockPos.containing(to[0], to[1] + 0.01, to[2]);
+        BlockState st = ctx.world().getBlockState(feet);
+        if (MovementHelper.collisionTop(st) <= 0) {
+            st = ctx.world().getBlockState(feet.below());
+        }
+        return MovementHelper.collisionWidth(st) < 0.9;
+    }
+
+    /** Ostinato: mid-air over a narrow landing: 1 hold forward toward its middle, -1 brake, 0 coast. */
+    static int airArrive(double d, double speed) {
+        if (d > 0.3) return speed < 0.25 ? 1 : 0;
+        return speed > 0.08 ? -1 : 0;
     }
 
     /** Stretch end: ease onto the last point (slow, no sprint) so the next movement starts from rest. */

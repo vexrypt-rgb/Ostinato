@@ -522,13 +522,13 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     /** Top (0..1.5) of a state's own collision shape, -1 when it has none. */
-    static double collisionTop(BlockState state) {
+    public static double collisionTop(BlockState state) {
         net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
         return s.isEmpty() ? -1 : s.max(net.minecraft.core.Direction.Axis.Y);
     }
 
     /** The narrower horizontal extent of a state's collision shape, 0 when it has none. */
-    static double collisionWidth(BlockState state) {
+    public static double collisionWidth(BlockState state) {
         net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
         if (s.isEmpty()) return 0;
         net.minecraft.world.phys.AABB b = s.bounds();
