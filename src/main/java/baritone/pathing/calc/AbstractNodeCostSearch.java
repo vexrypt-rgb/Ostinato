@@ -103,7 +103,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         }
         cancelRequested = false;
         try {
+            long t0 = System.nanoTime(); // Ostinato: planning-time stats
             IPath path = calculate0(primaryTimeout, failureTimeout).map(IPath::postProcess).orElse(null);
+            baritone.utils.PlanStats.astarNs.addAndGet(System.nanoTime() - t0);
             if (cancelRequested) {
                 return new PathCalculationResult(PathCalculationResult.Type.CANCELLATION);
             }

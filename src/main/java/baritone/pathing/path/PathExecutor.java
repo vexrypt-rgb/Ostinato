@@ -197,11 +197,15 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (driverRest > 0) {
             driverRest--;
         } else {
+            long t0 = System.nanoTime(); // Ostinato: planning-time stats
             driven = physics.tick(behavior.baritone, path, pathPosition);
+            long t1 = System.nanoTime();
+            baritone.utils.PlanStats.physNs.addAndGet(t1 - t0);
             if (driven >= 0) {
                 lastDriver = Driver.PHYSICS;
             } else {
                 driven = kinematic.tick(behavior.baritone, path, pathPosition);
+                baritone.utils.PlanStats.kinNs.addAndGet(System.nanoTime() - t1);
                 if (driven >= 0) {
                     lastDriver = Driver.KINEMATIC;
                 }

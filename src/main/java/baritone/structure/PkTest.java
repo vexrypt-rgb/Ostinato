@@ -101,6 +101,25 @@ public final class PkTest implements AbstractGameEventListener {
         profApply(mc);
     }
 
+    private long[] gStat0;
+
+    /** Per-goal planning time (A*, physics search, kinematic rollouts), travel time, jumps, stuck/no-plan counts. */
+    private void goalStat(boolean ok) {
+        if (gStat0 == null) return;
+        int jl = 0, ja = 0, st = 0, np = 0;
+        for (int i = (int) gStat0[4]; i < attempts.size(); i++) {
+            Attempt a = attempts.get(i);
+            if (a.why.equals("noplan")) { np++; continue; }
+            if (a.why.equals("stuck")) st++;
+            ja++;
+            if (a.ok) jl++;
+        }
+        say(String.format(Locale.ROOT, "PK GSTAT mode=%s goal=%d ok=%b astarMs=%.1f physMs=%.1f kinMs=%.1f travelS=%.2f jumps=%d/%d stuck=%d noplan=%d",
+                MODE, goalNo, ok, (baritone.utils.PlanStats.astarNs.get() - gStat0[0]) / 1e6, (baritone.utils.PlanStats.physNs.get() - gStat0[1]) / 1e6,
+                (baritone.utils.PlanStats.kinNs.get() - gStat0[2]) / 1e6, (tick - gStat0[3]) / 20.0, jl, ja, st, np));
+        gStat0 = null;
+    }
+
     private void run(String cmd) {
         MinecraftServer s = Minecraft.getInstance().getSingleplayerServer();
         s.submit(() -> {
@@ -340,6 +359,7 @@ public final class PkTest implements AbstractGameEventListener {
             if (st.kind.equals("hop")) { hopLeft = st.r; hopT = 0; hopPattern = st.text; hopLand = st.y; hopTop = 0; hopJump = false; b.getPathingBehavior().cancelEverything(); return; }
             if (st.kind.equals("tp")) { tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; continue; }
             goalNo++;
+            gStat0 = new long[]{baritone.utils.PlanStats.astarNs.get(), baritone.utils.PlanStats.physNs.get(), baritone.utils.PlanStats.kinNs.get(), tick, attempts.size()};
             lastGood = null;
             issue();
             return;
@@ -415,6 +435,7 @@ public final class PkTest implements AbstractGameEventListener {
             tp(step().pos());
             checkpoint = step().pos();
             say("PK skip goal " + goalNo);
+            goalStat(false);
             wait = 20;
             nextStep();
         } else {
@@ -498,6 +519,7 @@ public final class PkTest implements AbstractGameEventListener {
         reached++;
         checkpoint = step().pos();
         say("PK reached goal " + goalNo + " ticks=" + goalTick);
+        goalStat(true);
         b.getPathingBehavior().cancelEverything();
         wait = 10;
         nextStep();
