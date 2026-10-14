@@ -63,6 +63,18 @@ public class SwarmEndpointS2STest {
     }
 
     @Test
+    public void unsignedRejectedOnS2SWireEvenWhenNotRequired() throws Exception {
+        SwarmConfig.Builder cfg = SwarmConfig.builder();
+        cfg.wireVersion = "S2S";
+        cfg.requireSignedSender = false;
+        SwarmEndpoint b = new SwarmEndpoint("botB", cfg.build(), groups, bus.register("botB"), clock::get);
+        b.setSigning(bKey, Arrays.asList(aKey, bKey));
+        String frame = new SwarmFrame("alpha", "botA", "botB", 1, 1, 0, 1, 1, 1, "cmd", "stop").encode();
+        assertEquals(null, b.receiveLine(SigilCodec.sealSingle(SigilWire.S2, TestCircles.alpha(), frame, 234)));
+        assertEquals(SwarmReject.UNSEALED, b.lastReject());
+    }
+
+    @Test
     public void sendWithoutSignetFailsClosed() throws Exception {
         SwarmEndpoint a = new SwarmEndpoint("botA", SwarmConfig.defaults(), groups, bus.register("botA"), clock::get);
         try {

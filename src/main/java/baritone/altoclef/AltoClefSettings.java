@@ -93,51 +93,89 @@ public class AltoClefSettings {
 
     public boolean shouldForceSaveTool(BlockState state, ItemStack tool) {
         synchronized (propertiesMutex) {
-            return _forceSaveTool.stream().anyMatch(pred -> pred.test(state, tool));
+            for (BiPredicate<BlockState, ItemStack> pred : _forceSaveTool) {
+                if (pred.test(state, tool)) return true;
+            }
+            return false;
         }
     }
 
+    // The x,y,z forms are asked per block by the pathfinder: with nothing registered they answer without a BlockPos.
+
     public boolean shouldAvoidBreaking(int x, int y, int z) {
-        return shouldAvoidBreaking(new BlockPos(x, y, z));
+        synchronized (breakMutex) {
+            if (_blocksToAvoidBreaking.isEmpty() && _breakAvoiders.isEmpty()) return false;
+            return shouldAvoidBreaking(new BlockPos(x, y, z));
+        }
     }
 
     public boolean shouldAvoidBreaking(BlockPos pos) {
         synchronized (breakMutex) {
             if (_blocksToAvoidBreaking.contains(pos))
                 return true;
-            return (_breakAvoiders.stream().anyMatch(pred -> pred.test(pos)));
+            return anyMatch(_breakAvoiders, pos);
         }
     }
 
     public boolean shouldAvoidPlacingAt(BlockPos pos) {
         synchronized (placeMutex) {
-            return _placeAvoiders.stream().anyMatch(pred -> pred.test(pos));
+            return anyMatch(_placeAvoiders, pos);
         }
     }
 
     public boolean shouldAvoidPlacingAt(int x, int y, int z) {
-        return shouldAvoidPlacingAt(new BlockPos(x, y, z));
+        synchronized (placeMutex) {
+            return !_placeAvoiders.isEmpty() && anyMatch(_placeAvoiders, new BlockPos(x, y, z));
+        }
     }
 
     public boolean canWalkOnForce(int x, int y, int z) {
         synchronized (propertiesMutex) {
-            return _forceCanWalkOn.stream().anyMatch(pred -> pred.test(new BlockPos(x, y, z)));
+            return !_forceCanWalkOn.isEmpty() && anyMatch(_forceCanWalkOn, new BlockPos(x, y, z));
         }
     }
 
     public boolean shouldAvoidWalkThroughForce(BlockPos pos) {
         synchronized (propertiesMutex) {
-            return _forceAvoidWalkThrough.stream().anyMatch(pred -> pred.test(pos));
+            return anyMatch(_forceAvoidWalkThrough, pos);
         }
     }
 
     public boolean shouldAvoidWalkThroughForce(int x, int y, int z) {
-        return shouldAvoidWalkThroughForce(new BlockPos(x, y, z));
+        synchronized (propertiesMutex) {
+            return !_forceAvoidWalkThrough.isEmpty() && anyMatch(_forceAvoidWalkThrough, new BlockPos(x, y, z));
+        }
+    }
+
+    private static boolean anyMatch(List<Predicate<BlockPos>> preds, BlockPos pos) {
+        for (Predicate<BlockPos> pred : preds) {
+            if (pred.test(pos)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The walk-on and walk-through hooks as they stand, for a path calculation that asks per block and cannot take
+     * the lock each time. Null while none is registered.
+     */
+    public List<Predicate<BlockPos>> forceWalkOnSnapshot() {
+        synchronized (propertiesMutex) {
+            return _forceCanWalkOn.isEmpty() ? null : new ArrayList<>(_forceCanWalkOn);
+        }
+    }
+
+    public List<Predicate<BlockPos>> forceAvoidWalkThroughSnapshot() {
+        synchronized (propertiesMutex) {
+            return _forceAvoidWalkThrough.isEmpty() ? null : new ArrayList<>(_forceAvoidWalkThrough);
+        }
     }
 
     public boolean shouldForceUseTool(BlockState state, ItemStack tool) {
         synchronized (propertiesMutex) {
-            return _forceUseTool.stream().anyMatch(pred -> pred.test(state, tool));
+            for (BiPredicate<BlockState, ItemStack> pred : _forceUseTool) {
+                if (pred.test(state, tool)) return true;
+            }
+            return false;
         }
     }
 

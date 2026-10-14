@@ -18,6 +18,7 @@
 package baritone.pathing.movement;
 
 import baritone.Baritone;
+import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.IMovement;
 import baritone.api.pathing.movement.MovementStatus;
@@ -154,15 +155,6 @@ public abstract class Movement implements IMovement, MovementHelper {
         return currentState.getStatus();
     }
 
-    /**
-     * Vanilla sprint-swimming, for every movement type. Vanilla only enters the swim pose when the
-     * player sprints with its EYES under water, and while swimming vertical motion follows pitch.
-     * Holding JUMP (the old behaviour) keeps the head above the surface, so the bot paddled on top
-     * forever; a fixed -30 pitch could only ever rise. This dips the head under to start swimming,
-     * then steers pitch toward the destination height and surfaces when air runs low.
-     *
-     * @return true if it took over steering (the caller must not force JUMP)
-     */
     /** Surfacing for air in the swim pose; shared by movements so it survives path segments. */
     public static boolean breathing;
 
@@ -189,6 +181,15 @@ public abstract class Movement implements IMovement, MovementHelper {
         return false;
     }
 
+    /**
+     * Vanilla sprint-swimming, for every movement type. Vanilla only enters the swim pose when the
+     * player sprints with its EYES under water, and while swimming vertical motion follows pitch.
+     * Holding JUMP (the old behaviour) keeps the head above the surface, so the bot paddled on top
+     * forever; a fixed -30 pitch could only ever rise. This dips the head under to start swimming,
+     * then steers pitch toward the destination height and surfaces when air runs low.
+     *
+     * @return true if it took over steering (the caller must not force JUMP)
+     */
     private boolean applySwim(MovementState state) {
         if (!Baritone.settings().swimInWater.value || currentState.getStatus().isComplete()) return false;
         net.minecraft.world.entity.player.Player p = ctx.player();
@@ -272,6 +273,11 @@ public abstract class Movement implements IMovement, MovementHelper {
                 return false;
             }
             if (!MovementHelper.canWalkThrough(ctx, blockPos)) { // can't break air, so don't try
+                if (AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(blockPos.x, blockPos.y, blockPos.z)) {
+                    // kept out of rather than blocked: mining opens nothing, so the path is replanned around it
+                    state.setStatus(MovementStatus.UNREACHABLE);
+                    return true;
+                }
                 somethingInTheWay = true;
                 MovementHelper.switchToBestToolFor(ctx, BlockStateInterface.get(ctx, blockPos));
                 Optional<Rotation> reachable = RotationUtils.reachable(ctx, blockPos, ctx.playerController().getBlockReachDistance());

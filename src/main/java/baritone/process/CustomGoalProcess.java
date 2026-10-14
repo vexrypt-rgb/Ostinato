@@ -52,6 +52,11 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
      */
     private boolean tungstenTravelActive;
 
+    /** Ticks spent waiting for a cancelled Tungsten search to wind down before starting the next one. */
+    private int tungstenStopWait;
+
+    private static final int TUNGSTEN_STOP_PATIENCE = 40;
+
     /**
      * The current process state.
      *
@@ -71,6 +76,7 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
         }
         this.goal = goal;
         this.mostRecentGoal = goal;
+        this.tungstenStopWait = 0;
         if (baritone.getElytraProcess().isActive()) {
             try {
                 baritone.getElytraProcess().pathTo(goal);
@@ -117,6 +123,9 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                     // Hold classic pathing off while Tungsten drives movement inputs.
                     return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
+                if (waitingForTungstenStop()) {
+                    return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
+                }
                 // return FORCE_REVALIDATE_GOAL_AND_PATH just once
                 PathingCommand ret = new PathingCommand(this.goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
                 this.state = State.EXECUTING;
@@ -133,7 +142,7 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                     onLostControl(); // we're there xd
                     if (Baritone.settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
-                            clientLevel.disconnect();
+                            clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                         }
                     }
                     if (Baritone.settings().notificationOnPathComplete.value) {
@@ -162,6 +171,18 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
             logDirect("CustomGoal: Tungsten travel -> " + this.goal);
         }
         return ok;
+    }
+
+    /**
+     * A retarget lands while the search for the old goal is still stopping, and Tungsten will not start another
+     * until it has. Hold for a moment and ask again rather than dropping to classic pathing on every retarget.
+     */
+    private boolean waitingForTungstenStop() {
+        if (!MovementBackends.preferTungstenTravel() || TungstenMovementBackend.goalToBlock(this.goal) == null
+                || !TungstenMovementBackend.INSTANCE.isStopping()) {
+            return false;
+        }
+        return ++tungstenStopWait <= TUNGSTEN_STOP_PATIENCE;
     }
 
     private PathingCommand tickTungstenTravel() {

@@ -31,10 +31,11 @@ import java.util.Set;
 public final class OstinatoPins {
 
     private static final Set<String> PINNED = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "kinematicTravel", "physicsTravel", "movementBackend", "pitfallAvoidance", "sprintJump",
+            "kinematicTravel", "slowKinematic", "physicsTravel", "movementBackend", "pitfallAvoidance", "sprintJump",
             "allowBoats", "allowBoatFall", "maxFallHeightBoat", "allowDoorAirPockets", "swimInWater",
             "elytraGlideWithoutFireworks", "elytraGlideRatio", "elytraGlidePitch",
-            "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor"
+            "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor",
+            "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale"
     )));
 
     private OstinatoPins() {}

@@ -62,7 +62,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 
 import java.util.HashSet;
 import java.util.Optional;
@@ -79,7 +79,7 @@ public class MovementFall extends Movement {
     public static volatile int boatRideTick;
 
     public static boolean boatRideClaimed(int now) {
-        return boatRide && now - boatRideTick <= 5;
+        return boatRide && Math.abs(now - boatRideTick) <= 5; // either way: tickCount starts again with a new player entity
     }
     private Boolean boatMode;
     private int boatTicks;
@@ -150,6 +150,9 @@ public class MovementFall extends Movement {
         ladderIn = false;
         ticks = clickedAt = pickupMisses = 0;
         pickupStart = goneAt = -1;
+        // a movement the executor runs again decides afresh and gets its full time to place and mount
+        boatMode = null;
+        boatTicks = 0;
     }
 
     private FallMode fallMode() {
@@ -226,7 +229,7 @@ public class MovementFall extends Movement {
             }
 
             if (ctx.player().position().y - dest.getY() < ctx.playerController().getBlockReachDistance() && !ctx.player().onGround()) {
-                ctx.player().getInventory().selected = ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER);
+                ctx.player().getInventory().setSelectedSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER));
 
                 targetRotation = new Rotation(toDest.getYaw(), 90.0F);
 
@@ -243,7 +246,7 @@ public class MovementFall extends Movement {
         if (playerFeet.equals(dest) && (ctx.player().position().y - playerFeet.getY() < 0.094 || isWater)) { // 0.094 because lilypads
             if (isWater) { // only match water, not flowing water (which we cannot pick up with a bucket)
                 if (Inventory.isHotbarSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY))) {
-                    ctx.player().getInventory().selected = ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY);
+                    ctx.player().getInventory().setSelectedSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY));
                     if (ctx.player().getDeltaMovement().y >= 0) {
                         return state.setInput(Input.CLICK_RIGHT, true);
                     } else {
@@ -318,7 +321,7 @@ public class MovementFall extends Movement {
             if (boatTicks++ > 200) {
                 boatRide = false;
                 logDebug("boat fall: stuck riding at edge " + ctx.player().position() + " ticks=" + boatTicks);
-            return state.setStatus(MovementStatus.UNREACHABLE);
+                return state.setStatus(MovementStatus.UNREACHABLE);
             }
             return state.setTarget(new MovementTarget(new Rotation(want, 10), true));
         }
@@ -340,7 +343,7 @@ public class MovementFall extends Movement {
         if (boat != null) {
             state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(boat.getX(), boat.getY() + 0.3, boat.getZ()), ctx.playerRotations()), true));
             if (boatTicks % 4 == 3) {
-                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.player(), boat, InteractionHand.MAIN_HAND);
+                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.player(), boat, new net.minecraft.world.phys.EntityHitResult(boat), InteractionHand.MAIN_HAND);
                 if (boatTicks % 40 == 3) logDebug("boat fall: board " + r + " riding=" + ctx.player().getVehicle());
             }
             return state;
@@ -350,7 +353,7 @@ public class MovementFall extends Movement {
             logDebug("boat fall: no boat " + ctx.player().position() + " ticks=" + boatTicks);
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        ctx.player().getInventory().selected = slot;
+        ctx.player().getInventory().setSelectedSlot(slot);
         // Boats can't overlap us. With headroom, jump and place underneath at the top of the jump;
         // in a 1-2 high space, back off src and place on its far half instead.
         if (ctx.playerFeet().equals(src) && MovementHelper.canWalkThrough(ctx, src.above(2)) && MovementHelper.canWalkThrough(ctx, src.above(3))) {

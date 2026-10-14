@@ -71,7 +71,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (bsi.get0(x, y + 1, z).getBlock() instanceof EndPortalFrameBlock) {
             return true;
         }
-        if (AltoClefSettings.getInstance().shouldAvoidBreaking(new BlockPos(x, y, z))) return true;
+        if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z)) return true;
 
         if (!bsi.worldBorder.canPlaceAt(x, z)) {
             return true;
@@ -125,25 +125,30 @@ public interface MovementHelper extends ActionCosts, Helper {
         return canWalkThrough(bsi, x, y, z, bsi.get0(x, y, z));
     }
 
+    // The planner's answers below must match the executor's (the bsi overload): a path through a cell the executor
+    // will not walk through leaves it trying to mine air.
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.swimThroughLava && state.getBlock() == Blocks.LAVA) {
+            return context.get(x, y + 1, z).getFluidState().isEmpty();
+        }
+        if (context.avoidsWalkThrough(x, y, z)) {
+            return false;
+        }
         return context.precomputedData.canWalkThrough(context.bsi, x, y, z, state);
     }
 
     static boolean canWalkThrough(CalculationContext context, int x, int y, int z) {
-        return context.precomputedData.canWalkThrough(context.bsi, x, y, z, context.get(x, y, z));
+        return canWalkThrough(context, x, y, z, context.get(x, y, z));
     }
 
     static boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
-        Ternary canWalkThrough = canWalkThroughBlockState(state);
-        Block block = state.getBlock();
-        BlockState up = bsi.get0(x, y + 1, z);
-        if (AltoClefSettings.getInstance().canSwimThroughLava() && block == Blocks.LAVA) {
-            return up.getFluidState().isEmpty();
+        if (state.getBlock() == Blocks.LAVA && AltoClefSettings.getInstance().canSwimThroughLava()) {
+            return bsi.get0(x, y + 1, z).getFluidState().isEmpty(); // the surface only
         }
         if (AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) {
             return false;
         }
-
+        Ternary canWalkThrough = canWalkThroughBlockState(state);
         if (canWalkThrough == YES) {
             return true;
         }
@@ -236,7 +241,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
 
             BlockState up = bsi.get0(x, y + 1, z);
-            if (!up.getFluidState().isEmpty() || up.getBlock() instanceof WaterlilyBlock) {
+            if (!up.getFluidState().isEmpty() || up.getBlock() instanceof LilyPadBlock) {
                 return false;
             }
             return fluidState.getType() instanceof WaterFluid;
@@ -286,6 +291,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean fullyPassable(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.avoidsWalkThrough(x, y, z)) {
+            return false;
+        }
         return context.precomputedData.fullyPassable(context.bsi, x, y, z, state);
     }
 
@@ -414,6 +422,9 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @return Whether or not the specified block can be walked on
      */
     static boolean canWalkOn(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
+        if (AltoClefSettings.getInstance().canWalkOnForce(x, y, z)) {
+            return true;
+        }
         Ternary canWalkOn = canWalkOnBlockState(state);
         if (canWalkOn == YES) {
             return true;
@@ -439,7 +450,10 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (isBlockNormalCube(state) && (block != Blocks.MAGMA_BLOCK || Baritone.settings().allowWalkOnMagmaBlocks.value) && block != Blocks.BUBBLE_COLUMN && block != Blocks.HONEY_BLOCK) {
             return YES;
         }
-        if (block instanceof AzaleaBlock) {
+        // A lantern on the floor holds a player up. As NO, standing on one read as standing on air
+        // (seen on soul lanterns in the nether). It is a low floor: see isBottomSlab for what that rules out.
+        // Ported from xiaoka6666/baritone (26.3 branch), widened from the soul lantern to every lantern.
+        if (isStandingLantern(state) || block instanceof AzaleaBlock) {
             return YES;
         }
         if (block == Blocks.LADDER || (isClimbable(block) && Baritone.settings().allowVines.value)) { // TODO reconsider this
@@ -510,6 +524,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static boolean canWalkOn(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.forcesWalkOn(x, y, z)) {
+            return true;
+        }
         return context.precomputedData.canWalkOn(context.bsi, x, y, z, state);
     }
 
@@ -649,7 +666,10 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (!state.getFluidState().isEmpty()) {
                 return COST_INF;
             }
-            double mult = context.breakCostMultiplierAt(x, y, z, state);
+            if (context.avoidsWalkThrough(x, y, z)) {
+                return COST_INF; // kept out of, not walled off: digging does not open it
+            }
+            double mult = context.breakCostMultiplierAt(x, y, z, state); // asks the break avoiders, as does avoidBreaking
             if (mult >= COST_INF) {
                 return COST_INF;
             }
@@ -658,9 +678,6 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             double strVsBlock = context.toolSet.getStrVsBlock(state);
             if (strVsBlock <= 0) {
-                return COST_INF;
-            }
-            if (AltoClefSettings.getInstance().shouldAvoidBreaking(x, y, z)) {
                 return COST_INF;
             }
             double result = 1 / strVsBlock;
@@ -677,9 +694,19 @@ public interface MovementHelper extends ActionCosts, Helper {
         return 0; // we won't actually mine it, so don't check fallings above
     }
 
+    /**
+     * A floor about half a block up: a bottom slab, or a lantern standing on the ground (9/16). A jump from one
+     * does not reach a full block above, and a full block beside it is a step, not a jump.
+     */
     static boolean isBottomSlab(BlockState state) {
-        return state.getBlock() instanceof SlabBlock
-                && state.getValue(SlabBlock.TYPE) == SlabType.BOTTOM;
+        return (state.getBlock() instanceof SlabBlock
+                && state.getValue(SlabBlock.TYPE) == SlabType.BOTTOM)
+                || isStandingLantern(state);
+    }
+
+    /** A lantern on the ground. One hanging has the block it hangs from where the player would stand. */
+    static boolean isStandingLantern(BlockState state) {
+        return state.getBlock() instanceof LanternBlock && !state.getValue(LanternBlock.HANGING);
     }
 
     /**
@@ -701,7 +728,7 @@ public interface MovementHelper extends ActionCosts, Helper {
      */
     static void switchToBestToolFor(IPlayerContext ctx, BlockState b, ToolSet ts, boolean preferSilkTouch) {
         if (Baritone.settings().autoTool.value && !Baritone.settings().assumeExternalAutoTool.value) {
-            ctx.player().getInventory().selected = ts.getBestSlot(b.getBlock(), preferSilkTouch);
+            ctx.player().getInventory().setSelectedSlot(ts.getBestSlot(b.getBlock(), preferSilkTouch));
         }
     }
 

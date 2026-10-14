@@ -82,9 +82,11 @@ public class Baritone implements IBaritone {
     private final FarmProcess farmProcess;
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
+    private final PortalBuildProcess portalBuildProcess;
     private final PvpProcess pvpProcess;
     private final baritone.structure.StructureBehavior structureBehavior;
     private final PveProcess pveProcess;
+    private final baritone.process.BastionProcess bastionProcess;
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -131,11 +133,13 @@ public class Baritone implements IBaritone {
             this.inventoryPauserProcess  = this.registerProcess(InventoryPauserProcess::new);
             this.elytraProcess           = this.registerProcess(ElytraProcess::create);
             this.registerProcess(BackfillProcess::new);
+            this.pvpProcess              = this.registerProcess(PvpProcess::new);
+            this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
+            this.pveProcess              = this.registerProcess(PveProcess::new);
+            this.bastionProcess          = this.registerProcess(baritone.process.BastionProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
-            this.pvpProcess              = this.registerProcess(PvpProcess::new);
-            this.pveProcess              = this.registerProcess(PveProcess::new);
-            this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
+            this.portalBuildProcess      = this.registerProcess(PortalBuildProcess::new);
             VexBench.install(this);
             baritone.process.SimBench.install(this);
         }
@@ -197,6 +201,10 @@ public class Baritone implements IBaritone {
 
     public PvpProcess getPvpProcess() {
         return this.pvpProcess;
+    }
+
+    public baritone.process.BastionProcess getBastionProcess() {
+        return this.bastionProcess;
     }
 
     public PveProcess getPveProcess() {
@@ -270,6 +278,10 @@ public class Baritone implements IBaritone {
         return this.commandManager;
     }
 
+    public PortalBuildProcess getPortalBuildProcess() {
+        return this.portalBuildProcess;
+    }
+
     @Override
     public IElytraProcess getElytraProcess() {
         return this.elytraProcess;
@@ -280,7 +292,7 @@ public class Baritone implements IBaritone {
         new Thread(() -> {
             try {
                 Thread.sleep(100);
-                mc.execute(() -> mc.setScreen(new GuiClick()));
+                mc.execute(() -> mc.gui.setScreen(new GuiClick()));
             } catch (Exception ignored) {}
         }).start();
     }

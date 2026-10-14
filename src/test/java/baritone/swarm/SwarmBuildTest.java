@@ -19,6 +19,7 @@
 package baritone.swarm;
 
 import baritone.swarm.crypto.SigilCircle;
+import baritone.swarm.frame.SwarmMessage;
 import baritone.swarm.roster.SwarmRoster;
 import baritone.swarm.transport.InMemorySwarmBus;
 import org.junit.Before;
@@ -127,6 +128,22 @@ public class SwarmBuildTest {
         tickAll(alice, bob, carol);
         assertFalse(alice.build().jobRunning());
         assertTrue(String.join("\n", log), log.stream().anyMatch(l -> l.contains("finished, 3 region(s)")));
+    }
+
+    @Test
+    public void stopOfAnEarlierJobLeavesTheCurrentOneRunning() throws Exception {
+        InMemorySwarmBus bus = new InMemorySwarmBus();
+        FakeBuilder ab = new FakeBuilder(), bb = new FakeBuilder(), cb = new FakeBuilder();
+        SwarmControl alice = control("Alice", bus, ab), bob = control("Bob", bus, bb), carol = control("Carol", bus, cb);
+        alice.build().start("crew", "house.schem", 0, 64, 0, "strips", "auto", 0, 0);
+        tickAll(alice, bob, carol);
+        String job = bob.build().myOrder().job;
+        bob.build().handle(new SwarmMessage("crew", "Alice", "*", 1, 900, SwarmBuild.STOP, "job=older"));
+        assertFalse(bb.cancelled);
+        assertNotNull(bob.build().myOrder());
+        bob.build().handle(new SwarmMessage("crew", "Alice", "*", 1, 901, SwarmBuild.STOP, "job=" + job));
+        assertTrue(bb.cancelled);
+        assertNull(bob.build().myOrder());
     }
 
     @Test

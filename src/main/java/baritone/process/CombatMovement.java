@@ -57,7 +57,7 @@ final class CombatMovement {
         }
         if (dist > 3.5) {
             // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
-            if (me.onGround() && me.isSprinting() && !me.isInWater() ) hands.key(Input.JUMP);
+            if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) hands.key(Input.JUMP);
             return;
         }
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);

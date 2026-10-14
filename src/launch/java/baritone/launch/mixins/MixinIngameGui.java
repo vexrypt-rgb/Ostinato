@@ -17,26 +17,28 @@
 
 package baritone.launch.mixins;
 
+import baritone.gui.hud.AcsHud;
 import baritone.gui.hud.PathStatusHud;
 import net.minecraft.client.DeltaTracker;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiGraphics;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Draws the Ostinato path status card after the vanilla HUD.
+ * Draws the Ostinato path status and autotune cards after the vanilla HUD.
  */
-@Mixin(Gui.class)
+@Mixin(net.minecraft.client.gui.Hud.class)
 public class MixinIngameGui {
 
     @Inject(
-            method = "render",
+            method = "extractRenderState",
             at = @At("RETURN")
     )
-    private void onRenderIngameGui(GuiGraphics graphics, DeltaTracker delta, CallbackInfo ci) {
+    private void onRenderIngameGui(GuiGraphicsExtractor graphics, DeltaTracker delta, CallbackInfo ci) {
         PathStatusHud.render(graphics, delta.getGameTimeDeltaPartialTick(false));
+        AcsHud.render(graphics);
     }
 }

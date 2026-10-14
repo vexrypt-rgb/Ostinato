@@ -21,7 +21,7 @@ import baritone.api.IBaritone;
 import baritone.api.command.ICommand;
 import baritone.api.command.argument.ICommandArgument;
 import baritone.api.command.registry.Registry;
-import net.minecraft.util.Tuple;
+import baritone.api.utils.Pair;
 
 import java.util.List;
 import java.util.stream.Stream;
@@ -44,9 +44,19 @@ public interface ICommandManager {
 
     boolean execute(String string);
 
-    boolean execute(Tuple<String, List<ICommandArgument>> expanded);
+    boolean execute(Pair<String, List<ICommandArgument>> expanded);
 
-    Stream<String> tabComplete(Tuple<String, List<ICommandArgument>> expanded);
+    Stream<String> tabComplete(Pair<String, List<ICommandArgument>> expanded);
 
     Stream<String> tabComplete(String prefix);
+
+    /**
+     * Ask {@code guard} before any command runs, however it was started (chat, GUI or code). The guard gets the
+     * command and the full command line, and returns a reason to refuse it, or empty to let it run. This lets another
+     * mod share the player's controls with Ostinato (for example, so a fight in another mod is not interrupted by a
+     * {@code #goto}) without Ostinato depending on that mod. {@code null} removes the guard. Game thread only.
+     */
+    default void setExecutionGuard(java.util.function.BiFunction<ICommand, String, java.util.Optional<String>> guard) {
+        throw new UnsupportedOperationException("this command manager has no execution guard");
+    }
 }

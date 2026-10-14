@@ -148,7 +148,7 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
         try {
             BlockOptionalMetaLookup filter = new BlockOptionalMetaLookup(step.blocks());
             int n = 0;
-            for (ItemStack s : baritone().getPlayerContext().player().getInventory().items) {
+            for (ItemStack s : baritone().getPlayerContext().player().getInventory().getNonEquipmentItems()) {
                 if (filter.has(s)) {
                     n += s.getCount();
                 }

@@ -132,7 +132,7 @@ public final class VexBench implements AbstractGameEventListener {
             return;
         }
         bot = "vex" + round; // VexBot lowercases names
-        run("kill @e[type=!player]", "kill @a[name=!" + Minecraft.getInstance().player.getGameProfile().getName() + "]", "kill @e[type=item]",
+        run("kill @e[type=!player]", "kill @a[name=!" + Minecraft.getInstance().player.getGameProfile().name() + "]", "kill @e[type=item]",
                 // explosive rounds leave craters, anchors and obsidian; rebuild the superflat arena
                 "fill -16 -60 -16 16 -50 16 air", "fill -16 -63 -16 16 -62 16 dirt", "fill -16 -61 -16 16 -61 16 grass_block");
         setup = true; // gear up once we're alive again: a kit given to a corpse is lost on respawn
@@ -179,7 +179,7 @@ public final class VexBench implements AbstractGameEventListener {
         server.submit(() -> {
             ServerPlayer p = server.getPlayerList().getPlayers().isEmpty() ? null : server.getPlayerList().getPlayers().get(0);
             var src = server.createCommandSourceStack();
-            if (p != null) src = src.withPosition(new Vec3(0, p.getY(), 0)).withLevel(p.serverLevel());
+            if (p != null) src = src.withPosition(new Vec3(0, p.getY(), 0)).withLevel(p.level());
             for (String c : String.join(";", cmds).split(";")) { // templates may chain commands with ;
                 log("cmd " + c);
                 server.getCommands().performPrefixedCommand(src, c);

@@ -1,5 +1,8 @@
 package baritone.process;
 
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+import net.minecraft.world.item.component.SwingAnimation;
+
 import baritone.Baritone;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.utils.BoatUtil;
@@ -15,7 +18,7 @@ import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.InteractionHand;
@@ -49,6 +52,8 @@ public final class BoatProcess extends BaritoneProcessHelper {
     private int phaseTicks, sailStuck;
     private double lastProgressD;
     private int lastCheck;
+    /** Answers of {@link #surface} for the search under way, by cell; null outside one. */
+    private Long2ByteOpenHashMap seen;
 
     public BoatProcess(Baritone baritone) {
         super(baritone);
@@ -90,10 +95,13 @@ public final class BoatProcess extends BaritoneProcessHelper {
             }
             return false;
         }
+        if (lastCheck > ctx.player().tickCount + 200) {
+            lastCheck = 0; // tickCount starts again with a new player entity (respawn, another dimension)
+        }
         if (ctx.player().tickCount - lastCheck < 40) {
             return false;
         }
-        boolean own = BoatUtil.hasBoat(ctx.player().getInventory().items);
+        boolean own = BoatUtil.hasBoat(ctx.player().getInventory().getNonEquipmentItems());
         Entity found = floatingBoat();
         if (!own && found == null) {
             return false;
@@ -185,9 +193,20 @@ public final class BoatProcess extends BaritoneProcessHelper {
         }
     }
 
+    /** {@link #surface} within one search, which asks about every cell a dozen times over. */
+    private boolean surfaceSeen(int x, int y, int z) {
+        long k = key(x, z);
+        byte v = seen.get(k);
+        if (v == 0) {
+            v = (byte) (surface(x, y, z) ? 1 : 2);
+            seen.put(k, v);
+        }
+        return v == 1;
+    }
+
     private boolean nearShore(int x, int y, int z) {
         for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-            if (!surface(x + dx, y, z + dz)) return true;
+            if (!surfaceSeen(x + dx, y, z + dz)) return true;
         }
         return false;
     }
@@ -202,6 +221,15 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     /** extra: blocks spent reaching the start (e.g. walking to a found boat), taken off the gain. */
     private boolean plan(Goal g, BlockPos feet, boolean aboard, double extra) {
+        seen = new Long2ByteOpenHashMap();
+        try {
+            return search(g, feet, aboard, extra);
+        } finally {
+            seen = null;
+        }
+    }
+
+    private boolean search(Goal g, BlockPos feet, boolean aboard, double extra) {
         BlockPos start = null;
         search:
         for (int r = 0; r <= 3; r++) {
@@ -235,8 +263,8 @@ public final class BoatProcess extends BaritoneProcessHelper {
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 int nx = cx + dx, nz = cz + dz;
-                if (Math.abs(nx - start.getX()) > RADIUS || Math.abs(nz - start.getZ()) > RADIUS || !surface(nx, y, nz)) continue;
-                if (dx != 0 && dz != 0 && (!surface(cx + dx, y, cz) || !surface(cx, y, cz + dz))) continue;
+                if (Math.abs(nx - start.getX()) > RADIUS || Math.abs(nz - start.getZ()) > RADIUS || !surfaceSeen(nx, y, nz)) continue;
+                if (dx != 0 && dz != 0 && (!surfaceSeen(cx + dx, y, cz) || !surfaceSeen(cx, y, cz + dz))) continue;
                 double nd = c[0] + (dx != 0 && dz != 0 ? 1.414 : 1) + (nearShore(nx, y, nz) ? 3 : 0);
                 long nk = key(nx, nz);
                 Double old = dist.get(nk);
@@ -307,7 +335,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 if (findBoat(4) != null) { enter(Phase.MOUNT); return pause(); }
                 int slot = BoatUtil.hotbarBoat(ctx);
                 if (slot < 0 || phaseTicks > 100) return abort("could not place the boat (" + Minecraft.getInstance().hitResult + " eye " + ctx.player().getEyeY() + ")");
-                ctx.player().getInventory().selected = slot;
+                ctx.player().getInventory().setSelectedSlot(slot);
                 if (surfacing()) {
                     if (phaseTicks < 15) return pause();
                     // Can't place from under the surface; let the swim carry on and look again shortly.
@@ -344,7 +372,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 if (b == null || phaseTicks > 100) return abort("could not board");
                 if (ctx.player().distanceTo(b) > 3) return new PathingCommand(new GoalNear(b.blockPosition(), 1), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
                 look(b.getX(), b.getY() + 0.3, b.getZ());
-                if (phaseTicks % 2 == 1) Minecraft.getInstance().gameMode.interact(ctx.player(), b, InteractionHand.MAIN_HAND);
+                if (phaseTicks % 4 == 3) Minecraft.getInstance().gameMode.interact(ctx.player(), b, new net.minecraft.world.phys.EntityHitResult(b), InteractionHand.MAIN_HAND);
                 return pause();
             }
             case SAIL:
@@ -360,18 +388,26 @@ public final class BoatProcess extends BaritoneProcessHelper {
             }
             case BREAK: {
                 if (boat == null || !boat.isAlive()) { enter(Phase.COLLECT); return pause(); }
+                if (danger()) { logDebug("Boat: danger about, leaving the boat"); return finish(); }
                 if (phaseTicks > 100 || ctx.player().distanceTo(boat) > 5) return finish();
                 look(boat.getX(), boat.getY() + 0.3, boat.getZ());
                 if (phaseTicks % 4 == 0) {
                     Minecraft.getInstance().gameMode.attack(ctx.player(), boat);
-                    ctx.player().swing(InteractionHand.MAIN_HAND);
+                    ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                 }
                 return pause();
             }
             case COLLECT: {
+                if (danger()) { logDebug("Boat: danger about, leaving the drop"); return finish(); }
                 ItemEntity drop = boatDrop();
-                if (drop == null || phaseTicks > 100) return finish();
-                return new PathingCommand(new GoalNear(drop.blockPosition(), 1), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+                if (drop == null) {
+                    // the item spawns a tick or two after the boat breaks
+                    return phaseTicks > 12 ? finish() : pause();
+                }
+                if (phaseTicks > 160 || ctx.player().distanceTo(drop) < 0.6 && phaseTicks > 40) return finish();
+                // the path to the old goal is still running: drop it so the walk goes to the item, not onward
+                return new PathingCommand(new GoalBlock(drop.blockPosition()),
+                        phaseTicks % 40 == 1 ? PathingCommandType.CANCEL_AND_SET_GOAL : PathingCommandType.SET_GOAL_AND_PATH);
             }
             default:
                 return pause();
@@ -431,6 +467,16 @@ public final class BoatProcess extends BaritoneProcessHelper {
                     && (best == null || ctx.player().distanceTo(e) < ctx.player().distanceTo(best))) best = e;
         }
         return best;
+    }
+
+    /** Hostile mob close by, low health, burning or in lava: not the time to stand about collecting a boat. */
+    private boolean danger() {
+        var p = ctx.player();
+        if (p.getHealth() < 8 || p.isOnFire() || p.isInLava()) return true;
+        for (Entity e : ctx.entities()) {
+            if (e instanceof net.minecraft.world.entity.monster.Enemy && e.isAlive() && p.distanceTo(e) < 12) return true;
+        }
+        return false;
     }
 
     private ItemEntity boatDrop() {

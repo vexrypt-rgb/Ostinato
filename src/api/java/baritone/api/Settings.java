@@ -22,8 +22,8 @@ import baritone.api.utils.NotificationHelper;
 import baritone.api.utils.SettingsUtil;
 import baritone.api.utils.TypeUtils;
 import baritone.api.utils.gui.BaritoneToast;
-import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -402,6 +402,21 @@ public final class Settings {
      * (air, an open fence gate, a sign...), since it can drop out from under the player
      */
     public final Setting<Boolean> pitfallAvoidance = new Setting<>(true);
+
+    /**
+     * The longest path, in positions, that Baritone will walk. A longer one is thrown away and the calculation
+     * counts as failed, so whatever set the goal can pick another instead of spending minutes on a route it will
+     * not keep to (seen in the nether: 274-282 block paths recalculated over and over with no progress). The same
+     * goal is then left alone for five seconds.
+     * <p>
+     * This also refuses a long route that is fine: with a cap of 150, a goal a couple of hundred blocks off across
+     * loaded terrain fails instead of being walked.
+     * <p>
+     * 0 = no cap (upstream behaviour), and the default for that reason. 150 is the value it was written with.
+     * <p>
+     * Ported from xiaoka6666/baritone (26.3 branch).
+     */
+    public final Setting<Integer> maxPathLengthBlocks = new Setting<>(0);
 
     /**
      * Enables some more advanced vine features. They're honestly just gimmicks and won't ever be needed in real
@@ -792,6 +807,18 @@ public final class Settings {
     public final Setting<Boolean> renderPathAsLine = new Setting<>(false);
 
     /**
+     * Draw the current and next path as a smooth glowing ribbon with flowing colour, pulses and direction chevrons.
+     * Turn off for the plain line.
+     */
+    public final Setting<Boolean> fancyPath = new Setting<>(true);
+
+    /**
+     * Draw goal boxes, selection boxes and block outlines with a soft pulsing glow, and the path search as a glowing
+     * ribbon. Turn off for the plain outlines.
+     */
+    public final Setting<Boolean> fancyRender = new Setting<>(true);
+
+    /**
      * Render the goal
      */
     public final Setting<Boolean> renderGoal = new Setting<>(true);
@@ -862,6 +889,19 @@ public final class Settings {
      * Forces the client-sided yaw rotation to an average of the last {@link #smoothLookTicks} of server-sided rotations.
      */
     public final Setting<Boolean> smoothLook = new Setting<>(false);
+
+    /**
+     * Prototype: between ticks the view keeps moving toward the last aim goal in mouse-count steps, one per rendered
+     * frame, instead of arriving in one jump at the tick. Only used by the PvP look. On by default.
+     */
+    public final Setting<Boolean> frameLook = new Setting<>(true);
+
+    /**
+     * Every look Baritone makes (walking, mining, placing) turns the camera like a mouse: bounded speed, overshoot,
+     * tremor, mouse-count steps. PvP always does this. Off by default because path following and bridging were tuned
+     * against exact, instant rotations; not applied while elytra flying.
+     */
+    public final Setting<Boolean> humanLookEverywhere = new Setting<>(false);
 
     /**
      * Same as {@link #smoothLook} but for elytra flying.
@@ -1343,6 +1383,16 @@ public final class Settings {
     public final Setting<Double> freecamSpeed = new Setting<>(1D);
 
     /**
+     * Let the freecam enemy list (middle-click, or attacked while in freecam) include mobs, not just players
+     */
+    public final Setting<Boolean> enemyMobs = new Setting<>(false);
+
+    /**
+     * Key that toggles freecam, as a Minecraft key name (e.g. key.keyboard.f8, key.keyboard.unknown to disable).
+     */
+    public final Setting<String> freecamKey = new Setting<>("key.keyboard.f8");
+
+    /**
      * Opacity of the bot's ghost body while freecam is on (0 = invisible, 1 = solid)
      */
     public final Setting<Float> freecamGhostOpacity = new Setting<>(0.35f);
@@ -1389,7 +1439,7 @@ public final class Settings {
     public final Setting<Consumer<Component>> logger = new Setting<>((msg) -> {
         try {
             final GuiMessageTag tag = useMessageTag.value ? Helper.MESSAGE_TAG : null;
-            Minecraft.getInstance().gui.getChat().addMessage(msg, null, tag);
+            Minecraft.getInstance().gui.hud.getChat().addPlayerMessage(msg, null, tag);
         } catch (Throwable t) {
             LOGGER.warn("Failed to log message to chat: " + msg.getString(), t);
         }
@@ -1957,7 +2007,25 @@ public final class Settings {
     /**
      * Drive plain walking stretches of a path with a physics look-ahead controller instead of per-movement logic
      */
-    public final Setting<Boolean> kinematicTravel = new Setting<>(false);
+    public final Setting<Boolean> kinematicTravel = new Setting<>(true);
+
+    /**
+     * Slow kinematic: a slower, more careful physics-driven mode that also covers what kinematicTravel hands to Baritone. So far, swimming
+     */
+    public final Setting<Boolean> slowKinematic = new Setting<>(false);
+
+    /**
+     * Kinematic travel changes direction with the camera, a humanized mouse move, with W held, instead of snapping the
+     * rotation to the path every tick. The planner models the lag of the camera, so the turns still land on the path.
+     */
+    public final Setting<Boolean> headSteering = new Setting<>(true);
+
+    /**
+     * How far, in blocks, kinematic travel may drift to either side of the path line on open ground, as a slow random
+     * wander instead of a ruler-straight track. Zero follows the line exactly. Jumps, edges and the end of a stretch
+     * always follow the line.
+     */
+    public final Setting<Double> pathWander = new Setting<>(0.25);
 
     /**
      * Compare the kinematic simulation with the real player on every tick of a jump and log SIMTRACE lines (and
@@ -1987,6 +2055,30 @@ public final class Settings {
 
     /** Where the path status card sits: {@code RIGHT}, {@code LEFT}, {@code TOP_RIGHT} or {@code TOP_LEFT}. */
     public final Setting<String> pathHudAnchor = new Setting<>("RIGHT");
+
+    /**
+     * Let the Autotune Combat System move the combat timing values on its own while {@code #pvp} fights, one at a
+     * time. In turns with the value it trusts it fights under a neighbouring one, and keeps the neighbour only when
+     * the fights show it deals more damage without taking more, or takes less without dealing less. Off, every value
+     * stays at its baseline. What it has learned is kept for each kit in {@code baritone/autotune.txt} and read back
+     * the next time; {@code #pvp tune} shows it and {@code #pvp tune reset} forgets it.
+     */
+    public final Setting<Boolean> pvpAutotune = new Setting<>(false);
+
+    /** Show the Autotune Combat System card on the HUD while {@code #pvp} is fighting. Hidden while F3 is open. */
+    public final Setting<Boolean> renderAcsHud = new Setting<>(true);
+
+    /** Where the Autotune card sits: {@code TOP_LEFT}, {@code LEFT}, {@code TOP_RIGHT} or {@code RIGHT}. */
+    public final Setting<String> acsHudAnchor = new Setting<>("TOP_LEFT");
+
+    /** How solid the Autotune card's background is, from 0 (text only) to 1. */
+    public final Setting<Float> acsHudOpacity = new Setting<>(0.4f);
+
+    /**
+     * How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the
+     * largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.
+     */
+    public final Setting<Integer> acsHudScale = new Setting<>(0);
 
     /** Accent color of the Ostinato settings screen and path status card. */
     public final Setting<Color> guiAccentColor = new Setting<>(new Color(79, 209, 197));

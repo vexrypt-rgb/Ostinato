@@ -470,7 +470,7 @@ public final class SimBench implements AbstractGameEventListener {
 
     private static int count(LocalPlayer me, String item) {
         int n = 0;
-        for (var stack : me.getInventory().items) if (net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().equals(item)) n += stack.getCount();
+        for (int slot = 0; slot < me.getInventory().getContainerSize(); slot++) if (net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(me.getInventory().getItem(slot).getItem()).getPath().equals(item)) n += me.getInventory().getItem(slot).getCount();
         return n;
     }
 
@@ -479,7 +479,7 @@ public final class SimBench implements AbstractGameEventListener {
         server.submit(() -> {
             ServerPlayer p = server.getPlayerList().getPlayers().isEmpty() ? null : server.getPlayerList().getPlayers().get(0);
             var src = server.createCommandSourceStack();
-            if (p != null) src = src.withPosition(new Vec3(OX, OY, OZ)).withLevel(p.serverLevel());
+            if (p != null) src = src.withPosition(new Vec3(OX, OY, OZ)).withLevel(p.level());
             for (String cmd : cmds) server.getCommands().performPrefixedCommand(src, cmd);
         }).join();
     }

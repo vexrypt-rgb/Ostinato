@@ -78,6 +78,8 @@ public class MovementTraverse extends Movement {
     public static double cost(CalculationContext context, int x, int y, int z, int destX, int destZ) {
         BlockState pb0 = context.get(destX, y + 1, destZ);
         BlockState pb1 = context.get(destX, y, destZ);
+        // never step into a lava cell (bastion run 25 walked its lava escape through one)
+        if (MovementHelper.isLava(pb0) || MovementHelper.isLava(pb1)) return COST_INF;
         BlockState destOn = context.get(destX, y - 1, destZ);
         BlockState srcDown = context.get(x, y - 1, z);
         Block srcDownBlock = srcDown.getBlock();
@@ -159,7 +161,7 @@ public class MovementTraverse extends Movement {
                     }
                 }
                 // now that we've checked all possible directions to side place, we actually need to backplace
-                if (srcDownBlock == Blocks.SOUL_SAND || (srcDownBlock instanceof SlabBlock && srcDown.getValue(SlabBlock.TYPE) != SlabType.DOUBLE)) {
+                if (srcDownBlock == Blocks.SOUL_SAND || (srcDownBlock instanceof SlabBlock && srcDown.getValue(SlabBlock.TYPE) != SlabType.DOUBLE) || MovementHelper.isStandingLantern(srcDown)) {
                     return COST_INF; // can't sneak and backplace against soul sand or half slabs (regardless of whether it's top half or bottom half) =/
                 }
                 if (!standingOnABlock) { // standing on water / swimming

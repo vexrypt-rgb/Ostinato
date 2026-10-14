@@ -18,6 +18,7 @@
 
 package baritone.gui.screen;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.utils.BetterBlockPos;
@@ -32,10 +33,10 @@ import baritone.gui.tasks.TaskList;
 import baritone.gui.tasks.TaskRunner;
 import baritone.gui.tasks.TaskStep;
 import baritone.gui.tasks.game.TaskService;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
-import org.lwjgl.glfw.GLFW;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -65,6 +66,8 @@ final class TasksPanel {
     private int editStep;
     private String editKey;
     private boolean dropdown;
+    private List<String> savedNames = Collections.emptyList();
+    private long savedNamesAt;
     private long loadConfirmUntil;
     private String loadConfirmName;
     private long newConfirmUntil;
@@ -79,6 +82,16 @@ final class TasksPanel {
 
     private TaskList list() {
         return svc.list();
+    }
+
+    /** The saved lists' names. Asked for every frame, so the folder is read at most twice a second. */
+    private List<String> savedNames() {
+        long now = System.currentTimeMillis();
+        if (now - savedNamesAt > 500) {
+            savedNamesAt = now;
+            savedNames = svc.files().list();
+        }
+        return savedNames;
     }
 
     private TaskRunner runner() {
@@ -116,7 +129,9 @@ final class TasksPanel {
         if (svc.dirty) {
             return "unsaved changes (Ctrl+S)";
         }
-        return svc.files().exists(list().name()) ? "saved to baritone/tasks/" + TaskFiles.sanitize(list().name()) + ".json" : "not saved yet";
+        String file = TaskFiles.sanitize(list().name());
+        boolean saved = savedNames().stream().anyMatch(file::equalsIgnoreCase);
+        return saved ? "saved to baritone/tasks/" + TaskFiles.sanitize(list().name()) + ".json" : "not saved yet";
     }
 
     int footerStatusColor() {
@@ -125,7 +140,7 @@ final class TasksPanel {
 
     // ------------------------------------------------------------------ draw
 
-    void draw(GuiGraphics ms, int mx, int my, int accent, long now) {
+    void draw(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         TaskList l = list();
         TaskRunner r = runner();
         float tw = GuiDraw.text(ms, "Tasks", px0, top + 9, 1f, Theme.TEXT, true, true);
@@ -184,7 +199,7 @@ final class TasksPanel {
         }
     }
 
-    private void drawControlBar(GuiGraphics ms, int mx, int my, int accent, long now) {
+    private void drawControlBar(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
         TaskRunner r = runner();
         float cb0 = top + 26;
         GuiDraw.round(ms, px0, cb0, px1, cb0 + 20, 3, 0x0AFFFFFF);
@@ -262,7 +277,7 @@ final class TasksPanel {
         return s < 60 ? s + "s" : (s / 60) + "m " + String.format(Locale.ROOT, "%02ds", s % 60);
     }
 
-    private float barButton(GuiGraphics ms, String label, String[] icon, float x, float cb0, boolean enabled, boolean danger, int mx, int my) {
+    private float barButton(GuiGraphicsExtractor ms, String label, String[] icon, float x, float cb0, boolean enabled, boolean danger, int mx, int my) {
         float w = GuiDraw.width(label) + 25;
         boolean h = enabled && OstinatoScreen.in(mx, my, x, cb0 + 3, x + w, cb0 + 17);
         int col;
@@ -278,7 +293,7 @@ final class TasksPanel {
         return x + w;
     }
 
-    private float smallButton(GuiGraphics ms, String label, float xr, float y, int mx, int my, int textColor) {
+    private float smallButton(GuiGraphicsExtractor ms, String label, float xr, float y, int mx, int my, int textColor) {
         float w = GuiDraw.width(label) + 16, x0 = xr - w;
         boolean h = OstinatoScreen.in(mx, my, x0, y, xr, y + 14);
         GuiDraw.roundBorder(ms, x0, y, xr, y + 14, 3, h ? 0xFF3E4860 : Theme.FIELD_BORDER, h ? 0xFF1C2230 : 0xFF161B25);
@@ -312,7 +327,7 @@ final class TasksPanel {
         return px1 - 14 - 4 * 13;
     }
 
-    private void drawRow(GuiGraphics ms, int i, float ry, int mx, int my, int accent, long now) {
+    private void drawRow(GuiGraphicsExtractor ms, int i, float ry, int mx, int my, int accent, long now) {
         TaskStep s = list().get(i);
         TaskRunner r = runner();
         TaskRunner.StepStatus st = r.list() == null ? TaskRunner.StepStatus.PENDING : r.status(i);
@@ -420,12 +435,11 @@ final class TasksPanel {
         }
     }
 
-    private void drawDropdown(GuiGraphics ms, int mx, int my, int accent, float lx0, float lx1) {
-        List<String> names = svc.files().list();
+    private void drawDropdown(GuiGraphicsExtractor ms, int mx, int my, int accent, float lx0, float lx1) {
+        List<String> names = savedNames();
         int n = Math.min(10, names.size());
         float y0 = top + 21, h = Math.max(1, n) * 12 + 4;
-        ms.pose().pushPose();
-        ms.pose().translate(0, 0, 300);
+        ms.pose().pushMatrix();
         GuiDraw.shadow(ms, lx0, y0, lx1, y0 + h, 3, 5, 0x80);
         GuiDraw.roundBorder(ms, lx0, y0, lx1, y0 + h, 3, 0xFF34405A, 0xFA151A24, 0xFA0C0F16);
         if (names.isEmpty()) {
@@ -440,7 +454,7 @@ final class TasksPanel {
             }
             GuiDraw.text(ms, GuiDraw.trim(names.get(i), lx1 - lx0 - 12, 1f), lx0 + 6, iy + 2, cur ? accent : h2 ? Theme.TEXT : 0xFFB8C0CE, false);
         }
-        ms.pose().popPose();
+        ms.pose().popMatrix();
     }
 
     // ------------------------------------------------------------------ input
@@ -496,6 +510,7 @@ final class TasksPanel {
         overwriteConfirmUntil = 0;
         try {
             svc.save();
+            savedNamesAt = 0;
             svc.dirty = false;
             screen.flash("Saved baritone/tasks/" + list().name() + ".json", Theme.GREEN);
             return true;
@@ -534,7 +549,8 @@ final class TasksPanel {
         // dropdown first
         float rx = px1 - (GuiDraw.width("New") + 16) - 3 - (GuiDraw.width("Save") + 16) - 3, lx0 = rx - 92;
         if (dropdown) {
-            List<String> names = svc.files().list();
+            // the same names the dropdown is showing, so a click lands on the row that was drawn
+            List<String> names = savedNames();
             int n = Math.min(10, names.size());
             float y0 = top + 21;
             for (int i = 0; i < n; i++) {
@@ -700,7 +716,7 @@ final class TasksPanel {
             return true;
         }
         if (mx >= tx0 && mx < tx1) {
-            s.setType(s.type().next(button == 1 || Screen.hasShiftDown() ? -1 : 1));
+            s.setType(s.type().next(button == 1 || Keys.shift() ? -1 : 1));
             changed();
             return true;
         }
@@ -739,7 +755,7 @@ final class TasksPanel {
                             idx = o;
                         }
                     }
-                    int dir = button == 1 || Screen.hasShiftDown() ? -1 : 1;
+                    int dir = button == 1 || Keys.shift() ? -1 : 1;
                     s.set(spec.key, spec.options[((idx + dir) % spec.options.length + spec.options.length) % spec.options.length]);
                     changed();
                 } else if (button == 1) {
@@ -761,15 +777,15 @@ final class TasksPanel {
 
     /** Keys while a field of this panel is focused. */
     boolean keyPressed(int key) {
-        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+        if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
             commit();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == InputConstants.KEY_ESCAPE) {
             cancelEdit();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_TAB && editStep >= 0 && editStep < list().size()) {
+        if (key == InputConstants.KEY_TAB && editStep >= 0 && editStep < list().size()) {
             // next editable field in the row (wraps to the next row)
             int step = editStep;
             String k = editKey;

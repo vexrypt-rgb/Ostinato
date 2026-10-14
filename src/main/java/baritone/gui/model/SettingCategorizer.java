@@ -53,17 +53,17 @@ public final class SettingCategorizer {
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater");
         put(m, RENDER, "yLevelBoxSize", "fadePath", "cachedChunksOpacity");
-        put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "randomLooking", "randomLooking113",
-                "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "physicsTravel",
-                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed",
+        put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "randomLooking", "randomLooking113",
+                "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
+                "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
                 "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
         put(m, PATHING, "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
-        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault");
-        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor");
+        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune");
+        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
         rule("^swarm", SWARM);

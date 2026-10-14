@@ -36,6 +36,7 @@ public interface IMovementEngine {
 
     boolean isPathing();
 
+    /** Stops travel on every backend and every pathing process with it, not only the goal given here. */
     void cancel();
 
     /** Human-readable status for commands / debug. */

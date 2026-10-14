@@ -53,8 +53,8 @@ import java.util.function.LongSupplier;
 /**
  * One swarm member: frames, seals, sends, and on the way in opens, checks and
  * reassembles. Frames are sealed as one S1C, S2C or S2S token under the group's
- * circle. When {@link SwarmConfig#requireSignedSender()} is true, outbound uses
- * S2S and inbound unsigned tokens are refused.
+ * circle. When {@link SwarmConfig#requireSignedSender()} is true or the wire is
+ * S2S, outbound uses S2S and inbound unsigned tokens are refused.
  */
 public final class SwarmEndpoint implements Closeable {
 
@@ -116,6 +116,7 @@ public final class SwarmEndpoint implements Closeable {
      */
     public void setSigning(SigilEd25519 local, Collection<SigilEd25519> pinned) {
         this.localSignet = local;
+        // pins before the binding is lifted: a line read between the two is checked against the stricter pair
         this.pins = pinned == null ? Collections.<SigilEd25519>emptyList() : new ArrayList<SigilEd25519>(pinned);
         this.signerOf = null;
     }
@@ -125,12 +126,14 @@ public final class SwarmEndpoint implements Closeable {
      * signed by the key pinned for the member it claims to be from, so one member cannot speak as another.
      */
     public void setSigning(SigilEd25519 local, Map<String, SigilEd25519> pinnedByMember) {
-        setSigning(local, pinnedByMember.values());
         Map<String, byte[]> m = new HashMap<String, byte[]>();
         for (Map.Entry<String, SigilEd25519> e : pinnedByMember.entrySet()) {
             m.put(e.getKey(), e.getValue().keyid());
         }
+        this.localSignet = local;
+        // the binding first, so no line is ever checked against the new pins without it
         this.signerOf = m;
+        this.pins = new ArrayList<SigilEd25519>(pinnedByMember.values());
     }
 
     public long send(String group, String to, String type, String body)
@@ -162,6 +165,7 @@ public final class SwarmEndpoint implements Closeable {
         return frames.get(0).msgId();
     }
 
+    /** Whether this endpoint speaks S2S: it then signs what it sends and refuses what is not signed. */
     private boolean signedOut() {
         return cfg.requireSignedSender() || cfg.wire() == SigilWire.S2S;
     }
@@ -199,7 +203,7 @@ public final class SwarmEndpoint implements Closeable {
                 total = o.total;
                 signer = o.keyid;
             } else {
-                if (cfg.requireSignedSender()) {
+                if (signedOut()) {
                     return reject(SwarmReject.UNSEALED);
                 }
                 SigilCodec.Opened o = SigilCodec.open(token, keyring);

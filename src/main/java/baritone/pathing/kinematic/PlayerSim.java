@@ -5,8 +5,10 @@ import java.util.List;
 
 /**
  * Allocation-light copy of vanilla 1.16 player movement (LivingEntity.travel + Entity.move) for
- * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision and ladders/vines; no
- * fluids, sneaking or potion effects, so callers only use it on plain ground.
+ * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision, ladders/vines and still water via
+ * {@link #tickWater}, and the blocks that slow a walker or a jump (soul sand, honey, with honey's slide down its
+ * sides); no lava, currents or sneaking. Of the potion effects it follows Speed, Slowness and Jump Boost
+ * ({@link #speedScale}, {@link #jumpBoost}); nothing that changes gravity.
  */
 public final class PlayerSim {
 
@@ -21,8 +23,28 @@ public final class PlayerSim {
             return false;
         }
 
+        /** Still or flowing water fills this cell (flow is not simulated). */
+        default boolean water(int x, int y, int z) {
+            return false;
+        }
+
         /** Ladder, vine or anything else the player can hang on to. */
         default boolean climbable(int x, int y, int z) {
+            return false;
+        }
+
+        /** Block.getSpeedFactor: 0.4 for soul sand and honey, which slow whoever stands in or on them. */
+        default float speedFactor(int x, int y, int z) {
+            return 1;
+        }
+
+        /** Block.getJumpFactor: 0.5 for honey, which halves a jump off it. */
+        default float jumpFactor(int x, int y, int z) {
+            return 1;
+        }
+
+        /** Honey: falling past its side slides. */
+        default boolean sticky(int x, int y, int z) {
             return false;
         }
     }
@@ -31,11 +53,21 @@ public final class PlayerSim {
     public static final double HEIGHT = 1.8f;
     public static final double STEP = 0.6;
     private static final double CLIMB_LIMIT = 0.15, CLIMB_SPEED = 0.2;
+    /** A honey block's collision box stops a sixteenth short of its cell: how far out its side is felt, and how high. */
+    private static final double HONEY_REACH = 0.4375 + HALF_WIDTH, HONEY_TOP = 0.9375;
 
     public double x, y, z, vx, vy, vz;
-    public boolean onGround, sprinting, collidedH;
+    public boolean onGround, sprinting, collidedH, swimming;
     /** Vanilla's jump cooldown: holding jump re-jumps only every 10 ticks. */
     public int jumpTicks;
+    /**
+     * What effects and attributes change about the player: ground speed as a multiple of the plain one (Speed,
+     * Slowness), the strength of a jump, and what a jump gets on top of that (Jump Boost, 0.1 a level). Air control
+     * is not scaled, as in vanilla. Left as they are, nothing changes.
+     */
+    public double speedScale = 1, jumpStrength = 0.42, jumpBoost;
+    /** How much of a slowing block's drag is taken away, 0 to 1 (Soul Speed). */
+    public double movementEfficiency;
 
     private final World world;
     private final List<double[]> boxes = new ArrayList<>();
@@ -46,7 +78,8 @@ public final class PlayerSim {
 
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
-        onGround = o.onGround; sprinting = o.sprinting; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
+        onGround = o.onGround; sprinting = o.sprinting; swimming = o.swimming; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
+        speedScale = o.speedScale; jumpStrength = o.jumpStrength; jumpBoost = o.jumpBoost; movementEfficiency = o.movementEfficiency;
         return this;
     }
 
@@ -59,6 +92,11 @@ public final class PlayerSim {
 
     /** As above with the forward key's impulse: 1 forward, 0 none, -1 back. */
     public void tick(float yawDeg, int input, boolean sprint, boolean jump) {
+        tick(yawDeg, input, 0, sprint, jump);
+    }
+
+    /** With a strafe key too: +1 is A (left), -1 is D (right). Vanilla normalises a diagonal so strafing adds no speed. */
+    public void tick(float yawDeg, int input, int strafe, boolean sprint, boolean jump) {
         boolean forward = input > 0;
         if (Math.abs(vx) < 0.003) vx = 0;
         if (Math.abs(vy) < 0.003) vy = 0;
@@ -71,7 +109,7 @@ public final class PlayerSim {
         if (!jump) jumpTicks = 0;
         if (jump && onGround && jumpTicks == 0) {
             jumpTicks = 10;
-            vy = 0.42;
+            vy = jumpStrength * jumpFactor() + jumpBoost;
             if (sprinting) {
                 vx -= sin * 0.2;
                 vz += cos * 0.2;
@@ -81,15 +119,22 @@ public final class PlayerSim {
         double slip = onGround ? blockSlip * 0.91 : 0.91;
         double speed;
         if (onGround) {
-            double move = sprinting ? 0.13 : 0.1;
+            double move = (sprinting ? 0.13 : 0.1) * speedScale;
             speed = move * (0.21600002 / (blockSlip * blockSlip * blockSlip));
         } else {
             speed = sprinting ? 0.026 : 0.02;
         }
-        if (input != 0) {
-            double f = 0.98 * speed * input;
-            vx += -sin * f;
-            vz += cos * f;
+        if (input != 0 || strafe != 0) {
+            double fz = 0.98 * input, fx = 0.98 * strafe;
+            double len = Math.sqrt(fx * fx + fz * fz);
+            if (len > 1) {
+                fx /= len;
+                fz /= len;
+            }
+            fx *= speed;
+            fz *= speed;
+            vx += fx * cos - fz * sin;
+            vz += fz * cos + fx * sin;
         }
         if (climbable()) { // LivingEntity.handleOnClimbableSpeed
             vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
@@ -103,6 +148,60 @@ public final class PlayerSim {
         vy = (vy - 0.08) * 0.98;
         vx *= slip;
         vz *= slip;
+    }
+
+    /** Water at the feet, the body's middle or the eyes: any of them puts vanilla into its fluid branch. */
+    public boolean inWater() {
+        return world.water(floor(x), floor(y + 0.1), floor(z));
+    }
+
+    public boolean eyesInWater() {
+        return world.water(floor(x), floor(y + 1.62 - 0.11), floor(z));
+    }
+
+    /**
+     * One tick in water (vanilla LivingEntity.travelInWater). Sprinting with the eyes under makes the swim pose,
+     * where vertical speed chases the look direction; otherwise JUMP rises and SNEAK sinks at 0.04 a tick.
+     * Climbing out: walking into a bank with free space above gives the 0.3 hop.
+     */
+    public void tickWater(float yawDeg, float pitchDeg, boolean forward, boolean sprint, boolean jump, boolean sneak) {
+        if (Math.abs(vx) < 0.003) vx = 0;
+        if (Math.abs(vy) < 0.003) vy = 0;
+        if (Math.abs(vz) < 0.003) vz = 0;
+        sprinting = forward && !collidedH && (sprint || sprinting);
+        // vanilla: the swim pose starts with the eyes under, and lasts while sprinting in water, even with the head out
+        swimming = sprinting && (swimming ? inWater() : eyesInWater());
+        double yaw = Math.toRadians(yawDeg);
+        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        if (swimming) {
+            double look = -Math.sin(Math.toRadians(pitchDeg));
+            double k = look < -0.2 ? 0.085 : 0.06;
+            if (look <= 0 || jump || world.water(floor(x), floor(y + 1 - 0.1), floor(z))) {
+                vy += (look - vy) * k;
+            }
+        }
+        if (forward) {
+            double f = 0.98 * 0.02;
+            vx += -sin * f;
+            vz += cos * f;
+        }
+        if (jump) vy += 0.04;
+        if (sneak) vy -= 0.04;
+        double startY = y;
+        move(vx, vy, vz);
+        double drag = sprinting ? 0.9 : 0.8;
+        vx *= drag;
+        vz *= drag;
+        vy *= 0.8;
+        if (!sprinting) {
+            vy -= 0.08 / 16.0;
+        }
+        if (collidedH) {
+            double[] r = collide(x, y, z, vx, vy + 0.6 - y + startY, vz);
+            if (r[0] == vx && r[1] == vy + 0.6 - y + startY && r[2] == vz && !world.water(floor(x + vx), floor(y + vy + 0.6 - y + startY), floor(z + vz))) {
+                vy = 0.3;
+            }
+        }
     }
 
     /** Whether the cell the player's feet are in can be hung on to. */
@@ -141,6 +240,56 @@ public final class PlayerSim {
             double k = 0.4 + Math.abs(vy) * 0.2;
             vx *= k;
             vz *= k;
+        }
+        honeySlide();
+        // Entity.move ends by scaling the horizontal speed with the block's factor, in the air as on the ground
+        float drag = speedFactor();
+        if (drag != 1) {
+            drag += (float) movementEfficiency * (1 - drag);
+            vx *= drag;
+            vz *= drag;
+        }
+    }
+
+    /** Entity.getBlockSpeedFactor: the block the feet are in, else (out of water) the one half a block below. */
+    private float speedFactor() {
+        int cx = floor(x), cy = floor(y), cz = floor(z);
+        float f = world.speedFactor(cx, cy, cz);
+        int below = floor(y - 0.500001);
+        if (f != 1 || below == cy) return f;
+        f = world.speedFactor(cx, below, cz);
+        return f != 1 && world.water(cx, cy, cz) ? 1 : f;
+    }
+
+    /** Entity.getBlockJumpFactor: the same two blocks, the one the feet are in first. */
+    private float jumpFactor() {
+        int cx = floor(x), cy = floor(y), cz = floor(z);
+        float f = world.jumpFactor(cx, cy, cz);
+        int below = floor(y - 0.500001);
+        return f != 1 || below == cy ? f : world.jumpFactor(cx, below, cz);
+    }
+
+    /**
+     * HoneyBlock.entityInside: a faller whose box reaches into a honey block's cell from the side, where the block
+     * itself stops a sixteenth short, slides down it at 0.05 a tick instead of falling.
+     */
+    private void honeySlide() {
+        if (onGround || vy >= -0.08) return;
+        for (int cx = floor(x - HALF_WIDTH + 1e-5); cx <= floor(x + HALF_WIDTH - 1e-5); cx++) {
+            for (int cz = floor(z - HALF_WIDTH + 1e-5); cz <= floor(z + HALF_WIDTH - 1e-5); cz++) {
+                // vanilla's own test, done before looking at the world: most ticks no cell passes it
+                if (Math.abs(cx + 0.5 - x) + 1e-7 <= HONEY_REACH && Math.abs(cz + 0.5 - z) + 1e-7 <= HONEY_REACH) continue;
+                for (int cy = floor(y + 1e-5); cy <= floor(y + HEIGHT - 1e-5); cy++) {
+                    if (y > cy + HONEY_TOP - 1e-7 || !world.sticky(cx, cy, cz)) continue;
+                    if (vy < -0.13) {
+                        double k = -0.05 / vy;
+                        vx *= k;
+                        vz *= k;
+                    }
+                    vy = -0.05;
+                    return;
+                }
+            }
         }
     }
 

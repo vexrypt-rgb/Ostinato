@@ -7,13 +7,13 @@ Change any setting here with `#set <name> <value>` ([Settings](settings.md)).
 ## Kinematic travel
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `kinematicTravel` | false | Drive plain walking stretches with a physics look-ahead controller instead of per-movement logic |
+| `kinematicTravel` | true | Drive plain walking stretches with a physics look-ahead controller instead of per-movement logic |
 | `slowKinematic` | false | Slower, more careful physics mode that also covers what `kinematicTravel` hands back to Baritone (so far: swimming). Still being worked on |
 | `headSteering` | true | Turn by moving the camera like a mouse, W held, rather than snapping rotation to the path each tick |
 | `pathWander` | 0.25 | Blocks the bot may drift off the path line on open ground; 0 = ruler-straight. Jumps, edges and stretch ends always follow the line |
 | `kinematicTrace` | off | Developer trace of the controller |
 
-Turn `kinematicTravel` on to try the controller; it is off by default on this branch.
+Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 
 ## Optional and experimental moves
 | Setting | Default | Effect |

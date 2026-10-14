@@ -32,6 +32,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PaletteResize;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.phys.Vec3;
 import sun.misc.Unsafe;
@@ -45,8 +46,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import static net.minecraft.world.level.chunk.LevelChunkSection.SECTION_SIZE;
 
 /**
  * @author Brady
@@ -64,6 +63,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
         }
     }
     private static final BlockState AIR_BLOCK_STATE = Blocks.AIR.defaultBlockState();
+    private static final int SECTION_SIZE = 16;
     // This lock must be held while there are active pointers to chunks in java,
     // but we just hold it for the entire tick so we don't have to think much about it.
     public final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
@@ -98,7 +98,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
     }
 
     public boolean hasChunk(ChunkPos pos) {
-        return NetherPathfinder.hasChunkFromJava(this.context, pos.x, pos.z);
+        return NetherPathfinder.hasChunkFromJava(this.context, pos.x(), pos.z());
     }
 
     public void queueCacheCulling(int chunkX, int chunkZ, int maxDistanceBlocks) {
@@ -124,7 +124,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
                 try {
                     // we might free this chunk
                     this.boi.chunkPtr = 0L;
-                    long ptr = NetherPathfinder.allocateAndInsertChunk(this.context, chunk.getPos().x, chunk.getPos().z);
+                    long ptr = NetherPathfinder.allocateAndInsertChunk(this.context, chunk.getPos().x(), chunk.getPos().z());
                     writeChunkData(chunk, ptr);
                 } finally {
                     writeLock.unlock();
@@ -139,7 +139,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
             // not inserting or deleting from the cache hashmap but it would still be bad for this function to race with itself
             writeLock.lock();
             try {
-                long ptr = NetherPathfinder.getChunk(this.context, chunkPos.x, chunkPos.z);
+                long ptr = NetherPathfinder.getChunk(this.context, chunkPos.x(), chunkPos.z());
                 if (ptr == 0) return; // this shouldn't ever happen
                 event.getBlocks().forEach(pair -> {
                     BlockPos pos = pair.first().below(minY);

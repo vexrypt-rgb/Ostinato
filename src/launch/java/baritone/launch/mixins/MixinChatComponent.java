@@ -21,8 +21,8 @@ package baritone.launch.mixins;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.IBaritone;
-import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
 import org.spongepowered.asm.mixin.Mixin;
@@ -39,10 +39,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MixinChatComponent {
 
     @Inject(
-            method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+            method = "addPlayerMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
             at = @At("HEAD")
     )
-    private void onAddMessage(Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+    private void onAddPlayerMessage(Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+        forward(message);
+    }
+
+    @Inject(method = "addServerSystemMessage(Lnet/minecraft/network/chat/Component;)V", at = @At("HEAD"))
+    private void onAddServerSystemMessage(Component message, CallbackInfo ci) {
+        forward(message);
+    }
+
+    private static void forward(Component message) {
         if (!Baritone.settings().swarmEnabled.value || message == null) {
             return;
         }

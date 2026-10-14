@@ -14,9 +14,11 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -36,6 +38,8 @@ public final class PveProcess extends BaritoneProcessHelper {
     private static final float CHARGED = 0.92f;
 
     private Predicate<LivingEntity> filter;
+    /** Mobs marked by hand; fought as well as whatever the filter matches. */
+    private final Set<UUID> marked = new HashSet<>();
     private String label = "";
     private LivingEntity target;
     private final Random rng = new Random(11);
@@ -70,7 +74,10 @@ public final class PveProcess extends BaritoneProcessHelper {
         lastHealth = -1;
         attacks = kills = hurtEvents = blocks = meals = 0;
         damageTaken = 0;
-        ticks = 0; ignoreUntil.clear(); blind.clear();
+        ticks = 0;
+        marked.clear();
+        ignoreUntil.clear();
+        blind.clear();
         engaged.clear();
     }
 
@@ -87,15 +94,21 @@ public final class PveProcess extends BaritoneProcessHelper {
     /** Marked by hand (freecam). Players are PvP's; this takes mobs only. */
     public boolean addEnemy(LivingEntity e) {
         if (e == null || e instanceof Player || ctx.player() == null) return false;
-        UUID id = e.getUUID();
-        Predicate<LivingEntity> prev = filter;
-        if (prev == null) label = "marked";
-        filter = x -> x.getUUID().equals(id) || (prev != null && prev.test(x));
+        if (!isActive()) attack(x -> false, "marked");
+        marked.add(e.getUUID());
         return true;
     }
 
+    /** Set by a process that calls {@link #onTick} itself; keeps the filter alive while the path manager hands control elsewhere. */
+    public boolean driven;
+    /** Fight from where we stand: swing at what is in reach but never walk, back off or path (set while perched on a pillar). */
+    public boolean hold;
+
     public void clearEnemies() {
+        driven = false;
+        hold = false;
         filter = null;
+        marked.clear();
         target = null;
     }
 
@@ -117,12 +130,15 @@ public final class PveProcess extends BaritoneProcessHelper {
     }
 
     private boolean matches(LivingEntity e) {
-        return e != ctx.player() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null && filter.test(e);
+        return e != ctx.player() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null
+                && (marked.contains(e.getUUID()) || filter.test(e));
     }
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
+        inv.closeAbandoned(me);
+        if (!inv.wear(me)) inv.freshShield(me);
         baritone.getInputOverrideHandler().clearAllKeys();
         ticks++;
         float hp = me.getHealth() + me.getAbsorptionAmount();
@@ -136,12 +152,19 @@ public final class PveProcess extends BaritoneProcessHelper {
         List<LivingEntity> all = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(SCAN), this::matches);
         for (LivingEntity e : all) if (me.distanceTo(e) < 8) engaged.put(e.getUUID(), e);
         engaged.values().removeIf(e -> {
-            if (e.isDeadOrDying() || !e.isAlive()) {
+            // a mob that unloads or despawns is gone, not killed
+            if (e.isDeadOrDying()) {
                 kills++;
                 return true;
             }
             return e.isRemoved() || me.distanceTo(e) > SCAN + 8;
         });
+        if (ticks % 200 == 0) {
+            ignoreUntil.values().removeIf(until -> until <= ticks);
+            Set<UUID> near = new HashSet<>();
+            for (LivingEntity e : all) near.add(e.getUUID());
+            blind.keySet().retainAll(near);
+        }
         if (all.isEmpty()) {
             target = null;
             use(false);
@@ -240,14 +263,7 @@ public final class PveProcess extends BaritoneProcessHelper {
             // sprinting and the shield do not mix, and a shooter that is not closed on just keeps shooting:
             // charge it, weaving across its aim; the shield is only for when we are hurt and cannot get there
             boolean hurt = me.getHealth() <= 8;
-            if (armed && los && hd > 5 && hurt && me.getOffhandItem().getItem() == Items.SHIELD && hd <= DRIVE_PVE + 6) {
-                look(target.getEyePosition());
-                if (blockTicks++ == 0) blocks++;
-                use(true);
-                if (blockTicks > 60) {
-                    blockTicks = 0;
-                    use(false);
-                }
+            if (armed && los && hd > 5 && hurt && hd <= DRIVE_PVE + 6 && shieldUp(me, target)) {
                 movement.dodgeRanged(me);
                 return decide("block");
             }
@@ -257,7 +273,7 @@ public final class PveProcess extends BaritoneProcessHelper {
                 // a fireball in flight is struck back; a mouse click on whatever the crosshair is on
                 look(target.getBoundingBox().getCenter());
                 if (ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult er && er.getEntity() != target
-                        && er.getEntity() instanceof net.minecraft.world.entity.projectile.Fireball) {
+                        && er.getEntity() instanceof net.minecraft.world.entity.projectile.hurtingprojectile.Fireball) {
                     press(ctx.minecraft().options.keyAttack);
                 }
             }
@@ -275,7 +291,11 @@ public final class PveProcess extends BaritoneProcessHelper {
         blockTicks = 0;
         shooterClose = prof.kind == MobProfile.Kind.RANGED;
 
-        // 6. Far or out of sight: walk there.
+        // 6. Far or out of sight: walk there (unless held in place, e.g. on a pillar, where it has to come to us).
+        if (hold && (hd > 4.6 || !los)) {
+            use(false);
+            return decide("hold");
+        }
         if (hd > DRIVE_PVE || !los && hd > 2.5) {
             use(false);
             return decide("path", new PathingCommand(new GoalNear(target.blockPosition(), 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
@@ -285,7 +305,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         int weapon = inv.weapon(me);
         if (weapon >= 0) select(me, weapon);
         use(false);
-        boolean low = prof.kind == MobProfile.Kind.BOMB || target instanceof net.minecraft.world.entity.monster.EnderMan;
+        boolean low = prof.kind == MobProfile.Kind.BOMB || target instanceof net.minecraft.world.entity.monster.Enderman;
         look(low ? new Vec3(target.getX(), target.getY() + 0.3, target.getZ()) : swing.swingPoint(me, target, target.getDeltaMovement()));
         double er = exactReach(me, target);
         float charge = me.getAttackStrengthScale(0.5f);
@@ -296,10 +316,13 @@ public final class PveProcess extends BaritoneProcessHelper {
             backoff = prof.kind == MobProfile.Kind.RANGED ? 0 : prof.kind == MobProfile.Kind.BOMB ? 8 : 4 + (adjacent > 1 ? 3 : 0);
             return decide("hit");
         }
+        if (hold) return decide("hold");
         // recharging: step back so its swing finds air, then close as the charge fills
         boolean recharging = charge < CHARGED;
         // a hard hitter in our face: the recharge is spent behind the shield rather than stepping back into its reach
-        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.EnderMan) && shieldUp(me, target)) {
+        // (an axe knocks the shield down for seconds, so guarding against one only costs us swings)
+        if (recharging && hd < 3.5 && prof.kind == MobProfile.Kind.MELEE && prof.threat >= 5 && !(target instanceof net.minecraft.world.entity.monster.Enderman)
+                && !target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES) && shieldUp(me, target)) {
             return decide("guard");
         }
         if (backoff > 0 && recharging && hd < 3.0) {
@@ -329,6 +352,7 @@ public final class PveProcess extends BaritoneProcessHelper {
         look(me.getEyePosition().add(away.normalize().scale(6)));
     }
 
+    /** Hold the offhand shield toward the mob, dropping it for a tick every so often. False without a shield. */
     private boolean shieldUp(Player me, LivingEntity from) {
         if (me.getOffhandItem().getItem() != Items.SHIELD) return false;
         look(from.getEyePosition());
@@ -367,11 +391,11 @@ public final class PveProcess extends BaritoneProcessHelper {
         int slot = -1;
         if (me.getHealth() <= 8) {
             int g = goldenApple(me);
-            if (g >= 0) slot = g < 9 ? g : inv.slotOf(me, me.getInventory().getItem(g).getItem());
+            if (g >= 0) slot = g;
         }
         if (slot < 0 && me.getFoodData().needsFood()) {
             int i = healItem(me);
-            if (i >= 0) slot = i < 9 ? i : inv.slotOf(me, me.getInventory().getItem(i).getItem());
+            if (i >= 0) slot = i;
         }
         if (slot < 0) return false;
         if (!select(me, slot)) return true;
@@ -396,12 +420,13 @@ public final class PveProcess extends BaritoneProcessHelper {
     }
 
     private boolean select(Player me, int slot) {
+        slot = inv.toHotbar(me, slot); // from the main inventory this takes two ticks: false until it is up
         if (slot < 0) return false;
-        if (me.getInventory().selected != slot) {
-            me.getInventory().selected = slot;
+        if (me.getInventory().getSelectedSlot() != slot) {
+            me.getInventory().setSelectedSlot(slot);
             press(ctx.minecraft().options.keyHotbarSlots[slot]);
         }
-        return me.getInventory().selected == slot;
+        return me.getInventory().getSelectedSlot() == slot;
     }
 
     private void look(Vec3 at) {
@@ -428,10 +453,14 @@ public final class PveProcess extends BaritoneProcessHelper {
 
     @Override
     public void onLostControl() {
+        // another process (BastionProcess) is calling onTick itself, so losing the arbitration is not losing the fight
+        if (driven) return;
         filter = null;
+        marked.clear();
         target = null;
         engaged.clear();
         eatTicks = blockTicks = retreatTicks = backoff = 0;
+        inv.closeScreen();
         if (ctx.minecraft().options != null) use(false);
         baritone.getInputOverrideHandler().clearAllKeys();
     }

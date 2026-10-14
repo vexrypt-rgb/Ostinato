@@ -10,16 +10,6 @@ inventory, and schematic processes to make it happen. Multi-bot coordination
 (`#swarm`) uses the [SIGIL](https://github.com/vexrypt-rgb/sigil) wire format
 for sealed whispers.
 
-## User guides
-
-Step-by-step guides for every feature, written from the source:
-
-- [Guide index](docs/guides/README.md)
-- [Getting started](docs/guides/getting-started.md) · [Command reference](docs/guides/commands.md) · [Settings](docs/guides/settings.md)
-- [Movement and travel](docs/guides/movement.md) · [Combat, clutch and survival](docs/guides/combat-and-clutch.md)
-- [Mining, building and farming](docs/guides/mining-and-building.md) · [Swarm and region builds](docs/guides/swarm-and-region-builds.md)
-- [Screen, freecam and task lists](docs/guides/gui-freecam-tasks.md)
-
 ## Compatibility
 
 `gradle.properties` on this branch is the source of truth for the Minecraft
@@ -27,17 +17,18 @@ version of `main`.
 
 | Minecraft | Branch | Java | Status |
 | --- | --- | --- | --- |
-| 1.21.4 | `main` | 21 | Primary. Pairs with TenorClef `:1.21.4`. |
+| 26.3 | `main` | 25 | Primary line. Not a TenorClef pairing. |
+| 1.21.11 | `1.21.11` | 21 | Previous main line. TenorClef's 1.21.11 module is not a release target. |
+| 1.21.11 (Conductor module edition) | `conductor-module` | 21 | Ostinato plus its Conductor module. |
+| 1.21.4 | `1.21.4` | 21 | Pairs with TenorClef `:1.21.4`. |
 | 1.16.1 | `1.16.1` | 8 | Legacy. Pairs with TenorClef `:1.16.1`. Gradle 4.9; do not build with JDK 21. |
-| 1.21.11 | `1.21.11` | 21 | Experimental. TenorClef's 1.21.11 module is not a release target. |
-| 26.3 | `26.3` | 25 | Upstream 26.x line. Not a TenorClef pairing. |
 
-Do not point a 1.21.4 TenorClef build at a jar from `1.21.11` or `26.3`. See
+Do not point a 1.21.4 TenorClef build at a jar from `1.21.11` or `main` (26.3). See
 [TenorClef's wiring guide](https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md).
 
 ## Build
 
-Java 21 is required on `main`.
+Java 25 is required on `main` (26.3). The `1.21.11` and `1.21.4` branches need Java 21.
 
 On Windows:
 
@@ -61,7 +52,7 @@ Keep the trees as siblings. Build Ostinato first, then TenorClef.
 
 | TenorClef module | Ostinato branch | Typical staged jar |
 | --- | --- | --- |
-| `:1.21.4` | `main` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-1.21.4.jar` |
+| `:1.21.4` | `1.21.4` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-1.21.4.jar` |
 | `:1.16.1` | `1.16.1` | `libs/baritone-unoptimized-fabric-1.16.1.jar` |
 | `:1.21.11` | `1.21.11` | experimental; TenorClef does not yet compile this module |
 
@@ -90,7 +81,7 @@ fallback as a configuration issue.
 
 Beyond upstream Baritone, Ostinato adds:
 
-- **Kinematic travel** (`#set kinematicTravel true`, off by default): plain
+- **Kinematic travel** (`#set kinematicTravel false` to disable, on by default): plain
   walking stretches of a path (traverse, diagonal, 1-block ascend, drops up to
   3 blocks) are driven by a per-tick physics look-ahead. The controller
   simulates a set of yaw and jump choices with a copy of vanilla player

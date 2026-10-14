@@ -56,6 +56,7 @@ public final class DefaultCommands {
                 new FollowCommand(baritone),
                 new PvpCommand(baritone),
                 new PveCommand(baritone),
+                new BastionCommand(baritone),
                 new StructuresCommand(baritone),
                 new PickupCommand(baritone),
                 new ExploreFilterCommand(baritone),
@@ -74,7 +75,8 @@ public final class DefaultCommands {
                 new SelCommand(baritone),
                 new ElytraCommand(baritone),
                 new TasksCommand(baritone),
-                new SwarmCommand(baritone)
+                new SwarmCommand(baritone),
+                new PortalCommand(baritone)
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);

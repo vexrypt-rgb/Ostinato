@@ -1,0 +1,419 @@
+package baritone.structure;
+
+import baritone.Baritone;
+import baritone.api.event.events.TickEvent;
+import baritone.api.event.listener.AbstractGameEventListener;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderSet;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
+
+/** TEMP live harness: bastion + piglins + a brute, then #bastion. Never committed. */
+public final class BastTest implements AbstractGameEventListener {
+    private final Baritone b;
+    private int state, wait, ticks;
+    private net.minecraft.world.phys.Vec3 stallAt;
+    private int stallTick, stallCarried;
+    private BlockPos target;
+    /** -Dostinato.basttest.shelter=true: brutes sent at us on a flat arena, one set-up after another, to try the walling in. */
+    private static final boolean SHELTER = Boolean.getBoolean("ostinato.basttest.shelter");
+    private static final boolean REAL = System.getenv("BAST_REAL") != null && !SHELTER;
+    private static final String[] TRIALS = System.getProperty("ostinato.basttest.trials", "open,offcentre,ceiling,close,pair,pit,step,slab,above").split(",");
+    private int trial = -1, trialTick, trialHits, trialWalled, trialOut, trialBlocks;
+    private float trialHp, trialMin;
+    private int duelSummons;
+    private static BlockPos waterBase;
+    private static final String VARIANT = System.getProperty("ostinato.basttest.variant", "any");
+
+    private BastTest(Baritone b) { this.b = b; }
+
+    public static void install(Baritone b) {
+        if (Boolean.getBoolean("ostinato.basttest")) b.getGameEventHandler().registerEventListener(new BastTest(b));
+    }
+
+    private void say(String m) {
+        System.out.println(m);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) mc.execute(() -> baritone.api.BaritoneAPI.getSettings().logger.value.accept(net.minecraft.network.chat.Component.literal(m)));
+    }
+
+    private void run(String cmd) {
+        MinecraftServer s = Minecraft.getInstance().getSingleplayerServer();
+        s.submit(() -> {
+            var p = s.getPlayerList().getPlayers().get(0);
+            var src = s.createCommandSourceStack().withPosition(p.position()).withLevel(p.level());
+            s.getCommands().performPrefixedCommand(src, cmd);
+        }).join();
+    }
+
+    /** The movement after the current one: a run-up for it starts during this one. */
+    /** Which controller moved the player on the last path tick, and which inputs are forced right now. */
+    private String driverDesc() {
+        var cur = b.getPathingBehavior().getCurrent();
+        return cur == null ? "-" : cur.getLastDriver().name();
+    }
+
+    private String keysDesc() {
+        StringBuilder sb = new StringBuilder();
+        var in = b.getInputOverrideHandler();
+        baritone.api.utils.input.Input[] all = {baritone.api.utils.input.Input.MOVE_FORWARD, baritone.api.utils.input.Input.MOVE_BACK, baritone.api.utils.input.Input.MOVE_LEFT,
+                baritone.api.utils.input.Input.MOVE_RIGHT, baritone.api.utils.input.Input.JUMP, baritone.api.utils.input.Input.SNEAK, baritone.api.utils.input.Input.SPRINT};
+        String tags = "FBLRJSP";
+        for (int i = 0; i < all.length; i++) if (in.isInputForcedDown(all[i])) sb.append(tags.charAt(i));
+        return sb.length() == 0 ? "-" : sb.toString();
+    }
+
+    private String nextDesc() {
+        try {
+            var cur = b.getPathingBehavior().getCurrent();
+            if (cur == null || cur.getPosition() + 1 >= cur.getPath().movements().size()) return "none";
+            var m = cur.getPath().movements().get(cur.getPosition() + 1);
+            return m.getClass().getSimpleName() + "->" + m.getDest().x + "," + m.getDest().y + "," + m.getDest().z;
+        } catch (Throwable t) { return "?"; }
+    }
+
+    private String moveDesc() {
+        try {
+            var cur = b.getPathingBehavior().getCurrent();
+            if (cur == null) return "none";
+            var m = cur.getPath().movements().get(cur.getPosition());
+            var d = m.getDest();
+            var bs = Minecraft.getInstance().level.getBlockState(new BlockPos(d.x, d.y, d.z));
+            var bs1 = Minecraft.getInstance().level.getBlockState(new BlockPos(d.x, d.y + 1, d.z));
+            var bsb = Minecraft.getInstance().level.getBlockState(new BlockPos(d.x, d.y - 1, d.z));
+            return m.getClass().getSimpleName() + "@" + cur.getPosition() + "/" + cur.getPath().movements().size()
+                    + "->" + d.x + "," + d.y + "," + d.z + "[" + bs.getBlock().getDescriptionId().replace("block.minecraft.", "") + "," + bs1.getBlock().getDescriptionId().replace("block.minecraft.", "") + "," + bsb.getBlock().getDescriptionId().replace("block.minecraft.", "") + "]";
+        } catch (Throwable t) { return "?"; }
+    }
+
+    @Override
+    public void onTick(TickEvent e) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.getSingleplayerServer() == null) {
+            if (state == 0 && mc.gui.screen() instanceof TitleScreen) {
+                state = 1;
+                say("BAST creating world");
+                CreateWorldScreen.openFresh(mc, () -> {});
+                wait = 80;
+            } else if (state == 1 && --wait <= 0 && mc.gui.screen() instanceof CreateWorldScreen cw) {
+                // -Dostinato.basttest.seed=<seed>: the same world, bastion and start again, to try a fix against what prompted it
+                String seed = System.getProperty("ostinato.basttest.seed");
+                if (seed != null) cw.getUiState().setSeed(seed);
+                for (var c : mc.gui.screen().children()) {
+                    if (c instanceof Button bt && bt.getMessage().getString().contains("Create New World")) {
+                        state = 2;
+                        bt.onPress(new net.minecraft.client.input.InputWithModifiers() {
+                            public int input() { return 0; }
+                            public int modifiers() { return 0; }
+                        });
+                    }
+                }
+            }
+            return;
+        }
+        if (e.getType() != TickEvent.Type.IN) return;
+        if (state == 2) {
+            if (--wait > -200) return;
+            run("gamemode creative @p");
+            run("gamerule advance_time false");
+            run("gamerule spawn_mobs false");
+            run("gamerule send_command_feedback false");
+            if (VARIANT.equals("waterpocket")) {
+                // sealed 7x7x14 water tank deep in stone, an air room 2 blocks past its east wall: pocket, refill, tunnel out
+                BlockPos p0 = mc.player.blockPosition();
+                int x = p0.getX(), y = -40, z = p0.getZ();
+                waterBase = new BlockPos(x, y, z);
+                run("forceload add " + (x - 16) + " " + (z - 16) + " " + (x + 16) + " " + (z + 16));
+                run("fill " + (x - 4) + " " + (y - 1) + " " + (z - 4) + " " + (x + 9) + " " + (y + 14) + " " + (z + 4) + " stone");
+                run("fill " + (x - 3) + " " + y + " " + (z - 3) + " " + (x + 3) + " " + (y + 13) + " " + (z + 3) + " water");
+                run("fill " + (x + 6) + " " + y + " " + (z - 1) + " " + (x + 8) + " " + (y + 1) + " " + (z + 1) + " air");
+                run("gamemode survival @p");
+                run("clear @p");
+                run("give @p oak_door 4"); run("give @p iron_pickaxe"); run("give @p cooked_beef 8");
+                run("tp @p " + x + " " + (y + 6) + " " + z);
+                say("BAST waterpocket tank at " + waterBase.toShortString());
+                baritone.api.BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("bastion any");
+                state = 4; ticks = 0;
+                return;
+            }
+            MinecraftServer sv = mc.getSingleplayerServer();
+            BlockPos[] found = new BlockPos[1];
+            sv.submit(() -> {
+                var level = sv.getLevel(net.minecraft.resources.ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
+                var reg = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+                var h = reg.get(Identifier.withDefaultNamespace("bastion_remnant"));
+                // -Dostinato.basttest.variant=bridge|treasure|housing|stables: walk outwards until a bastion of that type turns up
+                String want = VARIANT.equals("housing") ? "units" : VARIANT.equals("stables") ? "hoglin_stable" : VARIANT;
+                java.util.Set<BlockPos> seen = new java.util.HashSet<>();
+                outer:
+                for (int ring = 0; ring <= 12; ring++) for (int i = -ring; i <= ring; i++) for (int j = -ring; j <= ring; j++) {
+                    if (Math.max(Math.abs(i), Math.abs(j)) != ring) continue;
+                    var r = level.getChunkSource().getGenerator().findNearestMapStructure(level, HolderSet.direct(h.get()), new BlockPos(i * 600, 64, j * 600), 20, false);
+                    if (r == null || !seen.add(r.getFirst())) continue;
+                    BlockPos at = r.getFirst();
+                    if (want.equals("any")) { found[0] = at; break outer; }
+                    var chunk = level.getChunk(at.getX() >> 4, at.getZ() >> 4, net.minecraft.world.level.chunk.status.ChunkStatus.STRUCTURE_STARTS);
+                    var start = level.structureManager().getStartForStructure(h.get().value(), chunk);
+                    if (start == null || start.getPieces().isEmpty()) continue;
+                    String piece = String.valueOf(start.getPieces().get(0) instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece pe ? pe.getElement() : start.getPieces().get(0));
+                    System.out.println("BAST candidate " + at + " " + piece);
+                    if (piece.contains("bastion/" + want)) { var bb = start.getBoundingBox(); found[0] = new BlockPos(at.getX(), (bb.minY() + bb.maxY()) / 2, at.getZ()); break outer; }
+                }
+            }).join();
+            target = found[0];
+            say("BAST target " + target + " seed " + sv.overworld().getSeed());
+            if (REAL) {
+                run("execute in minecraft:the_nether run forceload add " + (target.getX() + 90) + " " + target.getZ());
+                BlockPos[] spot = new BlockPos[3];
+                MinecraftServer sv2 = mc.getSingleplayerServer();
+                sv2.submit(() -> {
+                    var lvl = sv2.getLevel(net.minecraft.resources.ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
+                    for (int half : new int[]{3, 1, 0}) for (int side = 0; side < 4 && spot[0] == null; side++) for (int r = 0; r < 60 && spot[0] == null; r++) for (int dz = -r; dz <= r && spot[0] == null; dz++) {
+                        int ax = 45 + r /* runs 74, 77: 90 out the spawn was often cut off from the bastion */, x = target.getX() + (side == 0 ? ax : side == 1 ? -ax : dz), z = target.getZ() + (side == 2 ? ax : side == 3 ? -ax : dz);
+                        lvl.getChunk(x >> 4, z >> 4);
+                        for (int y = 110; y > 40; y--) {
+                            BlockPos q = new BlockPos(x, y, z);
+                            boolean open = true;
+                            for (int ox = -half; ox <= half && open; ox++) for (int oz = -half; oz <= half && open; oz++) {
+                                BlockPos f = q.offset(ox, 0, oz);
+                                open = lvl.getBlockState(f).getBlock() == net.minecraft.world.level.block.Blocks.NETHERRACK && lvl.getBlockState(f.above()).isAir() && lvl.getBlockState(f.above(2)).isAir() && lvl.getBlockState(f.above(3)).isAir();
+                            }
+                            if (open && spot[1] == null) spot[1] = q.above();
+                            // no lava within 8 (runs 34 and lava7 started next to a lavafall and burned before the test began)
+                            for (int lx = -8; lx <= 8 && open; lx++) for (int ly = -3; ly <= 6 && open; ly++) for (int lz = -8; lz <= 8 && open; lz++)
+                                if (lvl.getFluidState(q.offset(lx, ly, lz)).is(net.minecraft.tags.FluidTags.LAVA)) open = false;
+                            // lava that will spread here within 10 s (runs 82, 85 died at spawn)
+                            if (open) {
+                                final BlockPos qq = q;
+                                baritone.bastion.LavaFlow.Grid g = new baritone.bastion.LavaFlow.Grid() {
+                                    public int lava(int x, int y, int z) { var fs = lvl.getFluidState(new BlockPos(x, y, z)); return fs.is(net.minecraft.tags.FluidTags.LAVA) ? (fs.isSource() ? 0 : Math.max(0, 8 - fs.getAmount())) : -1; }
+                                    public boolean open(int x, int y, int z) { var s = lvl.getBlockState(new BlockPos(x, y, z)); return s.getFluidState().isEmpty() && (s.isAir() || s.canBeReplaced()); }
+                                };
+                                for (long k : baritone.bastion.LavaFlow.forecast(g, qq.getX(), qq.getY(), qq.getZ(), 12, 200).keySet()) {
+                                    int ky = (int) (k << 52 >> 52), kx = (int) (k >> 38), kz = (int) (k << 26 >> 38);
+                                    if (Math.abs(kx - qq.getX()) <= 4 && Math.abs(kz - qq.getZ()) <= 4 && Math.abs(ky - qq.getY()) <= 3) { open = false; break; }
+                                }
+                            }
+                            if (open && spot[2] == null) spot[2] = q.above();
+                            // run 104: spawned with no walkable way into the bastion and spent 10 min failing paths; require one
+                            if (open && connected(lvl, q.above(), target)) { spot[0] = q.above(); break; }
+                            if (open) break;
+                        }
+                    }
+                }).join();
+                if (spot[0] == null) spot[0] = spot[2] != null ? spot[2] : spot[1]; // no lava-free spot in range (lava9 crashed on null): take any open one
+                say("BAST start " + spot[0]);
+                run("execute as @p in minecraft:the_nether run tp @p " + spot[0].getX() + " " + spot[0].getY() + " " + spot[0].getZ());
+            } else run("execute as @p in minecraft:the_nether run tp @p " + target.getX() + " 80 " + target.getZ());
+            b.getStructureBehavior().setMode(StructureBehavior.Mode.BOTH);
+            state = 3;
+            ticks = 0;
+            return;
+        }
+        if (state == 3) {
+            ticks++;
+            if (ticks == 1 && !REAL) {
+                // flat stone arena well above the structure so the trade/trap logic is tested without terrain or lava
+                run("execute in minecraft:the_nether run forceload add " + target.getX() + " " + target.getZ());
+                run("execute in minecraft:the_nether run fill " + (target.getX() - 40) + " 200 " + (target.getZ() - 40) + " " + (target.getX() + 40) + " 200 " + (target.getZ() + 40) + " stone");
+                run("execute as @p in minecraft:the_nether run tp @p " + target.getX() + " 201 " + target.getZ());
+            }
+            if (ticks < 260) return;
+            run("clear @p");
+            run("give @p iron_pickaxe");
+            if (!REAL && !SHELTER) {
+            run("execute at @p run fill ~-12 ~ ~-12 ~12 ~5 ~12 air replace lava");
+            run("execute at @p run fill ~-10 ~-1 ~-10 ~10 ~-1 ~10 stone");
+            run("execute at @p run fill ~3 ~-5 ~-1 ~7 ~-1 ~1 stone");
+            run("execute at @p run fill ~5 ~-3 ~0 ~5 ~-1 ~0 air");
+            run("execute at @p run setblock ~-8 ~ ~0 gold_block");
+            run("execute at @p run setblock ~-8 ~ ~2 gold_block");
+            }
+            run("item replace entity @p armor.feet with golden_boots");
+            run("item replace entity @p armor.head with golden_helmet");
+            run("item replace entity @p armor.chest with iron_chestplate");
+            run("item replace entity @p armor.legs with iron_leggings");
+            run("item replace entity @p weapon.offhand with shield");
+            run("give @p diamond_sword");
+            run("give @p cooked_beef 16");
+            run("give @p gold_ingot 24"); run("give @p gold_block 2"); run("give @p netherrack 64"); run("give @p soul_sand 32"); run("item replace entity @p armor.legs with golden_leggings");
+            if (Boolean.getBoolean("ostinato.basttest.lava")) run("give @p oak_door 6"); run("give @p golden_apple 2");
+            run("give @p lava_bucket");
+            run("give @p bucket");
+            run("gamemode survival @p");
+            if (!REAL && !SHELTER) {
+            run("execute at @p run summon piglin ~4 ~ ~3");
+            run("execute at @p run summon piglin ~-4 ~ ~3");
+            run("execute at @p run summon piglin_brute ~3 ~ ~-6");
+            }
+            if (Boolean.getBoolean("ostinato.basttest.duel")) { run("give @p iron_axe"); run("item replace entity @p weapon.offhand with shield"); run("execute at @p run summon piglin_brute ~5 ~ ~ {Tags:[\"duel\"]}"); }
+            if (Boolean.getBoolean("ostinato.basttest.shield")) { run("give @p iron_axe"); run("item replace entity @p weapon.offhand with shield"); }
+            if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) { baritone.bastion.BastionSettings.TARGETS.put("ender_pearl", 999); baritone.bastion.BastionSettings.exitWhenDone = false; }
+            if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) for (int g = Integer.getInteger("ostinato.basttest.gold"); g > 0; g -= 64) run("give @p gold_ingot " + Math.min(64, g));
+            say("BAST setup done; starting #bastion " + VARIANT);
+            // why a path was not found is only said in the debug chat (run 115: 11 minutes on the start plateau, no reason logged)
+            baritone.api.BaritoneAPI.getSettings().chatDebug.value = true;
+            if (System.getProperty("ostinato.basttest.budget") != null) baritone.bastion.BastionSettings.timeBudget = Integer.getInteger("ostinato.basttest.budget");
+            baritone.bastion.BastionSettings.kinematic = Boolean.getBoolean("ostinato.basttest.kinematic");
+            b.getCommandManager().execute("bastion " + VARIANT);
+            state = SHELTER ? 5 : 4;
+            ticks = 0;
+            return;
+        }
+        if (state == 5) {
+            ticks++;
+            shelterTrials(mc);
+            return;
+        }
+        if (state == 4) {
+            ticks++;
+            if (Boolean.getBoolean("ostinato.basttest.lava") && ticks == 100) {
+                // deep lava pool around us, netherrack floor 3 below, shore 6+ blocks away
+                run("execute at @p run fill ~-6 ~-9 ~-6 ~6 ~-4 ~6 netherrack");
+                run("execute at @p run fill ~-6 ~-3 ~-6 ~6 ~1 ~6 lava");
+                run("execute at @p run tp @p ~ ~-2 ~");
+                say("BAST lava test: dropped into deep lava");
+            }
+            if (Boolean.getBoolean("ostinato.basttest.lava") && ticks == 900) { say("BAST END lava test hp=" + mc.player.getHealth() + " fire=" + mc.player.isOnFire() + " inLava=" + mc.player.isInLava() + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
+            if (Boolean.getBoolean("ostinato.basttest.duel") && state > 0 && ticks % 300 == 150 && duelSummons < 4) { duelSummons++; run("execute unless entity @e[type=minecraft:piglin_brute,tag=duel] at @p run summon piglin_brute ^ ^ ^4 {Tags:[\"duel\"]}"); }
+        if (Boolean.getBoolean("ostinato.basttest.duel") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute,tag=!duel]");
+        if (Boolean.getBoolean("ostinato.basttest.nobrutes") && ticks % 20 == 1) run("execute in minecraft:the_nether run kill @e[type=minecraft:piglin_brute]"); // 1.16.1 has no brutes
+            if (waterBase != null) {
+                var pl = mc.player;
+                if (pl.getHealth() <= 0) { say("BAST END waterpocket died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
+                if (ticks % 20 == 0) System.out.println("BAST dbg t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " under=" + pl.isUnderWater() + " st=" + b.getBastionProcess().status() + " pos=" + pl.blockPosition().toShortString());
+                boolean out = !pl.isInWater() && (Math.abs(pl.getBlockX() - waterBase.getX()) >= 6 || Math.abs(pl.getBlockZ() - waterBase.getZ()) >= 6) && pl.getY() < waterBase.getY() + 3; // outside the tank and its wall
+                if (out || ticks >= 2400) { say("BAST END waterpocket " + (out ? "ESCAPED" : "TIMEOUT") + " t=" + ticks + " hp=" + pl.getHealth() + " air=" + pl.getAirSupply() + " pos=" + pl.blockPosition().toShortString()); state = 9; mc.execute(mc::stop); return; }
+                return;
+            }
+            if (mc.player.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + b.getBastionProcess().status()); state = 9; mc.execute(mc::stop); return; }
+            if ((REAL || ticks <= 120 || b.getBastionProcess().status().contains("perch") || b.getBastionProcess().status().contains("eating") || mc.player.getHealth() < 20 || mc.player.isInLava()) && ticks % 3 == 0) {
+                var br = mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.PiglinBrute.class, mc.player.getBoundingBox().inflate(40));
+                System.out.println("BAST dbg t=" + ticks + " hp=" + mc.player.getHealth() + " st=" + b.getBastionProcess().status()
+                        + " y=" + String.format("%.2f", mc.player.getY()) + " gnd=" + mc.player.onGround()
+                        + " food=" + mc.player.getFoodData().getFoodLevel() + " lava=" + mc.player.isInLava() + " vc=" + mc.player.verticalCollision + " feetB=" + mc.level.getBlockState(mc.player.blockPosition()).getBlock() + " b2=" + mc.level.getBlockState(mc.player.blockPosition().below(2)).getBlock() + " head=" + mc.level.getBlockState(mc.player.blockPosition().above(2)).getBlock() + " vy=" + mc.player.getDeltaMovement().y + " using=" + mc.player.isUsingItem() + " sel=" + mc.player.getInventory().getSelectedSlot() + " fire=" + mc.player.isOnFire() + " held=" + mc.player.getMainHandItem().getItem() + " below=" + mc.level.getBlockState(mc.player.blockPosition().below()).getBlock()
+                        + " dec=" + b.getPveProcess().lastDecision()
+                        + " pos=" + mc.player.blockPosition().toShortString() + " fd=" + String.format("%.1f", mc.player.fallDistance)
+                        + " mv=" + moveDesc() + " nx=" + nextDesc() + " yaw=" + Math.round(net.minecraft.util.Mth.wrapDegrees(Minecraft.getInstance().player.getYRot())) + " drv=" + driverDesc() + " keys=" + keysDesc()
+                        + " brutes=" + br.size() + " nearest=" + br.stream().mapToDouble(x -> mc.player.distanceTo(x)).min().orElse(-1)
+                        + " near=" + mc.level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, mc.player.getBoundingBox().inflate(16), x -> x != mc.player)
+                                .stream().map(x -> x.getType().toShortString() + "@" + (int) mc.player.distanceTo(x)).toList());
+            }
+            if (ticks % 60 == 0) {
+                var p = mc.player;
+                say("BAST t=" + ticks + " hp=" + (int) p.getHealth() + " " + b.getBastionProcess().status() + " pos=" + p.blockPosition().toShortString());
+            }
+            boolean ended = !b.getBastionProcess().isActive() && ticks > 40;
+            // run 119 stood on one spot for eleven minutes: three minutes within three blocks is a stall, end the run there
+            // trading from a pickup hole stands still for minutes and is not a stall (run 126): what we carry keeps changing
+            int carried = 0;
+            for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) carried += mc.player.getInventory().getItem(i).getCount();
+            if (stallAt == null || stallTick > ticks || mc.player.position().distanceTo(stallAt) > 3 || carried != stallCarried) { stallAt = mc.player.position(); stallTick = ticks; stallCarried = carried; }
+            boolean stalled = ticks - stallTick > Integer.getInteger("ostinato.basttest.stallticks", 3600);
+            if (stalled) say("BAST STALL t=" + ticks + " since=" + stallTick + " pos=" + mc.player.blockPosition().toShortString() + " st=" + b.getBastionProcess().status());
+            if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended || stalled) {
+                var inv = mc.player.getInventory(); java.util.Map<String,Integer> m = new java.util.TreeMap<>();
+                for (int i = 0; i < 36; i++) { var s = inv.getItem(i); if (!s.isEmpty()) m.merge(baritone.process.BastionProcess.itemIdPublic(s), s.getCount(), Integer::sum); }
+                var d = b.getStructureBehavior().find("bastion_remnant");
+                say("BAST END t=" + ticks + " ended=" + ended + " hp=" + mc.player.getHealth() + " layout=" + (d.isEmpty() ? "?" : d.get(0).variant) + " st=" + b.getBastionProcess().status() + " inv=" + m);
+                state = 9; mc.execute(mc::stop);
+            }
+        }
+    }
+
+    private int netherrack(Minecraft mc) {
+        int n = 0;
+        for (int i = 0; i < 36; i++) if (mc.player.getInventory().getItem(i).is(net.minecraft.world.item.Items.NETHERRACK)) n += mc.player.getInventory().getItem(i).getCount();
+        return n;
+    }
+
+    /** One brute set-up after another on the arena; a line per second and a result line per trial. */
+    private void shelterTrials(Minecraft mc) {
+        var pl = mc.player;
+        var bp = b.getBastionProcess();
+        int ax = target.getX(), az = target.getZ();
+        String in = "execute in minecraft:the_nether run ";
+        if (pl.getHealth() <= 0) { say("BAST END died in trial " + (trial < 0 ? "-" : TRIALS[trial]) + " t=" + ticks + " st=" + bp.status()); state = 9; mc.execute(mc::stop); return; }
+        var brutes = mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.piglin.PiglinBrute.class, pl.getBoundingBox().inflate(40), x -> x.isAlive());
+        if (trial >= 0) {
+            trialTick++;
+            if (pl.getHealth() < trialHp - 1.5f) trialHits++;
+            trialHp = pl.getHealth();
+            trialMin = Math.min(trialMin, trialHp);
+            if (trialWalled < 0 && bp.walledIn()) trialWalled = trialTick;
+            if (trialWalled >= 0 && trialOut < 0 && !bp.walledIn() && !bp.status().startsWith("wall") && !bp.status().equals("eating")) trialOut = trialTick;
+            String bs = brutes.stream().map(x -> String.format("%.1f%s%s", pl.distanceTo(x), x.isAggressive() ? "A" : "q", x.hasLineOfSight(pl) ? "s" : "-")).toList().toString();
+            if (trialTick % 20 == 0 || trialTick < 60 && trialTick % 2 == 0)
+                System.out.println("BAST sh " + TRIALS[trial] + " t=" + trialTick + " hp=" + pl.getHealth() + " y=" + String.format("%.2f", pl.getY()) + " off=" + String.format("%.2f,%.2f", pl.getX() - Math.floor(pl.getX()) - 0.5, pl.getZ() - Math.floor(pl.getZ()) - 0.5)
+                        + " nr=" + netherrack(mc) + " drv=" + driverDesc() + " keys=" + keysDesc() + " brutes=" + bs + " st=" + bp.status());
+            boolean over = trialOut >= 0 && trialTick > trialOut + 40 || trialTick >= Integer.getInteger("ostinato.basttest.trialticks", 1500);
+            if (!over) return;
+            say("BAST TRIAL " + TRIALS[trial] + " hits=" + trialHits + " minhp=" + trialMin + " walled=" + trialWalled + " out=" + trialOut + " blocks=" + (trialBlocks - netherrack(mc)) + " brutes=" + bs + " st=" + bp.status());
+        }
+        if (++trial >= TRIALS.length) { say("BAST END shelter trials done t=" + ticks); state = 9; mc.execute(mc::stop); return; }
+        String name = TRIALS[trial];
+        // a clean arena: stone floor two thick at y=199..200, air above, nobody about
+        run(in + "kill @e[type=minecraft:piglin_brute]");
+        run(in + "kill @e[type=minecraft:item]");
+        run(in + "fill " + (ax - 16) + " 201 " + (az - 16) + " " + (ax + 16) + " 208 " + (az + 16) + " air");
+        run(in + "fill " + (ax - 16) + " 199 " + (az - 16) + " " + (ax + 16) + " 200 " + (az + 16) + " stone");
+        run("effect give @p minecraft:instant_health 1 5 true");
+        run("effect give @p minecraft:saturation 1 5 true");
+        run("clear @p minecraft:netherrack");
+        run("give @p netherrack 64");
+        double px = ax + 0.5, py = 201, pz = az + 0.5;
+        java.util.List<String> spawn = new java.util.ArrayList<>();
+        switch (name) {
+            case "offcentre" -> { px = ax + 0.78; pz = az + 0.24; spawn.add((ax + 11) + " 201 " + az); }
+            case "ceiling" -> { run(in + "fill " + (ax - 16) + " 204 " + (az - 16) + " " + (ax + 16) + " 204 " + (az + 16) + " stone"); spawn.add((ax - 11) + " 201 " + az); }
+            case "close" -> spawn.add((ax + 4) + " 201 " + (az + 1));
+            case "pair" -> { spawn.add((ax + 10) + " 201 " + az); spawn.add((ax - 10) + " 201 " + (az + 1)); }
+            // a hole to the east of our cell, thirty deep; the brute comes from the south
+            case "pit" -> { run(in + "fill " + (ax + 1) + " 170 " + (az - 2) + " " + (ax + 3) + " 200 " + (az + 2) + " air"); spawn.add(ax + " 201 " + (az + 10)); }
+            // the west half of the arena one block lower, the brute on it
+            case "step" -> { run(in + "fill " + (ax - 16) + " 200 " + (az - 16) + " " + (ax - 1) + " 200 " + (az + 16) + " air"); spawn.add((ax - 10) + " 200 " + az); }
+            case "slab" -> { run(in + "setblock " + ax + " 201 " + az + " minecraft:stone_slab"); py = 201.5; spawn.add(ax + " 201 " + (az - 11)); }
+            // a brute on a platform two up, four blocks off: it sees us over any wall we can build from the ground
+            case "above" -> { run(in + "fill " + (ax + 4) + " 201 " + (az - 2) + " " + (ax + 8) + " 202 " + (az + 2) + " stone"); spawn.add((ax + 6) + " 203 " + az); }
+            default -> spawn.add((ax + 11) + " 201 " + az);
+        }
+        run(in + "tp @p " + px + " " + py + " " + pz);
+        for (String s : spawn) run(in + "summon minecraft:piglin_brute " + s);
+        trialTick = 0; trialHits = 0; trialWalled = -1; trialOut = -1; trialHp = 20; trialMin = 20; trialBlocks = 64;
+        // a fresh start for the process: nothing of the last trial's walls in its head
+        b.getCommandManager().execute("bastion " + VARIANT);
+        say("BAST trial " + name + " set up");
+    }
+
+    /** Walkable flood fill (step up 1, drop up to 3, no lava next to the feet) from start to within 10 blocks of the bastion target. */
+    private static boolean connected(net.minecraft.server.level.ServerLevel lvl, BlockPos start, BlockPos target) {
+        java.util.ArrayDeque<BlockPos> q = new java.util.ArrayDeque<>();
+        java.util.HashSet<BlockPos> seen = new java.util.HashSet<>();
+        q.add(start); seen.add(start);
+        while (!q.isEmpty() && seen.size() < 40000) {
+            BlockPos p = q.poll();
+            if (Math.abs(p.getX() - target.getX()) <= 10 && Math.abs(p.getZ() - target.getZ()) <= 10 && (target.getY() <= 0 || Math.abs(p.getY() - target.getY()) <= 20)) return true; // run 110: "connected" on the roof 40 above
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) for (int dy = 1; dy >= -3; dy--) {
+                BlockPos n = p.relative(d).above(dy);
+                if (!stand(lvl, n)) continue;
+                if (dy == 1 && !lvl.getBlockState(p.above(2)).getCollisionShape(lvl, p.above(2)).isEmpty()) break;
+                if (dy < 0) { boolean clear = true; for (int k = 0; k > dy; k--) if (!lvl.getBlockState(p.relative(d).above(k + 1)).getCollisionShape(lvl, p).isEmpty()) clear = false; if (!clear) break; }
+                if (seen.add(n)) q.add(n);
+                break;
+            }
+        }
+        return false;
+    }
+
+    private static boolean stand(net.minecraft.server.level.ServerLevel lvl, BlockPos f) {
+        if (lvl.getBlockState(f.below()).getCollisionShape(lvl, f.below()).isEmpty()) return false;
+        if (!lvl.getBlockState(f).getCollisionShape(lvl, f).isEmpty() || !lvl.getBlockState(f.above()).getCollisionShape(lvl, f.above()).isEmpty()) return false;
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) if (lvl.getFluidState(f.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) return false;
+        return !lvl.getFluidState(f).is(net.minecraft.tags.FluidTags.LAVA);
+    }
+}

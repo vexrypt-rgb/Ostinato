@@ -28,6 +28,7 @@ Prefix `#`. Text below is taken from each command's built-in help; run `#help <c
 | `explore [x z]` / `explorefilter <json> [invert]` | explore; filter marks chunks as explored |
 | `find <block…>` | locate cached blocks |
 | `build <file> [x y z]` | build a schematic file |
+| `portal build [enter]` / `portal find` / `portal status` / `portal cancel` | build a nether portal at a lava pool with buckets (see [Mining and building](mining-and-building.md)) |
 | `schematica`, `litematica [#]` | build the schematic open in that mod |
 | `sel …` | WorldEdit-like selections (see [Mining and building](mining-and-building.md)) |
 | `wp …` | waypoints (`list save info delete restore clear goal goto`) |
@@ -62,3 +63,6 @@ Ostinato finds structures two ways:
 Commands: `#structures [list] [type]`, `nearest [type]`, `goto [type]`, `types`, `source <client|server|both>`, `clear`, `on|off`. A type is a variant id (`village_desert`) or a family (`village`).
 
 Known limits (client mode): buried treasure is server-only; an outpost or shipwreck inside the same 3x3 chunks as a mineshaft can be masked; the beached shipwreck and mountain portal variants may come back as the generic id. Calibration against a fresh world: 29 of 34 variants exact, 2 family-level, 3 missed.
+
+Bastion layouts use speedrun names: `housing`, `stables`, `treasure`, `bridge`. `#structures nearest stables` (or `bastion_stables`) selects one. Singleplayer with `#structures source server|both` reads the exact layout; the client tells them apart by the polished-basalt count once most of the 7x7 chunks around the bastion are loaded (14/16 matched the server in live tests, the other two had two bastions in range). Until then it reports plain `bastion_remnant`.
+n

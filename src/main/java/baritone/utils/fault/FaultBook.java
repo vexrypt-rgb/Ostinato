@@ -27,11 +27,14 @@ public final class FaultBook {
 
     public static final String EVENTS = "faults.jsonl";
     public static final String SUMMARY = "run-summary.json";
+    /** The event file stops growing here: a fault that repeats all session must not fill the disk. */
+    private static final long MAX_EVENT_BYTES = 4L << 20;
 
     private static Path dir = Path.of("baritone");
     private static Supplier<Map<String, String>> context = Map::of;
     private static Function<String, String> hints = c -> "";
     private static long runStart = System.currentTimeMillis();
+    private static long eventBytes;
 
     private static final Map<String, Long> openEpisodes = new LinkedHashMap<>();
     private static final Map<String, int[]> counts = new TreeMap<>(); // code -> [seen, recovered]
@@ -55,6 +58,7 @@ public final class FaultBook {
         lostMs.clear();
         recent.clear();
         loops.clear();
+        eventBytes = 0;
         write(EVENTS, "", false);
     }
 
@@ -170,6 +174,8 @@ public final class FaultBook {
         try {
             Files.createDirectories(dir);
             if (append) {
+                if (eventBytes > MAX_EVENT_BYTES) return;
+                eventBytes += body.length();
                 Files.writeString(dir.resolve(name), body, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             } else {

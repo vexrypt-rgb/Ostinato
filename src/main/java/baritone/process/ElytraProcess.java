@@ -200,7 +200,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         }
         if (ctx.player().isFallFlying() && this.state != State.LANDING && (this.behavior.pathManager.isComplete() || safetyLanding)) {
             final BetterBlockPos last = this.behavior.pathManager.path.getLast();
-            if (last != null && (ctx.player().position().distanceToSqr(last.getCenter()) < (48 * 48) || safetyLanding) && (!goingToLandingSpot || (safetyLanding && this.landingSpot == null))) {
+            if (last != null && (last.distToCenterSqr(ctx.player().position()) < (48 * 48) || safetyLanding) && (!goingToLandingSpot || (safetyLanding && this.landingSpot == null))) {
                 if (this.landingSearchState == null) {
                     logDirect("Path complete, searching for safe landing spot...");
                 }
@@ -216,7 +216,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
                 }
             }
 
-            if (last != null && ctx.player().position().distanceToSqr(last.getCenter()) < 1) {
+            if (last != null && last.distToCenterSqr(ctx.player().position()) < 1) {
                 if (Baritone.settings().notificationOnPathComplete.value && !reachedGoal) {
                     logNotification("Pathing complete", false);
                 }
@@ -224,7 +224,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
                     // don't be active when the user logs back in
                     this.onLostControl();
                     if (ctx.world() instanceof ClientLevel clientLevel) {
-                        clientLevel.disconnect();
+                        clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                     }
                     return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
@@ -496,7 +496,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
             return true;
         }
 
-        NonNullList<ItemStack> inv = ctx.player().getInventory().items;
+        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
         int qty = 0;
         for (int i = 0; i < 36; i++) {
             if (ElytraBehavior.isFireworks(inv.get(i))) {
@@ -513,7 +513,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
     }
 
     private int fireworkCount() {
-        NonNullList<ItemStack> inv = ctx.player().getInventory().items;
+        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
         int qty = 0;
         for (int i = 0; i < 36; i++) {
             if (ElytraBehavior.isFireworks(inv.get(i))) {

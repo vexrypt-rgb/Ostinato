@@ -23,8 +23,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -48,7 +48,7 @@ public final class BoatUtil {
 
     /** Hotbar slot holding a boat, swapping one in from the main inventory if needed; -1 if none. */
     public static int hotbarBoat(IPlayerContext ctx) {
-        NonNullList<ItemStack> inv = ctx.player().getInventory().items;
+        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
         for (int i = 0; i < 9; i++) {
             if (inv.get(i).getItem() instanceof BoatItem) return i;
         }
@@ -58,7 +58,7 @@ public final class BoatUtil {
             for (int j = 0; j < 9; j++) {
                 if (inv.get(j).isEmpty()) { hb = j; break; }
             }
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, hb, ClickType.SWAP, ctx.player());
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, hb, ContainerInput.SWAP, ctx.player());
             borrowed = new int[]{i, hb};
             return hb;
         }
@@ -68,8 +68,8 @@ public final class BoatUtil {
     /** Put back whatever the borrowed hotbar slot held, once the boat has been placed. */
     public static void restore(IPlayerContext ctx) {
         if (borrowed == null || ctx.player() == null) return;
-        if (!(ctx.player().getInventory().items.get(borrowed[1]).getItem() instanceof BoatItem)) {
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, borrowed[0], borrowed[1], ClickType.SWAP, ctx.player());
+        if (!(ctx.player().getInventory().getNonEquipmentItems().get(borrowed[1]).getItem() instanceof BoatItem)) {
+            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, borrowed[0], borrowed[1], ContainerInput.SWAP, ctx.player());
         }
         borrowed = null;
     }

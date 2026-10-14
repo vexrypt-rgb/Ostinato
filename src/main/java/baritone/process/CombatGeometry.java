@@ -113,7 +113,7 @@ final class CombatGeometry {
         net.minecraft.core.BlockPos.MutableBlockPos bp = new net.minecraft.core.BlockPos.MutableBlockPos(me.getBlockX(), 0, me.getBlockZ());
         for (int i = 0; i < 64; i++) {
             bp.setY(me.getBlockY() - i - 1);
-            if (me.level().getBlockState(bp).blocksMotion()) return me.getY() - (bp.getY() + 1);
+            if (!me.level().getBlockState(bp).getCollisionShape(me.level(), bp).isEmpty()) return me.getY() - (bp.getY() + 1);
         }
         return 64;
     }

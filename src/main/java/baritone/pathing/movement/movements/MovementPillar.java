@@ -34,7 +34,6 @@ import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
@@ -64,8 +63,8 @@ public class MovementPillar extends Movement {
             if (MovementHelper.isClimbable(fromDown.getBlock())) {
                 return COST_INF; // can't pillar from a ladder or vine onto something that isn't also climbable
             }
-            if (fromDown.getBlock() instanceof SlabBlock && fromDown.getValue(SlabBlock.TYPE) == SlabType.BOTTOM) {
-                return COST_INF; // can't pillar up from a bottom slab onto a non ladder
+            if (MovementHelper.isBottomSlab(fromDown)) {
+                return COST_INF; // can't pillar up from a bottom slab (or a lantern) onto a non ladder
             }
         }
         BlockState toBreak = context.get(x, y + 2, z);
@@ -174,7 +173,13 @@ public class MovementPillar extends Movement {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
 
-            MovementHelper.moveTowards(ctx, state, dest);
+            // dest is straight above us: re-aiming at it every tick makes the yaw flip back and forth. Only steer
+            // when we have drifted off the ladder's column.
+            double ox = ctx.player().position().x - (dest.getX() + 0.5);
+            double oz = ctx.player().position().z - (dest.getZ() + 0.5);
+            if (ox * ox + oz * oz > 0.25 * 0.25) {
+                MovementHelper.moveTowards(ctx, state, dest);
+            }
             state.setInput(Input.JUMP, true);
             return state;
         } else {

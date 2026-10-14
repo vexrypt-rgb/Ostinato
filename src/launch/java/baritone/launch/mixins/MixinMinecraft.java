@@ -24,7 +24,7 @@ import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.WorldEvent;
 import baritone.api.event.events.type.EventState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -55,6 +55,14 @@ public class MixinMinecraft {
     @Unique
     private BiFunction<EventState, TickEvent.Type, TickEvent> tickProvider;
 
+    /** Every rendered frame, not just every tick: the look layer's per-frame mouse prototype. */
+    @Inject(method = "runTick", at = @At("HEAD"))
+    private void ostinato$frame(boolean renderLevel, CallbackInfo ci) {
+        for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (baritone.getLookBehavior() instanceof baritone.behavior.LookBehavior lb) lb.frame();
+        }
+    }
+
     @Inject(
             method = "<init>",
             at = @At("RETURN")
@@ -68,7 +76,7 @@ public class MixinMinecraft {
             at = @At(
                     value = "FIELD",
                     opcode = Opcodes.GETFIELD,
-                    target = "net/minecraft/client/Minecraft.screen:Lnet/minecraft/client/gui/screens/Screen;",
+                    target = "net/minecraft/client/Minecraft.gui:Lnet/minecraft/client/gui/Gui;",
                     ordinal = 0,
                     shift = At.Shift.BEFORE
             ),
@@ -114,7 +122,7 @@ public class MixinMinecraft {
             method = "tick",
             at = @At(
                     value = "INVOKE",
-                    target = "net/minecraft/client/multiplayer/ClientLevel.tickEntities()V",
+                    target = "Lnet/minecraft/client/player/LocalPlayer;sendChanges()V",
                     shift = At.Shift.AFTER
             )
     )
@@ -131,7 +139,7 @@ public class MixinMinecraft {
             method = "setLevel",
             at = @At("HEAD")
     )
-    private void preLoadWorld(ClientLevel world, ReceivingLevelScreen.Reason arg2, CallbackInfo ci) {
+    private void preLoadWorld(final ClientLevel world, final CallbackInfo ci) {
         // If we're unloading the world but one doesn't exist, ignore it
         if (this.level == null && world == null) {
             return;
@@ -151,7 +159,7 @@ public class MixinMinecraft {
             method = "setLevel",
             at = @At("RETURN")
     )
-    private void postLoadWorld(ClientLevel world, ReceivingLevelScreen.Reason arg2, CallbackInfo ci) {
+    private void postLoadWorld(final ClientLevel world, final CallbackInfo ci) {
         // still fire event for both null, as that means we've just finished exiting a world
 
         // mc.world changing is only the primary baritone
@@ -166,14 +174,14 @@ public class MixinMinecraft {
     @Redirect(
             method = "tick",
             at = @At(
-                    value = "FIELD",
-                    opcode = Opcodes.GETFIELD,
-                    target = "Lnet/minecraft/client/Minecraft;screen:Lnet/minecraft/client/gui/screens/Screen;"
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/Gui;screen()Lnet/minecraft/client/gui/screens/Screen;"
             ),
             slice = @Slice(
                     from = @At(
-                            value = "INVOKE",
-                            target = "Lnet/minecraft/client/gui/components/DebugScreenOverlay;showDebugScreen()Z"
+                            value = "FIELD",
+                            opcode = Opcodes.PUTFIELD,
+                            target = "net/minecraft/client/Minecraft.missTime:I"
                     ),
                     to = @At(
                             value = "CONSTANT",
@@ -181,12 +189,12 @@ public class MixinMinecraft {
                     )
             )
     )
-    private Screen passEvents(Minecraft instance) {
+    private Screen passEvents(Gui gui) {
         // allow user input is only the primary baritone
         if (BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing() && player != null) {
             return null;
         }
-        return instance.screen;
+        return gui.screen();
     }
 
     // TODO

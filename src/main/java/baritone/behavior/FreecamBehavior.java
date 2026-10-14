@@ -19,7 +19,6 @@ package baritone.behavior;
 
 import baritone.api.BaritoneAPI;
 import baritone.Baritone;
-import baritone.api.BaritoneAPI;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.WorldEvent;
 import baritone.api.pathing.goals.GoalBlock;
@@ -34,12 +33,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
@@ -122,7 +120,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         flying = p.getAbilities().flying;
         jumpHeld = true;
         jumpTapTicks = 0;
-        camera.absMoveTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot());
+        camera.snapTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot());
         camera.syncPrev();
         active = camera;
         mc.setCameraEntity(camera);
@@ -156,6 +154,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     @Override
     public void onTick(TickEvent event) {
+        pollToggleKey();
         if (camera == null) {
             return;
         }
@@ -183,10 +182,41 @@ public final class FreecamBehavior extends Behavior implements Helper {
         if (mc.getCameraEntity() != camera) {
             mc.setCameraEntity(camera);
         }
+        markAttackers(p);
         move(mc.options);
         clamp(p);
-        if (mc.screen == null) {
+        if (mc.gui.screen() == null) {
             handleClicks(mc.options);
+        }
+    }
+
+    private boolean toggleKeyHeld;
+
+    /** The freecam toggle key (setting freecamKey); only the primary bot reacts, and never while a screen is open. */
+    private void pollToggleKey() {
+        if (baritone != BaritoneAPI.getProvider().getPrimaryBaritone() || mc.gui.screen() != null || mc.getWindow() == null) {
+            return;
+        }
+        boolean down = false;
+        try {
+            com.mojang.blaze3d.platform.InputConstants.Key key = com.mojang.blaze3d.platform.InputConstants.getKey(Baritone.settings().freecamKey.value);
+            down = key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYBOARD && key.getValue() > 0
+                    && com.mojang.blaze3d.platform.InputConstants.isKeyDown(key.getValue());
+        } catch (RuntimeException ignored) {
+            // bad key name in the setting: treat as unbound
+        }
+        if (down && !toggleKeyHeld && ctx.player() != null) {
+            toggle();
+        }
+        toggleKeyHeld = down;
+    }
+
+    /** While freecam is on, whoever just hurt the bot becomes an enemy. */
+    private void markAttackers(LocalPlayer p) {
+        net.minecraft.world.entity.LivingEntity by = p.getLastHurtByMob();
+        if (by != null && by != p && markable(by) && p.tickCount - p.getLastHurtByMobTimestamp() < 5
+                && (by instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(by) : ((Baritone) baritone).getPveProcess().addEnemy(by))) {
+            logDirect(by.getName().getString() + " attacked the bot: added to enemies");
         }
     }
 
@@ -217,8 +247,11 @@ public final class FreecamBehavior extends Behavior implements Helper {
         boolean sprint = held(gs.keySprint) && fwd > 0;
         double speed = Baritone.settings().freecamSpeed.value;
         // currents push the camera like a player (and tell us whether it is in the fluid)
-        boolean water = !flying && camera.updateFluidHeightAndDoFluidPushing(FluidTags.WATER, 0.014);
-        boolean lava = !flying && !water && camera.updateFluidHeightAndDoFluidPushing(FluidTags.LAVA, 0.0023333333333333335);
+        if (!flying) {
+            camera.refreshFluids(); // also pushes the camera along currents
+        }
+        boolean water = !flying && camera.isInWater();
+        boolean lava = !flying && !water && camera.isInLava();
         boolean climbing = !flying && !water && !lava && camera.level().getBlockState(camera.blockPosition()).is(BlockTags.CLIMBABLE);
         camera.stepUp = flying ? 0 : 0.6F;
         camera.setShiftKeyDown(sneak && !flying); // sneaking stops slime bounce and slime slowdown, as for a player
@@ -263,14 +296,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         double y0 = camera.getY();
         stuckInBlocks();
         camera.move(MoverType.SELF, camera.getDeltaMovement());
-        // The camera is never ticked by the level, so the landing effects Entity#move leaves to it are ours:
-        // slime bounces (unless sneaking), anything else stops the fall; a ceiling stops the rise.
-        if (camera.verticalCollisionBelow) {
-            camera.level().getBlockState(camera.getOnPos()).getBlock().updateEntityMovementAfterFallOn(camera.level(), camera);
-        } else if (camera.verticalCollision) {
-            Vec3 d = camera.getDeltaMovement();
-            camera.setDeltaMovement(d.x, 0, d.z);
-        }
+        // Entity#move also applies slime bounces (unless sneaking) and the ceiling/floor stop
         m = camera.getDeltaMovement();
         mx = m.x;
         my = m.y;
@@ -317,14 +343,14 @@ public final class FreecamBehavior extends Behavior implements Helper {
      * (TenorClef, InputOverrideHandler) release movement mappings every tick while they drive the player.
      */
     private boolean held(net.minecraft.client.KeyMapping km) {
-        if (mc.screen != null) { // typing in chat or a GUI must not fly the camera
+        if (mc.gui.screen() != null) { // typing in chat or a GUI must not fly the camera
             return false;
         }
         com.mojang.blaze3d.platform.InputConstants.Key key = com.mojang.blaze3d.platform.InputConstants.getKey(km.saveString());
-        if (key.getType() != com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM) {
+        if (key.getType() != com.mojang.blaze3d.platform.InputConstants.Type.KEYBOARD) {
             return km.isDown();
         }
-        return com.mojang.blaze3d.platform.InputConstants.isKeyDown(mc.getWindow().getWindow(), key.getValue());
+        return com.mojang.blaze3d.platform.InputConstants.isKeyDown(key.getValue());
     }
 
     /** Keeps the camera within the bot's render distance (horizontal circle) and the world's height. */
@@ -353,6 +379,10 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private void handleClicks(Options gs) {
         boolean left = false;
         boolean right = false;
+        boolean middle = false;
+        while (gs.keyPickItem.consumeClick()) {
+            middle = true;
+        }
         while (gs.keyAttack.consumeClick()) {
             left = true;
         }
@@ -362,13 +392,54 @@ public final class FreecamBehavior extends Behavior implements Helper {
         // Never let a held click reach the bot's controller (it would dig/use at the camera's crosshair).
         gs.keyAttack.setDown(false);
         gs.keyUse.setDown(false);
-        if (left) {
+        gs.keyPickItem.setDown(false);
+        if (middle) {
+            markEnemy();
+        } else if (left) {
             select();
         } else if (right) {
             BetterBlockPos pos = new BetterBlockPos(camera.getX(), camera.getY(), camera.getZ());
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
             logDirect("Going to " + pos);
         }
+    }
+
+    /** Players always; other living things only with the enemyMobs setting. */
+    private static boolean markable(net.minecraft.world.entity.LivingEntity e) {
+        return e instanceof net.minecraft.world.entity.player.Player || Baritone.settings().enemyMobs.value;
+    }
+
+    private void markEnemy() {
+        Entity hit = entityUnderCrosshair();
+        if (hit instanceof net.minecraft.world.entity.LivingEntity pl && markable(pl)) {
+            if ((pl instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(pl) : ((Baritone) baritone).getPveProcess().addEnemy(pl))) {
+                logDirect("Enemy added: " + pl.getName().getString());
+            } else {
+                logDirect(pl.getName().getString() + " is already an enemy");
+            }
+        } else {
+            logDirect("Middle-click a player to mark an enemy" + (Baritone.settings().enemyMobs.value ? " or mob" : ""));
+        }
+    }
+
+    private Entity entityUnderCrosshair() {
+        LocalPlayer p = ctx.player();
+        Vec3 start = camera.getEyePosition(1);
+        Vec3 end = start.add(camera.getViewVector(1).scale(renderRadius() * 2));
+        HitResult block = p.level().clip(new ClipContext(start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, camera));
+        double hitDist = block.getType() == HitResult.Type.MISS ? Double.MAX_VALUE : block.getLocation().distanceToSqr(start);
+        Entity hit = null;
+        for (Entity e : ctx.entities()) {
+            if (e == p || e == camera || !e.isAlive()) {
+                continue;
+            }
+            Optional<Vec3> v = e.getBoundingBox().inflate(e.getPickRadius() + 0.3).clip(start, end);
+            if (v.isPresent() && v.get().distanceToSqr(start) < hitDist) {
+                hitDist = v.get().distanceToSqr(start);
+                hit = e;
+            }
+        }
+        return hit;
     }
 
     private void select() {
@@ -419,7 +490,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private static final class Camera extends Entity {
 
         Camera(Level world) {
-            super(EntityType.PLAYER, world);
+            super(EntityTypes.PLAYER, world);
         }
 
         float stepUp;
@@ -427,6 +498,10 @@ public final class FreecamBehavior extends Behavior implements Helper {
         @Override
         public float maxUpStep() {
             return stepUp;
+        }
+
+        void refreshFluids() {
+            updateFluidInteraction();
         }
 
         float jumpFactor() {
@@ -452,11 +527,11 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
 
         @Override
-        protected void readAdditionalSaveData(CompoundTag nbt) {
+        protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput nbt) {
         }
 
         @Override
-        protected void addAdditionalSaveData(CompoundTag nbt) {
+        protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput nbt) {
         }
 
         @Override
