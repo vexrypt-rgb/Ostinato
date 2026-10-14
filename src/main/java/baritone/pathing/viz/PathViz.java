@@ -46,6 +46,8 @@ public final class PathViz {
     public static final int MAX_TREE_EDGES = 3000;
     public static final int MAX_PLAN = 200;
     public static final int MAX_REPLANS = 16;
+    public static final int MAX_ARC = 48;
+    public static final int MAX_HANDBACKS = 8;
 
     /** Rollout outcomes. */
     public static final String OK = "ok";
@@ -255,7 +257,19 @@ public final class PathViz {
         public double lx = Double.NaN, ly, lz;
         public boolean landed, grabbed;
         public long stamp;
+        /** The flown arc, one point per tick from take-off to landing. */
+        public final float[] arc = new float[MAX_ARC * 3];
+        public int arcN;
         Object owner;
+
+        void arc(double x, double y, double z) {
+            if (arcN < MAX_ARC) {
+                arc[arcN * 3] = (float) x;
+                arc[arcN * 3 + 1] = (float) y;
+                arc[arcN * 3 + 2] = (float) z;
+                arcN++;
+            }
+        }
     }
 
     public final Ring<JumpMark> jumps = new Ring<>(MAX_JUMPS, JumpMark::new);
@@ -273,6 +287,8 @@ public final class PathViz {
         m.tz = m.az = z;
         m.lx = Double.NaN;
         m.landed = m.grabbed = false;
+        m.arcN = 0;
+        m.arc(x, y, z);
         m.stamp = now();
     }
 
@@ -287,6 +303,9 @@ public final class PathViz {
             return;
         }
         JumpMark m = open(owner);
+        if (m != null) {
+            m.arc(x, y, z);
+        }
         if (m != null && y > m.ay) {
             m.ax = x;
             m.ay = y;
@@ -300,6 +319,7 @@ public final class PathViz {
         }
         JumpMark m = open(owner);
         if (m != null) {
+            m.arc(x, y, z);
             m.lx = x;
             m.ly = y;
             m.lz = z;
@@ -317,10 +337,33 @@ public final class PathViz {
 
     public final Ring<Mark> stuck = new Ring<>(MAX_STUCK, Mark::new);
 
+    /** Where travel handed back to Baritone; the corridor turns hand-back coloured for a moment after. */
+    public final Ring<Mark> handbacks = new Ring<>(MAX_HANDBACKS, Mark::new);
+    public long handbackStamp = Long.MIN_VALUE / 2;
+    public boolean handbackStuck;
+
+    public void handback(double x, double y, double z, String why) {
+        if (!jumpsOn()) {
+            return;
+        }
+        Mark m = handbacks.add();
+        m.x = x;
+        m.y = y;
+        m.z = z;
+        m.why = why;
+        m.stamp = now();
+        if (m.stamp - handbackStamp > 500) {
+            handbackStuck = false; // a plain hand-back; a stuck one just before keeps the red
+        }
+        handbackStamp = m.stamp;
+    }
+
     public void stuck(double x, double y, double z, String why) {
         if (!jumpsOn()) {
             return;
         }
+        handbackStamp = now();
+        handbackStuck = true;
         Mark m = stuck.add();
         m.x = x;
         m.y = y;
