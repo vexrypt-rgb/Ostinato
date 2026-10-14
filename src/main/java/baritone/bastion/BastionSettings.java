@@ -22,6 +22,8 @@ public final class BastionSettings {
     public static int bruteAvoidRadius = 7;
     /** Leave once the targets are met (otherwise keep bartering until out of gold). */
     /** Timed duel against a lone brute. Off: brute axes disable shields; leave, tower or kite instead. */
+    /** Brute tactic: lava (bucket, pit as fallback), pit, lava-only or off. */
+    public static String bruteTactic = System.getProperty("ostinato.bastion.brutetactic", "lava");
     /** Run the scripted movement steps of the routes (pillar, pocket, bridges, tunnels, elevator, lava). */
     public static boolean scriptedRoutes = !Boolean.getBoolean("ostinato.bastion.noscripts");
     /** Couriway intermediate routes (no cover blocks, gold elevator) instead of beginner. */

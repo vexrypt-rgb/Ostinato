@@ -1,5 +1,7 @@
 package baritone.process;
 
+import baritone.bastion.BruteTactics;
+import baritone.bastion.LavaFlow;
 import baritone.bastion.BastionScript;
 import baritone.bastion.BastionPriors;
 import baritone.bastion.BastionRouteResolver;
@@ -1277,6 +1279,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // runs 100-131: of fourteen first hits from a brute, eleven landed while we stood at a tower half built, on one
         // it could reach from a ledge, or clicking at a tunnel wall; and in nine towers the brute at the foot never once
         // gave up. Out of its sight it does. With the blocks for it, wall in before anything else
+        // user-chosen brute tactics (lava bucket / sealed pit) come before walls and towers; null when they do not apply
+        PathingCommand btc = bruteTactic(me, heavies);
+        if (btc != null) return btc;
         PathingCommand sh = shelter(me);
         if (sh != null) return sh;
         // run 133: between two ticks of waiting to land, a tower was begun and a tunnel wall clicked at; the tower was
@@ -2903,6 +2908,148 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             opLava = fl.above();
         }
         return BastionScript.Result.WORKING;
+    }
+
+    // ---- brute tactics (BruteTactics): lava bucket, or a sealed brute pit; never a direct hit
+    private BlockPos btLava, btPit, btPitCover;
+    private long btPourTick, btPitSince;
+    private int btPitPhase; // 0 none, 1 dig, 2 lure, 3 cover, 4 holding
+    private java.util.UUID btBrute;
+
+    private LavaFlow.Grid liveGrid() {
+        var w = ctx.world();
+        return new LavaFlow.Grid() {
+            public int lava(int x, int y, int z) {
+                var fs = w.getFluidState(new BlockPos(x, y, z));
+                if (!fs.is(net.minecraft.tags.FluidTags.LAVA)) return -1;
+                if (fs.isSource() || fs.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING)) return 0;
+                return Math.max(0, 8 - fs.getAmount());
+            }
+            public boolean open(int x, int y, int z) {
+                BlockPos q = new BlockPos(x, y, z);
+                if (!w.isLoaded(q)) return false;
+                net.minecraft.world.level.block.state.BlockState s = w.getBlockState(q);
+                return s.getFluidState().isEmpty() && (s.isAir() || s.canBeReplaced());
+            }
+        };
+    }
+
+    private PathingCommand bruteTactic(Player me, List<LivingEntity> heavies) {
+        String setting = BastionSettings.bruteTactic;
+        if ("off".equals(setting) || bastion == null) return null;
+        Vec3 eye = me.getEyePosition(1.0F);
+        // 1. lava already poured: wait while it burns, then scoop it back
+        if (btLava != null) {
+            LivingEntity b = null;
+            for (LivingEntity e : heavies) if (e.getUUID().equals(btBrute)) b = e;
+            boolean drops = !ctx.world().getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(btLava).inflate(3), i -> !i.getItem().is(Items.GOLD_INGOT)).isEmpty();
+            if (!realLava(btLava)) { logDirect("Bastion: brute lava: lava gone" + (b == null ? ", brute dead or away" : ", brute at " + String.format("%.1f", me.distanceTo(b)))); btLava = null; return null; }
+            if (b != null && me.distanceTo(b) < 2.5) return null; // too close: the shelter takes it
+            if (BruteTactics.scoopNow(ticks - btPourTick, b != null && b.isAlive(), b != null && b.isInLava(), drops)) {
+                int s = slotOf(me, Items.BUCKET);
+                if (s < 0 || s >= 9) { logDirect("Bastion: brute lava: no empty bucket in the hotbar to scoop"); btLava = null; return null; }
+                me.getInventory().setSelectedSlot(s);
+                baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(btLava), ctx.playerRotations()), true);
+                if (eye.distanceTo(Vec3.atCenterOf(btLava)) > 4.4) return new PathingCommand(new GoalNear(btLava, 3), PathingCommandType.SET_GOAL_AND_PATH);
+                if (ticks % 4 == 0) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+                status = "brute lava: scooping";
+                if (ticks - btPourTick > BruteTactics.BURN_TICKS + 200) { logDirect("Bastion: brute lava: could not scoop, leaving it"); btLava = null; }
+                return pause0();
+            }
+            status = "brute lava: burning (" + (b == null ? "gone" : String.format("%.0f hp", b.getHealth())) + ")";
+            return pause0();
+        }
+        // 2. brute pit in progress
+        if (btPitPhase > 0) return brutePit(me, heavies);
+        // 3. a brute to deal with?
+        LivingEntity b = null;
+        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (b == null || me.distanceTo(e) < me.distanceTo(b))) b = e;
+        if (b == null) return null;
+        final LivingEntity fb = b;
+        boolean blocksTrading = !ctx.world().getEntitiesOfClass(Piglin.class, b.getBoundingBox().inflate(BruteTactics.BLOCKS_TRADE), p -> p.isAlive() && !p.isBaby()).isEmpty() && me.distanceTo(b) < 20;
+        int lb = slotOf(me, Items.LAVA_BUCKET);
+        boolean hasLava = lb >= 0;
+        BlockPos target = null;
+        if (hasLava) {
+            LavaFlow.Grid g = liveGrid();
+            BlockPos m = me.blockPosition();
+            for (int[] c : BruteTactics.pourCandidates(b.getBlockX(), b.getBlockY(), b.getBlockZ(), m.getX(), m.getZ())) {
+                BlockPos t = new BlockPos(c[0], c[1], c[2]);
+                if (!solid(t.below()) || !ctx.world().getBlockState(t).canBeReplaced()) continue;
+                if (eye.distanceTo(Vec3.atCenterOf(t.below()).add(0, 0.5, 0)) > 4.4) continue;
+                if (BruteTactics.pourSafe(g, t.getX(), t.getY(), t.getZ(), m.getX(), m.getY(), m.getZ())) { target = t; break; }
+            }
+        }
+        BlockPos hole = holes.isEmpty() ? me.blockPosition() : holes.get(0);
+        int[] site = null;
+        for (int[] s : BruteTactics.pitSites(hole.getX(), hole.getY(), hole.getZ(), me.getBlockX(), me.getBlockZ())) {
+            BlockPos p = new BlockPos(s[0], s[1], s[2]);
+            if (!solid(p.below(2)) || lavaBeside(p) || lavaBeside(p.below())) continue;
+            if (!solid(p) && !ctx.world().getBlockState(p).canBeReplaced()) continue;
+            site = s; break;
+        }
+        BruteTactics.Plan plan = BruteTactics.choose(setting, me.distanceTo(b), blocksTrading, hasLava, target != null, site != null);
+        if (plan == BruteTactics.Plan.NONE) return null;
+        if (plan == BruteTactics.Plan.PIT) {
+            btPit = new BlockPos(site[0], site[1], site[2]);
+            btPitPhase = 1; btPitSince = ticks; btBrute = b.getUUID();
+            logDirect("Bastion: brute pit: digging at " + btPit.toShortString() + " (brute at " + String.format("%.1f", me.distanceTo(b)) + ")");
+            return brutePit(me, heavies);
+        }
+        if (lb >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, lb, 6, ContainerInput.SWAP, me); return pause0(); }
+        me.getInventory().setSelectedSlot(lb);
+        BlockPos fl = target.below();
+        Vec3 a = Vec3.atCenterOf(fl).add(0, 0.5, 0);
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, a, ctx.playerRotations()), true);
+        status = "brute lava: aiming at " + target.toShortString();
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(fl) && h.getDirection() == Direction.UP) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            btLava = target; btPourTick = ticks; btBrute = b.getUUID();
+            logDirect("Bastion: brute lava: poured at " + target.toShortString() + " (brute at " + String.format("%.1f", me.distanceTo(b)) + ", " + (int) b.getHealth() + " hp" + (blocksTrading ? ", by the piglins" : "") + ")");
+        }
+        return pause0();
+    }
+
+    private PathingCommand brutePit(Player me, List<LivingEntity> heavies) {
+        LivingEntity b = null;
+        for (LivingEntity e : heavies) if (e.getUUID().equals(btBrute)) b = e;
+        if (b == null) for (LivingEntity e : ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(32), PiglinBrute::isAlive)) if (e.getUUID().equals(btBrute)) b = e;
+        boolean in = b != null && BruteTactics.inPit(btPit.getX(), btPit.getY(), btPit.getZ(), b.getBlockX(), b.getY(), b.getBlockZ());
+        if (btPitPhase == 4) {
+            // holding: watch it, log an escape or a broken wall once
+            if (b == null || !b.isAlive()) { logDirect("Bastion: brute pit: brute gone"); btPitPhase = 0; return null; }
+            if (!in) { logDirect("Bastion: brute pit: escaped (" + where(b, me) + ", cover " + (solid(btPitCover) ? "intact" : "broken") + ", " + (ticks - btPitSince) / 20 + " s)"); btPitPhase = 0; return null; }
+            for (Direction d : Direction.Plane.HORIZONTAL) if (!solid(btPit.relative(d)) || !solid(btPit.below().relative(d))) { logDirect("Bastion: brute pit: wall open at " + d + " (aggressive=" + ((Mob) b).isAggressive() + ")"); btPitPhase = 0; return null; }
+            return null; // trapped: carry on trading
+        }
+        if (b == null || !b.isAlive()) { logDirect("Bastion: brute pit: brute gone before it was trapped"); btPitPhase = 0; return null; }
+        if (ticks - btPitSince > 1200) { logDirect("Bastion: brute pit: gave up in phase " + btPitPhase); btPitPhase = 0; return null; }
+        if (btPitPhase == 1) {
+            BastionScript.Result r = mineCell(me, btPit);
+            if (r == BastionScript.Result.DONE) r = mineCell(me, btPit.below());
+            if (r == BastionScript.Result.FAILED) { logDirect("Bastion: brute pit: could not dig"); btPitPhase = 0; return null; }
+            if (ctx.world().getBlockState(btPit).canBeReplaced() && ctx.world().getBlockState(btPit.below()).canBeReplaced()) { btPitPhase = 2; btPitSince = ticks; logDirect("Bastion: brute pit: dug, luring"); }
+            status = "brute pit: digging";
+            return opCmd != null ? opCmd : pause0();
+        }
+        if (btPitPhase == 2) {
+            if (in) { btPitPhase = 3; btPitCover = btPit.above(); logDirect("Bastion: brute pit: trapped, covering"); return pause0(); }
+            if (ticks - btPitSince > BruteTactics.LURE_TICKS) { logDirect("Bastion: brute pit: lure failed (brute " + where(b, me) + ")"); btPitPhase = 0; return null; }
+            int[] st = BruteTactics.lureStand(btPit.getX(), btPit.getY(), btPit.getZ(), b.getX(), b.getZ());
+            BlockPos s = new BlockPos(st[0], st[1], st[2]);
+            status = "brute pit: luring from " + s.toShortString();
+            if (!me.blockPosition().equals(s)) return new PathingCommand(new GoalBlock(s), PathingCommandType.SET_GOAL_AND_PATH);
+            return pause0();
+        }
+        if (btPitPhase == 3) {
+            opCmd = null;
+            BastionScript.Result r = placeCell(me, btPitCover);
+            if (r == BastionScript.Result.DONE) { btPitPhase = 4; btPitSince = ticks; logDirect("Bastion: brute pit: covered, brute trapped"); return null; }
+            if (r == BastionScript.Result.FAILED) { logDirect("Bastion: brute pit: could not cover"); btPitPhase = 0; return null; }
+            status = "brute pit: covering";
+            return opCmd != null ? opCmd : pause0();
+        }
+        return null;
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {
