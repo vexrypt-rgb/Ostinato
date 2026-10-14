@@ -25,9 +25,6 @@ public final class StructureBehavior extends Behavior {
     public enum Mode { CLIENT, SERVER, BOTH }
 
     private static final int PER_TICK = 4;
-    private static final int SCAN_RADIUS = 10;
-    /** Chunks further than this from the player are dropped; they are scanned again if we come back. */
-    private static final int FORGET = 32;
 
     private final Map<Long, int[]> counts = new HashMap<>();
     private final Map<Long, long[]> sums = new HashMap<>();
@@ -61,18 +58,11 @@ public final class StructureBehavior extends Behavior {
     public synchronized List<DetectedStructure> find(String query) {
         List<DetectedStructure> r = new ArrayList<>();
         for (DetectedStructure s : found) {
-            if (query == null || query.isEmpty() || StructureInfo.matches(s.id, query) || matchesVariant(s, query)) r.add(s);
+            if (query == null || query.isEmpty() || StructureInfo.matches(s.id, query)) r.add(s);
         }
         BlockPos me = ctx.playerFeet();
         r.sort((a, b) -> Double.compare(a.pos.distSqr(me), b.pos.distSqr(me)));
         return r;
-    }
-
-    /** "stables" or "bastion_stables" selects that bastion layout. */
-    private static boolean matchesVariant(DetectedStructure s, String q) {
-        if (s.variant == null) return false;
-        String k = StructureInfo.strip(q);
-        return k.equals(s.variant) || k.equals(s.id.replace("_remnant", "") + "_" + s.variant);
     }
 
     @Override
@@ -84,7 +74,7 @@ public final class StructureBehavior extends Behavior {
     public void onTick(TickEvent event) {
         if (!enabled || event.getType() != TickEvent.Type.IN || ctx.player() == null || ctx.world() == null) return;
         tick++;
-        String dim = ctx.world().dimension().identifier().getPath();
+        String dim = ctx.world().dimension().location().getPath();
         if (!dim.equals(dimension)) {
             dimension = dim;
             clear();
@@ -104,7 +94,7 @@ public final class StructureBehavior extends Behavior {
         int[] tot = new int[Cat.ALL.length];
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                int[] c = counts.get(ChunkPos.pack(cx + dx, cz + dz));
+                int[] c = counts.get(ChunkPos.asLong(cx + dx, cz + dz));
                 if (c != null) for (int k = 0; k < tot.length; k++) tot[k] += c[k];
             }
         }
@@ -131,30 +121,20 @@ public final class StructureBehavior extends Behavior {
         for (Consumer<DetectedStructure> l : listeners) l.accept(s);
     }
 
-    /** True when a bastion already known near {@code at} has its layout (a variant-less one is dropped so it can be refined). */
-    private synchronized boolean hasVariant(BlockPos at) {
-        for (DetectedStructure o : new ArrayList<>(found)) {
-            if (!o.id.equals("bastion_remnant") || o.pos.distSqr(at) >= 96 * 96) continue;
-            if (o.variant != null) return true;
-            if (BastionVariant.loaded(ctx.world(), o.pos) >= 40) found.remove(o);
-        }
-        return false;
-    }
-
     private static String family(String id) {
         StructureInfo i = StructureInfo.byId(id);
         return i == null ? id : i.family;
     }
 
     private void scanClient() {
-        int r = Math.min(SCAN_RADIUS, net.minecraft.client.Minecraft.getInstance().options.renderDistance().get());
+        int r = Math.min(10, net.minecraft.client.Minecraft.getInstance().options.renderDistance().get());
         int cx = ctx.playerFeet().getX() >> 4, cz = ctx.playerFeet().getZ() >> 4;
         int done = 0;
         for (int d = 0; d <= r && done < PER_TICK; d++) {
             for (int x = cx - d; x <= cx + d && done < PER_TICK; x++) {
                 for (int z = cz - d; z <= cz + d && done < PER_TICK; z++) {
                     if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) != d) continue;
-                    long key = ChunkPos.pack(x, z);
+                    long key = ChunkPos.asLong(x, z);
                     synchronized (this) {
                         if (counts.containsKey(key)) continue;
                     }
@@ -200,26 +180,16 @@ public final class StructureBehavior extends Behavior {
 
     private synchronized void evaluate() {
         List<DetectedStructure> hits = new ArrayList<>();
-        int pcx = ctx.playerFeet().getX() >> 4, pcz = ctx.playerFeet().getZ() >> 4;
         for (long key : new ArrayList<>(counts.keySet())) {
             int cx = ChunkPos.getX(key), cz = ChunkPos.getZ(key);
-            // what is out of view was judged while it was in view: only chunks that can still change are looked at again,
-            // and chunks far behind are forgotten (this map grew all session and was walked whole every two seconds)
-            int far = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
-            if (far > FORGET) {
-                counts.remove(key);
-                sums.remove(key);
-                continue;
-            }
-            if (far > SCAN_RADIUS + 1) continue;
             int[] tot = new int[Cat.ALL.length];
             long[] sm = new long[Cat.ALL.length * 3];
             boolean any = false;
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    int[] c = counts.get(ChunkPos.pack(cx + dx, cz + dz));
+                    int[] c = counts.get(ChunkPos.asLong(cx + dx, cz + dz));
                     if (c == null) continue;
-                    long[] s = sums.get(ChunkPos.pack(cx + dx, cz + dz));
+                    long[] s = sums.get(ChunkPos.asLong(cx + dx, cz + dz));
                     for (int k = 0; k < tot.length; k++) {
                         tot[k] += c[k];
                         if (c[k] != 0) any = true;
@@ -231,19 +201,10 @@ public final class StructureBehavior extends Behavior {
             long ySum = 0, yN = 0;
             for (int k = 0; k < tot.length; k++) { ySum += sm[k * 3 + 1]; yN += tot[k]; }
             BlockPos mid = new BlockPos(cx * 16 + 8, (int) (ySum / Math.max(1, yN)), cz * 16 + 8);
-            String biome = ctx.world().getBiome(mid).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
+            String biome = ctx.world().getBiome(mid).unwrapKey().map(k -> k.location().getPath()).orElse("");
             for (Signatures.Hit h : Signatures.evaluate(tot, dimension, biome)) {
                 BlockPos at = centroid(tot, sm, h.id, mid);
-                String variant = null;
-                if (h.id.equals("bastion_remnant")) {
-                    if (hasVariant(at)) continue;
-                    // one classification a pass: every chunk of the bastion reports it, and each used to read the whole window again
-                    boolean dup = false;
-                    for (DetectedStructure o : hits) dup |= o.id.equals(h.id) && o.pos.distSqr(at) < 96 * 96;
-                    if (dup) continue;
-                    variant = BastionVariant.classify(ctx.world(), at);
-                }
-                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick, variant));
+                hits.add(new DetectedStructure(h.id, dimension, at, DetectedStructure.Source.CLIENT, h.confidence, tick));
             }
         }
         for (DetectedStructure s : hits) add(s);
