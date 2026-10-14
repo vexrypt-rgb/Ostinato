@@ -489,6 +489,11 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             return YES;
         }
+        // Ostinato: fence, wall and closed gate tops (1.5 high) hold a player whose head then reaches a third cell up;
+        // canWalkOnPosition checks that cell.
+        if (isTallTop(state)) {
+            return MAYBE;
+        }
         // Anything else with a flat top a player is held up by (candles, sea pickles, flower pots, heads, upright end
         // rods and chains): its real collision shape decides. A low one is a low floor, see isBottomSlab.
         if (!isHazardFloor(block) && holdsPlayer(collisionTop(state), collisionWidth(state))) {
@@ -501,7 +506,19 @@ public interface MovementHelper extends ActionCosts, Helper {
     static boolean isHazardFloor(Block block) {
         return block instanceof CactusBlock || block instanceof CampfireBlock || block instanceof PointedDripstoneBlock
                 || block == Blocks.POWDER_SNOW || block instanceof ScaffoldingBlock || block instanceof BaseRailBlock
-                || block instanceof FenceBlock || block instanceof WallBlock || block instanceof FenceGateBlock;
+                || block instanceof FenceBlock || block instanceof WallBlock || block instanceof FenceGateBlock; // tall tops: isTallTop
+    }
+
+    /** Ostinato: a fence, wall or closed gate, whose collision top is 1.5 high. */
+    static boolean isTallTop(BlockState state) {
+        Block b = state.getBlock();
+        if (b instanceof FenceGateBlock) return !state.getValue(FenceGateBlock.OPEN);
+        return b instanceof FenceBlock || b instanceof WallBlock;
+    }
+
+    /** Ostinato: a player standing on a top this high has feet in the cell above and head two cells above that. */
+    static int cellsAboveNeeded(double top) {
+        return top > 1.0 ? 3 : 2;
     }
 
     /** Top (0..1.5) of a state's own collision shape, -1 when it has none. */
@@ -551,6 +568,9 @@ public interface MovementHelper extends ActionCosts, Helper {
             return isWater(upState) ^ Baritone.settings().assumeWalkOnWater.value;
         }
 
+        if (isTallTop(state)) { // Ostinato: standing 1.5 up, the head is in the third cell
+            return canWalkThrough(bsi, x, y + cellsAboveNeeded(1.5), z);
+        }
         if (block instanceof FallingBlock) {
             // pitfall: sand/gravel/concrete powder resting on something without collision (air, open gate, sign...) drops out from under us
             BlockPos.MutableBlockPos below = bsi.isPassableBlockPos.set(x, y - 1, z);

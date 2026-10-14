@@ -30,4 +30,11 @@ public class LowFloorTest {
         assertFalse(MovementHelper.isLowTop(1.0));
         assertFalse(MovementHelper.isLowTop(1 / 16.0));
     }
+
+    @Test
+    public void tallTopsNeedAThirdCell() {
+        assertEquals(3, MovementHelper.cellsAboveNeeded(1.5));   // fence, wall, gate
+        assertEquals(2, MovementHelper.cellsAboveNeeded(1.0));
+        assertEquals(2, MovementHelper.cellsAboveNeeded(6 / 16.0));
+    }
 }

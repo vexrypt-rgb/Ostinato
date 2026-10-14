@@ -66,6 +66,9 @@ public class MovementAscend extends Movement {
 
     public static double cost(CalculationContext context, int x, int y, int z, int destX, int destZ) {
         BlockState toPlace = context.get(destX, y, destZ);
+        if (MovementHelper.isTallTop(toPlace) && !MovementHelper.isTallTop(context.get(x, y - 1, z))) {
+            return COST_INF; // Ostinato: a jump rises 1.25, a fence/wall top is 1.5 up
+        }
         double additionalPlacementCost = 0;
         if (!MovementHelper.canWalkOn(context, destX, y, destZ, toPlace)) {
             additionalPlacementCost = context.costOfPlacingAt(destX, y, destZ, toPlace);
