@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.bastion.DamageBudget;
 import baritone.bastion.BruteTactics;
 import baritone.bastion.LavaFlow;
 import baritone.bastion.BastionScript;
@@ -2912,7 +2913,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
 
     // ---- brute tactics (BruteTactics): lava bucket, or a sealed brute pit; never a direct hit
     private BlockPos btLava, btPit, btPitCover;
-    private long btPourTick, btPitSince;
+    private long btPourTick, btPitSince, btDbg = -1000;
     private int btPitPhase; // 0 none, 1 dig, 2 lure, 3 cover, 4 holding
     private java.util.UUID btBrute;
 
@@ -2936,7 +2937,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
 
     private PathingCommand bruteTactic(Player me, List<LivingEntity> heavies) {
         String setting = BastionSettings.bruteTactic;
-        if ("off".equals(setting) || bastion == null) return null;
+        if ("off".equals(setting)) return null;
         Vec3 eye = me.getEyePosition(1.0F);
         // 1. lava already poured: wait while it burns, then scoop it back
         if (btLava != null) {
@@ -2963,7 +2964,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         if (btPitPhase > 0) return brutePit(me, heavies);
         // 3. a brute to deal with?
         LivingEntity b = null;
-        for (LivingEntity e : heavies) if (e instanceof PiglinBrute && (b == null || me.distanceTo(e) < me.distanceTo(b))) b = e;
+        // own query: heavies drops brutes on other levels or out of reach, but a brute standing at the piglins still blocks trading (r150/r151)
+        for (PiglinBrute e : ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(24), PiglinBrute::isAlive))
+            if (b == null || me.distanceTo(e) < me.distanceTo(b)) b = e;
         if (b == null) return null;
         final LivingEntity fb = b;
         boolean blocksTrading = !ctx.world().getEntitiesOfClass(Piglin.class, b.getBoundingBox().inflate(BruteTactics.BLOCKS_TRADE), p -> p.isAlive() && !p.isBaby()).isEmpty() && me.distanceTo(b) < 20;
@@ -2989,6 +2992,12 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             site = s; break;
         }
         BruteTactics.Plan plan = BruteTactics.choose(setting, me.distanceTo(b), blocksTrading, hasLava, target != null, site != null);
+        if (plan == BruteTactics.Plan.NONE && ticks - btDbg >= 200 && (btDbg = ticks) >= 0) logDirect("BAST dbg brute tactic: none (dist " + String.format("%.1f", me.distanceTo(b)) + ", blocksTrade=" + blocksTrading + ", lava=" + hasLava + ", safePour=" + (target != null) + ", pitSite=" + (site != null) + ", holes=" + holes.size() + ")");
+        if (plan == BruteTactics.Plan.NONE && hasLava && blocksTrading && !((Mob) b).isAggressive() && me.distanceTo(b) > 6 && me.getHealth() >= 14) {
+            // a calm brute guarding the piglins: walk up to pouring range (it ignores us until hit or close)
+            status = "brute lava: closing on the brute guarding the piglins";
+            return new PathingCommand(new GoalNear(b.blockPosition(), 5), PathingCommandType.SET_GOAL_AND_PATH);
+        }
         if (plan == BruteTactics.Plan.NONE) return null;
         if (plan == BruteTactics.Plan.PIT) {
             btPit = new BlockPos(site[0], site[1], site[2]);
@@ -3033,16 +3042,21 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             return opCmd != null ? opCmd : pause0();
         }
         if (btPitPhase == 2) {
-            if (in) { btPitPhase = 3; btPitCover = btPit.above(); logDirect("Bastion: brute pit: trapped, covering"); return pause0(); }
+            if (DamageBudget.abort(me.getHealth(), DamageBudget.BRUTE_HIT) && me.getHealth() < me.getMaxHealth()) { logDirect("Bastion: brute pit: hp " + (int) me.getHealth() + " under the damage budget, retreating"); btPitPhase = 0; return null; }
+            if (in) { btPitPhase = 3; btPitSince = ticks; btPitCover = btPit.above(); logDirect("Bastion: brute pit: trapped, covering"); return pause0(); }
             if (ticks - btPitSince > BruteTactics.LURE_TICKS) { logDirect("Bastion: brute pit: lure failed (brute " + where(b, me) + ")"); btPitPhase = 0; return null; }
             int[] st = BruteTactics.lureStand(btPit.getX(), btPit.getY(), btPit.getZ(), b.getX(), b.getZ());
             BlockPos s = new BlockPos(st[0], st[1], st[2]);
+            if (solid(s)) s = s.above(); // the stand is on the surface beside the pit, not in its wall
             status = "brute pit: luring from " + s.toShortString();
             if (!me.blockPosition().equals(s)) return new PathingCommand(new GoalBlock(s), PathingCommandType.SET_GOAL_AND_PATH);
             return pause0();
         }
         if (btPitPhase == 3) {
             opCmd = null;
+            // r152: placeCell walked 15 blocks off to build a footing; the cover sits on the pit walls, so place it from here
+            if (ticks - btPitSince > 200) { logDirect("Bastion: brute pit: could not cover in 10 s"); btPitPhase = 0; return null; }
+            if (me.getEyePosition(1.0F).distanceTo(Vec3.atCenterOf(btPitCover)) > 4.4) return new PathingCommand(new GoalNear(btPitCover, 2), PathingCommandType.SET_GOAL_AND_PATH);
             BastionScript.Result r = placeCell(me, btPitCover);
             if (r == BastionScript.Result.DONE) { btPitPhase = 4; btPitSince = ticks; logDirect("Bastion: brute pit: covered, brute trapped"); return null; }
             if (r == BastionScript.Result.FAILED) { logDirect("Bastion: brute pit: could not cover"); btPitPhase = 0; return null; }
