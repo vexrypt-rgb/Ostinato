@@ -72,6 +72,11 @@ public class SettingsUtil {
     }
 
     public static void readAndApply(Settings settings, String settingsName) {
+        // Ostinato: no client (headless pathfinding benchmark/tests): keep the defaults instead of failing to log the
+        // missing game directory through a null Minecraft. Never true in game.
+        if (Minecraft.getInstance() == null) {
+            return;
+        }
         try {
             forEachLine(settingsByName(settingsName), line -> {
                 Matcher matcher = SETTING_PATTERN.matcher(line);

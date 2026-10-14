@@ -56,7 +56,11 @@ import static baritone.api.pathing.movement.ActionCosts.COST_INF;
  */
 public class CalculationContext {
 
-    private static final ItemStack STACK_BUCKET_WATER = new ItemStack(Items.WATER_BUCKET);
+    // Ostinato: was a static ItemStack field on this class; held lazily so a headless context (no bound item components)
+    // can load this class. Same stack, built on first use by the normal constructor.
+    private static final class BucketHolder {
+        static final ItemStack STACK_BUCKET_WATER = new ItemStack(Items.WATER_BUCKET);
+    }
 
     public final boolean safeForThreadedUse;
     public final IBaritone baritone;
@@ -139,8 +143,83 @@ public class CalculationContext {
     private final List<java.util.function.Predicate<BlockPos>> forceWalkOn;
     private final List<java.util.function.Predicate<BlockPos>> avoidWalkThrough;
 
+    // Ostinato: vertical world bounds cached once, so the pathfinder and movement costs no longer read world.dimensionType()
+    // / world.getMinY() / world.getMaxY() per call, and so a headless context (no Level) works. Same values as before.
+    public final int worldMinY;
+    /** dimensionType().height(), the number of block rows. */
+    public final int worldHeight;
+    /** Level.getMaxY(): the top block row, worldMinY + worldHeight - 1. */
+    public final int worldMaxY;
+
     public CalculationContext(IBaritone baritone) {
         this(baritone, false);
+    }
+
+    /**
+     * Ostinato: a headless context over a synthetic or snapshot {@link BlockStateInterface}, with no player, inventory or
+     * client world, for the pathfinding benchmark and cost-equality tests. Player-derived inputs take the values of a
+     * fresh full-health player with an empty hotbar (bare hands via {@code toolSet}); everything else is read from
+     * settings exactly as the normal constructor does. New, replaces nothing.
+     */
+    public CalculationContext(BlockStateInterface bsi, ToolSet toolSet, boolean hasThrowaway, int minY, int height) {
+        this.precomputedData = new PrecomputedData();
+        this.safeForThreadedUse = true;
+        this.baritone = null;
+        this.world = null;
+        this.worldData = null;
+        this.bsi = bsi;
+        this.toolSet = toolSet;
+        this.aquaAffinity = false;
+        this.hasThrowaway = hasThrowaway;
+        this.hasWaterBucket = false;
+        this.hasBoat = false;
+        this.freeBoats = java.util.Collections.emptySet();
+        this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
+        this.canSprint = Baritone.settings().allowSprint.value;
+        this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
+        this.allowBreak = Baritone.settings().allowBreak.value;
+        this.swimThroughLava = false;
+        this.forceWalkOn = null;
+        this.avoidWalkThrough = null;
+        this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
+        this.allowParkour = ExperimentalMovement.allowParkour();
+        this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
+        this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
+        this.allowParkourFourGap = ExperimentalMovement.kinematicTravel();
+        this.allowNeos = ExperimentalMovement.allowNeos();
+        this.allowClimbJumps = ExperimentalMovement.allowClimbJumps();
+        this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
+        this.hasClutchItem = false;
+        this.clutchIsLadder = false;
+        this.clutchPicksUp = false;
+        this.blockReach = Baritone.settings().blockReachDistance.value;
+        this.experimental = ExperimentalMovement.on();
+        this.experimentalMinHealth = Baritone.settings().experimentalMinHealth.value;
+        this.fallDamageCost = Baritone.settings().fallDamageCost.value;
+        this.jumpBias = ExperimentalMovement.jumpBias();
+        this.health = 20;
+        this.assumeWalkOnWater = Baritone.settings().assumeWalkOnWater.value;
+        this.allowFallIntoLava = false;
+        this.frostWalker = 0;
+        this.allowDiagonalDescend = ExperimentalMovement.allowDiagonalDescend();
+        this.allowDiagonalAscend = ExperimentalMovement.allowDiagonalAscend();
+        this.allowDownward = Baritone.settings().allowDownward.value;
+        this.minFallHeight = 3;
+        this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;
+        this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
+        this.waterWalkSpeed = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - 1.0f) + ActionCosts.WALK_ONE_BLOCK_COST * 1.0f;
+        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
+        this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
+        this.jumpPenalty = Baritone.settings().jumpPenalty.value;
+        this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
+        this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
+        this.worldBorder = bsi.worldBorder;
+        this.minY = minY;
+        this.maxY = height;
+        this.worldMinY = minY;
+        this.worldHeight = height;
+        this.worldMaxY = minY + height - 1;
     }
 
     public CalculationContext(IBaritone baritone, boolean forUseOnAnotherThread) {
@@ -154,7 +233,7 @@ public class CalculationContext {
         this.toolSet = new ToolSet(player);
         this.aquaAffinity = player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SUBMERGED_MINING_SPEED) > 0.5;
         this.hasThrowaway = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
-        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
+        this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(BucketHolder.STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
         this.hasBoat = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
                 && BoatUtil.hasBoat(player.getInventory().getNonEquipmentItems());
         this.freeBoats = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
@@ -248,6 +327,9 @@ public class CalculationContext {
         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
         this.minY = world.dimensionType().minY();
         this.maxY = world.dimensionType().height();
+        this.worldMinY = this.minY; // Ostinato
+        this.worldHeight = this.maxY; // Ostinato
+        this.worldMaxY = world.getMaxY(); // Ostinato
     }
 
     /** Called by the search thread before A* starts; see the mining memo fields. */
