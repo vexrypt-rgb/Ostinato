@@ -30,6 +30,7 @@ import baritone.api.utils.input.Input;
 import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.kinematic.JumpSearch;
 import baritone.pathing.kinematic.JumpTemplates;
+import baritone.pathing.kinematic.MomentumHop;
 import baritone.pathing.kinematic.PlayerSim;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -134,6 +135,8 @@ public class MovementJump extends Movement {
     private boolean running, landed;
     private int settle;
     private int replans, replanCooldown;
+    private PlayerSim.World hopWorld;
+    private boolean hopPrev;
 
     public int[] frame() {
         return f;
@@ -219,6 +222,12 @@ public class MovementJump extends Movement {
                 if (!ceiling && JumpTemplates.HEAD_HITTERS.contains(t)) {
                     continue; // open sky: MovementParkour's jump
                 }
+                if (ceiling && JumpTemplates.MOMENTUM.contains(t) && hasShorter(c.options, t, dx, y + t.dy, dz)) {
+                    continue; // Ostinato: a shorter momentum run-up already lands here; skip the costlier searches
+                }
+                if (!ceiling && JumpTemplates.MOMENTUM.contains(t)) {
+                    continue;
+                }
                 if (ceiling && !headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz)) {
                     continue;
                 }
@@ -247,6 +256,13 @@ public class MovementJump extends Movement {
         return cell[3] == 0 && cell[1] >= 2 && context.get(cx, cy, cz).getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(context.get(cx, cy, cz));
     }
 
+    private static boolean hasShorter(List<Option> options, JumpTemplates.Template t, int x, int y, int z) {
+        for (Option o : options) {
+            if (o.x == x && o.y == y && o.z == z && JumpTemplates.MOMENTUM.contains(o.t) && o.t.runUp < t.runUp) return true;
+        }
+        return false;
+    }
+
     static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
         JumpSearch js = new JumpSearch(world);
         js.dirX = f[0];
@@ -264,6 +280,11 @@ public class MovementJump extends Movement {
         start.y = y;
         start.z = z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
         start.onGround = true;
+        if (JumpTemplates.MOMENTUM.contains(t)) {
+            // Ostinato: multi-hop momentum run under the ceiling, from standing still at the run-up start
+            start.vy = -0.0784000015258789;
+            return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false) != null;
+        }
         return js.search(start, true) || js.search(start, false);
     }
 
@@ -378,6 +399,7 @@ public class MovementJump extends Movement {
             ClientWorld world = new ClientWorld(ctx);
             js = new JumpSearch(world);
             real = new PlayerSim(world);
+            hopWorld = world;
             js.dirX = f[0];
             js.dirZ = f[1];
             js.edge = (src.x + 0.5 + 0.5 * f[0]) * f[0] + (src.z + 0.5 + 0.5 * f[1]) * f[1];
@@ -416,6 +438,11 @@ public class MovementJump extends Movement {
             if (!real.onGround) {
                 return state;
             }
+            if (JumpTemplates.MOMENTUM.contains(t)) {
+                running = true;
+                PositionSync.sync(ctx.player());
+                return momentumTick(state);
+            }
             boolean still = Math.abs(m.x) + Math.abs(m.z) <= 0.02;
             if (!still && !js.search(real, true)) {
                 return state; // no plan from this momentum: come to a stop first
@@ -427,6 +454,8 @@ public class MovementJump extends Movement {
             // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
             // position first, or it replays the jump from a stale spot inside the wall and rubber-bands us back
             PositionSync.sync(ctx.player());
+        } else if (JumpTemplates.MOMENTUM.contains(t)) {
+            return momentumTick(state);
         } else if (replanCooldown > 0) {
             replanCooldown--;
         } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {
@@ -469,6 +498,31 @@ public class MovementJump extends Movement {
                 viz.jumpAir(this, real.x, real.y, real.z);
             }
         }
+        return state;
+    }
+
+    // Ostinato: fly a multi-hop momentum run. Every grounded tick the hop timing is searched again from the real
+    // state (cheap: a few hundred sim ticks), so a slightly different real tick doesn't throw the run off.
+    private MovementState momentumTick(MovementState state) {
+        float yaw = (float) Math.toDegrees(Math.atan2(-f[0], f[1]));
+        state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, ctx.playerRotations().getPitch()), true));
+        if (real.onGround && ctx.playerFeet().equals(dest)) {
+            landed = true;
+            return state;
+        }
+        boolean jump = false;
+        if (real.onGround) {
+            String p = MomentumHop.find(hopWorld, real, f[0], f[1], dest.x, dest.y, dest.z, hopPrev);
+            if (p == null) {
+                return fail(state, "momentum hop: no timing reaches dest from here");
+            }
+            jump = !p.isEmpty() && p.charAt(0) == 'J';
+        }
+        hopPrev = jump;
+        trace(yaw, 1, jump);
+        state.setInput(Input.MOVE_FORWARD, true);
+        state.setInput(Input.SPRINT, true);
+        state.setInput(Input.JUMP, jump);
         return state;
     }
 }

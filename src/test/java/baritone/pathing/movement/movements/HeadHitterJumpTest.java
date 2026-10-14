@@ -20,8 +20,8 @@ public class HeadHitterJumpTest {
                 for (int bx = PlayerSim.floor(minX); bx <= PlayerSim.floor(maxX); bx++) {
                     for (int by = PlayerSim.floor(minY); by <= PlayerSim.floor(maxY); by++) {
                         for (int bz = PlayerSim.floor(minZ); bz <= PlayerSim.floor(maxZ); bz++) {
-                            boolean floor = by == -1 && (bx <= 0 && bx >= -6 || bx >= dest && bx <= dest + 30);
-                            boolean roof = ceil >= 0 && by == ceil && bx >= -6 && bx <= dest + 30;
+                            boolean floor = by == -1 && (bx <= 0 && bx >= -14 || bx >= dest && bx <= dest + 30);
+                            boolean roof = ceil >= 0 && by == ceil && bx >= -14 && bx <= dest + 30;
                             if (floor || roof) out.add(new double[]{bx, by, bz, bx + 1, by + 1, bz + 1});
                         }
                     }
@@ -36,9 +36,13 @@ public class HeadHitterJumpTest {
     }
 
     private static boolean lands(int a, int ceil) {
+        return lands(a, ceil, 99);
+    }
+
+    private static boolean lands(int a, int ceil, int maxRunUp) {
         int[] f = MovementJump.FRAMES[0];
         for (JumpTemplates.Template t : JumpTemplates.HEAD_HITTERS) {
-            if (t.dy == 0 && t.b == 0 && t.a == a && !t.neo
+            if (t.runUp <= maxRunUp && t.dy == 0 && t.b == 0 && t.a == a && !t.neo
                     && MovementJump.headHitterLands(course(a * f[0], ceil), 0, 0, 0, f, t, a * f[0], 0, a * f[1])) {
                 return true;
             }
@@ -52,8 +56,10 @@ public class HeadHitterJumpTest {
     }
 
     @Test
-    public void gapTwoUnderFullTwoHighRoofIsRefused() {
-        assertFalse(lands(3, 2)); // the sim caps the arc too low: refused at plan time rather than flown and failed
+    public void gapTwoUnderFullTwoHighRoofNeedsMomentum() {
+        // Ostinato: a short run-up caps the arc too low (refused), a long run of timed hops makes it (real game agrees)
+        assertFalse(lands(3, 2, 4));
+        assertTrue(lands(3, 2));
     }
 
     @Test

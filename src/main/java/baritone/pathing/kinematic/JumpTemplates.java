@@ -63,6 +63,8 @@ public final class JumpTemplates {
     // gap (a head hitter) is never planned there; these carry the cells a straight jump touches, the head cells
     // (y=2) marked passable so MovementJump treats a solid one as a ceiling and verifies the jump in the sim.
     public static final List<Template> HEAD_HITTERS = new ArrayList<>();
+    /** Ostinato: the head-hitter templates flown as a run of timed hops ({@link MomentumHop}) rather than one jump. */
+    public static final java.util.Set<Template> MOMENTUM = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     static {
         for (int dy = 0; dy >= -1; dy--) for (int a = 2; a <= 4; a++) for (int r = 0; r <= 4; r++) {
@@ -75,7 +77,22 @@ public final class JumpTemplates {
             plan[3] = 4;
             HEAD_HITTERS.add(new Template(a, dy, 0, r, 0, 4 * a + 4, plan, cells.toArray(new int[0][])));
         }
+        // Ostinato: multi-hop momentum. Gap 2 flat under a 2-high ceiling only works after a long run of timed
+        // head-hitter hops (run-up 5..12) with the last takeoff at the edge; MomentumHop finds the timing in the sim.
+        for (int r = 5; r <= 12; r++) {
+            List<int[]> cells = new ArrayList<>();
+            for (int k = -r; k <= 3; k++) {
+                for (int y = 0; y <= 2; y++) cells.add(new int[]{k, y, 0, 0});
+            }
+            int[] plan = new int[JumpSearch.DIMS];
+            plan[0] = 1;
+            plan[3] = 4;
+            Template m = new Template(3, 0, 0, r, 0, 16 + 2 * r, plan, cells.toArray(new int[0][]));
+            HEAD_HITTERS.add(m);
+            MOMENTUM.add(m);
+        }
     }
+
     private static final double MARGIN = 0.05;
     private static final int[] RUN_UPS = {0, 1, 2, 3};
     private static final int[] LATERAL = {0, 3, 6, 7, 8}; // tenths of a block
