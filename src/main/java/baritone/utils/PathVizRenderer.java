@@ -61,7 +61,9 @@ public final class PathVizRenderer implements IRenderer {
         boolean drawSpeed = speed && trailLive;
         boolean drawInputs = inputs && trailLive;
         boolean drawSearch = search && (v.treeCount > 0 && now - v.treeStamp < TREE_MS || v.plannedCount > 0 && trailLive || v.replans.size() > 0);
-        if (!(drawCorridor || drawRollouts || drawJumps || drawSpeed || drawInputs || drawSearch)) {
+        boolean kin = drawCorridor || drawRollouts || drawJumps;
+        boolean phys = drawSpeed || drawInputs || drawSearch;
+        if (!kin && !phys) {
             return;
         }
         vx = renderManager.renderPosX();
@@ -69,28 +71,64 @@ public final class PathVizRenderer implements IRenderer {
         vz = renderManager.renderPosZ();
         stack = poseStack;
         width = settings.pathRenderLineWidthPixels.value;
-        bb = IRenderer.startLines(Color.WHITE, 1F);
-        if (drawSearch) {
-            search(v, now);
+        if (phys) {
+            bb = IRenderer.startLines(Color.WHITE, 1F);
+            if (drawSearch) {
+                search(v, now);
+            }
+            if (drawSpeed) {
+                speedTrail(v);
+            }
+            if (drawInputs) {
+                inputs(v, now);
+            }
+            IRenderer.endLines(bb, settings.renderPathIgnoreDepth.value);
         }
-        if (drawCorridor) {
-            corridor(v);
+        if (kin) {
+            // K1-K3 are drawn on top of the world (no depth test), bright and thick, as in the concept sketches
+            bb = IRenderer.startLines(Color.WHITE, 1F);
+            if (drawCorridor) {
+                corridor(v);
+            }
+            if (drawRollouts) {
+                rollouts(v);
+            }
+            if (drawJumps) {
+                jumps(v, now);
+            }
+            IRenderer.endLines(bb, true);
         }
-        if (drawRollouts) {
-            rollouts(v);
-        }
-        if (drawJumps) {
-            jumps(v, now);
-        }
-        if (drawSpeed) {
-            speedTrail(v);
-        }
-        if (drawInputs) {
-            inputs(v, now);
-        }
-        IRenderer.endLines(bb, settings.renderPathIgnoreDepth.value);
         bb = null;
         stack = null;
+    }
+
+    // ---------------------------------------------------------------- K palette (concept sketches)
+
+    private static final float[] CYAN = {0.0F, 0.85F, 1.0F};
+    private static final float[] YELLOW = {1.0F, 0.86F, 0.1F};
+    private static final float[] GREEN = {0.15F, 1.0F, 0.45F};
+    private static final float[] RED = {1.0F, 0.18F, 0.15F};
+    private static final float[] ORANGE = {1.0F, 0.55F, 0.0F};
+    private static final float[] PINK = {1.0F, 0.45F, 0.7F};
+    private static final float[] GREY = {0.55F, 0.55F, 0.55F};
+    private static final float[] WHITE = {1.0F, 1.0F, 1.0F};
+
+    /** Pixel width multiplier of K lines over pathRenderLineWidthPixels. */
+    private static final float K_WIDTH = 3.0F;
+
+    private static void col(float[] c, float a) {
+        col(c[0], c[1], c[2], a);
+    }
+
+    /**
+     * A bright line with a wide faint halo under it: reads as a thick glowing stroke at a distance, and stays
+     * visible when the GL line width is clamped.
+     */
+    private static void bold(float[] c, double x1, double y1, double z1, double x2, double y2, double z2, float w) {
+        col(c, 0.28F);
+        line(x1, y1, z1, x2, y2, z2, w * K_WIDTH * 2.6F);
+        col(c, 0.95F);
+        line(x1, y1, z1, x2, y2, z2, w * K_WIDTH);
     }
 
     // ---------------------------------------------------------------- K1
@@ -98,7 +136,7 @@ public final class PathVizRenderer implements IRenderer {
     private static void corridor(PathViz v) {
         int n = v.lineCount;
         double[] l = v.line;
-        double r = Math.max(0.4, v.lineWidth * 0.65);
+        double r = Math.max(0.45, v.lineWidth * 0.65);
         int next = v.nextNode();
         double px = 0, py = 0, pz = 0, pSideX = 0, pSideZ = 0;
         for (int i = 0; i < n; i++) {
@@ -108,28 +146,32 @@ public final class PathVizRenderer implements IRenderer {
             double tl = Math.hypot(tx, tz);
             double sideX = tl < 1e-6 ? 1 : -tz / tl, sideZ = tl < 1e-6 ? 0 : tx / tl;
             boolean walked = s < v.lineS;
+            float[] tube = walked ? GREY : YELLOW;
             double cy = y + 0.9;
-            if (walked) {
-                col(0.35F, 0.35F, 0.35F, 0.35F);
-            } else {
-                col(1F, 0.84F, 0.31F, 0.45F);
-            }
-            ring(x, cy, z, sideX, sideZ, r, 12);
+            // ring: a wide translucent band (the "filled" tube wall) under a bright core
+            col(tube, walked ? 0.12F : 0.22F);
+            ring(x, cy, z, sideX, sideZ, r, 12, K_WIDTH * 4F);
+            col(tube, walked ? 0.45F : 0.95F);
+            ring(x, cy, z, sideX, sideZ, r, 12, K_WIDTH);
+            // node tile on the floor
+            col(walked ? GREY : CYAN, walked ? 0.4F : 0.9F);
+            square(x, y + 0.03, z, 0.5, K_WIDTH * 0.8F);
             if (i > 0) {
-                // the block path on the floor and the two rails of the tube
                 if (walked) {
-                    col(0.33F, 0.33F, 0.33F, 0.6F);
+                    col(GREY, 0.6F);
+                    line(px, py + 0.05, pz, x, y + 0.05, z, K_WIDTH * 1.5F);
+                    col(GREY, 0.45F);
+                    line(px + pSideX * r, py + 0.9, pz + pSideZ * r, x + sideX * r, cy, z + sideZ * r, K_WIDTH);
+                    line(px - pSideX * r, py + 0.9, pz - pSideZ * r, x - sideX * r, cy, z - sideZ * r, K_WIDTH);
                 } else {
-                    col(0.31F, 0.76F, 0.97F, 0.7F);
+                    bold(CYAN, px, py + 0.05, pz, x, y + 0.05, z, 1.6F);
+                    bold(YELLOW, px + pSideX * r, py + 0.9, pz + pSideZ * r, x + sideX * r, cy, z + sideZ * r, 1F);
+                    bold(YELLOW, px - pSideX * r, py + 0.9, pz - pSideZ * r, x - sideX * r, cy, z - sideZ * r, 1F);
+                    // faint top and bottom seams fill the tube in
+                    col(YELLOW, 0.18F);
+                    line(px, py + 0.9 + r, pz, x, cy + r, z, K_WIDTH * 2F);
+                    line(px, py + 0.9 - r, pz, x, cy - r, z, K_WIDTH * 2F);
                 }
-                line(px, py + 0.05, pz, x, y + 0.05, z, 2);
-                if (walked) {
-                    col(0.35F, 0.35F, 0.35F, 0.3F);
-                } else {
-                    col(1F, 0.84F, 0.31F, 0.45F);
-                }
-                line(px + pSideX * r, py + 0.9, pz + pSideZ * r, x + sideX * r, cy, z + sideZ * r, 1);
-                line(px - pSideX * r, py + 0.9, pz - pSideZ * r, x - sideX * r, cy, z - sideZ * r, 1);
             }
             px = x;
             py = y;
@@ -139,9 +181,12 @@ public final class PathVizRenderer implements IRenderer {
         }
         if (next >= 0) {
             double x = l[next * 4], y = l[next * 4 + 1], z = l[next * 4 + 2];
-            col(0.41F, 0.94F, 0.68F, 0.95F);
+            col(GREEN, 0.3F);
+            circle(x, y + 0.05, z, 0.45, 16, K_WIDTH * 4F);
+            col(GREEN, 1F);
+            circle(x, y + 0.05, z, 0.45, 16, K_WIDTH * 1.4F);
+            bold(GREEN, x, y + 0.05, z, x, y + 1.8, z, 1.4F);
             box(x - 0.2, y, z - 0.2, x + 0.2, y + 0.4, z + 0.2);
-            line(x, y + 0.4, z, x, y + 1.6, z, 2);
         }
     }
 
@@ -155,28 +200,27 @@ public final class PathVizRenderer implements IRenderer {
                 if (r.chosen != (pass == 1) || r.n < 1) {
                     continue;
                 }
-                float w;
-                if (r.chosen) {
-                    col(0.41F, 0.94F, 0.68F, 0.95F);
-                    w = 2.5F;
-                } else if (r.rejected()) {
-                    col(0.94F, 0.33F, 0.31F, 0.55F);
-                    w = 1;
-                } else {
-                    col(1F, 0.6F, 0F, 0.55F);
-                    w = 1;
-                }
+                float[] c = r.chosen ? GREEN : r.rejected() ? RED : ORANGE;
+                float w = r.chosen ? 1.8F : 0.9F;
                 float[] p = r.pts;
                 for (int k = 1; k < r.n; k++) {
-                    line(p[k * 3 - 3], p[k * 3 - 2] + 0.1, p[k * 3 - 1], p[k * 3], p[k * 3 + 1] + 0.1, p[k * 3 + 2], w);
+                    double x1 = p[k * 3 - 3], y1 = p[k * 3 - 2] + 0.1, z1 = p[k * 3 - 1], x2 = p[k * 3], y2 = p[k * 3 + 1] + 0.1, z2 = p[k * 3 + 2];
+                    if (r.chosen) {
+                        bold(c, x1, y1, z1, x2, y2, z2, w);
+                    } else {
+                        col(c, 0.8F);
+                        line(x1, y1, z1, x2, y2, z2, w * K_WIDTH);
+                    }
                 }
                 int e = (r.n - 1) * 3;
                 if (r.chosen) {
+                    col(WHITE, 1F);
                     for (int k = 0; k < r.n; k++) {
-                        cross(p[k * 3], p[k * 3 + 1] + 0.1, p[k * 3 + 2], 0.06);
+                        dot(p[k * 3], p[k * 3 + 1] + 0.1, p[k * 3 + 2], 0.07);
                     }
-                } else if (r.rejected()) {
-                    xMark(p[e], p[e + 1] + 0.1, p[e + 2], 0.18);
+                } else {
+                    col(c, 1F);
+                    xMark(p[e], p[e + 1] + 0.1, p[e + 2], 0.22);
                 }
             }
         }
@@ -191,31 +235,27 @@ public final class PathVizRenderer implements IRenderer {
             if (f <= 0) {
                 continue;
             }
-            boolean climb = m.kind == PathViz.CLIMB;
-            if (climb) {
-                col(0.96F, 0.56F, 0.69F, f);
-            } else {
-                col(1F, 0.93F, 0.35F, f);
-            }
-            circle(m.tx, m.ty + 0.03, m.tz, 0.4, 14);
-            line(m.tx, m.ty, m.tz, m.tx, m.ty + 0.5, m.tz, 2);
+            float[] take = m.kind == PathViz.CLIMB ? PINK : YELLOW;
+            col(take, 0.3F * f);
+            circle(m.tx, m.ty + 0.03, m.tz, 0.45, 16, K_WIDTH * 4F);
+            col(take, f);
+            circle(m.tx, m.ty + 0.03, m.tz, 0.45, 16, K_WIDTH * 1.4F);
+            line(m.tx, m.ty, m.tz, m.tx, m.ty + 0.6, m.tz, K_WIDTH * 1.4F);
             // apex: a dotted drop from the top of the arc to take-off height, and a tick at the top
-            col(1F, 1F, 1F, f * 0.8F);
+            col(WHITE, f);
             dotted(m.ax, m.ty, m.az, m.ax, m.ay, m.az, 0.12);
-            cross(m.ax, m.ay, m.az, 0.12);
+            line(m.ax - 0.2, m.ay, m.az, m.ax + 0.2, m.ay, m.az, K_WIDTH * 1.4F);
+            line(m.ax, m.ay, m.az - 0.2, m.ax, m.ay, m.az + 0.2, K_WIDTH * 1.4F);
+            float[] arc = {0.75F, 0.6F, 1.0F};
+            col(arc, 0.85F * f);
+            line(m.tx, m.ty + 0.05, m.tz, m.ax, m.ay + 0.05, m.az, K_WIDTH);
             if (m.landed) {
-                if (m.grabbed) {
-                    col(0.96F, 0.56F, 0.69F, f);
-                } else {
-                    col(0.15F, 0.78F, 0.85F, f);
-                }
-                circle(m.lx, m.ly + 0.03, m.lz, 0.4, 14);
-                col(0.7F, 0.62F, 0.86F, f * 0.6F);
-                line(m.tx, m.ty + 0.05, m.tz, m.ax, m.ay + 0.05, m.az, 1);
-                line(m.ax, m.ay + 0.05, m.az, m.lx, m.ly + 0.05, m.lz, 1);
-            } else {
-                col(0.7F, 0.62F, 0.86F, f * 0.6F);
-                line(m.tx, m.ty + 0.05, m.tz, m.ax, m.ay + 0.05, m.az, 1);
+                line(m.ax, m.ay + 0.05, m.az, m.lx, m.ly + 0.05, m.lz, K_WIDTH);
+                float[] land = m.grabbed ? PINK : CYAN;
+                col(land, 0.3F * f);
+                circle(m.lx, m.ly + 0.03, m.lz, 0.45, 16, K_WIDTH * 4F);
+                col(land, f);
+                circle(m.lx, m.ly + 0.03, m.lz, 0.45, 16, K_WIDTH * 1.4F);
             }
         }
         for (int i = 0; i < v.stuck.size(); i++) {
@@ -224,12 +264,16 @@ public final class PathVizRenderer implements IRenderer {
             if (f <= 0) {
                 continue;
             }
-            col(1F, 0.32F, 0.32F, f);
-            line(m.x, m.y, m.z, m.x, m.y + 2.6, m.z, 3);
+            bold(RED, m.x, m.y, m.z, m.x, m.y + 2.6, m.z, 1.8F);
             double t = m.y + 2.6;
-            line(m.x - 0.3, t, m.z, m.x + 0.3, t, m.z, 2);
-            line(m.x - 0.3, t, m.z, m.x, t + 0.5, m.z, 2);
-            line(m.x + 0.3, t, m.z, m.x, t + 0.5, m.z, 2);
+            col(RED, f);
+            for (int k = 0; k < 3; k++) { // a filled-looking warning triangle: three nested outlines
+                double s = 0.35 - k * 0.1, h = 0.6 - k * 0.15;
+                line(m.x - s, t, m.z, m.x + s, t, m.z, K_WIDTH * 1.4F);
+                line(m.x - s, t, m.z, m.x, t + h, m.z, K_WIDTH * 1.4F);
+                line(m.x + s, t, m.z, m.x, t + h, m.z, K_WIDTH * 1.4F);
+            }
+            col(RED, 0.9F * f);
             dashedBox(m.x - 0.3, m.y, m.z - 0.3, m.x + 0.3, m.y + 1.8, m.z + 0.3);
         }
     }
@@ -378,31 +422,43 @@ public final class PathVizRenderer implements IRenderer {
         line(x, y, z - s, x, y, z + s, 1);
     }
 
+    private static void square(double x, double y, double z, double h, float w) {
+        line(x - h, y, z - h, x + h, y, z - h, w);
+        line(x + h, y, z - h, x + h, y, z + h, w);
+        line(x + h, y, z + h, x - h, y, z + h, w);
+        line(x - h, y, z + h, x - h, y, z - h, w);
+    }
+
+    /** A tick dot: a short, very wide stroke reads as a round blob. */
+    private static void dot(double x, double y, double z, double s) {
+        line(x, y - s / 2, z, x, y + s / 2, z, K_WIDTH * 3F);
+    }
+
     private static void xMark(double x, double y, double z, double s) {
-        line(x - s, y - s, z - s, x + s, y + s, z + s, 2);
-        line(x - s, y + s, z - s, x + s, y - s, z + s, 2);
-        line(x - s, y - s, z + s, x + s, y + s, z - s, 2);
+        line(x - s, y, z - s, x + s, y, z + s, K_WIDTH * 2F);
+        line(x - s, y, z + s, x + s, y, z - s, K_WIDTH * 2F);
+        line(x, y - s, z, x, y + s, z, K_WIDTH * 2F);
     }
 
     /** A vertical ring around (x, y, z), across the direction whose sideways unit vector is (sideX, sideZ). */
-    private static void ring(double x, double y, double z, double sideX, double sideZ, double r, int seg) {
+    private static void ring(double x, double y, double z, double sideX, double sideZ, double r, int seg, float w) {
         double lx = x + sideX * r, ly = y, lz = z + sideZ * r;
         for (int k = 1; k <= seg; k++) {
             double a = 2 * Math.PI * k / seg, c = Math.cos(a) * r, s = Math.sin(a) * r;
             double nx = x + sideX * c, ny = y + s, nz = z + sideZ * c;
-            line(lx, ly, lz, nx, ny, nz, 1);
+            line(lx, ly, lz, nx, ny, nz, w);
             lx = nx;
             ly = ny;
             lz = nz;
         }
     }
 
-    private static void circle(double x, double y, double z, double r, int seg) {
+    private static void circle(double x, double y, double z, double r, int seg, float w) {
         double lx = x + r, lz = z;
         for (int k = 1; k <= seg; k++) {
             double a = 2 * Math.PI * k / seg;
             double nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
-            line(lx, y, lz, nx, y, nz, 2);
+            line(lx, y, lz, nx, y, nz, w);
             lx = nx;
             lz = nz;
         }
