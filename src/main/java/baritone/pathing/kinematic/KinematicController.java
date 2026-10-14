@@ -185,6 +185,9 @@ public final class KinematicController {
         boolean bestShort = false;
         int bestDelay = NEVER;
         double bestScore = -1e9;
+        float walkOff = 0;
+        boolean walkShort = false;
+        double walkScore = -1e9;
         for (int delay : longJump ? DELAYS : JUMP_OR_NOT) {
             for (float off : delay <= 0 ? YAW_OFFSETS : NO_OFFSET) {
                 double score = rollout(off, delay, false, here[0]);
@@ -197,10 +200,20 @@ public final class KinematicController {
                     bestDelay = delay;
                     bestShort = false;
                 }
+                if (delay == NEVER && score > walkScore + 1e-6) {
+                    walkScore = score;
+                    walkOff = off;
+                    walkShort = false;
+                }
             }
             if (delay <= 0) {
                 // steering at the line right beside the player first: gets the box off a corner it snagged on
                 double score = rollout(0, delay, true, here[0]);
+                if (delay == NEVER && score > walkScore + 1e-6) {
+                    walkScore = score;
+                    walkOff = 0;
+                    walkShort = true;
+                }
                 if (score > bestScore + 1e-6) {
                     bestScore = score;
                     best = 0;
@@ -208,6 +221,13 @@ public final class KinematicController {
                     bestShort = true;
                 }
             }
+        }
+        if (!longJump && bestDelay == 0 && !jumpWorthIt(bestScore, walkScore, here[0])) {
+            // a hop that is barely ahead of running: stay on the ground
+            bestScore = walkScore;
+            best = walkOff;
+            bestShort = walkShort;
+            bestDelay = NEVER;
         }
         boolean bestJump = bestDelay == 0 && real.onGround;
         int strafe = 0;
@@ -271,7 +291,18 @@ public final class KinematicController {
      * Score = arc progress at the end of the horizon; -inf if the player leaves the corridor or drops below the path
      * before {@link #LOOKAHEAD}. A plan with a jump delay walks that many ground ticks, then jumps at every landing.
      */
-    private double rollout(float yawOffset, int delay, boolean shortAim, double s0) {
+/** How much further along the line, over the horizon, a jump must get than running for it to be taken. */
+    static final double JUMP_GAIN = 0.75;
+
+    /**
+     * Jump on open ground only when it is needed (running makes no progress: a gap, a step, a block in the way) or
+     * when it is measurably faster than running, not because a sprint-jump scored a hair further.
+     */
+    static boolean jumpWorthIt(double jumpScore, double walkScore, double s0) {
+        return walkScore <= s0 + 0.05 || jumpScore >= walkScore + JUMP_GAIN;
+    }
+
+        private double rollout(float yawOffset, int delay, boolean shortAim, double s0) {
         sim.copyFrom(real);
         simTop = real.y + (real.onGround ? 0 : ctx.player().fallDistance);
         double s = s0, score = Double.NaN;

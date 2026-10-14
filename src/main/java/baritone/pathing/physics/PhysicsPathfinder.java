@@ -101,7 +101,7 @@ public final class PhysicsPathfinder {
                 PlayerSim c = new PlayerSim(world).copyFrom(s);
                 for (int t = 0; t < HOLD; t++) c.tick(a.yaw, a.forward, a.sprint, a.jump);
                 if (c.y < gy - 64) continue;
-                int g = n.ticks + HOLD;
+                int g = n.ticks + stepCost(a.jump, s.onGround);
                 Integer seen = best.putIfAbsent(key(c), g);
                 if (seen != null) {
                     if (seen <= g) continue;
@@ -111,6 +111,17 @@ public final class PhysicsPathfinder {
             }
         }
         return null;
+    }
+
+    /**
+     * Extra ticks a take-off costs, so a jump is planned only where it is needed (a gap, a step up) or where it beats
+     * running on the ground by more than this. Without it a sprint-jump, a hair faster, won every flat stretch.
+     */
+    static final int JUMP_COST = 4;
+
+    /** Search cost of holding an action for HOLD ticks from a state that was or was not on the ground. */
+    static int stepCost(boolean jump, boolean onGround) {
+        return HOLD + (jump && onGround ? JUMP_COST : 0);
     }
 
     private static double h(PlayerSim s, double gx, double gy, double gz) {
