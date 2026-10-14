@@ -97,6 +97,24 @@ public final class PlayerSim {
 
     /** With a strafe key too: +1 is A (left), -1 is D (right). Vanilla normalises a diagonal so strafing adds no speed. */
     public void tick(float yawDeg, int input, int strafe, boolean sprint, boolean jump) {
+        tick(yawDeg, input, strafe, Float.NaN, Float.NaN, sprint, jump);
+    }
+
+    /**
+     * Ostinato analog input: any forward/strafe in [-1, 1] (a thumbstick), through vanilla 26.3's own chain:
+     * Controlify-style length limit, then LocalPlayer.modifyInput (x0.98, square-movement stretch, capped at 1).
+     * A sprint needs only forward > 1e-5 (ClientInput.hasForwardImpulse). With values of -1, 0 or 1 this moves
+     * exactly as {@link #tick(float, int, int, boolean, boolean)} does with keys. Key ticks never go through here.
+     */
+    public void tickAnalog(float yawDeg, float forward, float strafe, boolean sprint, boolean jump) {
+        float[] mv = baritone.utils.AnalogMovement.moveVector(forward, strafe);
+        float[] in = baritone.utils.AnalogMovement.vanillaModify(mv[0], mv[1], 1);
+        tick(yawDeg, baritone.utils.AnalogMovement.hasForwardImpulse(mv[1]) ? 1 : 0, 0, in[1], in[0], sprint, jump);
+    }
+
+    /** Key ticks pass NaN for the analog pair (zza, xxa), which leaves them on the key formula unchanged. */
+    private void tick(float yawDeg, int input, int strafe, float zza, float xxa, boolean sprint, boolean jump) {
+        boolean analog = !Float.isNaN(zza);
         boolean forward = input > 0;
         if (Math.abs(vx) < 0.003) vx = 0;
         if (Math.abs(vy) < 0.003) vy = 0;
@@ -124,7 +142,13 @@ public final class PlayerSim {
         } else {
             speed = sprinting ? 0.026 : 0.02;
         }
-        if (input != 0 || strafe != 0) {
+        if (analog) { // Ostinato: Entity.getInputVector; vanillaModify already caps the length at 1
+            if ((double) zza * zza + (double) xxa * xxa >= 1.0E-7) {
+                double fx = xxa * speed, fz = zza * speed;
+                vx += fx * cos - fz * sin;
+                vz += fz * cos + fx * sin;
+            }
+        } else if (input != 0 || strafe != 0) {
             double fz = 0.98 * input, fx = 0.98 * strafe;
             double len = Math.sqrt(fx * fx + fz * fz);
             if (len > 1) {

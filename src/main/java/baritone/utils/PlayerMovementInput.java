@@ -31,6 +31,11 @@ public class PlayerMovementInput extends ClientInput {
 
     @Override
     public void tick() {
+        float[] analog = handler.analogMove();
+        if (analog != null) {
+            tickAnalog(analog[0], analog[1]);
+            return;
+        }
         float leftImpulse = 0.0F;
         float forwardImpulse = 0.0F;
         boolean jumping = handler.isInputForcedDown(Input.JUMP); // oppa gangnam style
@@ -65,5 +70,17 @@ public class PlayerMovementInput extends ClientInput {
         boolean sprinting = handler.isInputForcedDown(Input.SPRINT);
 
         this.keyPresses = new net.minecraft.world.entity.player.Input(up, down, left, right, jumping, sneaking, sprinting);
+    }
+
+    /**
+     * Ostinato: a thumbstick's worth of input, as Controlify feeds it: moveVector limited (not normalised) to length
+     * 1, the direction booleans from the signs. Sneak is left to vanilla (modifyInput scales by SNEAKING_SPEED).
+     */
+    private void tickAnalog(float forward, float strafe) {
+        float[] mv = AnalogMovement.moveVector(forward, strafe);
+        this.moveVector = new Vec2(mv[0], mv[1]);
+        boolean sneaking = handler.isInputForcedDown(Input.SNEAK) || handler.onMagma();
+        this.keyPresses = new net.minecraft.world.entity.player.Input(mv[1] > 0, mv[1] < 0, mv[0] > 0, mv[0] < 0,
+                handler.isInputForcedDown(Input.JUMP), sneaking, handler.isInputForcedDown(Input.SPRINT));
     }
 }

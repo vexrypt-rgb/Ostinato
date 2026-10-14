@@ -81,6 +81,39 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
     @Override
     public final void clearAllKeys() {
         this.inputForceStateMap.clear();
+        this.analogSet = false; // Ostinato
+    }
+
+    // Ostinato: analog movement, an optional refinement on top of the keys (see AnalogMovement)
+    private boolean analogSet;
+    private float analogForward, analogStrafe;
+
+    /** Whether the analogMovement setting allows analog values here (single-player/LAN host vs remote server). */
+    public boolean analogAllowed() {
+        return AnalogMovement.allowed(AnalogMovement.Mode.parse(Baritone.settings().analogMovement.value),
+                ctx.minecraft() != null && ctx.minecraft().hasSingleplayerServer());
+    }
+
+    /**
+     * Holds this forward/strafe (each in [-1, 1], +strafe is left) instead of the movement keys for the next input
+     * tick only (cleared by that tick, {@link #clearAllKeys()} or {@link #clearAnalog()}). Callers set the matching keys too: when analog is not
+     * allowed the keys alone drive, exactly as before.
+     */
+    public void setAnalogMove(float forward, float strafe) {
+        analogSet = true;
+        analogForward = forward;
+        analogStrafe = strafe;
+    }
+
+    public void clearAnalog() {
+        analogSet = false;
+    }
+
+    /** {forward, strafe} to feed this tick, or null for the plain key path. */
+    float[] analogMove() {
+        if (!analogSet) return null;
+        analogSet = false; // one tick only: whoever drives next sets it again or gets plain keys
+        return analogAllowed() ? new float[]{analogForward, analogStrafe} : null;
     }
 
     /** Standing on magma: sneaking is the only thing that stops it burning us, whatever else is steering. */

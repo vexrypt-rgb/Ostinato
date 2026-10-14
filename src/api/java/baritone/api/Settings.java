@@ -2034,6 +2034,14 @@ public final class Settings {
     public final Setting<Boolean> kinematicTrace = new Setting<>(false);
 
     /**
+     * Ostinato: analog movement. OFF: only the 8 key directions. SINGLEPLAYER_ONLY (default): in single-player and
+     * LAN worlds this client hosts the kinematic controller may also hold any forward/strafe value in [-1, 1], like a
+     * controller stick, to refine narrow landings and edge takeoffs; never on a remote server. ALWAYS: everywhere
+     * (servers may flag non-keyboard movement). Keys stay the primary path; everything must work with OFF.
+     */
+    public final Setting<String> analogMovement = new Setting<>("SINGLEPLAYER_ONLY");
+
+    /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.
      * Codes: M01 kinematic stuck, M02 off path, M03 movement timeout, M04 movement failed.
      */

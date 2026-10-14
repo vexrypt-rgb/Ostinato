@@ -90,6 +90,13 @@ public final class KinematicController {
     /** Head steering: the camera is a simulated hand, so rollouts model where it will really point. */
     /** Air strafe the rollouts apply for their first ticks while airborne: +1 A, -1 D. */
     private int rolloutStrafe;
+    /**
+     * Ostinato analog: when not NaN, the rollouts hold this forward/strafe (stick values) for their first airborne
+     * ticks instead of forward + rolloutStrafe. Only ever set when the analogMovement setting allows it.
+     */
+    private float rolloutAnalogF = Float.NaN, rolloutAnalogS;
+    /** Ostinato analog: candidate air sticks tried after the A/D keys, {forward, strafe}. */
+    private static final float[][] AIR_STICKS = {{1, 0.25f}, {1, -0.25f}, {1, 0.5f}, {1, -0.5f}, {0.5f, 0}, {0.5f, 0.25f}, {0.5f, -0.25f}, {0, 0}};
     private boolean head;
     private float camYaw, camVel0;
     private double wander;
@@ -279,6 +286,7 @@ public final class KinematicController {
         }
         boolean bestJump = bestDelay == 0 && real.onGround;
         int strafe = 0;
+        float[] stick = null; // Ostinato analog
         if (!real.onGround && bestScore > here[0] + 0.05) {
             // micro adjustment in the air, as a player taps A or D: the camera is slow, a strafe acts next tick
             double base = bestScore;
@@ -291,6 +299,19 @@ public final class KinematicController {
                 }
             }
             rolloutStrafe = 0;
+            if (baritone.getInputOverrideHandler().analogAllowed()) {
+                // Ostinato analog: a finer stick on top of the keys' choice; it has to beat the keys clearly
+                for (float[] st : AIR_STICKS) {
+                    rolloutAnalogF = st[0];
+                    rolloutAnalogS = st[1];
+                    double sc = rollout(best, bestDelay, bestShort, here[0]);
+                    if (sc > base + 0.03 && holdsWithMargin(best, bestDelay, here[0])) {
+                        base = sc;
+                        stick = st;
+                    }
+                }
+                rolloutAnalogF = Float.NaN;
+            }
         }
         boolean committed = !real.onGround && ctx.player().tickCount - lastDrivenTick <= 1;
         if (bestScore <= here[0] + 0.05) {
@@ -321,6 +342,9 @@ public final class KinematicController {
         baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, bestJump);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_LEFT, strafe > 0);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_RIGHT, strafe < 0);
+        if (stick != null && bestScore > here[0] + 0.05) {
+            baritone.getInputOverrideHandler().setAnalogMove(stick[0], stick[1]); // Ostinato analog
+        }
         return newPos;
     }
 
@@ -350,9 +374,16 @@ public final class KinematicController {
             st = ctx.world().getBlockState(feet.below());
         }
         double reach = 0.3 + MovementHelper.collisionWidth(st) / 2 - NARROW_OVERLAP;
-        for (int sp = 0; sp <= 1; sp++) {
+        // Ostinato analog: keys first (walk/sprint, key air steering); only then, when allowed, plans with stick air
+        // steering, then a partial stick on the ground (a slower walk that leaves from exactly the right spot)
+        boolean analog = baritone.getInputOverrideHandler().analogAllowed();
+        float[] groundMags = analog ? new float[]{1, 0.7f, 0.45f} : new float[]{1};
+        for (int pass = 0; pass < (analog ? 2 + groundMags.length - 1 : 1); pass++) {
+          boolean stickAir = pass > 0;
+          float mag = pass <= 1 ? 1 : groundMags[pass - 1];
+          for (int sp = 0; sp <= 1; sp++) {
             for (int delay = 0; delay <= 12; delay++) {
-                if (narrowLands(sp == 1, delay, top, cx, cz, reach)) {
+                if (narrowLands(sp == 1, delay, top, cx, cz, reach, mag, stickAir)) {
                     float yaw = (float) Math.toDegrees(Math.atan2(-(cx - real.x), cz - real.z));
                     baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
                     InputOverrideHandler in = baritone.getInputOverrideHandler();
@@ -360,33 +391,49 @@ public final class KinematicController {
                     in.setInputForceState(Input.MOVE_FORWARD, true);
                     in.setInputForceState(Input.SPRINT, sp == 1);
                     in.setInputForceState(Input.JUMP, delay == 0);
+                    if (mag < 1) {
+                        in.setAnalogMove(mag, 0);
+                    }
+                    narrowStickAir = stickAir;
                     if (delay == 0) {
                         narrowFlight = true;
                         narrowJumpTick = ctx.player().tickCount;
                     }
                     lastDrivenTick = ctx.player().tickCount;
                     if (Baritone.settings().kinematicTrace.value) {
-                        System.out.printf("KTRACE narrowTakeoff sprint=%b delay=%d reach=%.3f%n", sp == 1, delay, reach);
+                        System.out.printf("KTRACE narrowTakeoff sprint=%b delay=%d reach=%.3f stickAir=%b mag=%.2f%n", sp == 1, delay, reach, stickAir, mag);
                     }
                     return newPos;
                 }
             }
+          }
         }
         return -1;
     }
 
     static final double NARROW_OVERLAP = 0.05;
     private boolean narrowFlight;
+    /** Ostinato analog: the takeoff that is flying was planned with stick air steering ({@link #stickArrive}). */
+    private boolean narrowStickAir;
     private int narrowJumpTick;
 
     private boolean narrowLands(boolean sprint, int delay, double top, double cx, double cz, double reach) {
+        return narrowLands(sprint, delay, top, cx, cz, reach, 1, false);
+    }
+
+    /** Ostinato analog: {@code mag} < 1 walks on a partial stick; {@code stickAir} flies {@link #stickArrive}. */
+    private boolean narrowLands(boolean sprint, int delay, double top, double cx, double cz, double reach, float mag, boolean stickAir) {
         sim.copyFrom(real);
         boolean air = false;
         for (int t = 0; t < delay + 40; t++) {
             float yaw = (float) Math.toDegrees(Math.atan2(-(cx - sim.x), cz - sim.z));
             if (t <= delay) {
                 if (!sim.onGround) return false; // walked off the edge before the jump
-                sim.tick(yaw, 1, sprint, t == delay);
+                if (mag < 1) {
+                    sim.tickAnalog(yaw, mag, 0, sprint, t == delay);
+                } else {
+                    sim.tick(yaw, 1, sprint, t == delay);
+                }
                 continue;
             }
             if (!sim.onGround) air = true;
@@ -395,6 +442,10 @@ public final class KinematicController {
             }
             if (sim.y < top - 1.0) return false;
             double d = Math.hypot(cx - sim.x, cz - sim.z);
+            if (stickAir) {
+                sim.tickAnalog(yaw, stickArrive(d, Math.hypot(sim.vx, sim.vz)), 0, false, false);
+                continue;
+            }
             int a = airArrive(d, Math.hypot(sim.vx, sim.vz));
             sim.tick(yaw, a, false, false);
         }
@@ -404,6 +455,16 @@ public final class KinematicController {
     /** Ostinato: mid-air over a narrow landing: 1 hold forward toward its middle, -1 brake, 0 coast. */
     static boolean needsStepUp(double floor, double feetY) {
         return floor > feetY + 0.1;
+    }
+
+    /**
+     * Ostinato analog: proportional air steering onto a narrow landing. Air drag leaves 0.91 a tick, so coasting
+     * from speed v covers about 10v; ask for the stick that brings the speed to d / 10, a full stick being
+     * 0.98 * 0.02 a tick.
+     */
+    static float stickArrive(double d, double speed) {
+        double want = d / 10.1;
+        return (float) Math.max(-1, Math.min(1, (want - speed) / (0.98 * 0.02)));
     }
 
     static int airArrive(double d, double speed) {
@@ -428,6 +489,10 @@ public final class KinematicController {
             int a = airArrive(d, speed);
             in.setInputForceState(Input.MOVE_FORWARD, a > 0 && diff < 60);
             in.setInputForceState(Input.MOVE_BACK, a < 0);
+            if (narrowStickAir && narrowFlight && in.analogAllowed()) {
+                float f = stickArrive(d, speed); // Ostinato analog: fly the plan the takeoff was checked with
+                in.setAnalogMove(f > 0 && diff >= 60 ? 0 : f, 0);
+            }
             return newPos;
         }
         in.setInputForceState(Input.MOVE_FORWARD, speed < want && diff < 60 && d > 0.12);
@@ -489,7 +554,11 @@ public final class KinematicController {
                 camVel = vel[0];
                 want = cam;
             }
-            sim.tick(want, 1, !sim.onGround && t < 4 ? rolloutStrafe : 0, true, jump);
+            if (!Float.isNaN(rolloutAnalogF) && !sim.onGround && t < 4) {
+                sim.tickAnalog(want, rolloutAnalogF, rolloutAnalogS, true, jump); // Ostinato analog
+            } else {
+                sim.tick(want, 1, !sim.onGround && t < 4 ? rolloutStrafe : 0, true, jump);
+            }
             if (sim.collidedH && !wasBumping && t < HORIZON) {
                 bumps++; // grazing a wall or trunk cancels sprint (and the sprint-jump boost) in vanilla
             }
