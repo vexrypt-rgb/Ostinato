@@ -137,6 +137,7 @@ public final class PkTest implements AbstractGameEventListener {
         s.movementBackend.value = "baritone"; s.slowKinematic.value = false;
         boolean phys = MODE.equals("physics");
         s.physicsTravel.value = phys; s.kinematicTravel.value = !phys;
+        s.kinematicTrace.value = GOALS != null && GOALS.contains("drill"); // SIMTRACE: sim vs real per jump tick
         GameType gt = mc.getSingleplayerServer().getDefaultGameType();
         GameType use = (gt == GameType.CREATIVE || gt == GameType.SPECTATOR) ? GameType.ADVENTURE : gt;
         run("gamemode " + use.getName() + " @p");
@@ -236,7 +237,10 @@ public final class PkTest implements AbstractGameEventListener {
         Attempt a = pending != null ? pending : active;
         if (pending != null) { finish(pending, false, why); pending = null; active = null; } else closeAttempt(false, why);
         b.getPathingBehavior().cancelEverything();
-        BlockPos from = a != null ? a.src : lastGood;
+        Level lv = Minecraft.getInstance().level;
+        // only a spot the player can stand on: a jump's src can be logged mid-air when the executor moves on in flight
+        BlockPos from = a != null && solid(lv, a.src.below()) ? a.src : lastGood;
+        if (from != null && !solid(lv, from.below())) from = checkpoint;
         if (from == null) { goalFail(why); return; }
         int n = jumpFails.merge(from, 1, Integer::sum);
         if (a != null && n >= MAX_FAILS) {
@@ -319,7 +323,7 @@ public final class PkTest implements AbstractGameEventListener {
             activeMv = mv;
             if (mv != null && JUMPS.contains(mv.getClass().getSimpleName())) open(mc, mv);
         }
-        if (p.onGround() && active == null && pending == null) lastGood = p.blockPosition();
+        if (p.onGround() && active == null && pending == null && solid(mc.level, p.blockPosition().below())) lastGood = p.blockPosition();
         Attempt judge = pending != null ? pending : active;
         if (judge != null && pos.y < Math.min(judge.src.y, judge.dst.y) - 2.5) { falls++; fellOff("fall"); return; }
         double dist = pos.distanceTo(Vec3.atBottomCenterOf(step().pos()));
@@ -327,6 +331,7 @@ public final class PkTest implements AbstractGameEventListener {
         else if (tick - bestTick > 600) {
             BlockPos back = checkpoint != null ? checkpoint : lastGood;
             say("PK STUCK " + p.blockPosition().toShortString() + " goal " + step().pos().toShortString());
+            if (++stuckCount % 3 == 0) alert("stuck:" + stuckCount, "STUCK x" + stuckCount + " at " + p.blockPosition().toShortString() + " goal " + step().pos().toShortString());
             if (pending != null) finish(pending, false, "stuck");
             pending = null; active = null;
             b.getPathingBehavior().cancelEverything();
@@ -338,7 +343,7 @@ public final class PkTest implements AbstractGameEventListener {
             return;
         }
         if (b.getPathingBehavior().getCurrent() == null && !b.getPathingBehavior().getInProgress().isPresent()) {
-            if (++idleNoPlan == 60 && b.getCustomGoalProcess().isActive()) { say("PK IDLE no path running, repath"); reissue = true; }
+            if (++idleNoPlan == 60 && b.getCustomGoalProcess().isActive()) { say("PK IDLE no path running, repath"); reissue = true; alert("idle:" + goalNo, "IDLE goal " + goalNo + " " + step().pos().toShortString()); }
         } else idleNoPlan = 0;
         if (idleNoPlan > 120) { idleNoPlan = 0; goalFail("nopath"); return; }
         if (!b.getCustomGoalProcess().isActive() && !b.getPathingBehavior().isPathing()) { if (++idle > 60) goalFail("nopath"); }
@@ -349,7 +354,9 @@ public final class PkTest implements AbstractGameEventListener {
     private boolean atGoalPos(Vec3 v) { return atGoal(v) || v.distanceToSqr(step().x + 0.5, step().y, step().z + 0.5) < 9; }
 
     private void reachedGoal() {
+        var pl = Minecraft.getInstance().player;
         if (pending != null) finish(pending, true, "");
+        if (active != null && landed(pl, active.dst)) finish(active, true, "");
         pending = null; active = null;
         reached++;
         checkpoint = step().pos();
@@ -381,9 +388,44 @@ public final class PkTest implements AbstractGameEventListener {
         if (active != null) { finish(active, ok, why); active = null; }
     }
 
+    private final Map<String, int[]> tally = new HashMap<>();
+    private final Map<String, Map<String, Integer>> tallyWhy = new HashMap<>();
+    private final Set<String> alerted = new HashSet<>();
+    private int noplanStreak, stuckCount;
+
+    /** Live trouble: a type failing 3+ times or under 50% after 4 tries, a no-plan streak, repeated STUCK/IDLE. */
+    private void alert(String key, String text) {
+        if (!alerted.add(key)) return;
+        String line = "PK ALERT " + text + " world=" + WORLD + " mode=" + MODE + " section=" + drillTag;
+        say(line);
+        try {
+            Path dir = Minecraft.getInstance().gameDirectory.toPath().resolve("pk-results");
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve("alerts.txt"), LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")) + " " + line + "\n",
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+        } catch (Exception ignored) {}
+    }
+
+    private void trackTrouble(Attempt a) {
+        for (String tg : a.tags) {
+            if (tg.startsWith("drill:") || tg.equals("flat")) continue;
+            int[] c = tally.computeIfAbsent(tg, k -> new int[2]);
+            c[0]++; if (a.ok) c[1]++;
+            if (!a.ok) tallyWhy.computeIfAbsent(tg, k -> new HashMap<>()).merge(a.why, 1, Integer::sum);
+            int fails = c[0] - c[1];
+            if (fails >= 3 || (c[0] >= 4 && c[1] * 2 < c[0])) {
+                String top = tallyWhy.getOrDefault(tg, Map.of()).entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("-");
+                alert("type:" + tg + ":" + (fails >= 6 ? 2 : 1), tg + " " + c[1] + "/" + c[0] + " " + top);
+            }
+        }
+        if (!a.ok && a.why.equals("noplan")) { if (++noplanStreak >= 3) alert("noplan:" + attempts.size() / 10, "noplan-streak " + noplanStreak + " last=" + String.join(",", a.tags)); }
+        else noplanStreak = 0;
+    }
+
     private void finish(Attempt a, boolean ok, String why) {
         a.ok = ok; a.why = ok ? "" : why; a.ticks = tick - activeStart;
         attempts.add(a);
+        trackTrouble(a);
         if (ok) lastGood = a.dst;
         say("PK JUMP " + String.join(",", a.tags) + " " + (ok ? "ok" : "fail " + why) + " " + a.cls
                 + " " + a.src.toShortString() + "->" + a.dst.toShortString() + " t=" + a.ticks);
