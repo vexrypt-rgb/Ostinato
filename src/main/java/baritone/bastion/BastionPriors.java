@@ -152,6 +152,8 @@ public final class BastionPriors {
     /** Stables route: start at the top of the middle stairs; take a good gap's gold if there is one, else a triple's
      * 4 gold blocks; then chests. */
     public static List<StablesStep> stablesRoute(boolean anyGoodGap, boolean anyTriple) {
+        // both seen (audit #3): the good-gap gold, then the triple's gold and chests, all before trading
+        if (anyGoodGap && anyTriple) return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.GOOD_GAP_GOLD, StablesStep.TRIPLE_GOLD, StablesStep.TRIPLE_CHESTS, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
         if (anyGoodGap) return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.GOOD_GAP_GOLD, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
         if (anyTriple) return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.TRIPLE_GOLD, StablesStep.TRIPLE_CHESTS, StablesStep.MIDDLE_BOTTOM_CHEST);
         return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
@@ -194,5 +196,40 @@ public final class BastionPriors {
     /** Eat a golden apple: hurt, no regeneration running, a hoglin within melee range. */
     public static boolean eatGapple(float hp, boolean regen, int hoglinsWithin4) {
         return hp < 10 && !regen && hoglinsWithin4 > 0;
+    }
+
+    /** Workbench grid slots (1-9, row major) for a helmet: the top row and both sides of the middle row. */
+    public static final int[] HELMET_GRID = {1, 2, 3, 4, 6};
+
+    /** A trade-location step is over: time used, gold gone with nothing still admiring, or nothing to give. */
+    public static boolean tradeAtDone(long ticks, int seconds, int ingots, int blocks, int admiring) {
+        if (ticks > seconds * 20L) return true;
+        return ingots + blocks == 0 && (admiring == 0 || ticks > 200);
+    }
+
+    /** Centres of chest groups of 3 or more (chests within 2 of each other at the same height): triple ramparts. */
+    public static java.util.List<int[]> tripleCentres(java.util.List<int[]> chests) {
+        java.util.List<int[]> out = new java.util.ArrayList<>();
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < chests.size(); i++) {
+            if (seen.contains(i)) continue;
+            java.util.List<Integer> g = new java.util.ArrayList<>();
+            java.util.Deque<Integer> q = new java.util.ArrayDeque<>();
+            q.add(i); seen.add(i);
+            while (!q.isEmpty()) {
+                int a = q.poll(); g.add(a);
+                for (int j = 0; j < chests.size(); j++) {
+                    if (seen.contains(j)) continue;
+                    int[] p = chests.get(a), o = chests.get(j);
+                    if (p[1] == o[1] && Math.abs(p[0] - o[0]) <= 2 && Math.abs(p[2] - o[2]) <= 2) { seen.add(j); q.add(j); }
+                }
+            }
+            if (g.size() >= 3) {
+                int x = 0, y = 0, z = 0;
+                for (int a : g) { x += chests.get(a)[0]; y += chests.get(a)[1]; z += chests.get(a)[2]; }
+                out.add(new int[]{Math.round(x / (float) g.size()), y / g.size(), Math.round(z / (float) g.size())});
+            }
+        }
+        return out;
     }
 }

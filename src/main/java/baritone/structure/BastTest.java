@@ -101,15 +101,8 @@ public final class BastTest implements AbstractGameEventListener {
         if (state == 1) {
             if (ticks < 200) return;
             run("clear @p");
-            run("replaceitem entity @p armor.feet golden_boots");
-            run("replaceitem entity @p armor.head iron_helmet");
-            run("replaceitem entity @p armor.chest iron_chestplate");
-            run("replaceitem entity @p armor.legs iron_leggings");
-            run("give @p iron_pickaxe");
-            run("give @p diamond_sword");
-            run("give @p cooked_beef 16");
-            run("give @p gold_ingot 24"); run("give @p gold_block 2"); run("give @p netherrack 64"); run("give @p soul_sand 32");
-            run("give @p golden_apple 2"); run("give @p lava_bucket"); run("give @p bucket");
+            // kit presets: "run" (default) is a realistic 1.16.1 speedrun nether entry, gold comes from the bastion; "rich" is the old test kit
+            for (String c : BastKit.commands(System.getProperty("ostinato.basttest.kit", "run"))) run(c);
             run("gamemode survival @p");
             run("difficulty easy");
             if (Integer.getInteger("ostinato.basttest.gold", 0) > 0) { baritone.bastion.BastionSettings.TARGETS.put("ender_pearl", 999); baritone.bastion.BastionSettings.exitWhenDone = false; }
@@ -142,7 +135,7 @@ public final class BastTest implements AbstractGameEventListener {
         if (stallAt == null || stallTick > ticks || p.getPositionVec().distanceTo(stallAt) > 3 || carried != stallCarried) { stallAt = p.getPositionVec(); stallTick = ticks; stallCarried = carried; }
         boolean stalled = ticks - stallTick > Integer.getInteger("ostinato.basttest.stallticks", 3600);
         if (stalled) say("BAST STALL t=" + ticks + " since=" + stallTick + " pos=" + p.getPosition().getCoordinatesAsString() + " st=" + st);
-        if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(12000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended || stalled) {
+        if (ticks >= Integer.getInteger("ostinato.basttest.maxticks", Math.max(14000, (Integer.getInteger("ostinato.basttest.budget", 0) + 120) * 20)) || ended || stalled) {
             Map<String, Integer> m = new TreeMap<>();
             for (int i = 0; i < 36; i++) { ItemStack s = p.inventory.getStackInSlot(i); if (!s.isEmpty()) m.merge(baritone.process.BastionProcess.itemIdPublic(s), s.getCount(), Integer::sum); }
             List<DetectedStructure> d = b.getStructureBehavior().find("bastion_remnant");
@@ -244,4 +237,5 @@ public final class BastTest implements AbstractGameEventListener {
         for (Direction d : Direction.values()) if (lvl.getFluidState(f.offset(d)).isTagged(FluidTags.LAVA)) return false;
         return !lvl.getFluidState(f).isTagged(FluidTags.LAVA);
     }
+
 }

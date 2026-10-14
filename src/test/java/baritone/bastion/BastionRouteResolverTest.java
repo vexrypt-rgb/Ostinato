@@ -28,8 +28,8 @@ public class BastionRouteResolverTest {
         List<Point> pts = J8.listOf(high, s1a, s1b, s2a, s2b, d1, d2, single, outer);
         List<Target> t = BastionRouteResolver.resolve("treasure", BastionRoutes.treasure(false, false, false), 0, 60, 0, 20, 60, 0, pts);
         assertEquals(pts.size(), t.size());
-        assertEquals(Step.MINE_HIGH_GOLD_CRAFT_INGOTS, t.get(0).step());
-        assertEquals(high, t.get(0).point());
+        // the high gold is taken by the step's op from the pillar, not claimed as the bastion's highest (audit #7)
+        assertNotEquals(Step.MINE_HIGH_GOLD_CRAFT_INGOTS, t.get(0).step());
         assertEquals(Step.MINE_GOLD_SIDE_1, stepOf(t, s1a)); // we start on the +x side
         assertEquals(Step.MINE_GOLD_SIDE_2, stepOf(t, s2b));
         assertEquals(Step.LOOT_DOUBLE, stepOf(t, d1));
@@ -108,6 +108,6 @@ public class BastionRouteResolverTest {
     public void housingIntermediateTopTripleTogether() {
         List<Target> t = BastionRouteResolver.resolve("housing", BastionRoutes.housing(BastionRoutes.HousingVariant.INTERMEDIATE), 0, 50, 0, -23, 60, 0, housingFromTemplates());
         for (int i = 0; i < 3; i++) assertEquals(Step.LOOT_TOP_TRIPLE, t.get(i).step());
-        assertEquals(9, t.stream().filter(x -> x.step() == Step.GOLD_ELEVATOR).count());
+        assertEquals(9, t.stream().filter(x -> x.step() == Step.ELEVATOR_GOLD).count());
     }
 }

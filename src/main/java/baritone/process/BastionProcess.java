@@ -994,6 +994,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean angered;
 
     private long lastCraft = -100;
+    private int rhythmIdx;
+    private BlockPos rhythmGold;
 
     /** One gold block to 9 ingots through the player's 2x2 grid (container slots: 0 result, 1-4 grid, 9-35 main, 36-44 hotbar). */
     private boolean craftIngots(PlayerEntity me) {
@@ -2682,13 +2684,14 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
         if ("housing".equals(layout())) {
             BastionRoutes.HousingVariant hv = BastionRoutes.housingVariant(floorCells[0], floorCells[1], BastionSettings.intermediateRoutes);
             route = BastionRoutes.housing(hv);
-        } else route = BastionRoutes.forLayout(layout(), false, BastionSettings.intermediateRoutes);
+        } else route = BastionRoutes.forLayout(layout(), false, BastionSettings.intermediateRoutes, features(chests, gold));
+        BastionRouteResolver.intermediate = BastionSettings.intermediateRoutes;
         List<BastionRouteResolver.Target> targets = BastionRouteResolver.resolve(layout(), route, bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
         List<BastionPlan.Point> ordered = new ArrayList<>();
         planStep.clear();
         for (BastionRouteResolver.Target t : targets) { ordered.add(t.point()); if (t.step() != null) planStep.put(new BlockPos(t.point().x(), t.point().y(), t.point().z()), t.step()); }
         plan = ordered;
-        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; routeStart = ticks; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
+        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; routeStart = ticks; frameSet = false; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
     }
 
     // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
@@ -2715,33 +2718,48 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
         return false;
     }
 
+    /** Route-fixed facing (audit #10): left/right/behind keep the meaning they had when the route began. */
+    private boolean frameSet;
+    /** Where the route's piglin pit was dug (we stood beside it): trade-location steps return here. */
+    private BlockPos pitSpot;
+    private BastionRoutes.Step noTargetLogged;
+
     /** Walk the route: block steps are left to lootChests while they have targets; scripted steps run their ops here. */
     private PathingCommand runRoute(PlayerEntity me, List<LivingEntity> near) {
         if (route.isEmpty() || !BastionSettings.scriptedRoutes) return null;
         while (routeIdx < route.size()) {
             BastionRoutes.Step s = route.get(routeIdx);
             List<BastionScript.Op> ops = BastionScript.ops(s);
-            if (ops.isEmpty()) {
-                // a block step is over when its targets are gone, or when the loot loop has been working on another
-                // step's targets for 20 s (r144: top chests deferred behind a brute, the route never moved past them)
-                if (blockStep != s) { blockStep = s; blockStepIdle = ticks; }
+            if (ops.isEmpty() || scriptStep == s && scriptRun != null && scriptRun.done()) {
+                // a block step (or a scripted step whose ops are done but whose gold/chests remain) is over when its
+                // targets are gone, or when the loot loop has been working on another step's targets for 20 s
+                if (blockStep != s) {
+                    blockStep = s; blockStepIdle = ticks;
+                    if (ops.isEmpty() && !stepHasTargets(s) && noTargetLogged != s) { noTargetLogged = s; logDirect("Bastion: !! step " + s + " has no targets, finished with no effect"); }
+                }
                 if (currentStep == s) blockStepIdle = ticks;
                 if (stepHasTargets(s) && ticks - blockStepIdle < 400) return null;
-                if (stepHasTargets(s)) logDirect("Bastion: step " + s + " left for later, the loot loop is elsewhere");
+                if (stepHasTargets(s)) logDirect("Bastion: !! step " + s + " left for later, the loot loop is elsewhere");
+                if (!ops.isEmpty()) logDirect("Bastion: step " + s + " done" + (scriptRun.skipped() > 0 ? ", " + scriptRun.skipped() + " ops skipped" : "") + (scriptRun.noEffect() ? " !! with no effect" : ""));
                 routeIdx++;
+                scriptStep = null;
                 continue;
             }
             if (scriptStep != s) {
                 scriptStep = s;
                 scriptRun = new BastionScript.Runner(ops);
                 scriptAt = me.getPosition();
-                int dx = bastion.pos.getX() - scriptAt.getX(), dz = bastion.pos.getZ() - scriptAt.getZ();
-                if (Math.abs(dx) >= Math.abs(dz)) { sfx = dx >= 0 ? 1 : -1; sfz = 0; } else { sfx = 0; sfz = dz >= 0 ? 1 : -1; }
-                opLeft = -1; opLava = null;
+                if (!frameSet) {
+                    int[] f = BastionScript.facing(bastion.pos.getX() - scriptAt.getX(), bastion.pos.getZ() - scriptAt.getZ());
+                    sfx = f[0]; sfz = f[1]; frameSet = true;
+                }
+                opLeft = -1; opLava = null; carryThrow = 0; tradeAtStart = -1;
                 logDirect("Bastion: step " + s + " (" + ops.size() + " ops, facing " + sfx + "," + sfz + ")");
             }
             if (scriptRun.done()) {
-                logDirect("Bastion: step " + s + " done" + (scriptRun.skipped() > 0 ? ", " + scriptRun.skipped() + " ops skipped" : ""));
+                if (s == BastionRoutes.Step.PIGLIN_PIT || s == BastionRoutes.Step.HOUSING_PIT) { pitSpot = scriptAt; logDirect("Bastion: pit spot " + pitSpot.getCoordinatesAsString()); }
+                if (stepHasTargets(s)) { blockStep = null; continue; } // its gold/chests next, as a block step
+                logDirect("Bastion: step " + s + " done" + (scriptRun.skipped() > 0 ? ", " + scriptRun.skipped() + " ops skipped" : "") + (scriptRun.noEffect() ? " !! with no effect" : ""));
                 routeIdx++;
                 scriptStep = null;
                 continue;
@@ -2751,11 +2769,40 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
             opCmd = null;
             BastionScript.Result r = execOp(me, near, s, op);
             scriptRun.report(r);
-            if (scriptRun.index() != idx) opLeft = -1;
-            status = "route " + s + " op " + (idx + 1) + "/" + ops.size() + " " + op.kind() + (r == BastionScript.Result.FAILED ? " (failed, skipping)" : "");
+            String ev = scriptRun.event();
+            if (ev != null) logDirect("Bastion: !! step " + s + " " + ev);
+            if (scriptRun.index() != idx) {
+                opLeft = -1;
+                if (r == BastionScript.Result.DONE && BastionScript.reanchors(op.kind())) scriptAt = me.getPosition();
+                restoreParkour();
+            }
+            status = "route " + s + " op " + (idx + 1) + "/" + ops.size() + " " + op.kind() + (r == BastionScript.Result.FAILED ? " (failed)" : "");
             return opCmd != null ? opCmd : pause0();
         }
         return null;
+    }
+
+    /** Bridge triple ramparts, stables good gaps (gold behind chiseled blackstone) and triples, from the scan. */
+    private BastionRoutes.Features features(List<BlockPos> chests, List<BlockPos> gold) {
+        BastionRoutes.Features f = new BastionRoutes.Features();
+        List<int[]> cs = new ArrayList<>();
+        for (BlockPos c : chests) if (Math.hypot(c.getX() - bastion.pos.getX(), c.getZ() - bastion.pos.getZ()) <= 56) cs.add(new int[]{c.getX(), c.getY(), c.getZ()});
+        BlockPos at = ctx.player().getPosition();
+        int[] fc = BastionScript.facing(bastion.pos.getX() - at.getX(), bastion.pos.getZ() - at.getZ());
+        for (int[] t : BastionPriors.tripleCentres(cs)) {
+            int lat = -fc[1] * (t[0] - bastion.pos.getX()) + fc[0] * (t[2] - bastion.pos.getZ());
+            if (lat < 0) f.leftTriple = true; else f.rightTriple = true;
+            f.stablesTriple = true;
+        }
+        if ("stables".equals(layout())) {
+            boolean good = false;
+            for (BlockPos g : gold) {
+                for (BlockPos b : BlockPos.getAllInBoxMutable(g.add(-2, -2, -2), g.add(2, 2, 2))) if (ctx.world().getBlockState(b).getBlock() == Blocks.CHISELED_POLISHED_BLACKSTONE) { good = true; break; }
+                if (good) break;
+            }
+            f.leftGood = good; f.rightGood = good;
+        }
+        return f;
     }
 
     private BlockPos opCell(BastionScript.Op op) {
@@ -2784,6 +2831,8 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
             case MINE: return mineCell(me, opCell(op));
             case PILLAR: return pillarStep(me, op.n());
             case THROW: {
+                // craft first when the throw needs more ingots than we hold (treasure: the crossbow distraction)
+                if (ingotCount(me) < Math.max(1, op.n()) && me.inventory.count(Items.GOLD_BLOCK) > 0) { if (ticks - lastCraft >= 10 && craftIngots(me)) lastCraft = ticks; return BastionScript.Result.WORKING; }
                 int ingots = ingotCount(me);
                 if (opLeft < 0) { opLeft = op.n() == 0 ? ingots / 2 : op.n(); opThrowMark = distractions; }
                 opLeft -= distractions - opThrowMark;
@@ -2819,6 +2868,58 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
                 return r;
             }
             case LAVA_ON_PIGLIN: return lavaOnStraggler(me, near);
+            case CRAFT_ARMOR: return craftArmor(me);
+            case CRAFT_INGOTS: {
+                if (opLeft < 0) opLeft = op.n();
+                if (opLeft <= 0 || me.inventory.count(Items.GOLD_BLOCK) == 0) return BastionScript.Result.DONE;
+                if (ticks - lastCraft < 10) return BastionScript.Result.WORKING;
+                if (craftIngots(me)) { lastCraft = ticks; opLeft--; }
+                return BastionScript.Result.WORKING;
+            }
+            case MINE_GOLD_NEAR: {
+                BlockPos best = null;
+                BlockPos at = me.getPosition();
+                for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-5, -2, -5), at.add(5, 6, 5)))
+                    if (ctx.world().getBlockState(b).getBlock() == Blocks.GOLD_BLOCK && !lavaBeside(b) && (best == null || b.getY() > best.getY() || b.getY() == best.getY() && b.distanceSq(at) < best.distanceSq(at))) best = b.toImmutable();
+                if (best == null) return opLeft == 1 ? BastionScript.Result.DONE : BastionScript.Result.FAILED;
+                opLeft = 1;
+                BastionScript.Result r = mineCell(me, best);
+                return r == BastionScript.Result.DONE ? BastionScript.Result.WORKING : r; // DONE once no gold is left in reach
+            }
+            case JUMP: {
+                BlockPos c = opCell(op);
+                if (me.getPosition().equals(c)) return BastionScript.Result.DONE;
+                int[] back = BastionScript.toWorld(sfx, sfz, -1, 0, 0);
+                BlockPos gap = c.add(back[0], -1, back[2]);
+                if (!solid(c.down())) return placeCell(me, gap) == BastionScript.Result.FAILED ? BastionScript.Result.FAILED : BastionScript.Result.WORKING; // no landing: fill the gap
+                if (parkourSaved == null) { parkourSaved = BaritoneAPI.getSettings().allowParkour.value; BaritoneAPI.getSettings().allowParkour.value = true; }
+                opCmd = new PathingCommand(new GoalBlock(c), PathingCommandType.SET_GOAL_AND_PATH);
+                return BastionScript.Result.WORKING;
+            }
+            case TRADE_AT: {
+                if (tradeAtStart < 0) tradeAtStart = ticks;
+                int ingots = ingotCount(me), blocks = me.inventory.count(Items.GOLD_BLOCK);
+                if (BastionPriors.tradeAtDone(ticks - tradeAtStart, op.n(), ingots, blocks, admiring.size())) return BastionScript.Result.DONE;
+                PiglinEntity p = null;
+                for (LivingEntity e : near) if (e instanceof PiglinEntity && !((PiglinEntity) e).isChild() && e.isAlive() && !admiring.containsKey(e.getUniqueID()) && me.getDistance(e) <= 10 && me.canEntityBeSeen(e) && (p == null || me.getDistance(e) < me.getDistance(p))) p = (PiglinEntity) e;
+                status = "trading at the route spot";
+                if (p != null && ingots > 0) { PathingCommand d = distract(me, p); opCmd = d.commandType == PathingCommandType.SET_GOAL_AND_PATH ? null : d; }
+                return BastionScript.Result.WORKING;
+            }
+            case CARRY_UP: {
+                if (opLeft < 0) { opLeft = Math.min(op.n(), me.inventory.count(Items.GOLD_BLOCK)); carryThrow = opLeft * 9; if (opLeft == 0) return BastionScript.Result.FAILED; }
+                if (opLeft > 0) { if (ticks - lastCraft >= 10 && craftIngots(me)) { lastCraft = ticks; opLeft--; } return BastionScript.Result.WORKING; }
+                opLeft = 0;
+                if (carryThrow <= 0 || ingotCount(me) <= 0) return BastionScript.Result.DONE;
+                PiglinEntity p = null;
+                for (LivingEntity e : near) if (e instanceof PiglinEntity && !((PiglinEntity) e).isChild() && e.isAlive() && me.getDistance(e) <= 8 && (p == null || me.getDistance(e) < me.getDistance(p))) p = (PiglinEntity) e;
+                if (p == null) return BastionScript.Result.WORKING; // wait for the cup to fill (the op budget ends it)
+                int before = distractions;
+                PathingCommand d = distract(me, p);
+                opCmd = d.commandType == PathingCommandType.SET_GOAL_AND_PATH ? null : d;
+                carryThrow -= distractions - before;
+                return BastionScript.Result.WORKING;
+            }
             case WEAR_GOLD: {
                 if (wearingGold(me)) return BastionScript.Result.DONE;
                 return wearGold(me) ? BastionScript.Result.WORKING : BastionScript.Result.FAILED;
@@ -2843,20 +2944,76 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
     private BlockPos routeTarget(PlayerEntity me, BastionRoutes.Step s) {
         BlockPos at = me.getPosition();
         if (s == BastionRoutes.Step.TAKE_THIRD_BASALT_BRIDGE) {
-            // basalt bridge columns between us and the centre; lateral offset along our right-hand axis
+            // basalt bridge columns between us and the centre: a column is basalt at least 3 tall with air on top
+            // (walls and floors no longer count); neighbouring lateral offsets merge into one column
             List<BlockPos> tops = new ArrayList<>();
+            Map<Integer, Integer> height = new HashMap<>();
             for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-32, -10, -32), at.add(32, 6, 32))) {
-                if (!(ctx.world().getBlockState(b).getBlock() == Blocks.BASALT) && !(ctx.world().getBlockState(b).getBlock() == Blocks.POLISHED_BASALT)) continue;
-                if (!ctx.world().getBlockState(b.up()).isAir()) continue;
+                if (!basalt(b) || !ctx.world().getBlockState(b.up()).isAir()) continue;
+                int h = 1;
+                while (h < 8 && basalt(b.down(h))) h++;
+                if (h < 3) continue;
+                // between us and the centre only
+                int fwd = sfx * (b.getX() - at.getX()) + sfz * (b.getZ() - at.getZ());
+                if (fwd <= 0) continue;
                 tops.add(b.toImmutable());
+                int l = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ());
+                height.merge(l, h, Math::max);
             }
-            if (tops.isEmpty()) return null;
-            List<Integer> lat = new ArrayList<>();
-            for (BlockPos b : tops) { int l = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()); if (!lat.contains(l)) lat.add(l); }
-            int want = BastionScript.thirdFromLeft(lat);
+            List<Integer> cols = BastionScript.columns(height);
+            if (cols.isEmpty()) { logDirect("Bastion: !! no basalt bridge column found"); return null; }
+            int want = cols.get(Math.min(2, cols.size() - 1));
             BlockPos best = null;
-            for (BlockPos b : tops) if (-sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()) == want && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b;
+            for (BlockPos b : tops) { int l = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()); if ((l == want || l == want + 1) && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b; }
+            logDirect("Bastion: basalt columns at lateral " + cols + ", taking " + want);
             return best == null ? null : best.up();
+        }
+        if (s == BastionRoutes.Step.TRADE_AT_PIT || s == BastionRoutes.Step.TRADE || s == BastionRoutes.Step.TRADE_CORNER) {
+            // back to the route's pit (or where we stand when the route dug none)
+            return pitSpot != null ? pitSpot : at;
+        }
+        if (s == BastionRoutes.Step.TRADE_TRIPLE || s == BastionRoutes.Step.TRADE_SINGLE) {
+            // stand by the rampart chest group: a triple when there is one, else the nearest single chest
+            List<int[]> cs = new ArrayList<>();
+            for (BlockPos c : BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, new BlockOptionalMetaLookup(Blocks.CHEST), 64, 64, 64)) cs.add(new int[]{c.getX(), c.getY(), c.getZ()});
+            List<int[]> t = BastionPriors.tripleCentres(cs);
+            BlockPos best = null;
+            if (s == BastionRoutes.Step.TRADE_TRIPLE) for (int[] c : t) { BlockPos b = new BlockPos(c[0], c[1], c[2]); if (best == null || b.distanceSq(at) < best.distanceSq(at)) best = b; }
+            else for (int[] c : cs) { BlockPos b = new BlockPos(c[0], c[1], c[2]); if (best == null || b.distanceSq(at) < best.distanceSq(at)) best = b; }
+            return best == null ? at : standNear(best);
+        }
+        if (s == BastionRoutes.Step.TOP_OF_MIDDLE_STAIRS) {
+            // the highest stairs block within 12 of the centre with air above
+            BlockPos best = null;
+            for (BlockPos b : BlockPos.getAllInBoxMutable(bastion.pos.add(-12, -20, -12), bastion.pos.add(12, 24, 12)))
+                if (ctx.world().getBlockState(b).getBlock() instanceof net.minecraft.block.StairsBlock && ctx.world().getBlockState(b.up()).isAir() && ctx.world().getBlockState(b.up(2)).isAir() && (best == null || b.getY() > best.getY())) best = b.toImmutable();
+            return best == null ? null : best.up();
+        }
+        if (s == BastionRoutes.Step.HOUSING_ENTRY_BASALT_CUE) {
+            // the 2x1 basalt cue: basalt with basalt beside it at the same height, nearest; we stand on it
+            BlockPos best = null;
+            for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-16, -8, -16), at.add(16, 4, 16))) {
+                if (!basalt(b) || !ctx.world().getBlockState(b.up()).isAir() || !ctx.world().getBlockState(b.up(2)).isAir()) continue;
+                boolean pair = false;
+                for (Direction d : Direction.Plane.HORIZONTAL) if (basalt(b.offset(d)) && ctx.world().getBlockState(b.offset(d).up()).isAir()) pair = true;
+                if (pair && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b.toImmutable();
+            }
+            return best == null ? null : best.up();
+        }
+        if (s == BastionRoutes.Step.WALK_RIGHT_FORK) {
+            // right at the fork to the dead end: a standable cell on our right with walls on 3 sides
+            return deadEnd(at, 1, 12);
+        }
+        if (s == BastionRoutes.Step.ONE_BY_ONE) {
+            // the corner: a standable cell within 6 with walls on 2 adjacent sides
+            BlockPos best = null;
+            for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-6, -2, -6), at.add(6, 2, 6))) {
+                if (!standable(b)) continue;
+                int walls = 0; boolean adj = false; Direction prev = null;
+                for (Direction d : Direction.Plane.HORIZONTAL) if (solid(b.offset(d)) && solid(b.offset(d).up())) { walls++; if (prev != null && prev.getAxis() != d.getAxis()) adj = true; prev = d; }
+                if (walls >= 2 && adj && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b.toImmutable();
+            }
+            return best == null ? at : best;
         }
         if (s == BastionRoutes.Step.CROSS_BRICK_BRIDGE) {
             BlockPos best = null;
@@ -2868,6 +3025,130 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
             return best == null ? bastion.pos : best.up();
         }
         return bastion.pos;
+    }
+
+    private boolean basalt(BlockPos b) {
+        net.minecraft.block.Block k = ctx.world().getBlockState(b).getBlock();
+        return k == Blocks.BASALT || k == Blocks.POLISHED_BASALT;
+    }
+
+    private boolean standable(BlockPos b) {
+        return solid(b.down()) && ctx.world().getBlockState(b).isAir() && ctx.world().getBlockState(b.up()).isAir() && !lavaBeside(b);
+    }
+
+    /** A standable air cell next to the block (for chests), or the block itself. */
+    private BlockPos standNear(BlockPos b) {
+        for (Direction d : Direction.Plane.HORIZONTAL) if (standable(b.offset(d))) return b.offset(d);
+        return b;
+    }
+
+    /** A dead end on our side (side 1 = right, -1 = left) within r: standable, walls on 3 horizontal sides. */
+    private BlockPos deadEnd(BlockPos at, int side, int r) {
+        BlockPos best = null;
+        for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-r, -3, -r), at.add(r, 3, r))) {
+            int lat = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ());
+            if (Integer.signum(lat) != side || !standable(b)) continue;
+            int walls = 0;
+            for (Direction d : Direction.Plane.HORIZONTAL) if (solid(b.offset(d)) && solid(b.offset(d).up())) walls++;
+            if (walls >= 3 && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b.toImmutable();
+        }
+        if (best == null) logDirect("Bastion: !! no dead end found on the " + (side > 0 ? "right" : "left"));
+        return best;
+    }
+
+    private Boolean parkourSaved;
+    private int carryThrow;
+    private long tradeAtStart = -1;
+
+    private void restoreParkour() {
+        if (parkourSaved != null) { BaritoneAPI.getSettings().allowParkour.value = parkourSaved; parkourSaved = null; }
+    }
+
+    // ---- gold armour: a helmet from 5 ingots at a crafting table (carried, or made from nether stems)
+    private int armorStage;
+    private long armorWait;
+
+    private int invIndex(PlayerEntity me, net.minecraft.item.Item it) {
+        for (int i = 0; i < 36; i++) if (me.inventory.getStackInSlot(i).getItem() == it) return i;
+        return -1;
+    }
+
+    private int countAny(PlayerEntity me, net.minecraft.item.Item... its) { int n = 0; for (net.minecraft.item.Item i : its) n += me.inventory.count(i); return n; }
+
+    /** 2x2 inventory craft: one item from inventory index into each of the given grid slots (1-4), take the result. */
+    private void craft2x2(PlayerEntity me, int inv, int... grid) {
+        int id = me.container.windowId, slot = inv < 9 ? 36 + inv : inv;
+        ctx.playerController().windowClick(id, slot, 0, ClickType.PICKUP, me);
+        for (int g : grid) ctx.playerController().windowClick(id, g, 1, ClickType.PICKUP, me);
+        ctx.playerController().windowClick(id, slot, 0, ClickType.PICKUP, me);
+        ctx.playerController().windowClick(id, 0, 0, ClickType.QUICK_MOVE, me);
+    }
+
+    private BastionScript.Result craftArmor(PlayerEntity me) {
+        if (wearingGold(me)) return BastionScript.Result.DONE;
+        for (int i = 0; i < 36; i++) if (isGoldArmor(me.inventory.getStackInSlot(i))) return BastionScript.Result.DONE; // WEAR_GOLD puts it on
+        if (ticks < armorWait) return BastionScript.Result.WORKING;
+        armorWait = ticks + 5;
+        if (ingotCount(me) < 5) {
+            if (me.inventory.count(Items.GOLD_BLOCK) > 0) { if (craftIngots(me)) lastCraft = ticks; return BastionScript.Result.WORKING; }
+            logDirect("Bastion: !! no gold for a helmet (" + ingotCount(me) + " ingots)");
+            return BastionScript.Result.FAILED;
+        }
+        if (me.openContainer instanceof net.minecraft.inventory.container.WorkbenchContainer) {
+            net.minecraft.inventory.container.Container c = me.openContainer;
+            int inv = invIndex(me, Items.GOLD_INGOT);
+            int slot = inv < 9 ? 37 + inv : inv + 1;
+            ctx.playerController().windowClick(c.windowId, slot, 0, ClickType.PICKUP, me);
+            for (int g : BastionPriors.HELMET_GRID) ctx.playerController().windowClick(c.windowId, g, 1, ClickType.PICKUP, me);
+            ctx.playerController().windowClick(c.windowId, slot, 0, ClickType.PICKUP, me);
+            ctx.playerController().windowClick(c.windowId, 0, 0, ClickType.QUICK_MOVE, me);
+            ((net.minecraft.client.entity.player.ClientPlayerEntity) me).closeScreen();
+            logDirect("Bastion: crafted a gold helmet");
+            return BastionScript.Result.WORKING;
+        }
+        // a placed table in reach: open it
+        BlockPos at = me.getPosition();
+        for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-3, -1, -3), at.add(3, 2, 3))) {
+            if (ctx.world().getBlockState(b).getBlock() != Blocks.CRAFTING_TABLE) continue;
+            BlockPos t = b.toImmutable();
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F), Vector3d.copyCentered(t), ctx.playerRotations()), true);
+            ctx.minecraft().playerController.func_217292_a((net.minecraft.client.entity.player.ClientPlayerEntity) me, (net.minecraft.client.world.ClientWorld) ctx.world(), net.minecraft.util.Hand.MAIN_HAND,
+                    new BlockRayTraceResult(Vector3d.copyCentered(t).add(0, 0.5, 0), Direction.UP, t, false));
+            armorWait = ticks + 10;
+            return BastionScript.Result.WORKING;
+        }
+        int table = invIndex(me, Items.CRAFTING_TABLE);
+        if (table >= 0) {
+            BlockPos cell = null;
+            for (Direction d : Direction.Plane.HORIZONTAL) if (ctx.world().getBlockState(at.offset(d)).getMaterial().isReplaceable() && solid(at.offset(d).down())) { cell = at.offset(d); break; }
+            if (cell == null) { logDirect("Bastion: !! no room to place a crafting table"); return BastionScript.Result.FAILED; }
+            if (table >= 9) { ctx.playerController().windowClick(me.container.windowId, table, 8, ClickType.SWAP, me); return BastionScript.Result.WORKING; }
+            me.inventory.currentItem = table;
+            BlockPos below = cell.down();
+            ctx.minecraft().playerController.func_217292_a((net.minecraft.client.entity.player.ClientPlayerEntity) me, (net.minecraft.client.world.ClientWorld) ctx.world(), net.minecraft.util.Hand.MAIN_HAND,
+                    new BlockRayTraceResult(Vector3d.copyCentered(below).add(0, 0.5, 0), Direction.UP, below, false));
+            return BastionScript.Result.WORKING;
+        }
+        int planks = countAny(me, Items.CRIMSON_PLANKS, Items.WARPED_PLANKS);
+        if (planks >= 4) {
+            int inv = invIndex(me, me.inventory.count(Items.CRIMSON_PLANKS) >= 4 ? Items.CRIMSON_PLANKS : Items.WARPED_PLANKS);
+            if (inv < 0) { logDirect("Bastion: !! planks split across kinds"); return BastionScript.Result.FAILED; }
+            craft2x2(me, inv, 1, 2, 3, 4);
+            logDirect("Bastion: crafted a crafting table");
+            return BastionScript.Result.WORKING;
+        }
+        int stem = invIndex(me, Items.CRIMSON_STEM);
+        if (stem < 0) stem = invIndex(me, Items.WARPED_STEM);
+        if (stem >= 0) { craft2x2(me, stem, 1); return BastionScript.Result.WORKING; }
+        // chop a stem (crimson forest / warped forest trees around the bastion)
+        BlockPos best = null;
+        for (BlockPos b : BlockPos.getAllInBoxMutable(at.add(-16, -4, -16), at.add(16, 6, 16))) {
+            net.minecraft.block.Block k = ctx.world().getBlockState(b).getBlock();
+            if ((k == Blocks.CRIMSON_STEM || k == Blocks.WARPED_STEM) && (best == null || b.distanceSq(at) < best.distanceSq(at))) best = b.toImmutable();
+        }
+        if (best == null) { logDirect("Bastion: !! no crafting table and no nether stems within 16 for the helmet"); return BastionScript.Result.FAILED; }
+        BastionScript.Result r = mineCell(me, best);
+        return r == BastionScript.Result.FAILED ? r : BastionScript.Result.WORKING;
     }
 
     /** Place a throwaway block into the cell from any solid neighbour face in reach. */
@@ -3279,6 +3560,20 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
                 return distract(me, undistracted);
             }
             if (currentStep != st) { currentStep = st; logDirect("Bastion: step " + st); }
+            // intermediate pit gold: the aggro rhythm M-T-M-T-M-T-P-P-T while piglins watch
+            if (BastionSettings.intermediateRoutes && (st == BastionRoutes.Step.MINE_GOLD_SIDE_1 || st == BastionRoutes.Step.MINE_GOLD_SIDE_2)) {
+                if (!next.equals(rhythmGold)) { if (rhythmGold != null && BastionRoutes.rhythm(rhythmIdx) == 'M') rhythmIdx++; rhythmGold = next; }
+                char c = BastionRoutes.rhythm(rhythmIdx);
+                if (c == 'P') rhythmIdx++;
+                else if (c == 'T') {
+                    PiglinEntity w = nearestUndistracted(me, near);
+                    if (w == null || ingotCount(me) == 0) rhythmIdx++;
+                    else { int before = distractions; PathingCommand d = distract(me, w); if (distractions != before) rhythmIdx++; status = "rhythm throw"; if (d.commandType != PathingCommandType.SET_GOAL_AND_PATH) return d; }
+                }
+            }
+            // backup gold is crouch-mined (aim mid-up) so the block drops into our inventory
+            if (BastionRoutes.CROUCH_BACKUP_GOLD && (st == BastionRoutes.Step.BACKUP_GOLD_1 || st == BastionRoutes.Step.BACKUP_GOLD_2) && me.getDistanceSq(Vector3d.copyCentered(next)) < 25)
+                baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
             preferGold = next;
             PathingCommand g = drop(me, next);
             if (g != null) return g;

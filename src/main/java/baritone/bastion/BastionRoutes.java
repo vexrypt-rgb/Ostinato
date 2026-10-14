@@ -22,7 +22,7 @@ public final class BastionRoutes {
         // housing (video: beginner)
         HOUSING_ENTRY_BASALT_CUE, LOOT_TOP_LARGE, LOOT_TOP_SINGLE, RIGHT_FORK_BLOCK_IN, DROP_PIGLINS, DISTRACT_HALF_GOLD,
         ONE_BY_ONE, DIG_DOWN_3_STRIP_4, HOUSING_PIT, MINE_WALL_GOLD, T_TUNNEL_GOLD, UNSTICK_BY_MINING, TRADE_CORNER,
-        HOUSING_BOTTOM_CHEST, HOUSING_BACKUP_GOLD,
+        HOUSING_BOTTOM_CHEST, HOUSING_BACKUP_GOLD, WALK_RIGHT_FORK, STRIP_REST, PUSH_WALL_GOLD, T_TUNNEL_PUSH, ELEVATOR_GOLD,
         // housing (video: intermediate / lava)
         LOOT_TOP_TRIPLE, LOOT_LEFT_RAMPART_TRIPLE, BREAK_CHEST_AGGRO_THROW, BACK_OPENING, GOLD_ELEVATOR, LAVA_STRAGGLERS,
         OUTSIDE_CHESTS, AGGRO_ONE_GOLD_ARMOR, LAVA_BLOCK_GAP, STAIR_2, LOOT_ARMOR_CHEST, BLOCK_LOWER_LAVA, CORNER_CHEST,
@@ -49,6 +49,38 @@ public final class BastionRoutes {
     /** Next action in the rhythm for action index i: 'M' mine, 'T' throw an ingot, 'P' place a block. */
     public static char rhythm(int i) {
         return RHYTHM.charAt(Math.floorMod(i, RHYTHM.length()));
+    }
+
+    /**
+     * Video order of the pit gold for one side, from the pit corner: the 3 middle blocks top down, then top-left,
+     * bottom-left, bottom-right. Points given as {lateral (left negative), y}; returns indexes into the input.
+     * Intermediate side 1 leaves bottom-right for later.
+     */
+    public static List<Integer> orderPitGold(List<int[]> latY, int side, boolean intermediate) {
+        List<Integer> idx = new ArrayList<>();
+        for (int i = 0; i < latY.size(); i++) idx.add(i);
+        if (idx.isEmpty()) return idx;
+        int minL = Integer.MAX_VALUE, maxL = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+        for (int[] p : latY) { minL = Math.min(minL, p[0]); maxL = Math.max(maxL, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+        double midL = (minL + maxL) / 2.0, midY = (minY + maxY) / 2.0;
+        List<Integer> mid = new ArrayList<>(), rest = new ArrayList<>();
+        for (int i : idx) if (Math.abs(latY.get(i)[0] - midL) < 1) mid.add(i); else rest.add(i);
+        mid.sort((a, b) -> latY.get(b)[1] - latY.get(a)[1]);
+        List<Integer> out = new ArrayList<>(mid);
+        Gold[] order = {Gold.TOP_LEFT, Gold.BOTTOM_LEFT, Gold.BOTTOM_RIGHT};
+        for (Gold g : order) {
+            if (g == Gold.BOTTOM_RIGHT && intermediate && side == 1) continue;
+            Integer best = null;
+            for (int i : rest) {
+                int[] p = latY.get(i);
+                boolean left = p[0] < midL, top = p[1] > midY;
+                boolean fits = g == Gold.TOP_LEFT ? left && top : g == Gold.BOTTOM_LEFT ? left && !top : !left && !top;
+                if (fits && !out.contains(i)) { best = i; break; }
+            }
+            if (best != null) out.add(best);
+        }
+        for (int i : rest) if (!out.contains(i) && !(intermediate && side == 1 && latY.get(i)[0] > midL && latY.get(i)[1] <= midY)) out.add(i);
+        return out;
     }
 
     /** Backup gold is crouch-mined aiming mid-up so the block drops straight into our inventory. */
@@ -104,12 +136,12 @@ public final class BastionRoutes {
     public static List<Step> housing(HousingVariant v) {
         switch (v) {
             case INTERMEDIATE: return J8.listOf(Step.LOOT_TOP_TRIPLE, Step.LOOT_LEFT_RAMPART_TRIPLE, Step.BREAK_CHEST_AGGRO_THROW,
-                    Step.BACK_OPENING, Step.ONE_BY_ONE, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
+                    Step.BACK_OPENING, Step.ONE_BY_ONE, Step.ELEVATOR_GOLD, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
             case LAVA: return J8.listOf(Step.AGGRO_ONE_GOLD_ARMOR, Step.LAVA_BLOCK_GAP, Step.STAIR_2, Step.LOOT_ARMOR_CHEST,
-                    Step.BLOCK_LOWER_LAVA, Step.CORNER_CHEST, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
-            default: return J8.listOf(Step.HOUSING_ENTRY_BASALT_CUE, Step.LOOT_TOP_LARGE, Step.LOOT_TOP_SINGLE, Step.RIGHT_FORK_BLOCK_IN,
-                    Step.DROP_PIGLINS, Step.DISTRACT_HALF_GOLD, Step.ONE_BY_ONE, Step.DIG_DOWN_3_STRIP_4, Step.HOUSING_PIT,
-                    Step.MINE_WALL_GOLD, Step.T_TUNNEL_GOLD, Step.UNSTICK_BY_MINING, Step.TRADE_CORNER, Step.HOUSING_BOTTOM_CHEST,
+                    Step.BLOCK_LOWER_LAVA, Step.CORNER_CHEST, Step.ELEVATOR_GOLD, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
+            default: return J8.listOf(Step.HOUSING_ENTRY_BASALT_CUE, Step.LOOT_TOP_LARGE, Step.LOOT_TOP_SINGLE, Step.WALK_RIGHT_FORK, Step.RIGHT_FORK_BLOCK_IN,
+                    Step.DROP_PIGLINS, Step.DISTRACT_HALF_GOLD, Step.ONE_BY_ONE, Step.DIG_DOWN_3_STRIP_4, Step.HOUSING_PIT, Step.STRIP_REST,
+                    Step.MINE_WALL_GOLD, Step.PUSH_WALL_GOLD, Step.T_TUNNEL_GOLD, Step.T_TUNNEL_PUSH, Step.UNSTICK_BY_MINING, Step.TRADE_CORNER, Step.HOUSING_BOTTOM_CHEST,
                     Step.HOUSING_BACKUP_GOLD, Step.LEAVE);
         }
     }
@@ -160,11 +192,21 @@ public final class BastionRoutes {
 
     /** Route for a scanned layout name; unknown layouts fall back to trade-and-leave. */
     public static List<Step> forLayout(String layout, boolean goldArmor, boolean intermediate) {
+        return forLayout(layout, goldArmor, intermediate, new Features());
+    }
+
+    /** What the scan saw: bridge triple ramparts, stables good gaps and triples (null = not probed yet). */
+    public static final class Features {
+        public boolean leftTriple, rightTriple, stablesTriple;
+        public Boolean leftGood, rightGood;
+    }
+
+    public static List<Step> forLayout(String layout, boolean goldArmor, boolean intermediate, Features f) {
         switch (layout) {
             case "treasure": return treasure(intermediate, false, false);
             case "housing": return housing(intermediate ? HousingVariant.INTERMEDIATE : HousingVariant.BEGINNER);
-            case "bridge": return bridge(false, false);
-            case "stables": return stables(null, null, false);
+            case "bridge": return bridge(f.leftTriple, f.rightTriple);
+            case "stables": return stables(f.leftGood, f.rightGood, f.stablesTriple);
             default: return J8.listOf(Step.TRADE, Step.LEAVE);
         }
     }
@@ -174,7 +216,7 @@ public final class BastionRoutes {
         boolean breaksGold = s == Step.MINE_HIGH_GOLD_CRAFT_INGOTS || s == Step.MINE_GOLD_SIDE_1 || s == Step.MINE_GOLD_SIDE_2
                 || s == Step.BACKUP_GOLD_1 || s == Step.BACKUP_GOLD_2 || s == Step.MINE_CHALICE || s == Step.GOOD_GAP_GOLD
                 || s == Step.TRIPLE_GOLD || s == Step.MINE_WALL_GOLD || s == Step.T_TUNNEL_GOLD || s == Step.HOUSING_BACKUP_GOLD
-                || s == Step.GOLD_ELEVATOR;
+                || s == Step.ELEVATOR_GOLD;
         return breaksGold && !BastionPriors.mayBreakGold(nearestUndistracted);
     }
 }

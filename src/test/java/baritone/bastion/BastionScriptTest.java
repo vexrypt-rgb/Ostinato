@@ -12,12 +12,15 @@ public class BastionScriptTest {
     @Test
     public void everyTacticStepHasAScript() {
         Step[] tactic = {Step.TAKE_THIRD_BASALT_BRIDGE, Step.PILLAR_3_HUG, Step.COVER_2_BLOCKS, Step.BRIDGE_GAP, Step.BUILD_POCKET,
-                Step.CROSS_BRICK_BRIDGE, Step.PIGLIN_PIT, Step.DIG_DOWN_3_STRIP_4, Step.T_TUNNEL_GOLD, Step.MINE_WALL_GOLD,
+                Step.CROSS_BRICK_BRIDGE, Step.PIGLIN_PIT, Step.DIG_DOWN_3_STRIP_4, Step.T_TUNNEL_GOLD, Step.PUSH_WALL_GOLD,
                 Step.GOLD_ELEVATOR, Step.LAVA_BLOCK_GAP, Step.BLOCK_LOWER_LAVA, Step.LAVA_STRAGGLERS, Step.UNSTICK_BY_MINING,
                 Step.WEAR_GOLD_HELMET, Step.ONE_BY_ONE, Step.RIGHT_FORK_BLOCK_IN, Step.DROP_PIGLINS, Step.STAIR_2};
         for (Step s : tactic) assertFalse(s.toString(), BastionScript.ops(s).isEmpty());
-        assertTrue(BastionScript.ops(Step.LOOT_DOUBLE).isEmpty());
-        assertTrue(BastionScript.ops(Step.TRADE).isEmpty());
+        assertTrue(BastionScript.ops(Step.LOOT_DOUBLE).isEmpty()); assertTrue(BastionScript.ops(Step.MINE_WALL_GOLD).isEmpty());
+        // trade-location steps now go to the spot and trade there (audit #2)
+        assertEquals(Kind.TRADE_AT, BastionScript.ops(Step.TRADE).get(1).kind());
+        assertEquals(Kind.TRADE_AT, BastionScript.ops(Step.TRADE_AT_PIT).get(1).kind());
+        assertEquals(Kind.TRADE_AT, BastionScript.ops(Step.TRADE_TRIPLE).get(1).kind());
     }
 
     @Test
@@ -30,8 +33,11 @@ public class BastionScriptTest {
         assertEquals(5, p.size());
         assertTrue(p.stream().allMatch(o -> o.kind() == Kind.PLACE));
         List<Op> g = BastionScript.ops(Step.BRIDGE_GAP);
+        // place 2, jump the gap, place 2 (audit #7)
         assertEquals(4, g.stream().filter(o -> o.kind() == Kind.PLACE).count());
-        assertEquals(new Op(Kind.MOVE, 4, 0, 0, 0), g.get(g.size() - 1));
+        assertEquals(new Op(Kind.JUMP, 4, 0, 0, 0), g.get(3));
+        assertFalse(g.contains(new Op(Kind.PLACE, 3, 0, -1, 0)));
+        assertEquals(new Op(Kind.MOVE, 6, 0, 0, 0), g.get(g.size() - 1));
         assertTrue(g.stream().filter(o -> o.kind() == Kind.PLACE).allMatch(o -> o.u() == -1));
     }
 
@@ -39,20 +45,31 @@ public class BastionScriptTest {
     public void housingDigAndTunnel() {
         List<Op> d = BastionScript.ops(Step.DIG_DOWN_3_STRIP_4);
         assertEquals(new Op(Kind.MOVE, 0, 0, -3, 0), d.get(5));
-        assertEquals(new Op(Kind.MOVE, 4, 0, -3, 0), d.get(d.size() - 1));
+        // the pit is dug at the first tunnel block, the rest of the strip after it (audit #4)
+        assertEquals(new Op(Kind.MOVE, 1, 0, -3, 0), d.get(d.size() - 1));
+        assertEquals(new Op(Kind.MOVE, 3, 0, 0, 0), BastionScript.ops(Step.STRIP_REST).get(8));
         List<Op> t = BastionScript.ops(Step.T_TUNNEL_GOLD);
-        assertTrue(t.contains(new Op(Kind.MINE, 4, -1, -3, 0)));
-        assertTrue(t.contains(new Op(Kind.MINE, 4, 1, -3, 0)));
-        assertEquals(Kind.PUSH_ITEMS, t.get(t.size() - 1).kind());
-        assertEquals(Kind.PUSH_ITEMS, BastionScript.ops(Step.MINE_WALL_GOLD).get(0).kind());
+        assertTrue(t.contains(new Op(Kind.MINE, 0, -1, 0, 0)));
+        assertTrue(t.contains(new Op(Kind.MINE, 0, 1, 0, 0)));
+        // pushing runs after the gold is mined: its own steps after the gold steps (audit #6)
+        assertTrue(BastionScript.ops(Step.MINE_WALL_GOLD).isEmpty());
+        assertEquals(Kind.PUSH_ITEMS, BastionScript.ops(Step.PUSH_WALL_GOLD).get(0).kind());
+        List<Step> h = BastionRoutes.housing(BastionRoutes.HousingVariant.BEGINNER);
+        assertEquals(h.indexOf(Step.MINE_WALL_GOLD) + 1, h.indexOf(Step.PUSH_WALL_GOLD));
+        assertEquals(h.indexOf(Step.T_TUNNEL_GOLD) + 1, h.indexOf(Step.T_TUNNEL_PUSH));
+        assertEquals(h.indexOf(Step.DIG_DOWN_3_STRIP_4) + 1, h.indexOf(Step.HOUSING_PIT));
+        assertEquals(h.indexOf(Step.WALK_RIGHT_FORK) + 1, h.indexOf(Step.RIGHT_FORK_BLOCK_IN));
     }
 
     @Test
     public void elevatorAndLava() {
         List<Op> e = BastionScript.ops(Step.GOLD_ELEVATOR);
         assertEquals(5, e.stream().filter(o -> o.kind() == Kind.PLACE).count());
-        assertEquals(27, e.get(5).n());
-        assertEquals(36, e.get(6).n());
+        // carries 3 then 4 gold blocks up, after ELEVATOR_GOLD mined them (audit #5)
+        assertEquals(new Op(Kind.CARRY_UP, 0, 0, 0, 3), e.get(5));
+        assertEquals(new Op(Kind.CARRY_UP, 0, 0, 0, 4), e.get(6));
+        List<Step> iv = BastionRoutes.housing(BastionRoutes.HousingVariant.INTERMEDIATE);
+        assertEquals(iv.indexOf(Step.ELEVATOR_GOLD) + 1, iv.indexOf(Step.GOLD_ELEVATOR));
         assertEquals(2, BastionScript.ops(Step.LAVA_BLOCK_GAP).get(0).n());
         assertEquals(3, BastionScript.ops(Step.BLOCK_LOWER_LAVA).get(0).n());
         assertEquals(Kind.LAVA_ON_PIGLIN, BastionScript.ops(Step.LAVA_STRAGGLERS).get(0).kind());
@@ -77,9 +94,15 @@ public class BastionScriptTest {
         r.report(Result.DONE);
         assertEquals(1, r.index());
         for (int k = 0; k <= Runner.OP_TICKS; k++) r.report(Result.WORKING);
+        assertFalse(r.done()); // retried once
+        assertTrue(r.event().contains("retrying"));
+        for (int k = 0; k <= Runner.OP_TICKS; k++) r.report(Result.WORKING);
         assertTrue(r.done());
         assertEquals(1, r.skipped());
+        assertTrue(r.event().contains("skipped"));
         Runner f = new Runner(BastionScript.ops(Step.PILLAR_3_HUG));
+        f.report(Result.FAILED);
+        assertFalse(f.done());
         f.report(Result.FAILED);
         assertTrue(f.done());
     }

@@ -37,11 +37,14 @@ public final class BastionRouteResolver {
     public static List<Target> resolve(String layout, List<Step> route, int cx, int cy, int cz, int sx, int sy, int sz, List<Point> points) {
         List<Point> left = new ArrayList<>(points);
         List<Target> out = new ArrayList<>();
+        // the side axis comes from all the core gold, not what is left after side 1 (else side 2 can flip axis)
+        sideAxis = spreadAxis(within(of(points, Kind.GOLD), cx, cz, TREASURE_CORE));
         int[] at = {sx, sy, sz};
         for (Step s : route) {
             List<Point> picked = select(layout, s, cx, cy, cz, at, left);
             if (picked.isEmpty()) continue;
-            List<Point> ordered = BastionPlan.order(layout, cx, cy, cz, at[0], at[1], at[2], picked);
+            List<Point> ordered = s == Step.MINE_GOLD_SIDE_1 || s == Step.MINE_GOLD_SIDE_2 ? pitOrder(picked, s == Step.MINE_GOLD_SIDE_1 ? 1 : 2, cx, cz)
+                    : BastionPlan.order(layout, cx, cy, cz, at[0], at[1], at[2], picked);
             for (Point p : ordered) { out.add(new Target(s, p)); left.remove(p); }
             Point last = ordered.get(ordered.size() - 1);
             at[0] = last.x(); at[1] = last.y(); at[2] = last.z();
@@ -55,10 +58,10 @@ public final class BastionRouteResolver {
         List<Point> gold = of(left, Kind.GOLD), chests = of(left, Kind.CHEST);
         switch (s) {
             // ---- treasure
-            case MINE_HIGH_GOLD_CRAFT_INGOTS: return highest(gold, 1);
+            // MINE_HIGH_GOLD_CRAFT_INGOTS: its op mines the highest gold in reach of the pillar, not the highest in the bastion
             case MINE_GOLD_SIDE_1: case MINE_GOLD_SIDE_2: {
                 List<Point> core = within(gold, cx, cz, TREASURE_CORE);
-                int axis = spreadAxis(core);
+                int axis = sideAxis;
                 int startSide = Integer.signum((axis == 0 ? at[0] - cx : at[2] - cz));
                 if (startSide == 0) startSide = 1;
                 int want = s == Step.MINE_GOLD_SIDE_1 ? startSide : -startSide;
@@ -91,7 +94,7 @@ public final class BastionRouteResolver {
             case LOOT_LEFT_RAMPART_TRIPLE: return topTriple(chests);
             case HOUSING_BOTTOM_CHEST: { List<Point> d = paired(chests, true); d.sort(Comparator.comparingInt(Point::y)); return d.isEmpty() ? lowestOne(chests) : pairOf(d.get(0), d); }
             case CORNER_CHEST: return nearest(chests, at, 1);
-            case MINE_WALL_GOLD: case GOLD_ELEVATOR: return largestCluster(lowGold(gold));
+            case MINE_WALL_GOLD: case ELEVATOR_GOLD: return largestCluster(lowGold(gold));
             case T_TUNNEL_GOLD: return lowGold(gold);
             case HOUSING_BACKUP_GOLD: return gold;
             case OUTSIDE_CHESTS: { List<Point> o = new ArrayList<>(); for (Point p : chests) if (p.horiz(cx, cz) > TREASURE_CORE) o.add(p); return o; }
@@ -102,6 +105,21 @@ public final class BastionRouteResolver {
     /** True when this step breaks gold blocks (the distract-first gate applies). */
     public static boolean breaksGold(Step s) {
         return BastionRoutes.needsDistractFirst(s, 0);
+    }
+
+    private static int sideAxis;
+
+    /** Intermediate routes (skip bottom-right on side 1); set by the process from its settings. */
+    public static boolean intermediate;
+
+    /** Pit gold in the video order (BastionRoutes.orderPitGold), lateral along the axis the side spreads on. */
+    static List<Point> pitOrder(List<Point> ps, int side, int cx, int cz) {
+        int axis = spreadAxis(ps);
+        List<int[]> ly = new ArrayList<>();
+        for (Point p : ps) ly.add(new int[]{axis == 0 ? p.x() - cx : p.z() - cz, p.y()});
+        List<Point> o = new ArrayList<>();
+        for (int i : BastionRoutes.orderPitGold(ly, side, intermediate)) o.add(ps.get(i));
+        return o;
     }
 
     // ---- helpers
