@@ -247,4 +247,9 @@ public final class BastionPriors {
     public static double perchHeight(boolean hoglinsOnly) {
         return hoglinsOnly ? 1.9 : 3.7;
     }
+
+    /** Break gold only when nobody watches, or we hold gold to calm the watchers (ingots, plus 9 per block). */
+    public static boolean breakGoldUnarmed(int watchers, int goldIngotsEq) {
+        return watchers == 0 || goldIngotsEq > 0;
+    }
 }

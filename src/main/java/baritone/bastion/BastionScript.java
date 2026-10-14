@@ -199,6 +199,9 @@ public final class BastionScript {
         public boolean done() { return i >= ops.size(); }
         public int skipped() { return skipped; }
         public int index() { return i; }
+        /** Skip the rest of the step's ops (counted as skipped). */
+        public void abort() { while (!done()) { i++; skipped++; } }
+
         public boolean noEffect() { return done() && !ops.isEmpty() && instant == ops.size(); }
 
         /** The retry/skip that happened on the last report, or null; cleared on read. */

@@ -1000,6 +1000,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private boolean angered;
 
     private long lastCraft = -100;
+    private BlockPos watchedGold;
     private int rhythmIdx;
     private BlockPos rhythmGold;
 
@@ -2778,6 +2779,7 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
             scriptRun.report(r);
             String ev = scriptRun.event();
             if (ev != null) logDirect("Bastion: !! step " + s + " " + ev);
+            if (ev != null && ev.endsWith("skipped") && BastionScript.reanchors(op.kind())) { scriptRun.abort(); logDirect("Bastion: !! step " + s + " aborted: its target was never reached, the rest of its ops would run in the wrong place"); }
             if (scriptRun.index() != idx) {
                 opLeft = -1;
                 if (r == BastionScript.Result.DONE && BastionScript.reanchors(op.kind())) scriptAt = me.getPosition();
@@ -3527,7 +3529,11 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
         Map<String, Integer> have = counts(me);
         boolean wantGold = BastionGoals.needGold(BastionGoals.missing(have, BastionSettings.TARGETS),
                 BastionGoals.throwable(ingotCount(me), countOf(me, Items.GOLD_BLOCK)), BastionSettings.keepIngots, BastionSettings.goldCap);
-        for (BastionPlan.Point pt : plan) {
+        // the route's current block step first (s1161-b10: the top chests were "left for later" while the loop mined wall gold)
+        BastionRoutes.Step routeNow = BastionSettings.scriptedRoutes && routeIdx < route.size() ? route.get(routeIdx) : null;
+        List<BastionPlan.Point> order = new ArrayList<>(plan);
+        if (routeNow != null) order.sort(java.util.Comparator.comparingInt(pt -> planStep.get(new BlockPos(pt.x(), pt.y(), pt.z())) == routeNow ? 0 : 1));
+        for (BastionPlan.Point pt : order) {
             BlockPos b = new BlockPos(pt.x(), pt.y(), pt.z());
             if (!ctx.world().isBlockLoaded(b)) { unloaded = true; continue; }
             if (looted.contains(b) || badChest.getOrDefault(b, 0L) > ticks || badGold.getOrDefault(b, 0L) > ticks) continue;
@@ -3560,6 +3566,14 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
             // gold block next in the plan: the miner handles the piglin rule (breaking gold angers every piglin in 16, seen or not)
             // Couriway ch. 3: distract undistracted piglins within 16 with an ingot before breaking gold
             BastionRoutes.Step st = planStep.getOrDefault(next, BastionRoutes.Step.TRADE);
+            // s1161-b10 (run kit, no gold): broke gold in sight of 10 piglins with nothing to calm them and died
+            int watchers = 0;
+            for (LivingEntity e : near) if (e instanceof PiglinEntity && !((PiglinEntity) e).isChild() && e.isAlive() && me.getDistance(e) <= BastionPriors.AGGRO_RANGE && e.canEntityBeSeen(me)) watchers++;
+            if (!BastionPriors.breakGoldUnarmed(watchers, ingotCount(me) + 9 * me.inventory.count(Items.GOLD_BLOCK))) {
+                if (!next.equals(watchedGold)) { watchedGold = next; logDirect("Bastion: !! not breaking gold at " + next.getCoordinatesAsString() + ": " + watchers + " piglins watching and no gold to calm them"); }
+                badGold.put(next, ticks + 400);
+                return null;
+            }
             PiglinEntity undistracted = nearestUndistracted(me, near);
             double ud = undistracted == null ? Double.MAX_VALUE : me.getDistance(undistracted);
             if (undistracted != null && ingotCount(me) > 0 && (planStep.containsKey(next) ? BastionRoutes.needsDistractFirst(st, ud) : !BastionPriors.mayBreakGold(ud))) {
