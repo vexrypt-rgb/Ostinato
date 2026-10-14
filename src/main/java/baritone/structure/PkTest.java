@@ -260,7 +260,10 @@ public final class PkTest implements AbstractGameEventListener {
 
     private void goalFail(String why) {
         closeAttempt(false, why);
-        if (why.equals("nopath") && goalFails == 0) {
+        // drill: from the barrier catch floor (below the y=151 stands) nothing is plannable; that is a fall, not a no-plan
+        boolean onCatchFloor = drillTag != null && Minecraft.getInstance().player.getY() < 150;
+        if (onCatchFloor) say("PK catchfloor nopath ignored goal " + goalNo);
+        if (why.equals("nopath") && goalFails == 0 && !onCatchFloor) {
             // the planner had no way onto the next checkpoint: count it as a failed jump of the hop's shape
             Minecraft mc = Minecraft.getInstance();
             BlockPos from = lastGood != null ? lastGood : mc.player.blockPosition();
