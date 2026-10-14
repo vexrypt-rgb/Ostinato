@@ -29,6 +29,7 @@ import baritone.behavior.look.ForkableRandom;
 import baritone.api.utils.Helper;
 import baritone.behavior.look.HumanMouseModel;
 import baritone.behavior.look.ReactionGate;
+import baritone.behavior.look.ReactionModel;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 
 import java.util.ArrayDeque;
@@ -113,6 +114,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     // Ostinato: humanReactionDelay. Only reactive looks (combat aim) can be held; every other look cancels a hold.
     private final ReactionGate reaction = new ReactionGate();
     private final java.util.Random reactionRng = new java.util.Random();
+    private final ReactionModel defaultReaction = ReactionModel.defaults(); // the user's measured tired and peak sets
+    private final long sessionStartNanos = System.nanoTime();
     private boolean reactive;
 
     /** Ostinato: {@link #human()} for a look that reacts to the world (combat aim), so a surprise hold applies to it. */
@@ -123,12 +126,15 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     /**
      * Ostinato: a new, unexpected look target just appeared (a mob showing up, being hit, a new threat): with
-     * humanReactionDelay on, the camera holds for a reaction time sampled from the human mouse profile (or a
-     * built-in 230 ms median) before turning. Never call this for planned looks.
+     * humanReactionDelay on, the camera holds for a reaction time sampled from the profile's reaction block, or
+     * the user's measured tired reaction times when no profile is loaded, at the humanEnergy state. Never call
+     * this for planned looks.
      */
     public void surprise() {
         HumanMouseModel m = ctx.player() == null ? null : humanProfile();
-        reaction.surprise(Baritone.settings().humanReactionDelay.value, m, reactionRng);
+        double now = System.nanoTime() / 1e9, session = (System.nanoTime() - sessionStartNanos) / 1e9;
+        reaction.surprise(Baritone.settings().humanReactionDelay.value, m != null ? m.reactionModel() : defaultReaction,
+                ReactionModel.Energy.parse(Baritone.settings().humanEnergy.value), now, session, reactionRng);
     }
 
     /** Ostinato: whether a surprise reaction hold is running. */

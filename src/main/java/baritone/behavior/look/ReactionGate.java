@@ -29,13 +29,16 @@ public final class ReactionGate {
 
     private int holdTicks;
 
-    /** A surprise: starts a hold of a sampled reaction time, in 50 ms ticks. Returns the hold length (0 when disabled). */
-    public int surprise(boolean enabled, HumanMouseModel model, Random rng) {
+    /**
+     * A surprise: starts a hold of a reaction time sampled from {@code model} at the given energy, in 50 ms ticks.
+     * Returns the hold length (0 when disabled).
+     */
+    public int surprise(boolean enabled, ReactionModel model, ReactionModel.Energy energy, double nowSec, double sessionSec, Random rng) {
         if (!enabled) {
             holdTicks = 0;
             return 0;
         }
-        double ms = model != null ? model.sampleReactionMs(rng) : HumanMouseModel.defaultReactionMs(rng);
+        double ms = model.sample(energy, nowSec, sessionSec, rng);
         holdTicks = (int) Math.round(ms / 50.0);
         return holdTicks;
     }

@@ -43,10 +43,21 @@ current view.
 
 ## Surprise reaction delay
 
-The capture game's **Surprise!** round (a block pops up at a random moment and place; turn and click it) is the only
-source of the reaction-time fit (log-normal, `reaction` in the profile; needs 5+ hits, otherwise a built-in 230 ms
-median is used). `humanReactionDelay` (default on) applies a sampled delay only when a new, unexpected look target
-appears: in Ostinato that is combat aim (`CombatAim`) when a fight starts or the target jumps more than 60 degrees
-(a new threat, a switch after being hit). Path following, headSteering, mining, parkour and other planned looks are
-never delayed: any non-reactive look cancels a pending hold at once (`ReactionGate`).
+`humanReactionDelay` (default on) waits a reaction time only when a new, unexpected look target appears: in
+Ostinato that is combat aim (`CombatAim`) when a fight starts or the target jumps more than 60 degrees. Path
+following, headSteering, mining, parkour and other planned looks are never delayed; any non-reactive look cancels
+a pending hold (`ReactionGate`).
 
+Reaction times come from the profile's `reaction` block (`ReactionModel`), and the same numbers are built in when no
+profile is loaded:
+
+- `sets.tired`: measured, 200 214 247 290 317 350 407 ms (200 fastest while tired, 407 distracted while tired),
+  log-normal, bounded to [190, 420] ms.
+- `sets.peak`: measured, 165 173 177 181 185 190 198 220 ms (165 best ever and rare, 173-185 typical fastest,
+  220 slowest at peak), bounded to [165, 225] ms, median about 185.
+- An attention state drifts slowly (about a 3-minute timescale) between focused (the fastest samples) and
+  distracted (the slowest).
+- `humanEnergy` = `tired` (default), `peak`, or `auto` (drifts from peak to tired over `autoFatigueMinutes`, 180).
+
+The capture game's Surprise! round is optional. It isn't counted in coverage, and its times are only listed in the
+profile (`surpriseRoundMs`) for reference.

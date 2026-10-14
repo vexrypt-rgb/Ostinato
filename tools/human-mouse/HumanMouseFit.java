@@ -175,10 +175,9 @@ public class HumanMouseFit {
     static Map<String, Object> build(List<Seg> segs, List<Double> noise, List<Map<String, Object>> sources, boolean synthetic) {
         // duration: ms = a + b * log2(D/W + 1), least squares; urgency scales in log space
         int n = segs.size();
-        // reaction time: only from the surprise-target task (a target at an unpredictable time and place),
-        // used by Ostinato only for unexpected targets (humanReactionDelay), never for planned movement
+        // the optional Surprise! round is reported only; humanReactionDelay uses the user's measured sets below
         List<Double> rts = new ArrayList<>();
-        for (Seg s : segs) if ("reaction".equals(s.kind) && s.onsetMs >= 100 && s.onsetMs <= 1500) rts.add(Math.log(s.onsetMs));
+        for (Seg s : segs) if ("reaction".equals(s.kind) && s.onsetMs >= 100 && s.onsetMs <= 1500) rts.add(s.onsetMs);
         double sx = 0, sy = 0, sxx = 0, sxy = 0;
         for (Seg s : segs) { double id = log2(s.d / s.w + 1); sx += id; sy += s.dur; sxx += id * id; sxy += id * s.dur; }
         double b = (n * sxy - sx * sy) / Math.max(1e-9, n * sxx - sx * sx), a = (sy - b * sx) / n;
@@ -205,9 +204,7 @@ public class HumanMouseFit {
         p.put("created", new Date().toString());
         p.put("units", map("distance", "mouse counts (raw, as Minecraft reads them)", "time", "ms"));
         p.put("sources", sources);
-        if (rts.size() >= 5) p.put("reaction", map("logMean", mean(rts, 0), "logSd", Math.max(0.05, sdev(rts, 0.22)), "minMs", 120.0, "maxMs", 900.0, "samples", (double) rts.size()));
-        else if (synthetic) p.put("reaction", map("logMean", Math.log(230), "logSd", 0.22, "minMs", 120.0, "maxMs", 900.0, "samples", 0.0));
-        else System.out.println("note: fewer than 5 surprise-target (reaction) moves; the profile has no reaction fit and Ostinato will use its built-in 230 ms");
+        p.put("reaction", reactionBlock(rts));
         p.put("duration", map("a", a, "b", b, "logSd", sd, "urgencySlope", slope, "minMs", 40.0, "maxMs", 3000.0));
         p.put("noise", map("sd", nsd, "rho", rho, "dtMs", GRID, "spectrum", spectrum(noise)));
         int subsSum = 0, os = 0; double pkSum = 0, cv = 0; for (Seg s : segs) { subsSum += s.subs; if (s.overshoot) os++; pkSum += s.peakAt; cv += s.maxPerp; }
@@ -227,6 +224,29 @@ public class HumanMouseFit {
         p.put("templates", tl);
         return p;
     }
+
+    /** Ostinato: the user's measured tired reaction times (ms, 2026-10-14). */
+    static final double[] TIRED_MS = {200, 214, 247, 290, 317, 350, 407};
+
+    /** Ostinato: the user's measured peak reaction times (ms, 2026-10-14): 165 rare best, 173-185 typical fastest, 220 slowest. */
+    static final double[] PEAK_MS = {165, 173, 177, 181, 185, 190, 198, 220};
+
+    /** The surprise reaction block: the measured tired and peak sets and the attention walk. */
+    static Map<String, Object> reactionBlock(List<Double> gameRts) {
+        List<Object> tired = new ArrayList<>(), peak = new ArrayList<>();
+        for (double v : TIRED_MS) tired.add(v);
+        for (double v : PEAK_MS) peak.add(v);
+        Map<String, Object> sets = new LinkedHashMap<>();
+        sets.put("tired", map("samplesMs", tired, "estimated", false, "source", "user-measured while tired (200 fastest .. 407 distracted)", "boundsMs", r4list(190, 420)));
+        sets.put("peak", map("samplesMs", peak, "estimated", false, "source", "user-measured at peak (165 rare best, 173-185 typical fastest, 220 slowest)", "boundsMs", r4list(165, 225)));
+        Map<String, Object> b = map("model", "ostinato-attention-lognormal/1", "sets", sets,
+                "attention", map("timescaleSec", 180.0, "stateLogSd", 0.08, "note", "slow OU walk 0 focused (fastest samples) .. 1 distracted (slowest)"),
+                "autoFatigueMinutes", 180.0);
+        if (!gameRts.isEmpty()) { List<Object> g = new ArrayList<>(); for (double v : gameRts) g.add(r3(v)); b.put("surpriseRoundMs", g); b.put("surpriseRoundNote", "from the optional Surprise! round, informational only"); }
+        return b;
+    }
+
+    static List<Object> r4list(double... v) { List<Object> l = new ArrayList<>(); for (double x : v) l.add(x); return l; }
 
     /** Power of the tremor in a few bands (relative amplitude, counts), for inspection. */
     static List<Object> spectrum(List<Double> x) {

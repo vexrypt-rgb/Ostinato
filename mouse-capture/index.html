@@ -177,7 +177,8 @@ function coverage() {
   let filled = 0; for (const k in cov.cells) filled += Math.min(cov.cells[k], 3) / 3;
   const parts = { pointing: filled / CELL_TOTAL, follow: Math.min(1, cov.followSec / 240), tracking: Math.min(1, cov.trackSec / 240),
     tracing: Math.min(1, cov.traces / 60), camera: Math.min(1, cov.mcTurns / 150), desktop: Math.min(1, cov.absMoves / 80), reaction: Math.min(1, (cov.reactions || 0) / 60) };
-  const total = parts.pointing * 0.36 + parts.follow * 0.1 + parts.tracking * 0.1 + parts.tracing * 0.1 + parts.camera * 0.2 + parts.desktop * 0.06 + parts.reaction * 0.08;
+  // the Surprise! round is optional: not part of the variety score
+  const total = parts.pointing * 0.4 + parts.follow * 0.1 + parts.tracking * 0.12 + parts.tracing * 0.1 + parts.camera * 0.22 + parts.desktop * 0.06;
   return { total, parts };
 }
 function saveCov() { try { localStorage.setItem(COV_KEY, JSON.stringify(cov)); } catch (e) {} }
@@ -429,7 +430,7 @@ const TASKS = {
       const dyaw = wrap(tr.target.yaw - tr.fromYaw); const counts = Math.hypot(dyaw, tr.target.pitch - tr.fromPitch) / r.settings.mcDegreesPerCount; addCell(counts, Math.atan2(tr.target.pitch - tr.fromPitch, dyaw), tr.target.angSizeDeg < 3 ? 0 : tr.target.angSizeDeg < 8 ? 1 : 2, tr.urgency >= 0.7);
       delete tr.box; r.trials.push(tr); cov.mcTurns++; const pts = 120 * Math.max(0.3, 2 - (tr.tEnd - tr.tOn) / 900); r.score += pts; flash(W / 2, H / 2 - 30, '+' + Math.round(pts)); blip(760); TASKS.mcturn.next(r); } else blip(260, 0.05); },
     draw(r) { const tr = r.st.trial; drawWorld(tr ? [tr.box] : null); if (tr) { const d = dirTo(tr.box), off = wrap(d.yaw - yaw); if (Math.abs(off) > 40) { g.fillStyle = '#ff5d8f'; g.font = '700 28px system-ui'; g.fillText(off > 0 ? '➜' : '⬅', off > 0 ? W - 60 : 30, H / 2); } } } },
-  reaction: { name: 'Surprise!', how: 'hold still; when a block pops up, turn and click it fast', mode: 'lock', view: '3d', desc: 'Reaction time: targets appear at random moments and places.',
+  reaction: { optional: true, name: 'Surprise! (optional)', how: 'hold still; when a block pops up, turn and click it fast', mode: 'lock', view: '3d', desc: 'Reaction time: targets appear at random moments and places.',
     init(r) { buildWorld(); r.st = {}; this.arm(r); },
     arm(r) { r.st.trial = null; r.st.appearAt = now() + rnd(700, 3800); r.st.early = 0; },
     tick(r, t) { if (!r.st.trial && t >= r.st.appearAt) { const side = Math.random() < 0.5 ? -1 : 1, ay = side * rnd(12, 140), ap = rnd(-25, 25);
@@ -453,7 +454,7 @@ const TASKS = {
 };
 TASKS.desktop.draw = function (r, t) { const tr = r.st.trial; if (!tr) return; ring(tr.target.x, tr.target.y, tr.target.r, 1); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(cur.x, cur.y); g.lineTo(cur.x, cur.y + 16); g.lineTo(cur.x + 11, cur.y + 11); g.closePath(); g.fill(); };
 const COVER_KEY = { fitts: 'pointing', flick: 'pointing', precise: 'pointing', follow: 'follow', trace: 'tracing', mcturn: 'camera', reaction: 'reaction', track: 'tracking', desktop: 'desktop' };
-function suggested() { const c = coverage().parts; let best = null, bv = 9; for (const k in TASKS) { const v = c[COVER_KEY[k]] + (k === 'flick' || k === 'precise' ? 0.05 : 0) + Math.random() * 0.08; if (v < bv) { bv = v; best = k; } } return best; }
+function suggested() { const c = coverage().parts; let best = null, bv = 9; for (const k in TASKS) { if (TASKS[k].optional) continue; const v = c[COVER_KEY[k]] + (k === 'flick' || k === 'precise' ? 0.05 : 0) + Math.random() * 0.08; if (v < bv) { bv = v; best = k; } } return best; }
 
 // ---------- main loop ----------
 function frame() {
@@ -492,7 +493,7 @@ function showMenu(msg) {
   const p = c.parts; $('stats').innerHTML = (msg ? `<div style="color:var(--acc);margin-bottom:6px">${msg}</div>` : '') +
     `<table><tr><td>Overall variety</td><td><b>${Math.round(c.total * 100)}%</b> (80%+ makes a good profile; 40% is usable)</td></tr>
     <tr><td>Point-to-point cells</td><td>${Math.round(p.pointing * 100)}% of 288 distance × direction × size × urgency cells</td></tr>
-    <tr><td>Camera turns</td><td>${cov.mcTurns} / 150</td></tr><tr><td>Surprise reactions</td><td>${cov.reactions || 0} / 60</td></tr><tr><td>Tracking</td><td>${Math.round(cov.trackSec)} / 240 s</td></tr>
+    <tr><td>Camera turns</td><td>${cov.mcTurns} / 150</td></tr><tr><td>Surprise reactions (optional)</td><td>${cov.reactions || 0}</td></tr><tr><td>Tracking</td><td>${Math.round(cov.trackSec)} / 240 s</td></tr>
     <tr><td>Follow</td><td>${Math.round(cov.followSec)} / 240 s</td></tr><tr><td>Traces</td><td>${cov.traces} / 60</td></tr><tr><td>Desktop moves</td><td>${cov.absMoves} / 80</td></tr>
     <tr><td>This session</td><td>${session.rounds.length} rounds (download before closing the tab; also backed up in this browser)</td></tr></table>`;
 }

@@ -914,10 +914,16 @@ public final class Settings {
 
     /**
      * Ostinato: when a new, unexpected look target appears (a mob showing up, being hit, a new threat in a fight), the
-     * camera waits a human reaction time before turning, sampled from the humanMouseProfile (its surprise-target fit)
-     * or a built-in 230 ms median. Never applies to planned movement: path following, headSteering, mining, parkour.
+     * camera waits a human reaction time before turning, sampled from the profile's reaction block or, without a
+     * profile, your measured reaction times (tired 200..407 ms, peak 165..220 ms), with a slowly drifting attention state. Never applies to planned movement: path following, headSteering, mining, parkour.
      */
     public final Setting<Boolean> humanReactionDelay = new Setting<>(true);
+
+    /**
+     * Ostinato: energy state for humanReactionDelay: "tired" (measured 200..407 ms, the default), "peak" (measured
+     * 165..220 ms, typically 173..185 fastest), or "auto" (drifts from peak toward tired over about three hours).
+     */
+    public final Setting<String> humanEnergy = new Setting<>("tired");
 
     /**
      * Same as {@link #smoothLook} but for elytra flying.

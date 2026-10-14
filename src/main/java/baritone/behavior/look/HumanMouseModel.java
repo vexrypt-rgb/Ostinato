@@ -38,8 +38,8 @@ import java.util.Random;
  * A movement is conditioned on its vector (in raw mouse counts), the target width (counts) and urgency (0 calm,
  * 1 hurried): the duration follows the user's Fitts' law fit, the shape (velocity profile, submovements,
  * overshoot and correction, curvature) is warped from one of the nearest recorded movements, AR(1) tremor
- * fitted from the recordings rides on top. Movements start at once; the reaction-time distribution (fitted only from
- * the capture game's surprise-target task) is used separately, by {@link ReactionGate}, for unexpected targets. The landing is kept inside the target: a correction is blended in over the final part when the warped
+ * fitted from the recordings rides on top. Movements start at once; the profile's "reaction" block (the user's
+ * measured reaction times, see {@link ReactionModel}) is used separately, by {@link ReactionGate}, for unexpected targets. The landing is kept inside the target: a correction is blended in over the final part when the warped
  * template plus noise would end outside 40% of the width.
  */
 public final class HumanMouseModel {
@@ -54,16 +54,16 @@ public final class HumanMouseModel {
         }
     }
 
-    final double rtLogMean, rtLogSd, rtMin, rtMax;
+    final ReactionModel reaction;
     final double durA, durB, durLogSd, urgencySlope, durMin, durMax;
     final double noiseSd, noiseRho, noiseDt;
     final List<Template> templates;
     final boolean synthetic;
 
-    HumanMouseModel(double rtLogMean, double rtLogSd, double rtMin, double rtMax, double durA, double durB, double durLogSd,
+    HumanMouseModel(ReactionModel reaction, double durA, double durB, double durLogSd,
                     double urgencySlope, double durMin, double durMax, double noiseSd, double noiseRho, double noiseDt,
                     List<Template> templates, boolean synthetic) {
-        this.rtLogMean = rtLogMean; this.rtLogSd = rtLogSd; this.rtMin = rtMin; this.rtMax = rtMax;
+        this.reaction = reaction;
         this.durA = durA; this.durB = durB; this.durLogSd = durLogSd; this.urgencySlope = urgencySlope; this.durMin = durMin; this.durMax = durMax;
         this.noiseSd = noiseSd; this.noiseRho = noiseRho; this.noiseDt = noiseDt > 0 ? noiseDt : 5;
         this.templates = templates; this.synthetic = synthetic;
@@ -91,7 +91,7 @@ public final class HumanMouseModel {
             if (al.length < 3 || al.length != pe.length) continue;
             ts.add(new Template(num(t, "d", 100), Math.max(1, num(t, "w", 10)), num(t, "u", 0.5), al, pe));
         }
-        return new HumanMouseModel(num(rt, "logMean", DEFAULT_RT_LOG_MEAN), num(rt, "logSd", DEFAULT_RT_LOG_SD), num(rt, "minMs", 120), num(rt, "maxMs", 900),
+        return new HumanMouseModel(ReactionModel.parse(rt),
                 num(du, "a", 110), num(du, "b", 105), num(du, "logSd", 0.15), num(du, "urgencySlope", -0.35), num(du, "minMs", 40), num(du, "maxMs", 3000),
                 num(no, "sd", 0.5), num(no, "rho", 0.8), num(no, "dtMs", 5), ts, o.has("synthetic") && o.get("synthetic").getAsBoolean());
     }
@@ -104,21 +104,9 @@ public final class HumanMouseModel {
         return templates.size();
     }
 
-    /** Built-in surprise reaction time when no profile (or no reaction fit) is in use: median 230 ms. */
-    public static final double DEFAULT_RT_LOG_MEAN = Math.log(230), DEFAULT_RT_LOG_SD = 0.22;
-
-    /** A reaction time (ms) for a surprise: the user's fitted log-normal, clamped to [minMs, maxMs]. */
-    public double sampleReactionMs(Random rng) {
-        return Math.max(rtMin, Math.min(rtMax, Math.exp(rtLogMean + rtLogSd * rng.nextGaussian())));
-    }
-
-    public double medianReactionMs() {
-        return Math.max(rtMin, Math.min(rtMax, Math.exp(rtLogMean)));
-    }
-
-    /** The built-in reaction time, for when no profile is set. */
-    public static double defaultReactionMs(Random rng) {
-        return Math.max(120, Math.min(900, Math.exp(DEFAULT_RT_LOG_MEAN + DEFAULT_RT_LOG_SD * rng.nextGaussian())));
+    /** Ostinato: the surprise reaction model of this profile (the user's tired set and a peak set, see ReactionModel). */
+    public ReactionModel reactionModel() {
+        return reaction;
     }
 
     /** Median movement time (ms, without reaction) the fit predicts for a move of d counts onto a target w counts wide. */

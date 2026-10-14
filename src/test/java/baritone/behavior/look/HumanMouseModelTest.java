@@ -84,15 +84,15 @@ public class HumanMouseModelTest {
     }
 
     @Test
-    public void surpriseReactionTimesMatchTheProfile() throws Exception {
-        HumanMouseModel m = example();
-        Random r = new Random(5);
-        int n = 2001;
-        double[] rt = new double[n];
-        for (int i = 0; i < n; i++) rt[i] = m.sampleReactionMs(r);
-        Arrays.sort(rt);
-        assertEquals(m.medianReactionMs(), rt[n / 2], m.medianReactionMs() * 0.05);
-        assertTrue(rt[0] >= 120 && rt[n - 1] <= 900);
+    public void profileCarriesTheUsersTiredReactionSet() throws Exception {
+        ReactionModel rm = example().reactionModel();
+        assertArrayEquals(ReactionModel.TIRED_MS, rm.tired.samplesMs, 0);
+        assertFalse(rm.tired.estimated);
+        assertFalse(rm.peak.estimated);
+        assertArrayEquals(ReactionModel.PEAK_MS, rm.peak.samplesMs, 0);
+        assertEquals(165, rm.peak.minMs, 0);
+        assertEquals(190, rm.tired.minMs, 0);
+        assertEquals(420, rm.tired.maxMs, 0);
     }
 
     @Test

@@ -1,18 +1,34 @@
 {
   "format": "ostinato-human-mouse-profile/1",
   "synthetic": true,
-  "created": "Wed Oct 14 03:03:13 MST 2026",
+  "created": "Wed Oct 14 03:10:07 MST 2026",
   "units": {
     "distance": "mouse counts (raw, as Minecraft reads them)",
     "time": "ms"
   },
   "sources": [],
   "reaction": {
-    "logMean": 5.438079308923196,
-    "logSd": 0.22,
-    "minMs": 120,
-    "maxMs": 900,
-    "samples": 0
+    "model": "ostinato-attention-lognormal/1",
+    "sets": {
+      "tired": {
+        "samplesMs": [200, 214, 247, 290, 317, 350, 407],
+        "estimated": false,
+        "source": "user-measured while tired (200 fastest .. 407 distracted)",
+        "boundsMs": [190, 420]
+      },
+      "peak": {
+        "samplesMs": [165, 173, 177, 181, 185, 190, 198, 220],
+        "estimated": false,
+        "source": "user-measured at peak (165 rare best, 173-185 typical fastest, 220 slowest)",
+        "boundsMs": [165, 225]
+      }
+    },
+    "attention": {
+      "timescaleSec": 180,
+      "stateLogSd": 0.08,
+      "note": "slow OU walk 0 focused (fastest samples) .. 1 distracted (slowest)"
+    },
+    "autoFatigueMinutes": 180
   },
   "duration": {
     "a": 107.41751189227276,
