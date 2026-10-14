@@ -2925,7 +2925,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             // a brute guarding it (even one we gave up fighting) kills a speedrun kit: come back when it has moved
             if (!ctx.world().getEntitiesOfClass(PiglinBrute.class, new net.minecraft.world.phys.AABB(b).inflate(9), PiglinBrute::isAlive).isEmpty()) { unloaded = true; continue; } // deferred, not done
             if (pt.kind() == BastionPlan.Kind.GOLD) {
-                if (!wantGold || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
+                boolean rg = BastionSettings.scriptedRoutes && planStep.containsKey(b) && BastionRouteResolver.breaksGold(planStep.get(b));
+                if (!(wantGold || rg) || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
             } else if (!ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
             next = b;
             BastionRoutes.Step ps = planStep.get(b);
@@ -2935,7 +2936,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         // only "no chest left" once we stand in the bastion with its chunks loaded; from outside an empty plan means nothing
         chestsExhausted = next == null && !unloaded && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40;
         if (next == null) return null;
-        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK) && ingotCount(me) >= 4) {
+        // a route gold step (bridge chalice, treasure pit gold, housing wall gold) mines regardless of the ingots we hold
+        boolean routeGold = BastionSettings.scriptedRoutes && planStep.containsKey(next) && BastionRouteResolver.breaksGold(planStep.get(next));
+        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK) && ingotCount(me) >= 4 && !routeGold) {
             // runs 20/27 walked to gold blocks holding 20+ ingots: trade those first, mine only when nearly out
             badGold.put(next, ticks + 600);
             return null;
