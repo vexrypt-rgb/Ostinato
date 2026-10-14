@@ -1298,8 +1298,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
         BaritoneAPI.getSettings().maxFallHeightNoWater.value = me.getHealth() < BastionSettings.lowHealth ? Math.min(2, BastionSettings.maxSafeDrop) : BastionSettings.maxSafeDrop;
         // 0. A brute swings for ~9, so by the time we are hurt it is too late to run. As soon as one is coming for us, pillar up
         // two blocks (gravel/soul sand alternate): its attack box ends at its head, ours still reaches it, so we fight it from above.
+        // s1161-b04: two adult hoglins at melee range killed us in 14 s on flat ground; a pack (or one when hurt) is a heavy: perch
+        int hogs = ctx.world().getEntitiesWithinAABB(HoglinEntity.class, me.getBoundingBox().grow(8), h -> h.isAlive() && !h.isChild()).size();
+        final boolean hogHeavy = BastionPriors.hoglinsHeavy(hogs, me.getHealth());
         List<LivingEntity> heavies = ctx.world().getEntitiesWithinAABB(LivingEntity.class, me.getBoundingBox().grow(THREAT_RANGE),
-                e -> e != me && (e instanceof PiglinBrute || e instanceof ZoglinEntity) && e.isAlive() && (perching || !otherLevel(e, me))
+                e -> e != me && (e instanceof PiglinBrute || e instanceof ZoglinEntity || hogHeavy && e instanceof HoglinEntity && !((HoglinEntity) e).isChild()) && e.isAlive() && (perching || !otherLevel(e, me))
                         // ignored means out of reach from where we stood: one within 8 on our own level is in reach again (run 118)
                         && !(ignored.getOrDefault(e.getUniqueID(), 0L) > ticks && !(e instanceof MobEntity && me.getDistance(e) < 8 && (((MobEntity) e).isAggressive() || Math.abs(e.getPosY() - me.getPosY()) <= 3.5))));
         boolean heavyComing = heavies.stream().anyMatch(e -> me.getDistance(e) < 8 || me.getDistance(e) < 12 && e instanceof MobEntity && ((MobEntity) e).isAggressive());

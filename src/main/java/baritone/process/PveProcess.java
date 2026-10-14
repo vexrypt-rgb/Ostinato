@@ -72,9 +72,10 @@ public final class PveProcess extends BaritoneProcessHelper {
         baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(me.getEyePosition(1.0F),
                 target.getPositionVec().add(0, target.getHeight() * 0.6, 0), ctx.playerRotations()), true);
         double d = me.getDistance(target);
-        if (d < 3.6 && me.getCooledAttackStrength(0) >= 0.95F && ctx.minecraft().objectMouseOver instanceof EntityRayTraceResult
-                && ((EntityRayTraceResult) ctx.minecraft().objectMouseOver).getEntity() == target) {
-            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+        // s1161-b04: a forced left click never landed (no hoglin lost health); attack directly when in reach and in sight
+        if (d < 3.4 && me.getCooledAttackStrength(0) >= 0.95F && me.canEntityBeSeen(target)) {
+            ctx.minecraft().playerController.attackEntity(me, target);
+            me.swingArm(net.minecraft.util.Hand.MAIN_HAND);
             attacks++;
         }
         if (hold || d < 2.5) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);

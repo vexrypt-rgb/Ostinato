@@ -180,4 +180,9 @@ public final class BastionPriors {
     public static boolean pickupInReach(int dx, int dy, int dz) {
         return Math.abs(dy) <= 2 && dx * dx + dz * dz <= 25;
     }
+
+    /** Adult hoglins within 8 count as heavies (perch on a pillar) when two or more, or one while we are hurt. */
+    public static boolean hoglinsHeavy(int adultsWithin8, float hp) {
+        return adultsWithin8 >= 2 || adultsWithin8 >= 1 && hp < 12;
+    }
 }
