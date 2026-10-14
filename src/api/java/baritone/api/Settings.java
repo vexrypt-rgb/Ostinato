@@ -568,6 +568,28 @@ public final class Settings {
     public final Setting<Integer> pathingHierarchyCorridorRadius = new Setting<>(1);
 
     /**
+     * Ostinato: levels of the multi-level (Distant Horizons-style) hierarchy used by {@link #pathingHierarchical}.
+     * 1 = 16^3 sections only; 2 = plan on a coarse level first (cells of 16 &lt;&lt; pathingHierarchyCoarseFactorShift
+     * blocks), then refine on sections inside the coarse corridor, then blocks inside the section corridor.
+     */
+    public final Setting<Integer> pathingHierarchyLevels = new Setting<>(1);
+
+    /** Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly. */
+    public final Setting<Integer> pathingHierarchyMinDistance = new Setting<>(64);
+
+    /** Ostinato: coarse cell size as a shift over 16-block sections: 2 = 64 blocks, 3 = 128, 4 = 256. */
+    public final Setting<Integer> pathingHierarchyCoarseFactorShift = new Setting<>(2);
+
+    /**
+     * Ostinato: abstract route candidates to try before falling back to plain A*. 2 = when the first corridor's block
+     * search misses, re-plan the abstract route with the first one's sections penalised and search that corridor.
+     */
+    public final Setting<Integer> pathingHierarchyCandidates = new Setting<>(1);
+
+    /** Ostinato: cost multiplier on the first candidate's sections when looking for the second. */
+    public final Setting<Double> pathingHierarchyCandidatePenalty = new Setting<>(3.0);
+
+    /**
      * Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic
      * (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.
      */
