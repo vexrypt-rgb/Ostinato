@@ -117,19 +117,22 @@ public final class PkTest implements AbstractGameEventListener {
                 net.minecraft.client.Screenshot.grab(mc, false); // F2: saved by time stamp, matched to the PK SHOT line
                 say("PK SHOT " + name);
                 vizOnly(-1);
+                mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
                 shotNo++;
             }
             return;
         }
-        if (++shotTick < 60) return;
         long driven = baritone.pathing.kinematic.KinematicController.drivenTicks;
+        boolean drivenNow = driven > lastDriven;
+        lastDriven = driven;
+        if (++shotTick < 60) return;
         boolean moving = mc.player.getDeltaMovement().horizontalDistanceSqr() > 0.01;
-        if (moving && (!kin || driven > lastDriven)) {
+        if (moving && (kin == drivenNow)) {
             shotTick = 0;
             vizOnly((kin ? 0 : 3) + shotNo % 3);
-            shotWait = 4;
+            mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK); // the viz is around and ahead of the player
+            shotWait = 6;
         }
-        lastDriven = driven;
     }
 
     @Override

@@ -629,7 +629,21 @@ public final class KinematicController {
             double[] prev = line.get(line.size() - 1);
             s = prev[3] + Math.sqrt((x - prev[0]) * (x - prev[0]) + (z - prev[2]) * (z - prev[2]));
         }
-        line.add(new double[]{x, b.y, z, s});
+        line.add(new double[]{x, b.y, z, s, supportDrop(ctx.world().getBlockState(b), ctx.world().getBlockState(b.below()))});
+    }
+
+    /**
+     * Ostinato: how far below the cell floor the feet really rest. A candle, pot or lantern under the node holds the
+     * player at its own collision top, up to 0.75 lower than a full block; the rollouts took touching down there for a
+     * fall and handed every such landing back to Baritone.
+     */
+    static double supportDrop(BlockState feet, BlockState below) {
+        if (MovementHelper.collisionTop(feet) > 0) return 0;
+        return dropFor(MovementHelper.collisionTop(below));
+    }
+
+    static double dropFor(double top) {
+        return top > 0 && top < 1 ? 1 - top : 0;
     }
 
     /** Nearest point on the polyline: {arc length, horizontal distance}. */
@@ -694,10 +708,11 @@ public final class KinematicController {
         for (int i = 0; i + 1 < line.size(); i++) {
             double[] a = line.get(i), b = line.get(i + 1);
             if (s <= b[3] || i + 2 == line.size()) {
-                return Math.min(a[1], b[1]);
+                return Math.min(a[1] - a[4], b[1] - b[4]);
             }
         }
-        return line.get(line.size() - 1)[1];
+        double[] last = line.get(line.size() - 1);
+        return last[1] - last[4];
     }
 
     /** Advance past moves whose destination the player already stands in (on the ground at its floor, or near it mid-jump;
