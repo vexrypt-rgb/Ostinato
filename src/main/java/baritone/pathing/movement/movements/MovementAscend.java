@@ -123,7 +123,7 @@ public class MovementAscend extends Movement {
         if (MovementHelper.isClimbable(srcDown.getBlock())) {
             return COST_INF;
         }
-        if (MovementParkour.lowJump(srcDown) || MovementParkour.lowJump(context.get(x, y, z))) {
+        if (MovementParkour.lowJump(srcDown) || MovementParkour.lowJump(MovementParkour.factorBlock(context, x, y, z))) {
             return COST_INF; // Ostinato: off honey a jump rises about 0.4 blocks
         }
         // we can jump from soul sand, but not from a bottom slab

@@ -118,6 +118,23 @@ public class MovementParkour extends Movement {
         return false;
     }
     /** Ostinato: honey halves a jump (about 0.4 blocks high): nothing can be jumped up onto from it. */
+    /**
+     * Ostinato: the block whose jump and speed factors apply to a player standing at node (x, y, z), as vanilla picks it:
+     * the block at the feet, else the one at floor(feetY - 0.500001). On a slab or carpet laid over honey that is the
+     * honey a cell down, so the jump is halved there too (vanilla Entity.getBlockJumpFactor / getBlockSpeedFactor).
+     */
+    public static BlockState factorBlock(CalculationContext context, int x, int y, int z) {
+        BlockState feet = context.get(x, y, z);
+        if (feet.getBlock().getJumpFactor() != 1 || feet.getBlock().getSpeedFactor() != 1) return feet;
+        return context.get(x, factorCellY(y, MovementHelper.collisionTop(context.get(x, y - 1, z)), MovementHelper.collisionTop(feet)), z);
+    }
+
+    /** Feet height on whatever holds the player at node y (a low top in the feet cell, else the top of the block below), less half a block. */
+    static int factorCellY(int y, double belowTop, double feetTop) {
+        double feetY = feetTop > 0 && feetTop < 1 ? y + feetTop : belowTop > 0 ? y - 1 + Math.min(belowTop, 1) : y;
+        return (int) Math.floor(feetY - 0.500001);
+    }
+
     public static boolean lowJump(BlockState standingOn) {
         return lowJump(standingOn.getBlock().getJumpFactor());
     }
@@ -207,7 +224,7 @@ public class MovementParkour extends Movement {
             // check for ascend landing position
             BlockState destInto = context.bsi.get0(destX, y, destZ);
             if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && context.allowParkourAscend && context.canSprint && !lowJump(standingOn) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
+                if (i <= 3 && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z)) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
                     res.z = destZ;
@@ -235,7 +252,7 @@ public class MovementParkour extends Movement {
             if ((landingOn.getBlock() != Blocks.FARMLAND && MovementHelper.canWalkOn(context, destX, y - 1, destZ, landingOn))
                     || (Math.min(16, context.frostWalker + 2) >= i && MovementHelper.canUseFrostWalker(context, landingOn))
             ) {
-                if (slowTakeoff(standingOn) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
+                if (slowTakeoff(factorBlock(context, x, y, z)) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
                     break; // Ostinato: off honey or soul sand, only what the sim lands from the run-up there is
                 }
                 if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)) {
