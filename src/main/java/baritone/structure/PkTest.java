@@ -184,7 +184,7 @@ public final class PkTest implements AbstractGameEventListener {
         s.movementBackend.value = "baritone"; s.slowKinematic.value = false;
         boolean phys = MODE.equals("physics");
         s.physicsTravel.value = phys; s.kinematicTravel.value = !phys;
-        s.kinematicTrace.value = GOALS != null && GOALS.contains("drill"); // SIMTRACE: sim vs real per jump tick
+        s.kinematicTrace.value = true; // SIMTRACE: sim vs real per jump tick (MovementJump flights)
         GameType gt = mc.getSingleplayerServer().getDefaultGameType();
         GameType use = (gt == GameType.CREATIVE || gt == GameType.SPECTATOR) ? GameType.ADVENTURE : gt;
         run("gamemode " + use.getName() + " @p");
