@@ -95,6 +95,9 @@ public class MovementJump extends Movement {
     private static final class Cache {
         Object context;
         int x, y, z;
+        /** Ostinato: head-hitter sims spent this calculation (each ~30 ms; they dominated A* under floating courses). */
+        Object simContext;
+        int sims;
         final List<Option> options = new ArrayList<>();
     }
 
@@ -179,6 +182,11 @@ public class MovementJump extends Movement {
             return c.options;
         }
         c.context = context;
+        if (c.simContext != context) {
+            c.simContext = context;
+            c.sims = 0;
+        }
+        int nodeSims = 0;
         c.x = x;
         c.y = y;
         c.z = z;
@@ -232,8 +240,18 @@ public class MovementJump extends Movement {
                 if (!ceiling && JumpTemplates.MOMENTUM.contains(t)) {
                     continue;
                 }
+                if (ceiling) {
+                    // Ostinato: cap the sims (cached across replans): per node and per calculation
+                    Boolean known = HH_CACHE.get(hhKey(x, y, z, i, t, dx, dz));
+                    if (known != null) {
+                        if (!known) continue;
+                    } else if (nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
+                        continue;
+                    }
+                }
                 long hh0 = ceiling ? System.nanoTime() : 0;
-                boolean hhOk = !ceiling || headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz);
+                boolean hhOk = !ceiling || hhCached(context, x, y, z, i, f, t, dx, y + t.dy, dz, c);
+                if (ceiling) nodeSims++;
                 if (ceiling) {
                     PlanStats.hhNs.addAndGet(System.nanoTime() - hh0);
                     PlanStats.hhCalls.incrementAndGet();
@@ -264,6 +282,31 @@ public class MovementJump extends Movement {
     // sim against the real blocks and kept only when the sim lands on dest (the same search the flight runs).
     static boolean headHitterCell(CalculationContext context, int[] cell, int cx, int cy, int cz) {
         return cell[3] == 0 && cell[1] >= 2 && context.get(cx, cy, cz).getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(context.get(cx, cy, cz));
+    }
+
+    static final int MAX_NODE_SIMS = 3, MAX_CALC_SIMS = 150;
+    private static final java.util.Map<Long, Boolean> HH_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile long hhCacheBorn = System.currentTimeMillis();
+
+    private static long hhKey(int x, int y, int z, int frame, JumpTemplates.Template t, int dx, int dz) {
+        int ti = System.identityHashCode(t);
+        return (((long) (x & 0xFFFFF)) << 44) ^ (((long) (y & 0x3FF)) << 34) ^ (((long) (z & 0xFFFFF)) << 14) ^ ((long) frame << 10) ^ (ti * 0x9E3779B97F4A7C15L) ^ (((long) dx) * 31 + dz) * 0x632BE59BD9B4E019L;
+    }
+
+    private static boolean hhCached(CalculationContext context, int x, int y, int z, int frame, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, Cache c) {
+        long now = System.currentTimeMillis();
+        if (now - hhCacheBorn > 30000) { // blocks change: forget sims older than ~30 s
+            HH_CACHE.clear();
+            hhCacheBorn = now;
+        }
+        long k = hhKey(x, y, z, frame, t, dx, dz);
+        Boolean v = HH_CACHE.get(k);
+        if (v == null) {
+            c.sims++;
+            v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz);
+            HH_CACHE.put(k, v);
+        }
+        return v;
     }
 
     private static boolean lowTunnel(CalculationContext context, int x, int y, int z, int[] f) {
