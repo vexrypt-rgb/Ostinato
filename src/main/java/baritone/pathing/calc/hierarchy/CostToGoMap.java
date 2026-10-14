@@ -15,11 +15,21 @@ import java.util.PriorityQueue;
  */
 public final class CostToGoMap {
 
+    /** Ostinato: which cells (in this map's level coordinates) a search may use. */
+    @FunctionalInterface
+    public interface CellFilter {
+        boolean test(int cx, int cy, int cz);
+    }
+
     private final Long2DoubleOpenHashMap dist = new Long2DoubleOpenHashMap();
     public final int goalSx, goalSy, goalSz;
     public int expanded;
 
-    private CostToGoMap(int gx, int gy, int gz) {
+    /** Ostinato: log2 of the cell size in blocks (4 = sections). */
+    public final int shift;
+
+    private CostToGoMap(int gx, int gy, int gz, int shift) {
+        this.shift = shift;
         dist.defaultReturnValue(Double.NaN);
         goalSx = gx;
         goalSy = gy;
@@ -31,11 +41,30 @@ public final class CostToGoMap {
      * horizontally; it stops early once the start section is settled and {@code extra} more have been settled.
      */
     public static CostToGoMap build(SectionGraph g, CalculationContext ctx, int startX, int startY, int startZ, int goalX, int goalY, int goalZ, int margin, long deadlineMs) {
-        int ssx = startX >> 4, ssy = startY >> 4, ssz = startZ >> 4;
-        CostToGoMap m = new CostToGoMap(goalX >> 4, goalY >> 4, goalZ >> 4);
+        return build(g, ctx, startX, startY, startZ, goalX, goalY, goalZ, margin, deadlineMs, (CellFilter) null);
+    }
+
+    /**
+     * Ostinato: the same on any {@link LevelGraph} level (cell = 1 &lt;&lt; shift blocks), optionally limited to cells
+     * {@code allowed} accepts (used to refine progressively: a finer level only searches inside the coarser corridor).
+     */
+    public static CostToGoMap build(LevelGraph g, CalculationContext ctx, int startX, int startY, int startZ, int goalX, int goalY, int goalZ, int margin, long deadlineMs,
+                                    CellFilter allowed) {
+        return build(g, ctx, startX, startY, startZ, goalX, goalY, goalZ, margin, deadlineMs, allowed, null, 1);
+    }
+
+    /**
+     * Ostinato: second-candidate (k-diverse) variant. Edges leaving a cell in {@code penalised} cost {@code factor}
+     * times more, so the descent from the start avoids the first candidate's route where a comparable one exists.
+     */
+    public static CostToGoMap build(LevelGraph g, CalculationContext ctx, int startX, int startY, int startZ, int goalX, int goalY, int goalZ, int margin, long deadlineMs,
+                                    CellFilter allowed, it.unimi.dsi.fastutil.longs.LongOpenHashSet penalised, double factor) {
+        int sh = g.shift();
+        int ssx = startX >> sh, ssy = startY >> sh, ssz = startZ >> sh;
+        CostToGoMap m = new CostToGoMap(goalX >> sh, goalY >> sh, goalZ >> sh, sh);
         int minSx = Math.min(ssx, m.goalSx) - margin, maxSx = Math.max(ssx, m.goalSx) + margin;
         int minSz = Math.min(ssz, m.goalSz) - margin, maxSz = Math.max(ssz, m.goalSz) + margin;
-        int minSy = ctx.worldMinY >> 4, maxSy = ctx.worldMaxY >> 4;
+        int minSy = ctx.worldMinY >> sh, maxSy = ctx.worldMaxY >> sh;
         PriorityQueue<double[]> pq = new PriorityQueue<>((a, b) -> Double.compare(a[0], b[0]));
         m.dist.put(SectionGraph.key(m.goalSx, m.goalSy, m.goalSz), 0);
         pq.add(new double[]{0, m.goalSx, m.goalSy, m.goalSz});
@@ -57,9 +86,10 @@ public final class CostToGoMap {
                 if (ax < minSx || ax > maxSx || az < minSz || az > maxSz || ay < minSy || ay > maxSy) continue;
                 long ak = SectionGraph.key(ax, ay, az);
                 if (done.contains(ak)) continue;
+                if (allowed != null && !allowed.test(ax, ay, az)) continue;
                 float c = g.outgoing(ctx, ax, ay, az)[d];
                 if (!Float.isFinite(c)) continue;
-                double nd = top[0] + c;
+                double nd = top[0] + (penalised != null && penalised.contains(ak) ? c * factor : c);
                 double old = m.dist.get(ak);
                 if (Double.isNaN(old) || nd < old) {
                     m.dist.put(ak, nd);
@@ -76,15 +106,15 @@ public final class CostToGoMap {
 
     /** Remaining cost (ticks) from the section holding block (x,y,z); NaN if unknown. */
     public double costToGo(int x, int y, int z) {
-        return costToGoSection(x >> 4, y >> 4, z >> 4);
+        return costToGoSection(x >> shift, y >> shift, z >> shift);
     }
 
     /**
      * Section keys on the descent from the start's section to the goal's, each widened by {@code radius} sections;
      * null if the start was not reached.
      */
-    public it.unimi.dsi.fastutil.longs.LongOpenHashSet corridor(SectionGraph g, CalculationContext ctx, int x, int y, int z, int radius) {
-        int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+    public it.unimi.dsi.fastutil.longs.LongOpenHashSet corridor(LevelGraph g, CalculationContext ctx, int x, int y, int z, int radius) {
+        int sx = x >> shift, sy = y >> shift, sz = z >> shift;
         if (Double.isNaN(costToGoSection(sx, sy, sz))) return null;
         it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
         for (int steps = 0; steps < 100_000; steps++) {

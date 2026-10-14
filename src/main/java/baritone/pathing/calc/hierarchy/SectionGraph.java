@@ -26,7 +26,28 @@ import net.minecraft.world.level.block.state.BlockState;
  * movement settings and cleared when those change. Intra-section connectivity is assumed (a known simplification:
  * a section split by a wall is treated as one node).
  */
-public final class SectionGraph {
+public final class SectionGraph implements LevelGraph {
+
+    /** Ostinato: the coarse level above (64-256 blocks), told about invalidations; null = sections only. */
+    public volatile LevelGraph parent;
+
+    @Override
+    public int shift() {
+        return 4;
+    }
+
+    /** Ostinato: the coarse level with cells of {@code 16 << factorShift} blocks, created on first use. */
+    public synchronized CoarseGraph coarse(int factorShift) {
+        if (parent instanceof CoarseGraph cg && cg.shift() == 4 + factorShift) return cg;
+        CoarseGraph cg = new CoarseGraph(this, factorShift);
+        parent = cg;
+        return cg;
+    }
+
+    private void notifyParent(int sx, int sy, int sz) {
+        LevelGraph p = parent;
+        if (p != null) p.invalidateFine(sx, sy, sz);
+    }
 
     public static final int SIZE = 16;
     /** Neighbour offsets, index = direction. */
@@ -76,14 +97,17 @@ public final class SectionGraph {
     }
 
     /** Outgoing edge costs (ticks) to the 26 neighbours of section (sx,sy,sz); +inf where there is none. */
+    @Override
     public float[] outgoing(CalculationContext ctx, int sx, int sy, int sz) {
         long k = key(sx, sy, sz);
         long sig = signature(ctx);
         long ep;
         synchronized (this) {
             if (sig != signature) {
+                boolean had = signature != Long.MIN_VALUE;
                 edges.clear();
                 signature = sig;
+                if (had && parent instanceof CoarseGraph cg) cg.invalidateAll(); // Ostinato: coarse edges were built from these
             }
             float[] e = edges.get(k);
             if (e != null) return e;
@@ -107,6 +131,7 @@ public final class SectionGraph {
             for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) for (int dz = -1; dz <= 1; dz++)
                 edges.remove(key(sx + dx, sy + dy, sz + dz));
         }
+        notifyParent(sx, sy, sz);
     }
 
     public void invalidateChunk(int cx, int cz, int minSy, int maxSy) {
@@ -115,11 +140,16 @@ public final class SectionGraph {
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int sy = minSy - 1; sy <= maxSy + 1; sy++)
                 edges.remove(key(cx + dx, sy, cz + dz));
         }
+        for (int sy = minSy; sy <= maxSy; sy++) notifyParent(cx, sy, cz);
     }
 
-    public synchronized void invalidateAll() {
-        epoch++;
-        edges.clear();
+    public void invalidateAll() {
+        synchronized (this) {
+            epoch++;
+            edges.clear();
+        }
+        LevelGraph p = parent;
+        if (p instanceof CoarseGraph cg) cg.invalidateAll();
     }
 
     /** Fill the edges of a chunk column's sections on the calling (worker) thread. */
@@ -149,16 +179,18 @@ public final class SectionGraph {
             if (y <= minY || y >= maxY) continue;
             BlockState feet = ctx.get(x, y, z);
             if (allAir && !feet.isAir()) allAir = false;
-            if (((lx | ly | lz) & 7) == 3 && !MovementHelper.canWalkThrough(ctx, x, y, z, feet)) { // 8 samples for the tunnel price
-                double m = MovementHelper.getMiningDurationTicks(ctx, x, y, z, feet, false);
-                mineSum += m;
-                mineN++;
-            }
+
             if (!onShell(lx, ly, lz)) continue;
             boolean wet = MovementHelper.isWater(feet);
             if (!wet && !(MovementHelper.canWalkThrough(ctx, x, y, z, feet) && MovementHelper.canWalkThrough(ctx, x, y + 1, z) && MovementHelper.canWalkOn(ctx, x, y - 1, z))) continue;
             anyStandable = true;
             for (Moves m : moves) {
+                // Ostinato: a fixed-offset move that lands inside this section cannot produce an edge; skip it
+                // before evaluating (same result, most of the cold-build cost).
+                if (!m.dynamicXZ && !m.dynamicY) {
+                    int tx = lx + m.xOffset, ty = ly + m.yOffset, tz = lz + m.zOffset;
+                    if ((tx | ty | tz) >= 0 && tx < SIZE && ty < SIZE && tz < SIZE) continue;
+                }
                 int ny = y + m.yOffset;
                 if (ny > maxY || ny < minY) continue;
                 if (!m.dynamicXZ && !ctx.worldBorder.entirelyContains(x + m.xOffset, z + m.zOffset)) continue;
@@ -175,6 +207,21 @@ public final class SectionGraph {
             }
         }
         float[] out = new float[26];
+        boolean needAlt = !anyStandable;
+        for (int d = 0; d < 26 && !needAlt; d++) needAlt = !Float.isFinite(rate[d]);
+        if (needAlt && ctx.allowBreak && !allAir) {
+            // Ostinato: the tunnel price is only needed when some direction has no real move; sampling it lazily
+            // (same sample cells, same order) gives identical edges without the mining-time lookups in open terrain.
+            for (int lx = 0; lx < SIZE; lx++) for (int lz = 0; lz < SIZE; lz++) for (int ly = 0; ly < SIZE; ly++) {
+                if (((lx | ly | lz) & 7) != 3) continue;
+                int x = bx + lx, y = by + ly, z = bz + lz;
+                if (y <= minY || y >= maxY) continue;
+                BlockState feet = ctx.get(x, y, z);
+                if (MovementHelper.canWalkThrough(ctx, x, y, z, feet)) continue;
+                mineSum += MovementHelper.getMiningDurationTicks(ctx, x, y, z, feet, false);
+                mineN++;
+            }
+        }
         double tunnel = ctx.allowBreak && mineN > 0 ? (mineSum / mineN) * 2 + ActionCosts.WALK_ONE_BLOCK_COST : Double.POSITIVE_INFINITY; // two blocks per step
         double bridge = ctx.hasThrowaway ? ctx.costOfPlacingAt(bx, by, bz, ctx.get(bx, by, bz)) + ActionCosts.WALK_ONE_BLOCK_COST * 2 : Double.POSITIVE_INFINITY;
         for (int d = 0; d < 26; d++) {

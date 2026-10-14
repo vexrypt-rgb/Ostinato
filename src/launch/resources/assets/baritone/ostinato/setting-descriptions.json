@@ -332,5 +332,10 @@
  "useCalibratedCosts": "Ostinato: scale each move's planned cost by its measured actual/planned ratio from the calibration table.",
  "riskAwareCosts": "Ostinato: add the expected failure cost (measured failure rate x riskRecoveryTicks) to each move.",
  "riskRecoveryTicks": "Ostinato: ticks a failed movement costs to recover from (replan, walk back, retry), for riskAwareCosts.",
- "calibrationMinSamples": "Ostinato: samples a move needs before its calibrated factor or risk term is used."
+ "calibrationMinSamples": "Ostinato: samples a move needs before its calibrated factor or risk term is used.",
+ "pathingHierarchyLevels": "Ostinato: levels of the multi-level (Distant Horizons-style) hierarchy used by pathingHierarchical. 1 = 16^3 sections only; 2 = plan on a coarse level first (cells of 16 << pathingHierarchyCoarseFactorShift blocks), then refine on sections inside the coarse corridor, then blocks inside the section corridor.",
+ "pathingHierarchyCoarseFactorShift": "Ostinato: coarse cell size as a shift over 16-block sections: 2 = 64 blocks, 3 = 128, 4 = 256.",
+ "pathingHierarchyCandidates": "Ostinato: abstract route candidates to try before falling back to plain A*. 2 = when the first corridor's block search misses, re-plan the abstract route with the first one's sections penalised and search that corridor.",
+ "pathingHierarchyCandidatePenalty": "Ostinato: cost multiplier on the first candidate's sections when looking for the second.",
+ "pathingHierarchyMinDistance": "Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly."
 }
