@@ -77,8 +77,23 @@ public final class PathBench {
     public static Finder finder(String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("astar")) return ASTAR;
         if (spec.startsWith("wa:")) return weighted(Double.parseDouble(spec.substring(3)));
+        if (spec.startsWith("hpa")) { // hpa[:factor[:radius]]; a fresh SectionGraph per query = cold cache (worst case)
+            String[] p = spec.split(":");
+            double factor = p.length > 1 ? Double.parseDouble(p[1]) : 0;
+            int radius = p.length > 2 ? Integer.parseInt(p[2]) : 1;
+            boolean warm = System.getenv("OSTINATO_BENCH_WARM") != null;
+            return (s, g, c) -> {
+                Baritone.settings().pathingHierarchyHeuristicFactor.value = factor;
+                Baritone.settings().pathingHierarchyCorridorRadius.value = radius;
+                baritone.pathing.calc.hierarchy.SectionGraph graph = warm ? WARM.computeIfAbsent(c.bsi, k -> new baritone.pathing.calc.hierarchy.SectionGraph()) : new baritone.pathing.calc.hierarchy.SectionGraph();
+                return new HierarchicalPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, graph, 1);
+            };
+        }
         throw new IllegalArgumentException(spec);
     }
+
+    /** With OSTINATO_BENCH_WARM: one SectionGraph per world, reused across queries (as if prefetched while chunks loaded). */
+    private static final Map<Object, baritone.pathing.calc.hierarchy.SectionGraph> WARM = new IdentityHashMap<>();
 
     private static boolean booted;
 

@@ -316,5 +316,14 @@
  "acsHudOpacity": "How solid the Autotune card's background is, from 0 (text only) to 1.",
  "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.",
  "pathingFarSegmentWeight": "Ostinato: explicit weighted A* for far segments. When the segment's start is at least pathingFarSegmentDistance blocks (by the goal heuristic) from the goal, A* orders its open set by g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly, Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).",
- "pathingFarSegmentDistance": "Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for pathingFarSegmentWeight to apply."
+ "pathingFarSegmentDistance": "Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for pathingFarSegmentWeight to apply.",
+ "pathingHierarchical": "Ostinato: plan through the section-level (16x16x16) abstract graph first and keep block-level A* inside the resulting corridor (HierarchicalPathFinder). Falls back to plain A* when there is no abstract route. Off until proven.",
+ "pathingHierarchyMargin": "Ostinato: how many sections beyond the start/goal box the abstract search may detour through.",
+ "pathingHierarchyCorridorRadius": "Ostinato: corridor half-width in sections around the abstract route.",
+ "pathingHierarchyHeuristicFactor": "Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.",
+ "logMovementTicks": "Ostinato: log planned vs actual ticks of every executed movement to baritone/calibration/ /samples.csv.",
+ "useCalibratedCosts": "Ostinato: scale each move's planned cost by its measured actual/planned ratio from the calibration table.",
+ "riskAwareCosts": "Ostinato: add the expected failure cost (measured failure rate x riskRecoveryTicks) to each move.",
+ "riskRecoveryTicks": "Ostinato: ticks a failed movement costs to recover from (replan, walk back, retry), for riskAwareCosts.",
+ "calibrationMinSamples": "Ostinato: samples a move needs before its calibrated factor or risk term is used."
 }

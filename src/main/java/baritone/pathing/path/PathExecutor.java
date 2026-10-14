@@ -17,6 +17,7 @@
 
 package baritone.pathing.path;
 
+import baritone.pathing.calibration.CostCalibration;
 import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.pathing.calc.IPath;
@@ -412,6 +413,9 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         MovementStatus movementStatus = movement.update();
+        if (movementStatus == UNREACHABLE || movementStatus == FAILED || movementStatus == SUCCESS) { // Ostinato: cost calibration log
+            CostCalibration.record(movement, ticksOnCurrent + 1, movementStatus == SUCCESS, ctx.player().isInWater());
+        }
         if (movementStatus == UNREACHABLE || movementStatus == FAILED) {
             logDebug("Movement returns status " + movementStatus);
             Baritone.settings().movementFault.value.accept("M04", movement.getClass().getSimpleName() + " " + movementStatus + " at " + ctx.playerFeet());

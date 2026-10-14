@@ -40,6 +40,13 @@ import java.util.Optional;
 public final class AStarPathFinder extends AbstractNodeCostSearch {
 
     private final Favoring favoring;
+
+    /** Ostinato: optional corridor for the hierarchical planner; nodes it rejects are never expanded into. Null = stock. */
+    public interface NodeFilter {
+        boolean allow(int x, int y, int z);
+    }
+
+    NodeFilter nodeFilter;
     private final CalculationContext calcContext;
 
     /**
@@ -93,6 +100,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int pathingMaxChunkBorderFetch = Baritone.settings().pathingMaxChunkBorderFetch.value; // grab all settings beforehand so that changing settings during pathing doesn't cause a crash or unpredictable behavior
         double minimumImprovement = Baritone.settings().minimumImprovementRepropagation.value ? MIN_IMPROVEMENT : 0;
         Moves[] allMoves = Moves.values();
+        baritone.pathing.calibration.CostCalibration.Table calib = baritone.pathing.calibration.CostCalibration.forSearch(); // Ostinato: null = stock costs
         while (!openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // only call this once every 64 nodes (about half a millisecond)
                 long now = System.currentTimeMillis(); // since nanoTime is slow on windows (takes many microseconds)
@@ -169,6 +177,12 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                             SettingsUtil.maybeCensor(currentNode.z),
                             SettingsUtil.maybeCensor(res.y),
                             SettingsUtil.maybeCensor(currentNode.y + moves.yOffset)));
+                }
+                if (nodeFilter != null && !nodeFilter.allow(res.x, res.y, res.z)) { // Ostinato: corridor (null in stock planning)
+                    continue;
+                }
+                if (calib != null) { // Ostinato: measured cost factor and expected failure cost
+                    actionCost = actionCost * calib.mult[moves.ordinal()] + calib.add[moves.ordinal()];
                 }
                 long hashCode = BetterBlockPos.longHash(res.x, res.y, res.z);
                 if (isFavoring) {
