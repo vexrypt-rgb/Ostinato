@@ -255,24 +255,12 @@ public class ToolSet {
      */
     private double potionAmplifier() {
         double speed = 1;
-        if (player.hasEffect(MobEffects.HASTE)) {
-            speed *= 1 + (player.getEffect(MobEffects.HASTE).getAmplifier() + 1) * 0.2;
+        // Ostinato: as Player.getDestroySpeed - Haste or Conduit Power, whichever is higher, and 0.3^(n+1) fatigue
+        if (net.minecraft.world.effect.MobEffectUtil.hasDigSpeed(player)) {
+            speed *= baritone.pathing.movement.DigTime.haste(net.minecraft.world.effect.MobEffectUtil.getDigSpeedAmplification(player));
         }
         if (player.hasEffect(MobEffects.MINING_FATIGUE)) {
-            switch (player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
-                case 0:
-                    speed *= 0.3;
-                    break;
-                case 1:
-                    speed *= 0.09;
-                    break;
-                case 2:
-                    speed *= 0.0027; // you might think that 0.09*0.3 = 0.027 so that should be next, that would make too much sense. it's 0.0027.
-                    break;
-                default:
-                    speed *= 0.00081;
-                    break;
-            }
+            return speed * baritone.pathing.movement.DigTime.fatigue(player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier());
         }
         return speed;
     }

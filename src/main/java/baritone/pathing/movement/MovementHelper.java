@@ -742,7 +742,8 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (strVsBlock <= 0) {
                 return COST_INF;
             }
-            double result = 1 / strVsBlock;
+            // Ostinato: whole ticks, instant breaks, and the gap before the next block (DigTime)
+            double result = DigTime.ticks(strVsBlock, Baritone.settings().blockBreakSpeed.value);
             result += context.breakBlockAdditionalCost;
             result *= mult;
             if (includeFalling) {

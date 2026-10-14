@@ -116,9 +116,71 @@ public final class CrawlCosts implements ActionCosts {
         return WALK_ONE_BLOCK_COST / f;
     }
 
-    /** Sprinting before the pose change keeps the sprint (vanilla only refuses to START one), 30% faster. */
+    /**
+     * Ostinato: sprint-crawl. Sprint is a +30% MOVEMENT_SPEED modifier and survives the pose change; input is still
+     * scaled by SNEAKING_SPEED, so it is crawl / 1.3 (11.88 ticks per block at the default 0.3).
+     * <p>
+     * From LocalPlayer.aiStep (26.3): canStartSprinting needs {@code !isMovingSlowly() || isUnderWater()}, so a
+     * crawling player can never START a sprint; a running one is only stopped by shouldStopRunSprinting:
+     * <ul>
+     *     <li>!isSprintingPossible: food 6 or less (FoodData.hasEnoughFood), Blindness (isMobilityRestricted),
+     *     shallow water;</li>
+     *     <li>no forward impulse: releasing W, i.e. ANY stop, including stopping to mine;</li>
+     *     <li>horizontalCollision that is not minor (minor = blocked less than 8 degrees off the wanted direction while
+     *     still moving). Running head-on into an unmined block is a full stop: major.</li>
+     * </ul>
+     * Holding left click to mine does not touch the sprint (only attacking an entity does, Player.attack), nor does
+     * the sneak key or right clicking a block. So the sprint lasts as long as each next block is broken before we
+     * reach it, i.e. a block's mining time is at most one sprint-crawl block.
+     */
     public static double sprintCrawlOneBlockCost(double sneakFactor) {
         return crawlOneBlockCost(sneakFactor) / 1.3;
+    }
+
+    /** Ostinato: place and open the trapdoor; the close is clicked on the run, in the stride under it. */
+    public static final double SPRINT_ENTRY_INTERACT_TICKS = 2 * 4 + 1;
+
+    /** Ostinato: can a block taking {@code mine} ticks be broken ahead of us without dropping the sprint. */
+    public static boolean keepsSprint(double mine, double sprintStep) {
+        return mine <= sprintStep;
+    }
+
+    /**
+     * Ostinato: the sprint-crawl variant of {@link #tunnelCost}. Entry: mine the entry cell and the first crawl
+     * cell's feet from the start (standing), place and open the trapdoor, then sprint under it and close it in
+     * passing, so the sprint carries into the crawl. Every later block is mined while crawling towards it; one that
+     * takes longer than a sprint-crawl block makes us bump into it, which ends the sprint for the rest of the tunnel
+     * (it can't be restarted while crawling).
+     *
+     * @param cellMine feet mining of the crawl cells, the first one is mined from the start
+     */
+    public static double sprintTunnelCost(double entryMine, double[] cellMine, double exitFeet, double exitHead,
+                                          double crawlStep, double sprintStep, double itemCost) {
+        if (entryMine >= COST_INF || exitFeet >= COST_INF || exitHead >= COST_INF || cellMine.length == 0) {
+            return COST_INF;
+        }
+        for (double m : cellMine) {
+            if (m >= COST_INF) {
+                return COST_INF;
+            }
+        }
+        double c = WALK_ONE_BLOCK_COST + entryMine + cellMine[0] + SPRINT_ENTRY_INTERACT_TICKS + itemCost;
+        c += sprintStep; // entry cell to first crawl cell, already open
+        boolean sprinting = true;
+        for (int i = 1; i < cellMine.length; i++) {
+            if (sprinting && keepsSprint(cellMine[i], sprintStep)) {
+                c += sprintStep; // mined on the way, hidden
+            } else {
+                sprinting = false;
+                c += crawlStep + cellMine[i];
+            }
+        }
+        if (sprinting && keepsSprint(exitFeet, sprintStep)) {
+            c += sprintStep;
+        } else {
+            c += crawlStep + exitFeet;
+        }
+        return c + exitHead; // the head of the exit cell is mined from inside it, then we stand
     }
 
     /**

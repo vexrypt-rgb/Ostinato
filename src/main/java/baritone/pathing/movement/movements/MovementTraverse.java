@@ -131,6 +131,11 @@ public class MovementTraverse extends Movement {
             if (!standingOnABlock && Baritone.settings().swimInWater.value && MovementHelper.isWater(context.get(x, y, z))) {
                 return COST_INF; // floating: can't mine from here reliably, MovementSwim digs instead
             }
+            if (!context.aquaAffinity && MovementHelper.isWater(context.get(x, y + 1, z))) {
+                // Ostinato: eyes in water, SUBMERGED_MINING_SPEED 0.2 (Player.getDestroySpeed)
+                hardness1 *= 5;
+                hardness2 *= 5;
+            }
             return WC + hardness1 + hardness2;
         } else {//this is a bridge, so we need to place a block
             if (MovementHelper.isClimbable(srcDownBlock)) {

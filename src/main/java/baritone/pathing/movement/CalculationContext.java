@@ -115,6 +115,10 @@ public class CalculationContext {
     public final boolean allowCrawlTunnel;
     /** Ostinato: ticks per block crawling, from the SNEAKING_SPEED attribute (Swift Sneak raises it). */
     public final double crawlStepCost;
+    /** Ostinato: a sprint could be carried into a crawl tunnel (sprint allowed, food > 6, not blind). */
+    public boolean sprintCrawl;
+    /** Ostinato: ticks per block sprint-crawling. */
+    public final double sprintCrawlStepCost;
     /** Ostinato: what using up one trapdoor on a crawl tunnel is worth, in ticks. */
     public final double crawlTunnelItemCost;
     public final BetterWorldBorder worldBorder;
@@ -227,6 +231,8 @@ public class CalculationContext {
                 && ((Baritone) baritone).getInventoryBehavior().pickCrawlItem(false);
         this.crawlStepCost = CrawlCosts.crawlOneBlockCost(player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED));
         this.crawlTunnelItemCost = Baritone.settings().crawlTunnelItemCost.value;
+        this.sprintCrawl = Baritone.settings().allowSprintCrawl.value && this.canSprint && !player.isMobilityRestricted();
+        this.sprintCrawlStepCost = CrawlCosts.sprintCrawlOneBlockCost(player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED));
         // why cache these things here, why not let the movements just get directly from settings?
         // because if some movements are calculated one way and others are calculated another way,
         // then you get a wildly inconsistent path that isn't optimal for either scenario.

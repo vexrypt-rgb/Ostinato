@@ -322,5 +322,6 @@
  "renderPhysInputs": "Physics travel: draw a glyph per tick for the keys held (W, sprint, jump, A/D) and ghost hitboxes at jump, apex, landing and grab.",
  "renderPhysSearch": "Physics travel: draw the explored search tree, faint and fading by depth, and the planned against the actual trajectory with error links and replan markers.",
  "allowCrawlTunnel": "Ostinato: when tunnelling, crawl through 1-high tunnels (half the blocks to mine) if that is cheaper overall. Needs a trapdoor or fence gate on the hotbar, which is used up to force the crawl pose at the tunnel mouth.",
- "crawlTunnelItemCost": "Ostinato: the cost, in ticks, of using up one trapdoor or fence gate on a crawl tunnel."
+ "crawlTunnelItemCost": "Ostinato: the cost, in ticks, of using up one trapdoor or fence gate on a crawl tunnel.",
+ "allowSprintCrawl": "Ostinato: carry a sprint into crawl tunnels (30% faster crawling) by closing the trapdoor on the run, and mine each next block while crawling towards it so the sprint is never broken. Used where every block breaks in time."
 }

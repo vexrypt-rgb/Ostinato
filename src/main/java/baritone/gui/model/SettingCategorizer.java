@@ -56,7 +56,7 @@ public final class SettingCategorizer {
         put(m, MOVEMENT, "freeLook", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "randomLooking", "randomLooking113",
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
                 "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
-                "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "allowCrawlTunnel", "crawlTunnelItemCost", "experimentalMovement", "experimentalJumpBias",
+                "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "allowCrawlTunnel", "crawlTunnelItemCost", "allowSprintCrawl", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
         put(m, PATHING, "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");

@@ -26,11 +26,15 @@ import static org.junit.Assert.*;
 /** Ostinato: crawl pose and 1-high tunnel costs. */
 public class CrawlCostsTest {
 
-    private static final double PENALTY = 2; // blockBreakAdditionalPenalty default
+    private static final double PENALTY = 0.5; // blockBreakAdditionalPenalty default
 
-    /** Baritone's mining ticks: 1/strVsBlock + penalty, strVsBlock = speed / hardness / 30 with the right tool. */
+    /** Mining ticks as planned: DigTime (whole ticks + the 6 tick gap) + penalty, with the right tool. */
     private static double mine(double toolSpeed, double hardness) {
-        return hardness * 30 / toolSpeed + PENALTY;
+        return mine(toolSpeed, 0, hardness);
+    }
+
+    private static double mine(double toolSpeed, int efficiency, double hardness) {
+        return DigTime.ticks(DigTime.progress(toolSpeed, efficiency, hardness, true), 6) + PENALTY;
     }
 
     private static double[] cells(int n, double m) {
@@ -105,23 +109,28 @@ public class CrawlCostsTest {
 
     @Test
     public void fastToolsKeepWalking() {
-        // stone with a diamond pickaxe (speed 8): head mining is cheaper than the slower crawl
-        double m = mine(8, 1.5);
-        assertTrue(crawl(16, m) > walkTunnelCost(m, m, 16));
-        // netherrack with a diamond or wooden pickaxe: walk
-        assertTrue(crawl(16, mine(8, 0.4)) > walkTunnelCost(mine(8, 0.4), mine(8, 0.4), 16));
-        assertTrue(crawl(16, mine(2, 0.4)) > walkTunnelCost(mine(2, 0.4), mine(2, 0.4), 16));
+        // stone with a diamond pickaxe: 6 + 6 + 0.5 = 12.5 a block, just too slow to keep a sprint, and the plain
+        // crawl is slower than walking: 2-high it is. Same for netherrack with a wooden pick (6 ticks).
+        for (double m : new double[]{mine(8, 1.5), mine(2, 0.4)}) {
+            assertEquals(12.5, m, 1e-9);
+            assertTrue(crawl(16, m) > walkTunnelCost(m, m, 16));
+            assertTrue(sprintCrawl(16, m) > walkTunnelCost(m, m, 16));
+        }
+        // instant breaks (netherrack with gold, 1 tick, no gap): walking is far faster
+        double g = mine(12, 0.4);
+        assertEquals(1 + PENALTY, g, 1e-9);
+        assertTrue(sprintCrawl(16, g) > walkTunnelCost(g, g, 16));
     }
 
     @Test
     public void slowToolsCrawl() {
-        // stone with a stone pickaxe (4), wooden (2); deepslate / end stone (3.0) with iron (6); netherrack by hand (100/s)
+        // stone with a stone pickaxe (4), wooden (2); deepslate / end stone (3.0) with iron (6); netherrack by hand
         double[][] cases = {{4, 1.5}, {2, 1.5}, {6, 3.0}};
         for (double[] k : cases) {
             double m = mine(k[0], k[1]);
             assertTrue(crawl(16, m) < walkTunnelCost(m, m, 16));
         }
-        double hand = 0.4 * 100 + PENALTY;
+        double hand = DigTime.ticks(DigTime.progress(1, 0, 0.4, false), 6) + PENALTY;
         assertTrue(crawl(16, hand) < walkTunnelCost(hand, hand, 16));
     }
 
@@ -131,5 +140,83 @@ public class CrawlCostsTest {
         double m = breakEvenHeadMine(0.3) + 3;
         assertTrue(crawl(4, m) > walkTunnelCost(m, m, 4));
         assertTrue(crawl(16, m) < walkTunnelCost(m, m, 16));
+    }
+
+    // ---- Ostinato: sprint-crawl ----
+
+    private static final double CRAWL = crawlOneBlockCost(DEFAULT_SNEAK_FACTOR);
+    private static final double SPRINT = sprintCrawlOneBlockCost(DEFAULT_SNEAK_FACTOR);
+
+    private static double sprintCrawl(int length, double m) {
+        return sprintTunnelCost(2 * m, cells(length - 2, m), m, m, CRAWL, SPRINT, 10);
+    }
+
+    /** What the planner pays for a tunnel stretch: the cheapest of 2-high, crawl and sprint-crawl. */
+    private static double best(int length, double m) {
+        return Math.min(walkTunnelCost(m, m, length), Math.min(crawl(length, m), sprintCrawl(length, m)));
+    }
+
+    @Test
+    public void sprintCrawlIsThirtyPercentFaster() {
+        assertEquals(11.88, SPRINT, 0.01);
+        assertEquals(CRAWL / 1.3, SPRINT, 1e-9);
+    }
+
+    @Test
+    public void sprintSurvivesOnlyBlocksBrokenInTime() {
+        assertTrue(keepsSprint(0, SPRINT));
+        assertTrue(keepsSprint(SPRINT, SPRINT));
+        assertFalse(keepsSprint(SPRINT + 0.01, SPRINT));
+    }
+
+    @Test
+    public void sprintTunnelHidesMining() {
+        double m = 5;
+        double expect = ActionCosts.WALK_ONE_BLOCK_COST + 10 + 5 + SPRINT_ENTRY_INTERACT_TICKS + 10 + SPRINT + 2 * SPRINT + SPRINT + 5;
+        assertEquals(expect, sprintCrawl(5, m), 1e-9);
+    }
+
+    @Test
+    public void slowBlockEndsTheSprintForGood() {
+        double[] c = {1, 1, 30, 1, 1};
+        double cost = sprintTunnelCost(2, c, 1, 1, CRAWL, SPRINT, 0);
+        double expect = ActionCosts.WALK_ONE_BLOCK_COST + 2 + 1 + SPRINT_ENTRY_INTERACT_TICKS
+                + SPRINT + SPRINT                // first cell, then cell 2 mined on the run
+                + (CRAWL + 30)                   // bump: sprint gone
+                + 2 * (CRAWL + 1)                // can't restart while crawling
+                + (CRAWL + 1) + 1;               // exit feet, exit head
+        assertEquals(expect, cost, 1e-9);
+        assertTrue(sprintTunnelCost(2, new double[]{1, ActionCosts.COST_INF}, 1, 1, CRAWL, SPRINT, 0) >= ActionCosts.COST_INF);
+    }
+
+    @Test
+    public void sprintCrawlBeatsWalkingWhenEveryBlockKeepsUp() {
+        // netherrack with stone/diamond picks (2-3 ticks + gap) and stone with diamond Efficiency I (5 + gap)
+        for (double m : new double[]{mine(4, 0.4), mine(8, 0.4), mine(8, 1, 1.5)}) {
+            assertTrue(keepsSprint(m, SPRINT));
+            assertTrue(sprintCrawl(16, m) < crawl(16, m));
+            assertTrue(sprintCrawl(16, m) < walkTunnelCost(m, m, 16));
+        }
+    }
+
+    @Test
+    public void slowToolsStillTunnelAndPickTheFastestOption() {
+        // stone with stone and wooden picks, deepslate with wood, stone by hand: the sprint is lost at the first slow
+        // block, but the tunnel is still costed (finite) and the cheapest option is never worse than 2-high
+        double[] ms = {mine(4, 1.5), mine(2, 1.5), mine(2, 3.0), DigTime.ticks(DigTime.progress(1, 0, 1.5, false), 6) + PENALTY};
+        for (double m : ms) {
+            assertFalse(keepsSprint(m, SPRINT));
+            assertTrue(sprintCrawl(16, m) < ActionCosts.COST_INF);
+            assertTrue(best(16, m) <= walkTunnelCost(m, m, 16));
+            assertTrue(best(16, m) < walkTunnelCost(m, m, 16) * 0.9); // a real saving, not a detour bait
+            assertTrue(Math.abs(sprintCrawl(16, m) - crawl(16, m)) < 2 * m);
+        }
+        // slower tools never make a crawl tunnel relatively worse: the saving grows with mining time
+        double prev = -1;
+        for (double m = 12; m < 200; m += 10) {
+            double saving = walkTunnelCost(m, m, 16) - best(16, m);
+            assertTrue(saving >= prev);
+            prev = saving;
+        }
     }
 }

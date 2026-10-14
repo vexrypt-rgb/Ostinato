@@ -76,6 +76,8 @@ public class MovementCrawlTunnel extends Movement {
     private int cell = 2; // index (in blocks from src) of the cell we are working towards while crawling
     private int clickCooldown = 0;
     private int ticks = 0;
+    /** Ostinato: doing this one as a sprint-crawl (decided when it starts running). */
+    private Boolean sprint = null;
 
     public MovementCrawlTunnel(IBaritone baritone, BetterBlockPos src, Direction dir, int length) {
         super(baritone, src, src.relative(dir, length), new BetterBlockPos[]{src.relative(dir).above(), src.relative(dir)});
@@ -92,6 +94,7 @@ public class MovementCrawlTunnel extends Movement {
         cell = 2;
         clickCooldown = 0;
         ticks = 0;
+        sprint = null;
     }
 
     @Override
@@ -163,7 +166,32 @@ public class MovementCrawlTunnel extends Movement {
         int ex = x + length * dx, ez = z + length * dz;
         double exitMine = twoHigh(context, ex, y, ez);
         double itemCost = context.crawlTunnelItemCost;
-        return CrawlCosts.tunnelCost(entryMine, cells, exitMine, context.crawlStepCost, itemCost);
+        double walk = CrawlCosts.tunnelCost(entryMine, cells, exitMine, context.crawlStepCost, itemCost);
+        if (!context.sprintCrawl || exitMine >= COST_INF) {
+            return walk;
+        }
+        // Ostinato: sprint-crawl, split the exit into feet (can be mined on the run) and head
+        BlockState exFeet = context.get(ex, y, ez);
+        double exitFeet = MovementHelper.getMiningDurationTicks(context, ex, y, ez, exFeet, false);
+        double sprint = CrawlCosts.sprintTunnelCost(entryMine, cells, exitFeet, exitMine - exitFeet,
+                context.crawlStepCost, context.sprintCrawlStepCost, itemCost);
+        return Math.min(walk, sprint);
+    }
+
+    /** Ostinato: would this tunnel be done as a sprint-crawl (it is the cheaper of the two). */
+    public static boolean prefersSprint(CalculationContext context, int x, int y, int z, Direction dir, int length) {
+        if (!context.sprintCrawl) {
+            return false;
+        }
+        boolean was = context.sprintCrawl;
+        context.sprintCrawl = false;
+        double walk;
+        try {
+            walk = cost(context, x, y, z, dir, length);
+        } finally {
+            context.sprintCrawl = was;
+        }
+        return cost(context, x, y, z, dir, length) < walk;
     }
 
     /** Mining a full 2-high cell we will stand in, with a walkable floor. */
@@ -237,6 +265,9 @@ public class MovementCrawlTunnel extends Movement {
         if (phase == Phase.ENTRY_MINE) {
             phase = Phase.PLACE;
         }
+        if (sprint == null) {
+            sprint = prefersSprint(new CalculationContext(baritone), src.x, src.y, src.z, dir, length);
+        }
         BlockState trap = BlockStateInterface.get(ctx, entryHead);
         switch (phase) {
             case PLACE: {
@@ -285,6 +316,9 @@ public class MovementCrawlTunnel extends Movement {
                 return click(state, entryHead, 0.08);
             }
             case STEP_IN: {
+                if (sprint) {
+                    return sprintIn(state, trap, feet);
+                }
                 if (!trap.getValue(BlockStateProperties.OPEN)) {
                     phase = feet.equals(entry) ? Phase.CLOSE : Phase.OPEN;
                     return state;
@@ -312,6 +346,9 @@ public class MovementCrawlTunnel extends Movement {
                 return click(state, entryHead, 0.5 - CrawlCosts.TRAPDOOR_THICKNESS / 2 - 0.02);
             }
             case CRAWL: {
+                if (sprint && ctx.player().isSprinting()) {
+                    return sprintCrawl(state, feet);
+                }
                 if (feet.equals(dest)) {
                     phase = Phase.DONE;
                     return state.setStatus(MovementStatus.SUCCESS);
@@ -338,6 +375,102 @@ public class MovementCrawlTunnel extends Movement {
             default:
                 return state;
         }
+    }
+
+    /** Ostinato: how far the player centre is past src's centre along the tunnel. */
+    private double progress() {
+        Vec3 p = ctx.player().position();
+        return (p.x - (src.getX() + 0.5)) * dir.getStepX() + (p.z - (src.getZ() + 0.5)) * dir.getStepZ();
+    }
+
+    /**
+     * Ostinato: sprint entry. From the start, mine the first crawl cell's feet (so nothing stops us), then sprint
+     * forward and close the trapdoor while passing under it. The pose flips to crawl the next tick and the running
+     * sprint is kept (only starting one is refused). The window: our front edge is under the trapdoor
+     * (progress > 0.2) and has not yet reached the first crawl cell's head block (progress < 1.2), minus a tick for
+     * the pose; at ~0.28 blocks a tick that is three ticks or so.
+     */
+    private MovementState sprintIn(MovementState state, BlockState trap, BlockPos feet) {
+        BetterBlockPos first = src.relative(dir, 2);
+        if (!MovementHelper.canWalkThrough(ctx, first)) {
+            if (!feet.equals(src)) {
+                MovementHelper.moveTowards(ctx, state, src);
+                return state;
+            }
+            return mine(state, first);
+        }
+        double prog = progress();
+        if (!trap.getValue(BlockStateProperties.OPEN)) {
+            // closed on us: crawling now if it worked
+            if (ctx.player().getPose() == Pose.SWIMMING) {
+                phase = Phase.CRAWL;
+                cell = 2;
+                return sprintCrawl(state, feet);
+            }
+            return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SPRINT, true);
+        }
+        if (prog > 1.15 || (prog > 0.3 && ctx.player().horizontalCollision)) {
+            // missed the window: fall back to the plain entry (sprint is lost, cost was planned with it, so it's slower)
+            logDebug("crawl tunnel: missed the sprint close, closing standing");
+            sprint = false;
+            return state;
+        }
+        if (prog < -0.25) {
+            MovementHelper.moveTowards(ctx, state, src);
+            return state;
+        }
+        // look at the open panel the whole run, keys go by yaw (straight down the tunnel)
+        Vec3 spot = new Vec3(entryHead.getX() + 0.5 + dir.getStepX() * (0.5 - CrawlCosts.TRAPDOOR_THICKNESS / 2 - 0.02), entryHead.getY() + 0.5,
+                entryHead.getZ() + 0.5 + dir.getStepZ() * (0.5 - CrawlCosts.TRAPDOOR_THICKNESS / 2 - 0.02));
+        Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), spot, ctx.playerRotations());
+        state.setTarget(new MovementState.MovementTarget(r, true));
+        state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SPRINT, true);
+        if (prog > 0.2 && clickCooldown == 0 && ctx.isLookingAt(entryHead) && ctx.player().isSprinting()) {
+            state.setInput(Input.CLICK_RIGHT, true);
+            clickCooldown = 4;
+        }
+        return state;
+    }
+
+    /**
+     * Ostinato: crawl while keeping the sprint: never let go of W (that ends it), and mine the next closed block
+     * of the tunnel while moving towards it so we never bump into it (a head-on bump ends it too). If a block is
+     * too slow to break in time we bump, the sprint ends, and the plain crawl code takes over.
+     */
+    private MovementState sprintCrawl(MovementState state, BlockPos feet) {
+        if (feet.equals(dest)) {
+            if (!MovementHelper.canWalkThrough(ctx, dest.above())) {
+                return mine(state, dest.above()); // stand up only once the exit is 2 high
+            }
+            phase = Phase.DONE;
+            return state.setStatus(MovementStatus.SUCCESS);
+        }
+        int at = 0;
+        for (int i = 0; i <= length; i++) {
+            if (src.relative(dir, i).equals(feet)) {
+                at = i;
+            }
+        }
+        cell = Math.max(cell, Math.min(length, at + 1));
+        BetterBlockPos toward = src.relative(dir, Math.min(length, at + 1));
+        BlockPos block = null;
+        for (int i = at + 1; i <= Math.min(length, at + 3) && block == null; i++) {
+            BetterBlockPos c = src.relative(dir, i);
+            if (!MovementHelper.canWalkThrough(ctx, c)) {
+                block = c;
+            }
+        }
+        if (block != null) {
+            mine(state, block);
+            // keep W down whatever we look at; with the yaw down the tunnel it is plain forward
+            MovementHelper.moveTowardsWithoutRotation(ctx, state, toward);
+        } else if (at >= length - 1 && !MovementHelper.canWalkThrough(ctx, dest.above())) {
+            // last cell: run into the exit and mine its head from inside (the head doesn't block a crawler)
+            MovementHelper.moveTowards(ctx, state, dest);
+        } else {
+            MovementHelper.moveTowards(ctx, state, toward);
+        }
+        return state.setInput(Input.SPRINT, true);
     }
 
     private MovementState click(MovementState state, BlockPos pos, double towardsFar) {

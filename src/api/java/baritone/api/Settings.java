@@ -127,8 +127,11 @@ public final class Settings {
      * This is just a tiebreaker to make it less likely to break blocks if it can avoid it.
      * For example, fire has a break cost of 0, this makes it nonzero, so all else being equal
      * it will take an otherwise equivalent route that doesn't require it to put out fire.
+     * <p>
+     * Ostinato: 0.5 (was 2). Break costs now count whole ticks and the blockBreakSpeed gap (DigTime), which the old 2
+     * stood in for.
      */
-    public final Setting<Double> blockBreakAdditionalPenalty = new Setting<>(2D);
+    public final Setting<Double> blockBreakAdditionalPenalty = new Setting<>(0.5D);
 
     /**
      * Additional penalty for hitting the space bar (ascend, pillar, or parkour) because it uses hunger
@@ -250,6 +253,12 @@ public final class Settings {
      * Ostinato: the cost, in ticks, of using up one trapdoor or fence gate on a crawl tunnel.
      */
     public final Setting<Double> crawlTunnelItemCost = new Setting<>(10D);
+
+    /**
+     * Ostinato: carry a sprint into crawl tunnels (30% faster crawling) by closing the trapdoor on the run, and mine
+     * each next block while crawling towards it so the sprint is never broken. Used where every block breaks in time.
+     */
+    public final Setting<Boolean> allowSprintCrawl = new Setting<>(true);
 
     /**
      * After a ladder clutch, break the ladder and pick it back up so one ladder can save you more than once.

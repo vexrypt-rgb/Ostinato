@@ -27,6 +27,7 @@ import baritone.api.utils.RotationUtils;
 import baritone.api.utils.VecUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
+import baritone.pathing.movement.DigTime;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
@@ -90,13 +91,14 @@ public class MovementSwim extends Movement {
         double str = c.toolSet.getStrVsBlock(s);
         if (str <= 0) return COST_INF;
         // Underwater digging is 5x slower without Aqua Affinity, and another 5x while not on ground.
-        double t = (1 / str + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+        // Ostinato: the factor slows the progress, then it is whole ticks (DigTime)
+        double t = DigTime.ticks(str / (c.aquaAffinity ? 5 : 25), Baritone.settings().blockBreakSpeed.value) + c.breakBlockAdditionalCost;
         // Sand/gravel overhead drops into the gap and has to be dug again (a short stack is fine).
         for (int i = 1; !aboveCleared && c.get(x, y + i, z).getBlock() instanceof net.minecraft.world.level.block.FallingBlock; i++) {
             if (i > 3) return COST_INF;
             double fs = c.toolSet.getStrVsBlock(c.get(x, y + i, z));
             if (fs <= 0) return COST_INF;
-            t += (1 / fs + c.breakBlockAdditionalCost) * (c.aquaAffinity ? 5 : 25);
+            t += DigTime.ticks(fs / (c.aquaAffinity ? 5 : 25), Baritone.settings().blockBreakSpeed.value) + c.breakBlockAdditionalCost;
         }
         return t;
     }
