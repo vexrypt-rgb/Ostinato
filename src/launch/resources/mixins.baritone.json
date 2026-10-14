@@ -35,7 +35,8 @@
     "MixinRenderType",
     "MixinScreen",
     "MixinWorldRenderer",
-    "MixinWindowPlacement"
+    "MixinWindowPlacement",
+    "MixinNoMouseGrab"
   ],
   "mixins": [
   ]
