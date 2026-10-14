@@ -248,7 +248,7 @@ public final class PkTest implements AbstractGameEventListener {
     // "hop <ticks> <landY>": tick-exact headhitter momentum, no planner: hold W + sprint facing +z, press jump afresh on
     // every landing (the 3-tick hh cycle under a 2-high ceiling), log each tick, and report whether the far pad was reached
     private int hopLeft, hopT, hopLand, hopOk, hopTried;
-    private double hopTop;
+    private double hopTop, hopStartY;
     private boolean hopJump;
     private String hopPattern = ""; // optional tick-exact inputs: J = jump pressed that tick, . = not
 
@@ -259,13 +259,29 @@ public final class PkTest implements AbstractGameEventListener {
         p.setXRot(0f);
         boolean og = p.onGround();
         hopJump = hopPattern.isEmpty() ? og && !hopJump : hopT < hopPattern.length() && hopPattern.charAt(hopT) == 'J';
-        o.keyUp.setDown(true);
-        o.keySprint.setDown(true);
+        boolean still = hopPattern.startsWith("!"); // "!J...": stand still, jump only (jump-height probe)
+        if (still) hopJump = hopT + 1 < hopPattern.length() && hopPattern.charAt(hopT + 1) == 'J';
+        o.keyUp.setDown(!still);
+        o.keySprint.setDown(!still);
         o.keyJump.setDown(hopJump);
+        if (still) {
+            if (hopT == 0) hopStartY = p.getY();
+            hopTop = Math.max(hopTop, p.getY() - hopStartY);
+        }
         Vec3 v = p.getDeltaMovement();
         hopTop = Math.max(hopTop, Math.abs(v.z));
         say(String.format("PK HOP %s t=%d z=%.4f y=%.4f vz=%.4f vy=%.4f og=%b jump=%b", drillTag, hopT, p.getZ(), p.getY(), v.z, v.y, og, hopJump));
         hopT++;
+        if (still) {
+            if (hopT >= hopPattern.length() + 12) {
+                hopLeft = 0;
+                o.keyJump.setDown(false);
+                say(String.format("PK JUMPPROBE %s startY=%.4f rise=%.4f", drillTag, hopStartY, hopTop));
+                wait = 20;
+                resume = true;
+            }
+            return;
+        }
         boolean reached = og && p.getZ() >= 2.7 && p.getY() >= hopLand - 0.01;
         boolean fell = p.getY() < hopLand - 1.5;
         if (reached || fell || --hopLeft <= 0) {

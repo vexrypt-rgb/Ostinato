@@ -116,9 +116,16 @@ public final class KinematicController {
      * @return the path position to continue from if the controller drove this tick, or -1 to let Baritone run the movement
      */
     public int tick(Baritone baritone, IPath path, int pathPosition) {
+        narrowEnd = false;
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
+        }
+        if (narrowEnd && Baritone.settings().kinematicTrace.value) {
+            // Ostinato: per-tick trace onto a narrow landing: who drives, where the player is, how it moves
+            net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
+            System.out.printf("KTRACE narrow r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
+                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround());
         }
         return r;
     }
