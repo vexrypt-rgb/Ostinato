@@ -147,7 +147,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         shelterRounds = 0;
         shelterSlit = null;
         shelterTearing = false;
-        shelterNoLure = false;
+        shelterNoLure = false; shelterSlitCycles = 0;
         shelterKills = 0;
         shelterShy.clear();
         lastHunter = null;
@@ -413,6 +413,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long shelterSlitAt, shelterSlitHold, shelterStruckAt, shelterSeenAt;
     private int shelterSlitOff, shelterSlitHurts, shelterSlitBad, shelterStrikes, shelterKills;
     private boolean shelterNoLure, shelterTearing;
+    private int shelterSlitCycles;
     private LivingEntity shelterMark;
     private final java.util.LinkedHashSet<BlockPos> shelterPlaced = new java.util.LinkedHashSet<>();
     private long shelterTearAt, shelterTearDone;
@@ -523,7 +524,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             shelterMark = null;
             // what one brute could not see from its post says nothing of the next (run 133: seven brutes stood at the
             // walls after the first, half a minute each, and no slit was opened for any of them)
-            shelterNoLure = false;
+            shelterNoLure = false; shelterSlitCycles = 0;
             shelterShoves = 0;
             perching = false;
             baritone.getPveProcess().hold = false;
@@ -627,6 +628,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 shut = "nothing to strike with";
             } else if (shelterSlitOff > 40) {
                 shut = mark == null ? "nobody left at the slit" : "the brute is round another side";
+                // r142: a brute circling the ring had the slit shut and reopened every few seconds for 13 minutes
+                if (mark != null && ++shelterSlitCycles >= 6) {
+                    shut = "the brute keeps circling (" + shelterSlitCycles + " slits)";
+                    shelterNoLure = true;
+                    shelterShy.put(mark.getUUID(), ticks + 6000L);
+                }
             } else if (ticks - shelterSlitAt > 300 && ticks - shelterSeenAt > 300 && shelterStruckAt < shelterSlitAt) {
                 // fifteen seconds and it has not once looked our way: it is over us or under us, or round a corner
                 shut = "the brute" + (mark != null ? where(mark, me) : "") + " cannot see the slit";
