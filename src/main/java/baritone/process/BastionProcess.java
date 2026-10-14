@@ -2627,7 +2627,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
 
     // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
     private int routeIdx, opLeft = -1, opThrowMark;
-    private long routeStart;
+    private long routeStart, blockStepIdle;
+    private BastionRoutes.Step blockStep;
     private BastionScript.Runner scriptRun;
     private BastionRoutes.Step scriptStep;
     private BlockPos scriptAt, opLava;
@@ -2655,7 +2656,12 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             BastionRoutes.Step s = route.get(routeIdx);
             List<BastionScript.Op> ops = BastionScript.ops(s);
             if (ops.isEmpty()) {
-                if (stepHasTargets(s)) return null;
+                // a block step is over when its targets are gone, or when the loot loop has been working on another
+                // step's targets for 20 s (r144: top chests deferred behind a brute, the route never moved past them)
+                if (blockStep != s) { blockStep = s; blockStepIdle = ticks; }
+                if (currentStep == s) blockStepIdle = ticks;
+                if (stepHasTargets(s) && ticks - blockStepIdle < 400) return null;
+                if (stepHasTargets(s)) logDirect("Bastion: step " + s + " left for later, the loot loop is elsewhere");
                 routeIdx++;
                 continue;
             }
