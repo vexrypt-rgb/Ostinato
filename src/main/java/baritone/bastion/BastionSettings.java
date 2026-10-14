@@ -40,12 +40,14 @@ public final class BastionSettings {
     public static int chestWaitTicks = 200;
     /** Most ingots worth fetching for one bastion (gold blocks are finite and slow to mine). */
     public static int goldCap = 64;
+    /** Seconds past timeBudget spent bartering while pearls are short and gold remains (s1161-b02 left 117 ingots unspent). */
+    public static int goldOvertime = 240;
 
     static { resetTargets(); }
 
     public static void resetTargets() {
         TARGETS.clear();
-        TARGETS.put("ender_pearl", 8); // runs got ~1 throw/50 s: 12 never landed in a 300 s budget
+        TARGETS.put("ender_pearl", 12); // 1.16.1 speedrun goal 11+; overtime keeps bartering while gold remains
         TARGETS.put("obsidian", 10);
         TARGETS.put("string", 6);
         TARGETS.put("fire_resistance", 1);
@@ -65,6 +67,7 @@ public final class BastionSettings {
                 case "exitdistance": exitDistance = Integer.parseInt(value); return null;
             case "timebudget": timeBudget = Math.max(30, Integer.parseInt(value)); return null;
                 case "chestwait": chestWaitTicks = Integer.parseInt(value); return null;
+                case "goldovertime": goldOvertime = Math.max(0, Integer.parseInt(value)); return null;
                 case "goldcap": goldCap = Math.max(1, Integer.parseInt(value)); return null;
                 default:
                     int n = Integer.parseInt(value);

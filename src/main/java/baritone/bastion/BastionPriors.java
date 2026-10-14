@@ -165,4 +165,14 @@ public final class BastionPriors {
         long t = now - startTick;
         return t > CLOSE_IN_TICKS || (!visible && dist <= 8 && t > 40);
     }
+
+    /** Craft a held gold block into ingots once ingots run below a throw camp's worth. */
+    public static boolean shouldCraftIngots(int ingots, int blocks, long sinceLastCraft) {
+        return blocks > 0 && ingots < 9 && sinceLastCraft >= 10;
+    }
+
+    /** Stay past the time budget while pearls are short, gold remains, health holds, and the overtime is not used up. */
+    public static boolean overtime(long elapsedTicks, int budgetS, int pearls, int pearlTarget, int goldEq, int overtimeS, float hp) {
+        return pearls < pearlTarget && goldEq >= 6 && hp >= 10 && elapsedTicks <= (budgetS + overtimeS) * 20L;
+    }
 }

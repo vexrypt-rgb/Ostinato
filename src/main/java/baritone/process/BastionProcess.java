@@ -993,6 +993,24 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private int trapTries, aimTicks;
     private boolean angered;
 
+    private long lastCraft = -100;
+
+    /** One gold block to 9 ingots through the player's 2x2 grid (container slots: 0 result, 1-4 grid, 9-35 main, 36-44 hotbar). */
+    private boolean craftIngots(PlayerEntity me) {
+        if (!me.inventory.getItemStack().isEmpty() || ctx.minecraft().currentScreen != null) return false;
+        int inv = -1;
+        for (int i = 0; i < 36; i++) if (me.inventory.getStackInSlot(i).getItem() == Items.GOLD_BLOCK) { inv = i; break; }
+        if (inv < 0) return false;
+        int slot = inv < 9 ? 36 + inv : inv;
+        int id = me.container.windowId;
+        ctx.playerController().windowClick(id, slot, 0, ClickType.PICKUP, me);
+        ctx.playerController().windowClick(id, 1, 1, ClickType.PICKUP, me);
+        ctx.playerController().windowClick(id, slot, 0, ClickType.PICKUP, me);
+        ctx.playerController().windowClick(id, 0, 0, ClickType.QUICK_MOVE, me);
+        logDirect("Bastion: crafted a gold block into ingots (" + me.inventory.count(Items.GOLD_BLOCK) + " blocks left)");
+        return true;
+    }
+
     private int ingotCount(PlayerEntity me) {
         int n = 0;
         for (int i = 0; i < 36; i++) {
@@ -1428,7 +1446,11 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "kiting brute at " + String.format("%.1f", me.getDistance(brute));
             // drops a path that ends near the brute instead of finishing it first; one that already runs clear is kept
             return new PathingCommand(new GoalRunAway(14, brute.getPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
-        }        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L) {
+        }
+        // s1161-b02 left with 12 gold blocks unspent: blocks cannot be bartered, craft them in the 2x2 grid as ingots run low
+        if (BastionPriors.shouldCraftIngots(ingotCount(me), me.inventory.count(Items.GOLD_BLOCK), ticks - lastCraft) && craftIngots(me)) lastCraft = ticks;
+        if (bastion != null && startTick > 0 && ticks - startTick > BastionSettings.timeBudget * 20L
+            && !BastionPriors.overtime(ticks - startTick, BastionSettings.timeBudget, me.inventory.count(Items.ENDER_PEARL), BastionSettings.TARGETS.getOrDefault("ender_pearl", 0), ingotCount(me) + 9 * me.inventory.count(Items.GOLD_BLOCK), BastionSettings.goldOvertime, me.getHealth())) {
             // a runner time-boxes the bastion: past the budget, leave with what we have
             logDirect("Bastion: time budget (" + BastionSettings.timeBudget + " s) used, leaving");
             return exit(me, counts(me));
