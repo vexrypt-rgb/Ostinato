@@ -77,6 +77,12 @@ Install a compatible Tungsten Fabric jar beside Ostinato, then
 Baritone. Backend selection should be visible in logs; treat an unexpected
 fallback as a configuration issue.
 
+## Acknowledgements
+
+Ostinato ports code from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken
+(LGPL-3.0): the A* search speedups (open-set heap, cell node map, mining-cost memo, favoring cache)
+and the boat steering controller used while sailing. See [CREDITS.md](CREDITS.md) for the file list.
+
 ## Movement features
 
 Beyond upstream Baritone, Ostinato adds:

@@ -65,6 +65,12 @@ public final class PathNode {
      */
     public int heapPosition;
 
+    /**
+     * The favoring multiplier for edges into this node, looked up once when first reached; 0 means not looked up yet.
+     * From Soprano (https://github.com/AverWasTaken/soprano, LGPL-3.0), src/main/java/baritone/pathing/calc/PathNode.java.
+     */
+    public double favor;
+
     public PathNode(int x, int y, int z, Goal goal) {
         this.previous = null;
         this.cost = ActionCosts.COST_INF;
