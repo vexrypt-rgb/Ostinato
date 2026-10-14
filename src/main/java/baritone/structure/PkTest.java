@@ -72,6 +72,35 @@ public final class PkTest implements AbstractGameEventListener {
 
     private static void say(String m) { System.out.println("[PK] " + m); }
 
+    // viz cost profile: runs alongside the course; window k: 0 all on, 1..7 one layer off, 8 all off; FPS uncapped meanwhile
+    private static final String[] PROF = {"renderPath", "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch"};
+    private int profWin, profIdx = -1, profT, profN, profPrevFps = -1;
+    private long profSum;
+    private int profMin, profCap = 30;
+
+    @SuppressWarnings("unchecked")
+    private void profApply(Minecraft mc) {
+        if (profIdx == 0) { profCap = mc.options.framerateLimit().get(); mc.options.framerateLimit().set(260); }
+        for (int i = 0; i < PROF.length; i++) {
+            boolean on = profIdx == 0 || (profIdx <= PROF.length && profIdx != i + 1);
+            ((Settings.Setting<Boolean>) Baritone.settings().byLowerName.get(PROF[i].toLowerCase(Locale.ROOT))).value = on;
+        }
+    }
+
+    private void profTick(Minecraft mc) {
+        if (profIdx < 0) return;
+        int f = mc.getFps();
+        if (profT++ >= 20 && f != profPrevFps) { profSum += f; profN++; profMin = Math.min(profMin, f); }
+        profPrevFps = f;
+        if (profT < profWin) return;
+        String what = profIdx == 0 ? "all_on" : profIdx <= PROF.length ? "off_" + PROF[profIdx - 1] : "all_off";
+        double avg = profN == 0 ? 0 : (double) profSum / profN;
+        say(String.format(Locale.ROOT, "PK VIZPROF %s fps=%.1f min=%d frameMs=%.2f n=%d", what, avg, profN == 0 ? 0 : profMin, avg > 0 ? 1000 / avg : 0, profN));
+        profIdx++; profT = 0; profSum = 0; profN = 0; profMin = 9999;
+        if (profIdx > PROF.length + 1) { profIdx = -1; mc.options.framerateLimit().set(profCap); say("PK VIZPROF done"); return; }
+        profApply(mc);
+    }
+
     private void run(String cmd) {
         MinecraftServer s = Minecraft.getInstance().getSingleplayerServer();
         s.submit(() -> {
@@ -140,6 +169,7 @@ public final class PkTest implements AbstractGameEventListener {
         Minecraft mc = Minecraft.getInstance();
         try {
             shots(mc);
+            profTick(mc);
             if (state == 0) {
                 if (mc.gui.screen() instanceof TitleScreen) {
                     state = 1;
@@ -201,6 +231,7 @@ public final class PkTest implements AbstractGameEventListener {
                     switch (a[0]) {
                         case "cmd" -> steps.add(new Step("cmd", 0, 0, 0, 0, line.substring(4).trim()));
                         case "tag" -> steps.add(new Step("tag", 0, 0, 0, 0, a.length > 1 ? a[1] : ""));
+                        case "vizprof" -> steps.add(new Step("vizprof", 0, 0, 0, a.length > 1 ? Integer.parseInt(a[1]) : 200, ""));
                         case "wait" -> steps.add(new Step("wait", 0, 0, 0, Integer.parseInt(a[1]), ""));
                         case "hop" -> steps.add(new Step("hop", 0, Integer.parseInt(a[2]), 0, Integer.parseInt(a[1]), a.length > 3 ? a[3] : ""));
                         case "tp", "goal" -> steps.add(new Step(a[0], (int) Math.floor(Double.parseDouble(a[1])), (int) Math.floor(Double.parseDouble(a[2])), (int) Math.floor(Double.parseDouble(a[3])), 0, ""));
@@ -304,6 +335,7 @@ public final class PkTest implements AbstractGameEventListener {
             Step st = step();
             if (st.kind.equals("cmd")) { run(st.text); continue; }
             if (st.kind.equals("tag")) { drillTag = st.text; say("PK section " + drillTag); continue; }
+            if (st.kind.equals("vizprof")) { profWin = st.r; profIdx = 0; profT = 0; profSum = 0; profN = 0; profMin = 9999; profApply(Minecraft.getInstance()); continue; }
             if (st.kind.equals("wait")) { wait = st.r; resume = true; return; }
             if (st.kind.equals("hop")) { hopLeft = st.r; hopT = 0; hopPattern = st.text; hopLand = st.y; hopTop = 0; hopJump = false; b.getPathingBehavior().cancelEverything(); return; }
             if (st.kind.equals("tp")) { tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; continue; }
