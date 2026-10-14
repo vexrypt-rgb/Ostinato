@@ -5,6 +5,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.Locale;
 
 public class HumanMouseFit {
     static final int N = 40;          // template resolution: N+1 points over normalized movement time
@@ -49,6 +50,7 @@ public class HumanMouseFit {
     static Map<String, Object> fit(List<Path> files, boolean includeDesktop) throws IOException {
         List<Seg> segs = new ArrayList<>();
         List<Double> noise = new ArrayList<>();
+        Map<String, Integer> rejected = new TreeMap<>();
         List<Map<String, Object>> sources = new ArrayList<>();
         int rounds = 0;
         for (Path f : files) {
@@ -85,13 +87,24 @@ public class HumanMouseFit {
                         w = 2 * num(tg.get("r"), 10) / gain;
                     }
                     Seg sg = segment(tr, tOn, tEnd, tx, ty, w, u);
-                    if (sg != null) { sg.kind = kind; segs.add(sg); for (double v : sg.residual) noise.add(v); }
+                    if (sg == null) { count(rejected, kind + ": too short/long or no movement"); continue; }
+                    sg.kind = kind;
+                    String why = outlier(sg);
+                    if (why != null) { count(rejected, kind + ": " + why); continue; }
+                    segs.add(sg);
+                    for (double v : sg.residual) noise.add(v);
+                    noise.add(Double.NaN); // segments are separate runs for the tremor autocorrelation
                 }
             }
         }
         if (segs.size() < 10) throw new IllegalStateException("only " + segs.size() + " usable movements found; record a few more rounds");
         System.out.println("rounds " + rounds + ", movements " + segs.size());
-        return build(segs, noise, sources, false);
+        Map<String, Object> p = build(segs, noise, sources, false);
+        Map<String, Object> rej = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> e : rejected.entrySet()) rej.put(e.getKey(), (double) e.getValue());
+        p.put("rejected", rej);
+        report(segs, rejected);
+        return p;
     }
 
     /** Cumulative position track of a round, in counts (lock) or px (abs). */
@@ -158,11 +171,55 @@ public class HumanMouseFit {
         s.subs = Math.max(1, subs);
         double mx = 0, mp = 0; for (int k = 0; k <= N; k++) { mx = Math.max(mx, s.along[k]); mp = Math.max(mp, Math.abs(s.perp[k])); }
         s.overshoot = mx > 1 + 0.5 * s.w / D; s.maxPerp = mp; s.peakAt = (pk - on) / (double) (off - on);
-        // tremor: raw position minus a 60 ms smoothed path, from the movement and its dwell
-        double[] lx = smooth(px, 12), ly = smooth(py, 12);
-        s.residual = new double[n];
-        for (int i = 0; i < n; i++) s.residual[i] = (px[i] - lx[i]) * ux + (py[i] - ly[i]) * uy;
+        // tremor: raw position minus a 35 ms smoothed path, only where the hand is slow (homing in, dwelling);
+        // in the fast part the high-pass would measure the movement itself, not the jitter
+        double[] lx = smooth(px, 3), ly = smooth(py, 3);
+        List<Double> res = new ArrayList<>();
+        for (int i = Math.max(1, on); i < n; i++) {
+            if (vs[Math.min(i, vs.length - 1)] > 0.15 * peak) { if (!res.isEmpty() && !Double.isNaN(res.get(res.size() - 1))) res.add(Double.NaN); continue; }
+            res.add((px[i] - lx[i]) * ux + (py[i] - ly[i]) * uy);
+        }
+        s.residual = new double[res.size()];
+        for (int i = 0; i < res.size(); i++) s.residual[i] = res.get(i);
         return s;
+    }
+
+    /** Why a segmented movement is not usable as a template, or null. */
+    static String outlier(Seg s) {
+        // a target about as close as it is wide is already under (or next to) the cursor: the "move" is a wander,
+        // not an aimed movement (the capture game placed these before 2026-10-14)
+        if (s.d < 0.75 * s.w) return "target closer than its width";
+        double endErr = Math.hypot(s.along[N] - 1, s.perp[N]) * s.d;
+        // the move ended far from the target: the virtual cursor was pinned at a screen edge, or segmentation failed
+        if (endErr > Math.max(s.w, 0.35 * s.d)) return "ended far from the target";
+        double mx = 0; for (double v : s.along) mx = Math.max(mx, v);
+        if (mx > 2.0) return "overshoot over 100%";
+        if (s.maxPerp > 0.6) return "path off to the side by over 60% of the distance";
+        return null;
+    }
+
+    static void count(Map<String, Integer> m, String k) { m.merge(k, 1, Integer::sum); }
+
+    /** Console summary: per round type and distance band, plus what was rejected. */
+    static void report(List<Seg> segs, Map<String, Integer> rejected) {
+        Map<String, List<Seg>> byKind = new TreeMap<>();
+        for (Seg s : segs) byKind.computeIfAbsent(s.kind, k -> new ArrayList<>()).add(s);
+        System.out.println("kind        moves  median ms  overshoot  subs  maxPerp/D(median)");
+        for (Map.Entry<String, List<Seg>> e : byKind.entrySet()) {
+            List<Seg> l = e.getValue(); int os = 0; double sub = 0; double[] du = new double[l.size()], pe = new double[l.size()];
+            for (int i = 0; i < l.size(); i++) { Seg s = l.get(i); if (s.overshoot) os++; sub += s.subs; du[i] = s.dur; pe[i] = s.maxPerp; }
+            Arrays.sort(du); Arrays.sort(pe);
+            System.out.printf(Locale.ROOT, "%-10s %6d %10.0f %9.0f%% %5.2f %8.3f%n", e.getKey(), l.size(), du[du.length / 2], 100.0 * os / l.size(), sub / l.size(), pe[pe.length / 2]);
+        }
+        double[] edges = {0, 50, 150, 400, 1000, 1e9};
+        System.out.println("distance (counts)  moves  median ms");
+        for (int b = 0; b + 1 < edges.length; b++) {
+            List<Double> d = new ArrayList<>();
+            for (Seg s : segs) if (s.d >= edges[b] && s.d < edges[b + 1]) d.add(s.dur);
+            Collections.sort(d);
+            System.out.printf(Locale.ROOT, "%6.0f-%-8s %8d %10s%n", edges[b], edges[b + 1] > 1e8 ? "up" : String.valueOf((int) edges[b + 1]), d.size(), d.isEmpty() ? "-" : String.valueOf(Math.round(d.get(d.size() / 2))));
+        }
+        if (!rejected.isEmpty()) System.out.println("rejected: " + rejected);
     }
 
     static double[] smooth(double[] a, int half) {
@@ -187,7 +244,9 @@ public class HumanMouseFit {
         for (int i = 0; i < n; i++) { Seg s = segs.get(i); res[i] = Math.log(s.dur / (a + b * log2(s.d / s.w + 1))); rm += res[i]; um += s.u; }
         rm /= n; um /= n;
         for (int i = 0; i < n; i++) { double du = segs.get(i).u - um; ru += du * (res[i] - rm); uu += du * du; }
-        double slope = uu > 1e-6 ? ru / uu : -0.4;
+        // urgency only means something when the data has a spread of it (flicks vs precision rounds); a slope from
+        // a few unequal round types is confounded with the task, and hurrying never makes a move slower
+        double slope = uu / n > 0.02 ? Math.max(-1.0, Math.min(0.0, ru / uu)) : -0.35;
         double sd = 0; for (int i = 0; i < n; i++) { double e = res[i] - rm - slope * (segs.get(i).u - um); sd += e * e; }
         sd = Math.sqrt(sd / n);
         // fold the mean residual back into the intercept so exp(0) is the median
@@ -195,7 +254,7 @@ public class HumanMouseFit {
 
 
         double nsd = 0, nlag = 0, nvar = 0; int nc = 0;
-        for (int i = 1; i < noise.size(); i++) { double x0 = noise.get(i - 1), x1 = noise.get(i); nvar += x1 * x1; nlag += x0 * x1; nc++; }
+        for (int i = 1; i < noise.size(); i++) { double x0 = noise.get(i - 1), x1 = noise.get(i); if (Double.isNaN(x0) || Double.isNaN(x1)) continue; nvar += x1 * x1; nlag += x0 * x1; nc++; }
         nsd = nc > 0 ? Math.sqrt(nvar / nc) : 0.5; double rho = nc > 0 && nvar > 0 ? Math.max(0, Math.min(0.98, nlag / nvar)) : 0.8;
 
         Map<String, Object> p = new LinkedHashMap<>();
@@ -209,7 +268,7 @@ public class HumanMouseFit {
         p.put("noise", map("sd", nsd, "rho", rho, "dtMs", GRID, "spectrum", spectrum(noise)));
         int subsSum = 0, os = 0; double pkSum = 0, cv = 0; for (Seg s : segs) { subsSum += s.subs; if (s.overshoot) os++; pkSum += s.peakAt; cv += s.maxPerp; }
         p.put("stats", map("movements", (double) n, "meanSubmovements", subsSum / (double) n, "overshootRate", os / (double) n,
-                "meanPeakVelocityAt", pkSum / n, "meanMaxPerpOverD", cv / n));
+                "meanPeakVelocityAt", pkSum / n, "meanMaxPerpOverD", cv / n, "medianMaxPerpOverD", medianPerp(segs)));
         // keep a spread of templates
         List<Seg> keep = new ArrayList<>(segs);
         Collections.shuffle(keep, new Random(7));
@@ -255,7 +314,7 @@ public class HumanMouseFit {
         double[] hz = {2, 4, 6, 8, 10, 12, 16, 20, 30, 40};
         for (double f : hz) {
             double re = 0, im = 0, w = 2 * Math.PI * f * GRID / 1000.0;
-            for (int i = 0; i < len; i++) { re += x.get(i) * Math.cos(w * i); im += x.get(i) * Math.sin(w * i); }
+            for (int i = 0; i < len; i++) { double v = x.get(i); if (Double.isNaN(v)) continue; re += v * Math.cos(w * i); im += v * Math.sin(w * i); }
             out.add(map("hz", f, "amp", len == 0 ? 0.0 : r4(Math.hypot(re, im) / Math.sqrt(len))));
         }
         return out;
@@ -291,6 +350,8 @@ public class HumanMouseFit {
         p.put("note", "Synthetic example (min-jerk primary + corrective submovement). Replace with a profile fitted from your own recordings.");
         return p;
     }
+
+    static double medianPerp(List<Seg> segs) { double[] v = new double[segs.size()]; for (int i = 0; i < v.length; i++) v[i] = segs.get(i).maxPerp; Arrays.sort(v); return v.length == 0 ? 0 : v[v.length / 2]; }
 
     static double minJerk(double t) { return t * t * t * (10 - 15 * t + 6 * t * t); }
 

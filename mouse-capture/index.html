@@ -295,7 +295,9 @@ function placeTarget(fromX, fromY, minD, maxD, margin) {
 function newPointTrial(r, opt) {
   const gain = r.settings.pageGainPxPerCount;
   const rad = opt.r();
-  const p = placeTarget(cur.x, cur.y, opt.minD, Math.min(opt.maxD, Math.hypot(W, H) * 0.8), rad + 8);
+  // a target must be clearly away from the cursor (at least 2.5 radii), or the move is a wander, not an aim
+  const minD = Math.max(opt.minD, rad * 2.5 + 10);
+  const p = placeTarget(cur.x, cur.y, minD, Math.max(minD * 1.2, Math.min(opt.maxD, Math.hypot(W, H) * 0.8)), rad + 8);
   r.st.trial = { kind: opt.kind, tOn: +(now() - r.t0).toFixed(3), from: { x: cur.x, y: cur.y }, target: { x: p.x, y: p.y, r: rad },
     countsDist: Math.hypot(p.x - cur.x, p.y - cur.y) / gain, angle: Math.atan2(p.y - cur.y, p.x - cur.x), urgency: opt.urgency, clicks: 0, deadlineMs: opt.deadline || 0 };
 }
