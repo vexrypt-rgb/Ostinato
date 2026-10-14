@@ -27,13 +27,25 @@ import java.util.Random;
  */
 public final class ReactionGate {
 
-    private int holdTicks;
+    /** What a reactive look does this tick. */
+    public enum Phase {
+        /** aim normally */
+        MOVE,
+        /** stay still: not noticed yet */
+        HOLD,
+        /** Ostinato peripheral awareness: a fast rough partial turn toward the threat, before it is recognized */
+        ORIENT
+    }
+
+    private int holdTicks, orientTicks;
+    private double orientFraction, orientErrorDeg;
 
     /**
      * A surprise: starts a hold of a reaction time sampled from {@code model} at the given energy, in 50 ms ticks.
      * Returns the hold length (0 when disabled).
      */
     public int surprise(boolean enabled, ReactionModel model, ReactionModel.Energy energy, double nowSec, double sessionSec, Random rng) {
+        orientTicks = 0;
         if (!enabled) {
             holdTicks = 0;
             return 0;
@@ -43,27 +55,55 @@ public final class ReactionGate {
         return holdTicks;
     }
 
-    /**
-     * One tick of a look. Returns true when the camera must stay where it is this tick. A look that isn't
-     * reactive ends any hold immediately and is never delayed.
-     */
-    public boolean hold(boolean reactiveLook) {
+    /** A surprise answered by a peripheral-awareness plan: hold, then (if early) orient, then aim. */
+    public void start(PeripheralAwareness.Plan plan) {
+        if (plan.early) {
+            holdTicks = plan.orientDelayTicks;
+            orientTicks = plan.recognizeTicks - plan.orientDelayTicks;
+        } else {
+            holdTicks = plan.recognizeTicks;
+            orientTicks = 0;
+        }
+        orientFraction = plan.fraction;
+        orientErrorDeg = plan.roughErrorDeg;
+    }
+
+    /** One tick of a look. A look that isn't reactive ends any hold or orienting turn at once and is never delayed. */
+    public Phase step(boolean reactiveLook) {
         if (!reactiveLook) {
-            holdTicks = 0;
-            return false;
+            cancel();
+            return Phase.MOVE;
         }
         if (holdTicks > 0) {
             holdTicks--;
-            return true;
+            return Phase.HOLD;
         }
-        return false;
+        if (orientTicks > 0) {
+            orientTicks--;
+            return Phase.ORIENT;
+        }
+        return Phase.MOVE;
+    }
+
+    /** Old form of {@link #step}: true while the camera must stay still. */
+    public boolean hold(boolean reactiveLook) {
+        return step(reactiveLook) == Phase.HOLD;
+    }
+
+    public double orientFraction() {
+        return orientFraction;
+    }
+
+    public double orientErrorDeg() {
+        return orientErrorDeg;
     }
 
     public boolean holding() {
-        return holdTicks > 0;
+        return holdTicks > 0 || orientTicks > 0;
     }
 
     public void cancel() {
         holdTicks = 0;
+        orientTicks = 0;
     }
 }

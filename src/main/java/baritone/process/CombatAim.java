@@ -25,6 +25,7 @@ final class CombatAim {
     // Ostinato: humanReactionDelay, when the last fight look was and where it pointed
     private int lastLookTick = Integer.MIN_VALUE / 2;
     private float lastAimYaw, lastAimPitch;
+    private double lastDist = -1;
 
     CombatAim(Baritone baritone, IPlayerContext ctx, Random rng) {
         this.baritone = baritone;
@@ -35,7 +36,7 @@ final class CombatAim {
     /** Look at the point; {@code targetSpeed} is the target's horizontal speed in blocks per tick (wander grows with it). */
     void look(Vec3 at, double targetSpeed) {
         Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), at, ctx.playerRotations());
-        noticeSurprise(r);
+        noticeSurprise(r, at, targetSpeed);
         if (HUMANIZE) {
             // a hand on a mouse never tracks perfectly: a slow wander around the aim point, bigger when the target moves fast
             double energy = 0.5 + Math.min(1.0, targetSpeed * 3);
@@ -53,14 +54,21 @@ final class CombatAim {
      * a switch after being hit) is a surprise, so the hand waits a reaction time before turning (humanReactionDelay).
      * A target already near the crosshair is not a surprise.
      */
-    private void noticeSurprise(Rotation r) {
+    private void noticeSurprise(Rotation r, Vec3 at, double targetSpeed) {
         Player me = ctx.player();
         if (me == null) return;
         int t = me.tickCount;
         boolean fresh = t - lastLookTick > 20;
         boolean jumped = !fresh && Math.hypot(Mth.wrapDegrees(r.getYaw() - lastAimYaw), r.getPitch() - lastAimPitch) > 60;
-        boolean offView = Math.hypot(Mth.wrapDegrees(r.getYaw() - me.getYRot()), r.getPitch() - me.getXRot()) > 10;
-        if (HUMANIZE && (fresh || jumped) && offView) baritone.getLookBehavior().surprise();
+        double off = Math.hypot(Mth.wrapDegrees(r.getYaw() - me.getYRot()), r.getPitch() - me.getXRot());
+        boolean offView = off > 10;
+        double dist = ctx.playerHead().distanceTo(at);
+        boolean approaching = lastDist >= 0 && !fresh && dist < lastDist - 0.02;
+        lastDist = dist;
+        if (HUMANIZE && (fresh || jumped) && offView) {
+            // Ostinato peripheral awareness: what the senses get from it (hostile mobs are audible close by)
+            baritone.getLookBehavior().surpriseThreat(off, Math.min(1, targetSpeed * 4), approaching, false, dist < 16, me.hurtTime > 0);
+        }
         lastLookTick = t;
         lastAimYaw = r.getYaw();
         lastAimPitch = r.getPitch();

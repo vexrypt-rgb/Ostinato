@@ -61,3 +61,12 @@ profile is loaded:
 
 The capture game's Surprise! round is optional. It isn't counted in coverage, and its times are only listed in the
 profile (`surpriseRoundMs`) for reference.
+
+## Peripheral awareness
+
+`humanPeripheral` (default on) adds an orienting stage to surprise threats (`PeripheralAwareness`). A threat outside
+the central ~30 degrees can be noticed pre-attentively: seen out to the FOV edge + 10 degrees (likelier when it moves,
+flickers or approaches; half as likely when barely on screen), or heard / hitting from anywhere including behind
+(sight never reaches past ~110 degrees). When noticed, the camera makes a fast rough partial turn (45-75% of the angle,
+a few degrees off) after 0.6-0.8 of the sampled reaction time (same energy state), then the precise aim starts at the
+full reaction time. Central threats just get the normal reaction. Planned looks cancel it like the reaction hold.

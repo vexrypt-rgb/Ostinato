@@ -28,6 +28,7 @@ import baritone.api.utils.Rotation;
 import baritone.behavior.look.ForkableRandom;
 import baritone.api.utils.Helper;
 import baritone.behavior.look.HumanMouseModel;
+import baritone.behavior.look.PeripheralAwareness;
 import baritone.behavior.look.ReactionGate;
 import baritone.behavior.look.ReactionModel;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
@@ -137,6 +138,40 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 ReactionModel.Energy.parse(Baritone.settings().humanEnergy.value), now, session, reactionRng);
     }
 
+    /**
+     * Ostinato: a surprise threat with what the senses get from it (humanPeripheral). Off-center threats that are
+     * noticed pre-attentively get a fast rough partial turn toward them before the normal precise aim; behind the
+     * player only a sound or a hit cues it. With humanPeripheral off this is {@link #surprise()}.
+     *
+     * @param angleOffDeg angle between the view and the threat
+     * @param moving      0 still .. 1 fast
+     */
+    public void surpriseThreat(double angleOffDeg, double moving, boolean approaching, boolean flicker, boolean sound, boolean hit) {
+        if (!Baritone.settings().humanReactionDelay.value) {
+            reaction.cancel();
+            return;
+        }
+        HumanMouseModel m = ctx.player() == null ? null : humanProfile();
+        double now = System.nanoTime() / 1e9, session = (System.nanoTime() - sessionStartNanos) / 1e9;
+        double rt = (m != null ? m.reactionModel() : defaultReaction).sample(ReactionModel.Energy.parse(Baritone.settings().humanEnergy.value), now, session, reactionRng);
+        PeripheralAwareness.Cue cue = new PeripheralAwareness.Cue(angleOffDeg, fovHalfDeg(), moving, approaching, flicker, sound, hit);
+        reaction.start(PeripheralAwareness.plan(Baritone.settings().humanPeripheral.value, cue, rt, reactionRng));
+        orientGoal = null;
+    }
+
+    /** Horizontal half field of view, degrees, from the vertical FOV option and the window shape. */
+    private double fovHalfDeg() {
+        try {
+            double v = ctx.minecraft().options.fov().get();
+            double aspect = (double) ctx.minecraft().getWindow().getWidth() / Math.max(1, ctx.minecraft().getWindow().getHeight());
+            return Math.toDegrees(Math.atan(Math.tan(Math.toRadians(v / 2)) * aspect));
+        } catch (Throwable t) {
+            return 51; // fov 70 at 16:9
+        }
+    }
+
+    private Rotation orientGoal; // Ostinato: where the rough orienting turn heads
+
     /** Ostinato: whether a surprise reaction hold is running. */
     public boolean reacting() {
         return reaction.holding();
@@ -213,11 +248,28 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * mouse count rides on top; the result is rounded to whole mouse counts as before.
      */
     private Rotation humanStep(Rotation want) {
-        if (reaction.hold(this.reactive)) { // Ostinato: surprise reaction delay, reactive looks only
+        ReactionGate.Phase phase = reaction.step(this.reactive); // Ostinato: surprise reaction delay, reactive looks only
+        if (phase == ReactionGate.Phase.HOLD) {
             velYaw = 0;
             velPitch = 0;
             plan = null;
             return new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
+        }
+        if (phase == ReactionGate.Phase.ORIENT) {
+            // Ostinato peripheral awareness: a fast, rough, partial turn toward the threat before it is recognized
+            if (orientGoal == null) {
+                float cy0 = ctx.player().getYRot(), cp0 = ctx.player().getXRot();
+                float f = (float) reaction.orientFraction(), e = (float) reaction.orientErrorDeg();
+                orientGoal = new Rotation(cy0 + net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy0) * f + e,
+                        net.minecraft.util.Mth.clamp(cp0 + (want.getPitch() - cp0) * f * 0.6f, -90f, 90f));
+                plan = null;
+            }
+            want = orientGoal;
+            aimUrgency = 1f;
+            aimWidthDeg = Math.max(aimWidthDeg, 12f);
+        } else if (orientGoal != null) {
+            orientGoal = null; // recognized: the precise aim takes over from wherever the rough turn got to
+            plan = null;
         }
         Rotation profiled = profileStep(want); // Ostinato: a fitted human mouse profile, when one is set
         if (profiled != null) return profiled;
@@ -401,7 +453,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 // The target is done being used for this game tick, so it can be invalidated
                 this.target = null;
                 if (!this.human) { velYaw = 0; velPitch = 0; plan = null; reaction.cancel(); }
-                else if (!this.reactive) reaction.cancel(); // a planned look this tick: no hold carries over
+                else if (!this.reactive) { reaction.cancel(); orientGoal = null; } // a planned look this tick: no hold carries over
                 this.reactive = false;
                 this.human = false;
                 this.aimWidthDeg = 3f; // Ostinato

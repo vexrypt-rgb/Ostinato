@@ -926,6 +926,14 @@ public final class Settings {
     public final Setting<String> humanEnergy = new Setting<>("tired");
 
     /**
+     * Ostinato: peripheral awareness for surprise threats. A threat off the center of view (beyond ~30 degrees, out to
+     * a little past the edge of the FOV) or heard / hitting from further round (to ~110 degrees, or behind) can be
+     * noticed before it is recognized: a fast, rough partial turn toward it after 0.6..0.8 of the reaction time, then
+     * the normal precise aim. Movement, flicker and an approaching threat make it likelier. Threat looks only.
+     */
+    public final Setting<Boolean> humanPeripheral = new Setting<>(true);
+
+    /**
      * Same as {@link #smoothLook} but for elytra flying.
      */
     public final Setting<Boolean> elytraSmoothLook = new Setting<>(false);

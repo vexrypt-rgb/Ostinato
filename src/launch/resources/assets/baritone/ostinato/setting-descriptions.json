@@ -232,6 +232,7 @@
  "humanLookEverywhere": "Every look (walking, mining, placing) turns the camera like a mouse: bounded speed, overshoot, tremor, mouse-count steps. PvP always does this. Off by default; not used while elytra flying.",
  "humanReactionDelay": "Ostinato: wait a human reaction time (your measured reaction times: tired 200-407 ms, peak 165-220 ms, or the profile's) before turning to a new, unexpected target such as a mob appearing or being hit. Never delays path following, mining or parkour.",
  "humanEnergy": "Ostinato: reaction-time energy state: tired (measured 200-407 ms, default), peak (measured 165-220 ms) or auto (drifts from peak to tired over a long session).",
+ "humanPeripheral": "Ostinato: threats seen off-center (or heard, or hitting you from behind) get a fast rough turn toward them before you consciously recognize them, then the precise aim. Threat looks only.",
  "humanMouseProfile": "Ostinato: path to a human mouse profile fitted from your own mouse recordings (tools/human-mouse); camera turns then follow your own timing, overshoot and tremor. \"example\" uses the bundled synthetic profile; empty keeps the built-in curve.",
  "smoothLook": "Forces the client-sided yaw rotation to an average of the last smoothLookTicks of server-sided rotations.",
  "smoothLookTicks": "The number of ticks to average across for smoothLook;",
