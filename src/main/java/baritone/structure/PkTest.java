@@ -121,7 +121,7 @@ public final class PkTest implements AbstractGameEventListener {
             }
             return;
         }
-        if (++shotTick < 300) return;
+        if (++shotTick < 60) return;
         long driven = baritone.pathing.kinematic.KinematicController.drivenTicks;
         boolean moving = mc.player.getDeltaMovement().horizontalDistanceSqr() > 0.01;
         if (moving && (!kin || driven > lastDriven)) {

@@ -138,7 +138,9 @@ public final class JumpTemplates {
                 // the mover accepts a run-up stop anywhere within 0.15 of the start (and a few hundredths to the
                 // side); the jump must work from all of it, not just the two ends: r=1 4-gaps had dead bands inside
                 boolean robust = true;
-                for (int ox = -15; ox <= 5 && robust; ox += 2) for (int oz = -5; oz <= 5 && robust; oz += 5) {
+                // Ostinato: a neo is a precise jump (players line it up by hand): its stop window is the mover's tight one
+                int oxMin = d[3] > 0 ? -6 : -15, ozStep = d[3] > 0 ? 100 : 5;
+                for (int ox = oxMin; ox <= 5 && robust; ox += 2) for (int oz = d[3] > 0 ? 0 : -5; oz <= 5 && robust; oz += ozStep) {
                     JumpSearch rj = new JumpSearch(w);
                     rj.dirX = 1;
                     rj.dirZ = 0;
