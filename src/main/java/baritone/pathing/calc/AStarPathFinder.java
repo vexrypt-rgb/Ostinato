@@ -42,6 +42,13 @@ import java.util.Optional;
 public final class AStarPathFinder extends AbstractNodeCostSearch {
 
     private final Favoring favoring;
+
+    /** Ostinato: optional corridor for the hierarchical planner; nodes it rejects are never expanded into. Null = stock. */
+    public interface NodeFilter {
+        boolean allow(int x, int y, int z);
+    }
+
+    NodeFilter nodeFilter;
     private final CalculationContext calcContext;
 
     /**
@@ -182,6 +189,9 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                             SettingsUtil.maybeCensor(currentNode.z),
                             SettingsUtil.maybeCensor(res.y),
                             SettingsUtil.maybeCensor(currentNode.y + moves.yOffset)));
+                }
+                if (nodeFilter != null && !nodeFilter.allow(res.x, res.y, res.z)) { // Ostinato: corridor (null in stock planning)
+                    continue;
                 }
                 long hashCode = BetterBlockPos.longHash(res.x, res.y, res.z);
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);

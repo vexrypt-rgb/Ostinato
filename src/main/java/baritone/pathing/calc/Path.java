@@ -141,6 +141,7 @@ class Path extends PathBase {
                     best = move;
                     bestCost = c;
                 }
+                move.sourceMove = moves; // Ostinato: remember the Moves entry for cost calibration
             }
         }
         if (best == null && first != null) {

@@ -562,6 +562,39 @@ public final class Settings {
      */
     public final Setting<Integer> pathingFarSegmentDistance = new Setting<>(128);
 
+    /**
+     * Ostinato: plan through the section-level (16x16x16) abstract graph first and keep block-level A* inside the
+     * resulting corridor (HierarchicalPathFinder). Falls back to plain A* when there is no abstract route. Off until proven.
+     */
+    public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
+
+    /** Ostinato: how many sections beyond the start/goal box the abstract search may detour through. */
+    public final Setting<Integer> pathingHierarchyMargin = new Setting<>(3);
+
+    /** Ostinato: corridor half-width in sections around the abstract route. */
+    public final Setting<Integer> pathingHierarchyCorridorRadius = new Setting<>(1);
+
+    /**
+     * Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic
+     * (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.
+     */
+    public final Setting<Double> pathingHierarchyHeuristicFactor = new Setting<>(0.0);
+
+    /** Ostinato: log planned vs actual ticks of every executed movement to baritone/calibration/<version>/samples.csv. */
+    public final Setting<Boolean> logMovementTicks = new Setting<>(false);
+
+    /** Ostinato: scale each move's planned cost by its measured actual/planned ratio from the calibration table. */
+    public final Setting<Boolean> useCalibratedCosts = new Setting<>(false);
+
+    /** Ostinato: add the expected failure cost (measured failure rate x riskRecoveryTicks) to each move. */
+    public final Setting<Boolean> riskAwareCosts = new Setting<>(false);
+
+    /** Ostinato: ticks a failed movement costs to recover from (replan, walk back, retry), for riskAwareCosts. */
+    public final Setting<Double> riskRecoveryTicks = new Setting<>(200.0);
+
+    /** Ostinato: samples a move needs before its calibrated factor or risk term is used. */
+    public final Setting<Integer> calibrationMinSamples = new Setting<>(20);
+
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**
      * The maximum number of times it will fetch outside loaded or cached chunks before assuming that

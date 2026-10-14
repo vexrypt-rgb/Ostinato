@@ -17,6 +17,8 @@
 
 package baritone.behavior;
 
+import baritone.pathing.calc.HierarchicalPathFinder;
+import baritone.pathing.calc.hierarchy.SectionGraph;
 import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
@@ -736,6 +738,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         }
         // Ostinato: was always `new AStarPathFinder(..., context)` (weight 1); far segments may now use weighted A*.
         double weight = farSegmentWeight(transformed, start);
+        if (Baritone.settings().pathingHierarchical.value) { // Ostinato: opt-in hierarchical planner
+            return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
+        }
         return new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
 
     }
