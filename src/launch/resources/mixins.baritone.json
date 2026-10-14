@@ -34,7 +34,8 @@
     "MixinRenderPipelines",
     "MixinRenderType",
     "MixinScreen",
-    "MixinWorldRenderer"
+    "MixinWorldRenderer",
+    "MixinWindowPlacement"
   ],
   "mixins": [
   ]
