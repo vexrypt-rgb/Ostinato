@@ -241,6 +241,17 @@ public final class Settings {
     public final Setting<Boolean> allowLadderClutch = new Setting<>(false);
 
     /**
+     * Ostinato: when tunnelling, crawl through 1-high tunnels (half the blocks to mine) if that is cheaper overall.
+     * Needs a trapdoor or fence gate on the hotbar, which is used up to force the crawl pose at the tunnel mouth.
+     */
+    public final Setting<Boolean> allowCrawlTunnel = new Setting<>(true);
+
+    /**
+     * Ostinato: the cost, in ticks, of using up one trapdoor or fence gate on a crawl tunnel.
+     */
+    public final Setting<Double> crawlTunnelItemCost = new Setting<>(10D);
+
+    /**
      * After a ladder clutch, break the ladder and pick it back up so one ladder can save you more than once.
      */
     public final Setting<Boolean> pickupLadders = new Setting<>(true);

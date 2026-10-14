@@ -22,6 +22,8 @@ Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 | `allowMomentumJumps` | true | Longer jumps using run-up momentum |
 | `allowClimbJumps` | false | Jump onto/off ladders and vines across a gap. Needs `allowParkour` |
 | `allowLadderClutch` | false | Survive a long fall by placing a ladder or vine on a wall beside the last blocks. Needs a ladder or vine on the hotbar |
+| `allowCrawlTunnel` | true | Ostinato: dig 1-high crawl tunnels (half the blocks) when cheaper than 2-high, including setup. Uses up a trapdoor or fence gate from the hotbar to force the crawl pose |
+| `crawlTunnelItemCost` | 10 | Ticks charged for the trapdoor/gate a crawl tunnel uses up |
 | `pickupLadders` | true | Take placed ladders back |
 | `pitfallAvoidance` | true | Never stand on sand/gravel/concrete powder resting on a block with no collision |
 | `sprintJump` | false | Sprint-jump option |

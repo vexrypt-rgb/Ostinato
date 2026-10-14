@@ -1076,6 +1076,162 @@ public enum Moves {
         }
     },
 
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_NORTH_4(0, 0, -4) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.NORTH, 4);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.NORTH, 4);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_NORTH_8(0, 0, -8) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.NORTH, 8);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.NORTH, 8);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_NORTH_16(0, 0, -16) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.NORTH, 16);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.NORTH, 16);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_SOUTH_4(0, 0, 4) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.SOUTH, 4);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.SOUTH, 4);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_SOUTH_8(0, 0, 8) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.SOUTH, 8);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.SOUTH, 8);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_SOUTH_16(0, 0, 16) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.SOUTH, 16);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.SOUTH, 16);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_EAST_4(4, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.EAST, 4);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.EAST, 4);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_EAST_8(8, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.EAST, 8);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.EAST, 8);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_EAST_16(16, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.EAST, 16);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.EAST, 16);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_WEST_4(-4, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.WEST, 4);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.WEST, 4);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_WEST_8(-8, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.WEST, 8);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.WEST, 8);
+        }
+    },
+
+    // Ostinato: 1-high crawl tunnel, see MovementCrawlTunnel
+    CRAWL_TUNNEL_WEST_16(-16, 0, 0) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementCrawlTunnel(context.getBaritone(), src, Direction.WEST, 16);
+        }
+
+        @Override
+        public double cost(CalculationContext context, int x, int y, int z) {
+            return MovementCrawlTunnel.cost(context, x, y, z, Direction.WEST, 16);
+        }
+    },
+
     CHAIN_JUMP_2(0, 0, 0, true, true) {
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {

@@ -194,6 +194,18 @@ public final class InventoryBehavior extends Behavior implements Helper {
         return null;
     }
 
+    /**
+     * Ostinato: a trapdoor (wooden or copper; iron ones won't open by hand) or a fence gate on the hotbar, to force the
+     * crawl pose for MovementCrawlTunnel.
+     */
+    public boolean pickCrawlItem(boolean select) {
+        if (AltoClefSettings.getInstance().isInteractionPaused()) return false;
+        return throwaway(select, stack -> stack.getItem() instanceof BlockItem bi
+                && !AltoClefSettings.getInstance().isItemProtected(stack.getItem())
+                && ((bi.getBlock() instanceof net.minecraft.world.level.block.TrapDoorBlock && bi.getBlock() != net.minecraft.world.level.block.Blocks.IRON_TRAPDOOR)
+                    || bi.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock), false);
+    }
+
     public boolean selectThrowawayForLocation(boolean select, int x, int y, int z) {
         if (AltoClefSettings.getInstance().isInteractionPaused()) return false;
         if (AltoClefSettings.getInstance().shouldAvoidPlacingAt(x, y, z)) return false;

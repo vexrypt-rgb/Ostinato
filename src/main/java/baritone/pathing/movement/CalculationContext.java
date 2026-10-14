@@ -111,6 +111,12 @@ public class CalculationContext {
     public double jumpPenalty;
     public final double walkOnWaterOnePenalty;
     public final boolean allowWalkOnMagmaBlocks;
+    /** Ostinato: crawl (1-high) tunnelling is on and a trapdoor or fence gate is on hand to start it. */
+    public final boolean allowCrawlTunnel;
+    /** Ostinato: ticks per block crawling, from the SNEAKING_SPEED attribute (Swift Sneak raises it). */
+    public final double crawlStepCost;
+    /** Ostinato: what using up one trapdoor on a crawl tunnel is worth, in ticks. */
+    public final double crawlTunnelItemCost;
     public final BetterWorldBorder worldBorder;
 
     public final PrecomputedData precomputedData;
@@ -215,6 +221,12 @@ public class CalculationContext {
         this.jumpPenalty = Baritone.settings().jumpPenalty.value;
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
+        // Ostinato: crawl tunnels need a trapdoor or fence gate to force the pose (see MovementCrawlTunnel)
+        this.allowCrawlTunnel = Baritone.settings().allowCrawlTunnel.value && Baritone.settings().allowPlace.value
+                && !AltoClefSettings.getInstance().isInteractionPaused()
+                && ((Baritone) baritone).getInventoryBehavior().pickCrawlItem(false);
+        this.crawlStepCost = CrawlCosts.crawlOneBlockCost(player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED));
+        this.crawlTunnelItemCost = Baritone.settings().crawlTunnelItemCost.value;
         // why cache these things here, why not let the movements just get directly from settings?
         // because if some movements are calculated one way and others are calculated another way,
         // then you get a wildly inconsistent path that isn't optimal for either scenario.
