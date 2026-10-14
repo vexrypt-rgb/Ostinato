@@ -13,6 +13,7 @@ public class LowFloorTest {
         assertTrue(MovementHelper.holdsPlayer(6 / 16.0, 6 / 16.0));   // flower pot
         assertTrue(MovementHelper.holdsPlayer(8 / 16.0, 8 / 16.0));   // skull on the floor
         assertTrue(MovementHelper.holdsPlayer(1.0, 4 / 16.0));        // upright end rod / chain
+        assertTrue(MovementHelper.holdsPlayer(1.0, 12 / 16.0));       // anvil (a falling block, not a full cube)
     }
 
     @Test

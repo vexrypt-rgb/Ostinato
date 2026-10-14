@@ -574,7 +574,9 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (block instanceof FallingBlock) {
             // pitfall: sand/gravel/concrete powder resting on something without collision (air, open gate, sign...) drops out from under us
             BlockPos.MutableBlockPos below = bsi.isPassableBlockPos.set(x, y - 1, z);
-            return isBlockNormalCube(state) && !bsi.get0(x, y - 1, z).getCollisionShape(bsi.access, below).isEmpty();
+            // Ostinato: an anvil is a falling block that is not a full cube; its shape decides like any other low top
+            boolean holds = isBlockNormalCube(state) || holdsPlayer(collisionTop(state), collisionWidth(state));
+            return holds && !bsi.get0(x, y - 1, z).getCollisionShape(bsi.access, below).isEmpty();
         }
         if (MovementHelper.isLava(state) && !MovementHelper.isFlowing(x, y, z, state, bsi) && Baritone.settings().assumeWalkOnLava.value) { // if we get here it means that assumeWalkOnLava must be true, so put it last
             return true;
