@@ -498,7 +498,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // s1161-b04/06/08: hoglins in a stables (low ceilings, no tower) killed us three times; walls stop them too
         List<HoglinEntity> hogsNear = ctx.world().getEntitiesWithinAABB(HoglinEntity.class, me.getBoundingBox().grow(6), h -> h.isAlive() && !h.isChild());
-        HoglinEntity hogOn = BastionPriors.shelterFromHoglins(hogsNear.size(), me.getHealth()) ? hogsNear.stream().min(java.util.Comparator.comparingDouble(me::getDistance)).orElse(null) : null;
+        // with headroom the 2-high perch beats walls (we hit them from above, s1161-b09 lost 3 min walled in); walls under a low ceiling
+        HoglinEntity hogOn = BastionPriors.shelterFromHoglins(hogsNear.size(), me.getHealth()) && !BastionPriors.hoglinPerch(headroom(me, me.getPosition().getY()), true) ? hogsNear.stream().min(java.util.Comparator.comparingDouble(me::getDistance)).orElse(null) : null;
         if (sheltering && hogsNear.stream().anyMatch(h -> me.getDistance(h) < 5)) shelterAngryAt = ticks;
         if (!sheltering) {
             // hurt with one about: the walls are where to eat and mend, if there is anything to mend with
@@ -1485,7 +1486,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 return pause0();
             }
         }
-        if (!perching && !wallsToHand && !me.isInLava() && !me.isBurning() && !lavaWithin(me, 3) && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.isOnGround() && headroom(me, me.getPosition().getY())) {
+        final boolean hogOnly = !heavies.isEmpty() && heavies.stream().allMatch(e -> e instanceof HoglinEntity);
+        if (!perching && (!wallsToHand || hogOnly) && !me.isInLava() && !me.isBurning() && !lavaWithin(me, 3) && ticks >= perchCooldown && heavyComing && pillarBlocks(me) >= 4 && me.isOnGround() && headroom(me, me.getPosition().getY())) {
             perching = true;
             perchUp = false;
             perchCapped = false;
@@ -1505,7 +1507,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             // hysteresis: climb to base+2.3, then only climb again if we drop below base+1.2 (soul sand is 0.875 high)
             // judged only when settled: mid-jump height says nothing about where we land (a brute's attack box ends ~1.95 up)
             if (!perchUp) perchClimbing = true;
-            else if (me.isOnGround() && !perchCapped) perchClimbing = me.getPosY() < perchBase + 3.7;
+            else if (me.isOnGround() && !perchCapped) perchClimbing = me.getPosY() < perchBase + BastionPriors.perchHeight(heavies.stream().allMatch(e -> e instanceof HoglinEntity));
             perchUp = true;
             // run 123: the path carried us nine blocks on and two down before we stopped. The tower went up there, measured
             // from here: too short, and the lava trap looked for its column in the wrong place. The tower is where we stand
@@ -1538,7 +1540,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             if (!fighting) {
                 fighting = true;
                 stallKey = null;
-                pveP.attack(e -> e instanceof PiglinBrute || e instanceof ZoglinEntity, "brutes from the perch");
+                pveP.attack(e -> e instanceof PiglinBrute || e instanceof ZoglinEntity || e instanceof HoglinEntity && !((HoglinEntity) e).isChild(), "brutes/hoglins from the perch");
                 pveP.driven = true;
             }
             // Brutes that stay out of reach (across a gap, behind a wall) are no threat: when nothing changes for a while, get on with the job

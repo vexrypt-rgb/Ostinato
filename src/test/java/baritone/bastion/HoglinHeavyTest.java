@@ -38,4 +38,12 @@ public class HoglinHeavyTest {
         assertFalse(BastionPriors.shelterFromHoglins(1, 18));
         assertFalse(BastionPriors.shelterFromHoglins(0, 4));
     }
+
+    @Test
+    public void perchOverWallsForHoglinsWithHeadroom() { // s1161-b09: 3 min walled in, never fought
+        assertTrue(BastionPriors.hoglinPerch(true, true));
+        assertFalse(BastionPriors.hoglinPerch(false, true));
+        assertEquals(1.9, BastionPriors.perchHeight(true), 0);
+        assertEquals(3.7, BastionPriors.perchHeight(false), 0);
+    }
 }

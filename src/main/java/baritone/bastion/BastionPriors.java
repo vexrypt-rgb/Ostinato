@@ -237,4 +237,14 @@ public final class BastionPriors {
     public static boolean shelterFromHoglins(int adultsWithin6, float hp) {
         return adultsWithin6 >= 2 || adultsWithin6 >= 1 && hp < 16;
     }
+
+    /** Hoglins: perch on a 2-high pillar when there is headroom (they cannot reach, we can hit them), else wall in. */
+    public static boolean hoglinPerch(boolean headroom, boolean hoglinsOnly) {
+        return headroom && hoglinsOnly;
+    }
+
+    /** Height above the base the perch climbs to: 2 for hoglins (in our reach), 3 for brutes (out of theirs). */
+    public static double perchHeight(boolean hoglinsOnly) {
+        return hoglinsOnly ? 1.9 : 3.7;
+    }
 }
