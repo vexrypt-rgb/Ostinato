@@ -54,7 +54,7 @@ public final class MomentumHop {
         }
 
         boolean on(PlayerSim p) {
-            return p.onGround && PlayerSim.floor(p.x) == destX && PlayerSim.floor(p.z) == destZ && Math.abs(p.y - destY) < 0.01;
+            return p.onGround && PlayerSim.floor(p.x) == destX && PlayerSim.floor(p.z) == destZ && PlayerSim.feetCell(p.y) == destY;
         }
 
         boolean dfs(PlayerSim p, int t, boolean prev, StringBuilder trail) {

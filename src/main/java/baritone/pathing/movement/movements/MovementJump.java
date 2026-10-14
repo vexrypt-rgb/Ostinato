@@ -229,6 +229,11 @@ public class MovementJump extends Movement {
                             ceiling = true; // Ostinato: a low ceiling is checked by simulating the jump below
                             continue;
                         }
+                        if (cell[3] == 1 && cell[1] >= 2 && t.neo && !MovementHelper.fullyPassable(context, cx, y + 1, cz)) {
+                            // Ostinato: a neo's feet stay within 1.25 of take-off, so the box always spans the y+1 row too:
+                            // a solid y+1 in the same column stops it the same, and the wall may end below the template's top
+                            continue;
+                        }
                         continue templates;
                     }
                 }
@@ -328,6 +333,11 @@ public class MovementJump extends Movement {
     }
 
     static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
+        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, y);
+    }
+
+    /** As above, standing at feet height {@code startY} (below y on soul sand and other low tops). */
+    static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY) {
         JumpSearch js = new JumpSearch(world);
         js.dirX = f[0];
         js.dirZ = f[1];
@@ -341,7 +351,7 @@ public class MovementJump extends Movement {
         double a = -t.runUp + 0.5, b = 0.5 + lat;
         PlayerSim start = new PlayerSim(world);
         start.x = x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2];
-        start.y = y;
+        start.y = startY;
         start.z = z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
         start.onGround = true;
         if (JumpTemplates.MOMENTUM.contains(t)) {

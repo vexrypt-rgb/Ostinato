@@ -325,7 +325,7 @@ public class MovementSlime extends Movement {
         } else if (js.jumped) {
             js.airTicks++;
             // touching the pad bounces straight back up; only settling on dest's floor ends the flight
-            if (js.airTicks > 1 && real.onGround && m.y <= 0.1 && Math.abs(p.y - dest.y) < 0.01) {
+            if (js.airTicks > 1 && real.onGround && m.y <= 0.1 && PlayerSim.feetCell(p.y) == dest.y) {
                 landed = true;
                 state.setInput(Input.MOVE_FORWARD, false);
                 state.setInput(Input.MOVE_BACK, false);

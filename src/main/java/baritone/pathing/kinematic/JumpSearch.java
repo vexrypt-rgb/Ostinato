@@ -129,10 +129,10 @@ public final class JumpSearch {
                         return false;
                     }
                     destX = PlayerSim.floor(sim.x);
-                    destY = PlayerSim.floor(sim.y + 0.01);
+                    destY = PlayerSim.feetCell(sim.y);
                     destZ = PlayerSim.floor(sim.z);
                 }
-                if (Math.abs(sim.y - destY) > 0.01) {
+                if (PlayerSim.feetCell(sim.y) != destY) {
                     return false; // came down somewhere else first
                 }
                 if (carry) {

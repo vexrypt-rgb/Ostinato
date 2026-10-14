@@ -333,7 +333,9 @@ public final class KinematicController {
         if (MovementHelper.collisionTop(st) <= 0) {
             st = ctx.world().getBlockState(feet.below());
         }
-        return MovementHelper.collisionWidth(st) < 0.9;
+        // a sixteenth in on each side (honey, chest, cake) lands like a full block; honey read as narrow had the
+        // controller hunting for a landing onto the honey it was taking off from
+        return MovementHelper.collisionWidth(st) < 0.8;
     }
 
     /**

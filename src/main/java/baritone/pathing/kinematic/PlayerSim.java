@@ -329,6 +329,14 @@ public final class PlayerSim {
         return d;
     }
 
+    /**
+     * Ostinato: the block cell the feet stand in, as {@code IPlayerContext.playerFeet} counts it. A landing on soul sand,
+     * a chest, farmland or a lantern rests a little below the cell's floor, and still belongs to that cell.
+     */
+    public static int feetCell(double y) {
+        return floor(y + 0.1251);
+    }
+
     public static int floor(double v) {
         int i = (int) v;
         return v < i ? i - 1 : i;

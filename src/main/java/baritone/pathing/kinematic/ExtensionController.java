@@ -353,7 +353,7 @@ public final class ExtensionController {
             if (!sim.onGround) {
                 left = true;
             } else if (left || t > delay + 2) {
-                return left && Math.abs(sim.y - dest.y) < 0.01
+                return left && PlayerSim.feetCell(sim.y) == dest.y
                         && (planned(dest, ext, sx, sz, PlayerSim.floor(sim.x), PlayerSim.floor(sim.z))
                         || MovementHelper.canWalkOn(ctx, new BetterBlockPos(PlayerSim.floor(sim.x), dest.y - 1, PlayerSim.floor(sim.z))));
             }
