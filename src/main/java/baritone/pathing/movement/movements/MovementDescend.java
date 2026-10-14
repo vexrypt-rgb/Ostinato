@@ -356,7 +356,7 @@ public class MovementDescend extends Movement {
         if (!context.experimental || blocks > ExperimentalMovement.MAX_HURT_FALL) {
             return;
         }
-        int damage = ExperimentalMovement.fallDamage(blocks);
+        int damage = ExperimentalMovement.fallDamage(blocks, context.safeFall); // Ostinato: Jump Boost
         if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
             return;
         }

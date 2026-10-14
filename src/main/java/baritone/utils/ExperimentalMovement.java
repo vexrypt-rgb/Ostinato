@@ -80,7 +80,12 @@ public final class ExperimentalMovement {
 
     /** LivingEntity.calculateFallDamage before armor and feather falling, which only make it smaller. */
     public static int fallDamage(int blocksFallen) {
-        return Math.max(0, blocksFallen - SAFE_FALL);
+        return fallDamage(blocksFallen, SAFE_FALL);
+    }
+
+    /** Ostinato: with the player's safe fall distance (Jump Boost adds a block a level). */
+    public static int fallDamage(int blocksFallen, int safeFall) {
+        return Math.max(0, blocksFallen - safeFall);
     }
 
     public static boolean canAffordFall(double health, double damage, double minHealth) {

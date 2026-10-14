@@ -61,6 +61,32 @@ public final class ClientWorld implements PlayerSim.World {
         return walkScale(ctx) >= 1;
     }
 
+    // Ostinato: an effect that runs out within this many ticks is planned as if it were gone already: a path is
+    // costed now and walked over the next several seconds, and a jump that needs the boost must not outlive it
+    public static final int EFFECT_PLAN_TICKS = 200;
+
+    /** Ostinato: whether {@code effect} is on and lasts at least {@link #EFFECT_PLAN_TICKS} more. */
+    public static boolean lasting(IPlayerContext ctx, net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect) {
+        net.minecraft.world.effect.MobEffectInstance e = ctx.player().getEffect(effect);
+        return e != null && (e.isInfiniteDuration() || e.getDuration() >= EFFECT_PLAN_TICKS);
+    }
+
+    /**
+     * Ostinato: the SAFE_FALL_DISTANCE attribute (3, plus 1 per Jump Boost level in 26.3) as whole blocks, with a
+     * Jump Boost about to end taken off again so a drop is not planned on it.
+     */
+    public static int safeFall(IPlayerContext ctx) {
+        double safe = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SAFE_FALL_DISTANCE);
+        net.minecraft.world.effect.MobEffectInstance jb = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.JUMP_BOOST);
+        if (jb != null && !lasting(ctx, net.minecraft.world.effect.MobEffects.JUMP_BOOST)) safe -= jb.getAmplifier() + 1;
+        return Math.max(0, (int) Math.floor(safe + 1e-6));
+    }
+
+    /** Ostinato: Player.isMobilityRestricted (Blindness) stops and forbids a sprint in LocalPlayer.aiStep. */
+    public static boolean sprintAllowed(IPlayerContext ctx) {
+        return !ctx.player().isMobilityRestricted();
+    }
+
     /** A value this close to the plain one is the plain one: what the simulator does by default stays bit for bit. */
     private static double near(double v, double plain) {
         return Math.abs(v - plain) < 1e-4 ? plain : v;
@@ -77,6 +103,11 @@ public final class ClientWorld implements PlayerSim.World {
         sim.jumpBoost = ctx.player().getJumpBoostPower();
         // Soul Speed raises this only while the player stands on a soul block: read from anywhere else it is 0
         sim.movementEfficiency = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_EFFICIENCY);
+        // Ostinato: gravity effects, so a rollout under them can be told (the controllers still stand down for them)
+        sim.gravity = ctx.player().getGravity();
+        sim.slowFalling = ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING);
+        net.minecraft.world.effect.MobEffectInstance lev = ctx.player().getEffect(net.minecraft.world.effect.MobEffects.LEVITATION);
+        sim.levitation = lev == null ? -1 : lev.getAmplifier();
     }
 
     /** Loads the real player's position, velocity, collision flags, speed and jump strength into {@code sim}. */

@@ -8,7 +8,8 @@ import java.util.List;
  * look-ahead search. Covers walking, sprinting, jumping, step-up, block collision, ladders/vines and still water via
  * {@link #tickWater}, and the blocks that slow a walker or a jump (soul sand, honey, with honey's slide down its
  * sides); no lava, currents or sneaking. Of the potion effects it follows Speed, Slowness and Jump Boost
- * ({@link #speedScale}, {@link #jumpBoost}); nothing that changes gravity.
+ * ({@link #speedScale}, {@link #jumpBoost}), and in the air Slow Falling and Levitation ({@link #slowFalling},
+ * {@link #levitation}, as LivingEntity.travelInAir and getEffectiveGravity do them).
  */
 public final class PlayerSim {
 
@@ -66,6 +67,12 @@ public final class PlayerSim {
      * is not scaled, as in vanilla. Left as they are, nothing changes.
      */
     public double speedScale = 1, jumpStrength = 0.42, jumpBoost;
+    // Ostinato: the gravity side of the effects, LivingEntity.travelInAir in 26.3. gravity is the GRAVITY attribute;
+    // Slow Falling caps it at 0.01 while vy <= 0; Levitation (amplifier, -1 for none) replaces gravity with
+    // vy += (0.05 * (amp + 1) - vy) * 0.2. Left as they are the plain fall stays bit for bit.
+    public double gravity = 0.08;
+    public boolean slowFalling;
+    public int levitation = -1;
     /** How much of a slowing block's drag is taken away, 0 to 1 (Soul Speed). */
     public double movementEfficiency;
 
@@ -80,6 +87,7 @@ public final class PlayerSim {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
         onGround = o.onGround; sprinting = o.sprinting; swimming = o.swimming; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
         speedScale = o.speedScale; jumpStrength = o.jumpStrength; jumpBoost = o.jumpBoost; movementEfficiency = o.movementEfficiency;
+        gravity = o.gravity; slowFalling = o.slowFalling; levitation = o.levitation; // Ostinato
         return this;
     }
 
@@ -145,9 +153,15 @@ public final class PlayerSim {
         if ((collidedH || jump) && climbable()) {
             vy = CLIMB_SPEED; // pressing into the wall or holding jump climbs
         }
-        vy = (vy - 0.08) * 0.98;
+        vy = airVertical(vy) * 0.98; // Ostinato: was (vy - 0.08), effects included now
         vx *= slip;
         vz *= slip;
+    }
+
+    // Ostinato: LivingEntity.travelInAir's vertical step before the 0.98 drag
+    private double airVertical(double v) {
+        if (levitation >= 0) return v + (0.05 * (levitation + 1) - v) * 0.2;
+        return v - (slowFalling && v <= 0 ? Math.min(gravity, 0.01) : gravity);
     }
 
     /** Water at the feet, the body's middle or the eyes: any of them puts vanilla into its fluid branch. */

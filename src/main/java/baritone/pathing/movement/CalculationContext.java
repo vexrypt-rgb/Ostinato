@@ -104,6 +104,8 @@ public class CalculationContext {
     public final boolean allowDownward;
     public int minFallHeight;
     public int maxFallHeightNoWater;
+    /** Ostinato: blocks a fall can take without damage, 3 plain. */
+    public int safeFall = 3;
     public final int maxFallHeightBucket;
     public final double waterWalkSpeed;
     public final double breakBlockAdditionalCost;
@@ -140,7 +142,8 @@ public class CalculationContext {
         this.freeBoats = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
                 ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
         this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
-        this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
+        this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6
+                && ClientWorld.sprintAllowed(baritone.getPlayerContext()); // Ostinato: Blindness forbids sprinting
         this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
         this.allowBreak = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowBreak.value;
         this.swimThroughLava = AltoClefSettings.getInstance().canSwimThroughLava();
@@ -191,6 +194,9 @@ public class CalculationContext {
         this.allowDownward = Baritone.settings().allowDownward.value;
         this.minFallHeight = 3; // Minimum fall height used by MovementFall
         this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;
+        // Ostinato: Jump Boost raises the safe fall distance a block per level (only while it lasts the plan out)
+        this.safeFall = ClientWorld.safeFall(baritone.getPlayerContext());
+        this.maxFallHeightNoWater += Math.max(0, safeFall - ExperimentalMovement.SAFE_FALL);
         this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
         float waterSpeedMultiplier = 1.0f;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
