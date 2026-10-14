@@ -89,10 +89,54 @@ public final class PkTest implements AbstractGameEventListener {
         lastPos = null;
     }
 
+    // -Dostinato.pkshots: in-game screenshots of each path visualization, one viz shown at a time while moving
+    private static final boolean SHOTS = System.getProperty("ostinato.pkshots") != null;
+    private int shotTick, shotNo, shotWait;
+    private long lastDriven;
+
+    private void vizOnly(int k) {
+        Settings st = BaritoneAPI.getSettings();
+        Settings.Setting<Boolean>[] all = vizSettings(st);
+        for (int i = 0; i < all.length; i++) all[i].value = k < 0 || i == k;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Settings.Setting<Boolean>[] vizSettings(Settings st) {
+        return new Settings.Setting[]{st.renderKinCorridor, st.renderKinRollouts, st.renderKinJumps,
+                st.renderPhysSpeedTrail, st.renderPhysInputs, st.renderPhysSearch};
+    }
+
+    private void shots(Minecraft mc) {
+        if (!SHOTS || shotNo >= 6 || mc.player == null || !b.getPathingBehavior().isPathing()) return;
+        boolean kin = MODE.equals("kinematic");
+        String[] labels = kin ? new String[]{"K1-corridor", "K2-rollouts", "K3-jumps"} : new String[]{"P1-speedtrail", "P2-inputs", "P3-search"};
+        if (shotWait > 0) {
+            if (--shotWait == 0) {
+                int k = shotNo % 3;
+                String name = "pathviz-" + labels[k] + "-" + (shotNo / 3 + 1) + ".png";
+                net.minecraft.client.Screenshot.grab(mc, false); // F2: saved by time stamp, matched to the PK SHOT line
+                say("PK SHOT " + name);
+                vizOnly(-1);
+                shotNo++;
+            }
+            return;
+        }
+        if (++shotTick < 300) return;
+        long driven = baritone.pathing.kinematic.KinematicController.drivenTicks;
+        boolean moving = mc.player.getDeltaMovement().horizontalDistanceSqr() > 0.01;
+        if (moving && (!kin || driven > lastDriven)) {
+            shotTick = 0;
+            vizOnly((kin ? 0 : 3) + shotNo % 3);
+            shotWait = 4;
+        }
+        lastDriven = driven;
+    }
+
     @Override
     public void onTick(TickEvent e) {
         Minecraft mc = Minecraft.getInstance();
         try {
+            shots(mc);
             if (state == 0) {
                 if (mc.gui.screen() instanceof TitleScreen) {
                     state = 1;
