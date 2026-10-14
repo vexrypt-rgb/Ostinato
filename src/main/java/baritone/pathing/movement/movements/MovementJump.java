@@ -31,6 +31,7 @@ import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.kinematic.JumpSearch;
 import baritone.pathing.kinematic.JumpTemplates;
 import baritone.pathing.kinematic.MomentumHop;
+import baritone.utils.PlanStats;
 import baritone.pathing.kinematic.PlayerSim;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -222,13 +223,22 @@ public class MovementJump extends Movement {
                 if (!ceiling && JumpTemplates.HEAD_HITTERS.contains(t)) {
                     continue; // open sky: MovementParkour's jump
                 }
+                if (ceiling && JumpTemplates.MOMENTUM.contains(t) && !lowTunnel(context, x, y, z, f)) {
+                    continue; // Ostinato: a momentum run only pays under a real 2-high tunnel over take-off and gap
+                }
                 if (ceiling && JumpTemplates.MOMENTUM.contains(t) && hasShorter(c.options, t, dx, y + t.dy, dz)) {
                     continue; // Ostinato: a shorter momentum run-up already lands here; skip the costlier searches
                 }
                 if (!ceiling && JumpTemplates.MOMENTUM.contains(t)) {
                     continue;
                 }
-                if (ceiling && !headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz)) {
+                long hh0 = ceiling ? System.nanoTime() : 0;
+                boolean hhOk = !ceiling || headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz);
+                if (ceiling) {
+                    PlanStats.hhNs.addAndGet(System.nanoTime() - hh0);
+                    PlanStats.hhCalls.incrementAndGet();
+                }
+                if (!hhOk) {
                     continue;
                 }
                 double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
@@ -254,6 +264,13 @@ public class MovementJump extends Movement {
     // sim against the real blocks and kept only when the sim lands on dest (the same search the flight runs).
     static boolean headHitterCell(CalculationContext context, int[] cell, int cx, int cy, int cz) {
         return cell[3] == 0 && cell[1] >= 2 && context.get(cx, cy, cz).getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(context.get(cx, cy, cz));
+    }
+
+    private static boolean lowTunnel(CalculationContext context, int x, int y, int z, int[] f) {
+        for (int k = 0; k <= 2; k++) {
+            if (MovementHelper.fullyPassable(context, x + k * f[0], y + 2, z + k * f[1])) return false;
+        }
+        return true;
     }
 
     private static boolean hasShorter(List<Option> options, JumpTemplates.Template t, int x, int y, int z) {
@@ -283,7 +300,7 @@ public class MovementJump extends Movement {
         if (JumpTemplates.MOMENTUM.contains(t)) {
             // Ostinato: multi-hop momentum run under the ceiling, from standing still at the run-up start
             start.vy = -0.0784000015258789;
-            return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false) != null;
+            return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false, MomentumHop.PLAN_BUDGET) != null;
         }
         return js.search(start, true) || js.search(start, false);
     }

@@ -114,9 +114,9 @@ public final class PkTest implements AbstractGameEventListener {
             ja++;
             if (a.ok) jl++;
         }
-        say(String.format(Locale.ROOT, "PK GSTAT mode=%s goal=%d ok=%b astarMs=%.1f physMs=%.1f kinMs=%.1f travelS=%.2f jumps=%d/%d stuck=%d noplan=%d",
+        say(String.format(Locale.ROOT, "PK GSTAT mode=%s goal=%d ok=%b astarMs=%.1f physMs=%.1f kinMs=%.1f travelS=%.2f jumps=%d/%d stuck=%d noplan=%d hhSimMs=%.1f hhCalls=%d",
                 MODE, goalNo, ok, (baritone.utils.PlanStats.astarNs.get() - gStat0[0]) / 1e6, (baritone.utils.PlanStats.physNs.get() - gStat0[1]) / 1e6,
-                (baritone.utils.PlanStats.kinNs.get() - gStat0[2]) / 1e6, (tick - gStat0[3]) / 20.0, jl, ja, st, np));
+                (baritone.utils.PlanStats.kinNs.get() - gStat0[2]) / 1e6, (tick - gStat0[3]) / 20.0, jl, ja, st, np, (baritone.utils.PlanStats.hhNs.get() - gStat0[5]) / 1e6, baritone.utils.PlanStats.hhCalls.get() - gStat0[6]));
         gStat0 = null;
     }
 
@@ -359,7 +359,7 @@ public final class PkTest implements AbstractGameEventListener {
             if (st.kind.equals("hop")) { hopLeft = st.r; hopT = 0; hopPattern = st.text; hopLand = st.y; hopTop = 0; hopJump = false; b.getPathingBehavior().cancelEverything(); return; }
             if (st.kind.equals("tp")) { tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; continue; }
             goalNo++;
-            gStat0 = new long[]{baritone.utils.PlanStats.astarNs.get(), baritone.utils.PlanStats.physNs.get(), baritone.utils.PlanStats.kinNs.get(), tick, attempts.size()};
+            gStat0 = new long[]{baritone.utils.PlanStats.astarNs.get(), baritone.utils.PlanStats.physNs.get(), baritone.utils.PlanStats.kinNs.get(), tick, attempts.size(), baritone.utils.PlanStats.hhNs.get(), baritone.utils.PlanStats.hhCalls.get()};
             lastGood = null;
             issue();
             return;

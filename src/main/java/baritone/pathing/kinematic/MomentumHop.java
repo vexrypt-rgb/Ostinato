@@ -14,15 +14,21 @@ public final class MomentumHop {
     private MomentumHop() {}
 
     /** Ticks searched at most, and sim ticks spent at most per search. */
-    public static final int MAX_TICKS = 60, BUDGET = 40000;
+    public static final int MAX_TICKS = 60, BUDGET = 40000, PLAN_BUDGET = 6000;
 
     /**
      * @return the jump pattern from {@code start} ('J' = press jump this tick, '.' = don't), ending on the tick the
      * player stands on dest, or null if none was found
      */
     public static String find(PlayerSim.World w, PlayerSim start, int dirX, int dirZ, int destX, int destY, int destZ, boolean jumpedLastTick) {
+        return find(w, start, dirX, dirZ, destX, destY, destZ, jumpedLastTick, BUDGET);
+    }
+
+    /** As above with a sim-tick budget (the planner uses a smaller one). */
+    public static String find(PlayerSim.World w, PlayerSim start, int dirX, int dirZ, int destX, int destY, int destZ, boolean jumpedLastTick, int budget) {
         float yaw = (float) Math.toDegrees(Math.atan2(-dirX, dirZ));
         Search s = new Search(w, yaw, dirX, dirZ, destX, destY, destZ, Math.min(start.y, destY) - 0.6);
+        s.budget = budget;
         StringBuilder trail = new StringBuilder();
         return s.dfs(start, 0, jumpedLastTick, trail) ? trail.toString() : null;
     }
@@ -33,7 +39,7 @@ public final class MomentumHop {
         final int dirX, dirZ, destX, destY, destZ;
         final double floorY, beyond;
         final Set<Long> seen = new HashSet<>();
-        int spent;
+        int spent, budget = BUDGET;
 
         Search(PlayerSim.World w, float yaw, int dirX, int dirZ, int destX, int destY, int destZ, double floorY) {
             this.w = w;
@@ -53,7 +59,7 @@ public final class MomentumHop {
 
         boolean dfs(PlayerSim p, int t, boolean prev, StringBuilder trail) {
             if (on(p)) return true;
-            if (p.y < floorY || t >= MAX_TICKS || spent > BUDGET) return false;
+            if (p.y < floorY || t >= MAX_TICKS || spent > budget) return false;
             if (p.x * dirX + p.z * dirZ > beyond) return false;
             long key = (((long) Math.round((p.x * dirX + p.z * dirZ) * 200) & 0xFFFFF) << 40)
                     ^ (((long) Math.round(p.y * 200) & 0xFFFF) << 24)
