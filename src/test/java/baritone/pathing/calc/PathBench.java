@@ -234,6 +234,12 @@ public final class PathBench {
             sb.append(String.format(Locale.ROOT, "| %s | %s | %d | %d | %.1f | %.1f | %.0f | %.1f | %.1f |%n", k[0], k[1], l.size() / reps, f, pct(ms, .5), pct(ms, .95), pct(nodes, .5), cost, mb));
         }
         sb.append(String.format(Locale.ROOT, "%nAll: median %.1f ms, p95 %.1f ms, failures %d of %d queries, %d reps.%n%n", pct(allMs, .5), pct(allMs, .95), fails, rs.size() / reps, reps));
+        // Ostinato: travel-first score. Failures rank first; then estimated time-to-arrive per solved query =
+        // planned travel ticks (path cost) + planning wall time in ticks (50 ms/tick), since the bot waits on the plan.
+        double travel = rs.stream().filter(Result::ok).mapToDouble(Result::cost).average().orElse(Double.NaN);
+        double arrive = rs.stream().filter(Result::ok).mapToDouble(r -> r.cost + r.ms / 50.0).average().orElse(Double.NaN);
+        sb.append(String.format(Locale.ROOT, "Score (travel-first): failure rate %.1f%%, mean travel %.1f ticks, mean time-to-arrive %.1f ticks (travel + plan).%n%n",
+                100.0 * fails / Math.max(1, rs.size() / reps), travel, arrive));
         return sb.toString();
     }
 
