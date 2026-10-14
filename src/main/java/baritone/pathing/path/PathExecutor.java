@@ -896,6 +896,14 @@ public class PathExecutor implements IPathExecutor, Helper {
         return lastDriver;
     }
 
+    /**
+     * Ostinato: whether kinematic or physics travel drove the last tick. Baritone's own path ribbon is hidden then; it
+     * shows again once they hand back (M01) or leave a segment to Baritone's movement logic.
+     */
+    public boolean travelDriving() {
+        return lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS;
+    }
+
     @Override
     public IPath getPath() {
         return path;
