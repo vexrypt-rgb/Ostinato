@@ -496,10 +496,14 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 if (pig == null || me.getDistance(q) < me.getDistance(pig)) pig = q;
             }
         }
+        // s1161-b04/06/08: hoglins in a stables (low ceilings, no tower) killed us three times; walls stop them too
+        List<HoglinEntity> hogsNear = ctx.world().getEntitiesWithinAABB(HoglinEntity.class, me.getBoundingBox().grow(6), h -> h.isAlive() && !h.isChild());
+        HoglinEntity hogOn = BastionPriors.shelterFromHoglins(hogsNear.size(), me.getHealth()) ? hogsNear.stream().min(java.util.Comparator.comparingDouble(me::getDistance)).orElse(null) : null;
+        if (sheltering && hogsNear.stream().anyMatch(h -> me.getDistance(h) < 5)) shelterAngryAt = ticks;
         if (!sheltering) {
             // hurt with one about: the walls are where to eat and mend, if there is anything to mend with
             boolean hurt = me.getHealth() < 14 && nearest != null && (foodSlot(me) >= 0 || me.getFoodStats().getFoodLevel() >= 18);
-            if (hunter == null && !hurt && pig == null || me.isInLava() || ticks < shelterCooldown || pillarBlocks(me) < 12
+            if (hunter == null && !hurt && pig == null && hogOn == null || me.isInLava() || ticks < shelterCooldown || pillarBlocks(me) < 12
                     // already up a tower: that is the older answer at work
                     || perching && me.getPosY() >= perchBase + 1.9) return null;
             if (shelterCell(me) == null) {
@@ -535,6 +539,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             baritone.getPveProcess().hold = false;
             if (fighting) { baritone.getPveProcess().clearEnemies(); fighting = false; }
             logDirect("Bastion: " + (hunter != null ? "brute at " + String.format("%.1f", me.getDistance(hunter)) + where(hunter, me)
+                    : hogOn != null ? "hoglin on us at " + String.format("%.1f", me.getDistance(hogOn)) + where(hogOn, me) + ", " + (int) me.getHealth() + " hp"
                     : pig != null ? "piglin on us at " + String.format("%.1f", me.getDistance(pig)) + where(pig, me) + ", " + (int) me.getHealth() + " hp"
                     : "hurt (" + (int) me.getHealth() + " hp) with a brute about") + ", walling in");
         }

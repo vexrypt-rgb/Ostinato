@@ -232,4 +232,9 @@ public final class BastionPriors {
         }
         return out;
     }
+
+    /** Wall in against hoglins within 6: two or more, or one while below 16 hp (no tower fits under a stables ceiling). */
+    public static boolean shelterFromHoglins(int adultsWithin6, float hp) {
+        return adultsWithin6 >= 2 || adultsWithin6 >= 1 && hp < 16;
+    }
 }

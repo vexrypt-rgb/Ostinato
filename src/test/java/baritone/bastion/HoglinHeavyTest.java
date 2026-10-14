@@ -30,4 +30,12 @@ public class HoglinHeavyTest {
         assertFalse(BastionPriors.eatGapple(15, false, 2));
         assertFalse(BastionPriors.eatGapple(5, false, 0));
     }
+
+    @Test
+    public void wallInAgainstHoglins() {
+        assertTrue(BastionPriors.shelterFromHoglins(2, 20)); // s1161-b08
+        assertTrue(BastionPriors.shelterFromHoglins(1, 12));
+        assertFalse(BastionPriors.shelterFromHoglins(1, 18));
+        assertFalse(BastionPriors.shelterFromHoglins(0, 4));
+    }
 }
