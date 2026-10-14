@@ -17,6 +17,8 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.pathing.kinematic.BsiWorld;
+
 import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.IBaritone;
@@ -53,7 +55,15 @@ public class MovementJump extends Movement {
 
     private static final BetterBlockPos[] EMPTY = new BetterBlockPos[]{};
     /** Approach (ux, uz) and lateral (lx, lz) of the 8 frames: 4 directions, lateral side either way. */
-    private static final int[][] FRAMES = new int[8][];
+    static final int[][] FRAMES = new int[8][];
+
+    /** Ostinato: the straight head-hitter templates, then the rest. */
+    private static final List<JumpTemplates.Template> HEAD_AND_ALL = new java.util.ArrayList<>();
+
+    static {
+        HEAD_AND_ALL.addAll(JumpTemplates.HEAD_HITTERS);
+        HEAD_AND_ALL.addAll(JumpTemplates.ALL);
+    }
 
     static {
         int[][] dirs = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
@@ -178,7 +188,7 @@ public class MovementJump extends Movement {
                 continue;
             }
             templates:
-            for (JumpTemplates.Template t : JumpTemplates.ALL) {
+            for (JumpTemplates.Template t : (i & 1) == 0 ? HEAD_AND_ALL : JumpTemplates.ALL) {
                 if (t.neo && !context.allowNeos || t.runUp > 0 && !t.neo && !context.allowMomentumJumps) {
                     continue;
                 }
@@ -194,10 +204,22 @@ public class MovementJump extends Movement {
                         continue templates;
                     }
                 }
+                boolean ceiling = false;
                 for (int[] cell : t.cells) {
-                    if (MovementHelper.fullyPassable(context, x + cell[0] * f[0] + cell[2] * f[2], y + cell[1], z + cell[0] * f[1] + cell[2] * f[3]) == (cell[3] == 1)) {
+                    int cx = x + cell[0] * f[0] + cell[2] * f[2], cy = y + cell[1], cz = z + cell[0] * f[1] + cell[2] * f[3];
+                    if (MovementHelper.fullyPassable(context, cx, cy, cz) == (cell[3] == 1)) {
+                        if (headHitterCell(context, cell, cx, cy, cz)) {
+                            ceiling = true; // Ostinato: a low ceiling is checked by simulating the jump below
+                            continue;
+                        }
                         continue templates;
                     }
+                }
+                if (!ceiling && JumpTemplates.HEAD_HITTERS.contains(t)) {
+                    continue; // open sky: MovementParkour's jump
+                }
+                if (ceiling && !headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, y + t.dy, dz)) {
+                    continue;
                 }
                 double cost = (t.ticks + t.runUp * WALK_ONE_BLOCK_COST + context.jumpPenalty) * context.jumpBias;
                 int ddx = dx, ddy = y + t.dy, ddz = dz;
@@ -215,6 +237,33 @@ public class MovementJump extends Movement {
             }
         }
         return c.options;
+    }
+
+    // Ostinato: head-hitter jumps. Templates assume 2 clear cells over the arc; a solid ceiling cell above the
+    // head (template cell 2+ up) does not rule a jump out: it caps or bumps the arc, so the jump is flown in the
+    // sim against the real blocks and kept only when the sim lands on dest (the same search the flight runs).
+    static boolean headHitterCell(CalculationContext context, int[] cell, int cx, int cy, int cz) {
+        return cell[3] == 0 && cell[1] >= 2 && context.get(cx, cy, cz).getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(context.get(cx, cy, cz));
+    }
+
+    static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
+        JumpSearch js = new JumpSearch(world);
+        js.dirX = f[0];
+        js.dirZ = f[1];
+        js.edge = (x + 0.5 + 0.5 * f[0]) * f[0] + (z + 0.5 + 0.5 * f[1]) * f[1];
+        js.destX = dx;
+        js.destY = dy;
+        js.destZ = dz;
+        js.side = f[4];
+        System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
+        double lat = Math.min(t.lateral, 0.75);
+        double a = -t.runUp + 0.5, b = 0.5 + lat;
+        PlayerSim start = new PlayerSim(world);
+        start.x = x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2];
+        start.y = y;
+        start.z = z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
+        start.onGround = true;
+        return js.search(start, true) || js.search(start, false);
     }
 
     public static void cost(CalculationContext context, int x, int y, int z, int slot, MutableMoveResult res) {

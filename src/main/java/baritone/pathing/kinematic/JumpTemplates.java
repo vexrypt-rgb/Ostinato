@@ -59,6 +59,23 @@ public final class JumpTemplates {
         }
     }
 
+    // Ostinato: straight jumps under a ceiling. MovementParkour wants 3 clear cells over the arc, so a 2-2.5 high
+    // gap (a head hitter) is never planned there; these carry the cells a straight jump touches, the head cells
+    // (y=2) marked passable so MovementJump treats a solid one as a ceiling and verifies the jump in the sim.
+    public static final List<Template> HEAD_HITTERS = new ArrayList<>();
+
+    static {
+        for (int dy = 0; dy >= -1; dy--) for (int a = 2; a <= 4; a++) for (int r = 0; r <= 4; r++) {
+            List<int[]> cells = new ArrayList<>();
+            for (int k = -r; k <= a; k++) {
+                for (int y = (k == a ? dy : 0); y <= 2; y++) cells.add(new int[]{k, y, 0, 0});
+            }
+            int[] plan = new int[JumpSearch.DIMS];
+            plan[0] = 1;
+            plan[3] = 4;
+            HEAD_HITTERS.add(new Template(a, dy, 0, r, 0, 4 * a + 4, plan, cells.toArray(new int[0][])));
+        }
+    }
     private static final double MARGIN = 0.05;
     private static final int[] RUN_UPS = {0, 1, 2, 3};
     private static final int[] LATERAL = {0, 3, 6, 7, 8}; // tenths of a block
