@@ -1,5 +1,7 @@
 package baritone.process;
 
+import baritone.bastion.BastionPriors;
+import baritone.bastion.BastionRouteResolver;
 import baritone.bastion.BastionRoutes;
 import baritone.bastion.ThrowAdapt;
 import baritone.Baritone;
@@ -2488,7 +2490,32 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     private final Map<BlockPos, Long> badChest = new HashMap<>();
     private List<BastionPlan.Point> plan = List.of();
     /** Objective-level route for the layout (BastionRoutes); the block plan above executes its chest/gold steps. */
-    private List<BastionRoutes.Step> route = List.of();
+    private List<BastionRoutes.Step> route = List.of(), loggedRoute = List.of();
+    private final Map<BlockPos, BastionRoutes.Step> planStep = new HashMap<>();
+    private BastionRoutes.Step currentStep;
+    private int[] floorCells = {0, 0};
+
+    /** Adult piglin within 16 that is not admiring and not holding our gold. */
+    private Piglin nearestUndistracted(Player me, List<LivingEntity> near) {
+        Piglin best = null;
+        for (LivingEntity e : near) if (e instanceof Piglin p && !p.isBaby() && p.isAlive() && !admiring.containsKey(p.getUUID()) && !p.getOffhandItem().is(Items.GOLD_INGOT)
+                && me.distanceTo(p) <= BastionPriors.AGGRO_RANGE && (best == null || me.distanceTo(p) < me.distanceTo(best))) best = p;
+        return best;
+    }
+
+    /** Housing lava variant: sample netherrack floor cells around the bastion and count those with lava on top. */
+    private int[] lavaFloorSample() {
+        int floor = 0, lava = 0;
+        BlockPos c = bastion.pos;
+        for (int dx = -24; dx <= 24; dx += 3) for (int dz = -24; dz <= 24; dz += 3) for (int dy = -12; dy <= 4; dy++) {
+            BlockPos b = c.offset(dx, dy, dz);
+            if (!ctx.world().hasChunkAt(b) || !ctx.world().getBlockState(b).is(Blocks.NETHERRACK)) continue;
+            net.minecraft.world.level.block.state.BlockState up = ctx.world().getBlockState(b.above());
+            if (up.isAir()) { floor++; break; }
+            if (up.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) { floor++; lava++; break; }
+        }
+        return new int[]{floor, lava};
+    }
     private BlockPos planFor, chestTarget, openedChest, entry;
     private long chestScan = -1000, chestSince, chestWaitSince, chestClickTick = -1000, lastTake;
     private boolean exiting, goldSourceGone, chestsExhausted;
@@ -2560,6 +2587,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         chestScan = ticks;
         planFor = bastion.pos;
         List<BlockPos> chests = BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, new BlockOptionalMetaLookup(Blocks.CHEST), 64, 64, 64);
+        floorCells = lavaFloorSample();
         List<BastionPlan.Point> pts = new ArrayList<>();
         for (BlockPos b : chests) {
             if (Math.hypot(b.getX() - bastion.pos.getX(), b.getZ() - bastion.pos.getZ()) > 56 || looted.contains(b)) continue;
@@ -2571,9 +2599,17 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             pts.add(new BastionPlan.Point(b.getX(), b.getY(), b.getZ(), BastionPlan.Kind.GOLD));
         }
         BlockPos at = me.blockPosition();
-        plan = BastionPlan.order(layout(), bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
-        route = BastionRoutes.forLayout(layout(), false, false);
-        logDirect("Bastion: route " + layout() + " " + route);
+        // the route (BastionRoutes) decides the order of objectives; the resolver maps each to the scanned blocks
+        if ("housing".equals(layout())) {
+            BastionRoutes.HousingVariant hv = BastionRoutes.housingVariant(floorCells[0], floorCells[1], BastionSettings.intermediateRoutes);
+            route = BastionRoutes.housing(hv);
+        } else route = BastionRoutes.forLayout(layout(), false, BastionSettings.intermediateRoutes);
+        List<BastionRouteResolver.Target> targets = BastionRouteResolver.resolve(layout(), route, bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
+        List<BastionPlan.Point> ordered = new ArrayList<>();
+        planStep.clear();
+        for (BastionRouteResolver.Target t : targets) { ordered.add(t.point()); if (t.step() != null) planStep.put(new BlockPos(t.point().x(), t.point().y(), t.point().z()), t.step()); }
+        plan = ordered;
+        if (!route.equals(loggedRoute)) { loggedRoute = route; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {
@@ -2599,6 +2635,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                 if (!wantGold || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
             } else if (!ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
             next = b;
+            BastionRoutes.Step ps = planStep.get(b);
+            if (ps != null && ps != currentStep && pt.kind() == BastionPlan.Kind.CHEST) { currentStep = ps; logDirect("Bastion: step " + ps); }
             break;
         }
         // only "no chest left" once we stand in the bastion with its chunks loaded; from outside an empty plan means nothing
@@ -2611,6 +2649,15 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         }
         if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK)) {
             // gold block next in the plan: the miner handles the piglin rule (breaking gold angers every piglin in 16, seen or not)
+            // Couriway ch. 3: distract undistracted piglins within 16 with an ingot before breaking gold
+            BastionRoutes.Step st = planStep.getOrDefault(next, BastionRoutes.Step.TRADE);
+            Piglin undistracted = nearestUndistracted(me, near);
+            double ud = undistracted == null ? Double.MAX_VALUE : me.distanceTo(undistracted);
+            if (undistracted != null && ingotCount(me) > 0 && (planStep.containsKey(next) ? BastionRoutes.needsDistractFirst(st, ud) : !BastionPriors.mayBreakGold(ud))) {
+                status = "distract first (" + st + ", piglin at " + String.format("%.1f", ud) + ")";
+                return distract(me, undistracted);
+            }
+            if (currentStep != st) { currentStep = st; logDirect("Bastion: step " + st); }
             preferGold = next;
             PathingCommand g = drop(me, next);
             if (g != null) return g;

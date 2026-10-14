@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Per-layout bastion routes built from Couriway's guide (ch. 3, ch. 4) and his treasure videos. Each step names an
  * objective; BastionProcess resolves it to blocks with the scanned layout. Pure logic.
- * Video route notes for housing are still to come: {@link #housing} keeps the ch. 3 order until then.
+ * Housing follows Couriway's beginner video route by default, with intermediate (gold elevator) and lava variants.
  */
 public final class BastionRoutes {
     private BastionRoutes() {}
@@ -19,9 +19,13 @@ public final class BastionRoutes {
         BACKUP_GOLD_2, TRADE_AT_PIT,
         // treasure optional / later
         PEARL_HANG_SPAWNER, BOTTOM_ROUTE,
-        // housing (ch. 3)
-        GET_ARMOR, HOUSING_TOP, HOUSING_RIGHT_CHESTS, HOUSING_BOTTOM_DOUBLE, HOUSING_SOUL_SAND_CHEST, HOUSING_LEFT_RAMPART,
-        HOUSING_MID_GOLD, HOUSING_BACKUP_GOLD,
+        // housing (video: beginner)
+        HOUSING_ENTRY_BASALT_CUE, LOOT_TOP_LARGE, LOOT_TOP_SINGLE, RIGHT_FORK_BLOCK_IN, DROP_PIGLINS, DISTRACT_HALF_GOLD,
+        ONE_BY_ONE, DIG_DOWN_3_STRIP_4, HOUSING_PIT, MINE_WALL_GOLD, T_TUNNEL_GOLD, UNSTICK_BY_MINING, TRADE_CORNER,
+        HOUSING_BOTTOM_CHEST, HOUSING_BACKUP_GOLD,
+        // housing (video: intermediate / lava)
+        LOOT_TOP_TRIPLE, LOOT_LEFT_RAMPART_TRIPLE, BREAK_CHEST_AGGRO_THROW, BACK_OPENING, GOLD_ELEVATOR, LAVA_STRAGGLERS,
+        OUTSIDE_CHESTS, AGGRO_ONE_GOLD_ARMOR, LAVA_BLOCK_GAP, STAIR_2, LOOT_ARMOR_CHEST, BLOCK_LOWER_LAVA, CORNER_CHEST,
         // bridge (ch. 4)
         MINE_CHALICE, TRADE_TRIPLE, TRADE_SINGLE, LOOT_RAMPARTS,
         // stables (ch. 4)
@@ -82,26 +86,40 @@ public final class BastionRoutes {
         return s;
     }
 
-    /** Housing (ch. 3 order; video notes pending). */
-    public static List<Step> housing(boolean goldArmor) {
-        List<Step> s = new ArrayList<>();
-        if (!goldArmor) s.add(Step.GET_ARMOR); // top triple or bottom double
-        for (BastionPriors.Spot p : BastionPriors.housingRoute(goldArmor)) {
-            switch (p) {
-                case TOP: if (goldArmor) s.add(Step.HOUSING_TOP); break;
-                case RIGHT_TOP_CHESTS: s.add(Step.HOUSING_RIGHT_CHESTS); break;
-                case RIGHT_BOTTOM_DOUBLE: s.add(Step.HOUSING_BOTTOM_DOUBLE); break;
-                case SOUL_SAND_CENTER: s.add(Step.HOUSING_SOUL_SAND_CHEST); break;
-                case MID_GOLD: s.add(Step.HOUSING_MID_GOLD); break;
-                case BACKUP_GOLD_LEFT: s.add(Step.HOUSING_BACKUP_GOLD); break;
-                default: break;
-            }
-        }
-        s.add(Step.HOUSING_LEFT_RAMPART);
-        s.add(Step.TRADE);
-        s.add(Step.LEAVE);
-        return s;
+    public enum HousingVariant { BEGINNER, INTERMEDIATE, LAVA }
+
+    /** Lava variant when a large share of the netherrack floor cells we scanned carry lava. */
+    public static final double LAVA_FLOOR_SHARE = 0.3;
+
+    public static HousingVariant housingVariant(int floorCells, int lavaFloorCells, boolean intermediate) {
+        if (floorCells > 0 && lavaFloorCells >= LAVA_FLOOR_SHARE * floorCells) return HousingVariant.LAVA;
+        return intermediate ? HousingVariant.INTERMEDIATE : HousingVariant.BEGINNER;
     }
+
+    /**
+     * Housing routes from Couriway's videos. The Hard/Easy difficulty toggle the video uses to unstick piglins needs
+     * a settings change mid-run, so it is replaced by UNSTICK_BY_MINING (mine the block under or beside a stuck
+     * piglin so it drops into the pit).
+     */
+    public static List<Step> housing(HousingVariant v) {
+        switch (v) {
+            case INTERMEDIATE: return List.of(Step.LOOT_TOP_TRIPLE, Step.LOOT_LEFT_RAMPART_TRIPLE, Step.BREAK_CHEST_AGGRO_THROW,
+                    Step.BACK_OPENING, Step.ONE_BY_ONE, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
+            case LAVA: return List.of(Step.AGGRO_ONE_GOLD_ARMOR, Step.LAVA_BLOCK_GAP, Step.STAIR_2, Step.LOOT_ARMOR_CHEST,
+                    Step.BLOCK_LOWER_LAVA, Step.CORNER_CHEST, Step.GOLD_ELEVATOR, Step.TRADE, Step.LAVA_STRAGGLERS, Step.OUTSIDE_CHESTS, Step.LEAVE);
+            default: return List.of(Step.HOUSING_ENTRY_BASALT_CUE, Step.LOOT_TOP_LARGE, Step.LOOT_TOP_SINGLE, Step.RIGHT_FORK_BLOCK_IN,
+                    Step.DROP_PIGLINS, Step.DISTRACT_HALF_GOLD, Step.ONE_BY_ONE, Step.DIG_DOWN_3_STRIP_4, Step.HOUSING_PIT,
+                    Step.MINE_WALL_GOLD, Step.T_TUNNEL_GOLD, Step.UNSTICK_BY_MINING, Step.TRADE_CORNER, Step.HOUSING_BOTTOM_CHEST,
+                    Step.HOUSING_BACKUP_GOLD, Step.LEAVE);
+        }
+    }
+
+    /** Wall gold mined in the strip tunnel is pushed away with a placed block so we do not pick the gold block back up. */
+    public static final boolean PUSH_GOLD_ITEMS_AWAY = true;
+    /** Trading corner: gold on the left, us on the right. */
+    public static final boolean GOLD_LEFT_OF_US = true;
+    /** Gold elevator carries gold blocks up in batches of 3, then 4. */
+    public static final int[] ELEVATOR_BATCHES = {3, 4};
 
     /** Bridge: whole chalice first, then trade at a triple (or a single) while looting the ramparts. */
     public static List<Step> bridge(boolean leftTriple, boolean rightTriple) {
@@ -134,7 +152,7 @@ public final class BastionRoutes {
     public static List<Step> forLayout(String layout, boolean goldArmor, boolean intermediate) {
         switch (layout) {
             case "treasure": return treasure(intermediate, false, false);
-            case "housing": return housing(goldArmor);
+            case "housing": return housing(intermediate ? HousingVariant.INTERMEDIATE : HousingVariant.BEGINNER);
             case "bridge": return bridge(false, false);
             case "stables": return stables(null, null, false);
             default: return List.of(Step.TRADE, Step.LEAVE);
@@ -145,7 +163,8 @@ public final class BastionRoutes {
     public static boolean needsDistractFirst(Step s, double nearestUndistracted) {
         boolean breaksGold = s == Step.MINE_HIGH_GOLD_CRAFT_INGOTS || s == Step.MINE_GOLD_SIDE_1 || s == Step.MINE_GOLD_SIDE_2
                 || s == Step.BACKUP_GOLD_1 || s == Step.BACKUP_GOLD_2 || s == Step.MINE_CHALICE || s == Step.GOOD_GAP_GOLD
-                || s == Step.TRIPLE_GOLD || s == Step.HOUSING_MID_GOLD || s == Step.HOUSING_BACKUP_GOLD;
+                || s == Step.TRIPLE_GOLD || s == Step.MINE_WALL_GOLD || s == Step.T_TUNNEL_GOLD || s == Step.HOUSING_BACKUP_GOLD
+                || s == Step.GOLD_ELEVATOR;
         return breaksGold && !BastionPriors.mayBreakGold(nearestUndistracted);
     }
 }

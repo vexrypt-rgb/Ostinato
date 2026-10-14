@@ -37,9 +37,14 @@ public class BastionRoutesTest {
 
     @Test
     public void otherLayouts() {
-        assertEquals(Step.GET_ARMOR, housing(false).get(0));
-        assertEquals(Step.HOUSING_TOP, housing(true).get(0));
-        assertFalse(housing(false).contains(Step.HOUSING_TOP));
+        assertEquals(Step.HOUSING_ENTRY_BASALT_CUE, housing(HousingVariant.BEGINNER).get(0));
+        assertTrue(housing(HousingVariant.BEGINNER).contains(Step.UNSTICK_BY_MINING));
+        assertTrue(housing(HousingVariant.INTERMEDIATE).contains(Step.GOLD_ELEVATOR));
+        assertEquals(Step.AGGRO_ONE_GOLD_ARMOR, housing(HousingVariant.LAVA).get(0));
+        assertEquals(HousingVariant.LAVA, housingVariant(100, 40, false));
+        assertEquals(HousingVariant.BEGINNER, housingVariant(100, 5, false));
+        assertEquals(HousingVariant.INTERMEDIATE, housingVariant(0, 0, true));
+        assertTrue(needsDistractFirst(Step.MINE_WALL_GOLD, 3));
         assertEquals(Step.MINE_CHALICE, bridge(true, false).get(0));
         assertEquals(Step.TRADE_TRIPLE, bridge(false, true).get(1));
         assertEquals(Step.TRADE_SINGLE, bridge(false, false).get(1));
