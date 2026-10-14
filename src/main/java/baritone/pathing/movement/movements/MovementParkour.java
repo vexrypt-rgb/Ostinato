@@ -17,6 +17,9 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.pathing.kinematic.BsiWorld;
+import baritone.pathing.kinematic.JumpTemplates;
+
 import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
@@ -91,6 +94,25 @@ public class MovementParkour extends Movement {
         return new MovementParkour(context.getBaritone(), src, dist, direction, res.y > src.y);
     }
 
+    /** Ostinato: a takeoff block that slows the run-up or the jump (honey, soul sand). */
+    static boolean slowTakeoff(BlockState standingOn) {
+        return standingOn.getBlock().getSpeedFactor() < 1 || standingOn.getBlock().getJumpFactor() < 1;
+    }
+
+    /** Ostinato: fly a straight jump of distance i from the run-up actually there, in the sim, against the real blocks. */
+    private static boolean slowTakeoffLands(CalculationContext context, int x, int y, int z, int xDiff, int zDiff, int i) {
+        int r = 0;
+        while (r < 2 && MovementHelper.canWalkOn(context, x - (r + 1) * xDiff, y - 1, z - (r + 1) * zDiff)) r++;
+        int frame = xDiff == 1 ? 0 : zDiff == 1 ? 2 : xDiff == -1 ? 4 : 6;
+        int[] f = MovementJump.FRAMES[frame];
+        for (JumpTemplates.Template t : JumpTemplates.HEAD_HITTERS) {
+            if (t.a == i && t.dy == 0 && t.runUp == r
+                    && MovementJump.headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, x + xDiff * i, y, z + zDiff * i)) {
+                return true;
+            }
+        }
+        return false;
+    }
     /** Ostinato: honey halves a jump (about 0.4 blocks high): nothing can be jumped up onto from it. */
     public static boolean lowJump(BlockState standingOn) {
         return lowJump(standingOn.getBlock().getJumpFactor());
@@ -209,6 +231,9 @@ public class MovementParkour extends Movement {
             if ((landingOn.getBlock() != Blocks.FARMLAND && MovementHelper.canWalkOn(context, destX, y - 1, destZ, landingOn))
                     || (Math.min(16, context.frostWalker + 2) >= i && MovementHelper.canUseFrostWalker(context, landingOn))
             ) {
+                if (slowTakeoff(standingOn) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
+                    break; // Ostinato: off honey or soul sand, only what the sim lands from the run-up there is
+                }
                 if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y;
