@@ -114,7 +114,8 @@ public class MovementJump extends Movement {
         return state.setStatus(MovementStatus.UNREACHABLE);
     }
 
-    private static final ThreadLocal<Cache> CACHE = ThreadLocal.withInitial(Cache::new);
+    // Ostinato: was a ThreadLocal<Cache>; the cache is only ever valid for one CalculationContext, so it now lives on the
+    // context (CalculationContext.jumpCache) and skips the ThreadLocal lookup on every cost() call. Same hits and misses.
 
     private final JumpTemplates.Template t;
     private final int[] f;
@@ -159,7 +160,10 @@ public class MovementJump extends Movement {
     }
 
     private static List<Option> options(CalculationContext context, int x, int y, int z) {
-        Cache c = CACHE.get();
+        Cache c = (Cache) context.jumpCache; // Ostinato: was CACHE.get()
+        if (c == null) {
+            context.jumpCache = c = new Cache();
+        }
         if (c.context == context && c.x == x && c.y == y && c.z == z) {
             return c.options;
         }
@@ -240,7 +244,7 @@ public class MovementJump extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
-        CACHE.get().context = null; // the world may have changed since
+        if (context.jumpCache != null) ((Cache) context.jumpCache).context = null; // the world may have changed since (Ostinato: was CACHE.get().context = null)
         for (Option o : options(context, src.x, src.y, src.z)) {
             if (o.t == t && FRAMES[o.frame] == f) {
                 return o.cost;
