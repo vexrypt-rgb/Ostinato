@@ -61,9 +61,22 @@ public final class PathBench {
 
     public static final Finder ASTAR = (s, g, c) -> new AStarPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c);
 
-    /** OSTINATO_BENCH_FINDER: astar (default). */
+    /** Weighted A* exactly as PathingBehavior picks it: weight only on far segments (settings pathingFarSegment*). */
+    public static Finder weighted(double w) {
+        return (s, g, c) -> {
+            Baritone.settings().pathingFarSegmentWeight.value = w;
+            try {
+                return new AStarPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, baritone.behavior.PathingBehavior.farSegmentWeight(g, s));
+            } finally {
+                Baritone.settings().pathingFarSegmentWeight.value = 1.0;
+            }
+        };
+    }
+
+    /** OSTINATO_BENCH_FINDER: astar (default), wa:&lt;weight&gt;. */
     public static Finder finder(String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("astar")) return ASTAR;
+        if (spec.startsWith("wa:")) return weighted(Double.parseDouble(spec.substring(3)));
         throw new IllegalArgumentException(spec);
     }
 
