@@ -2627,7 +2627,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     }
 
     // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
-    private int routeIdx, opLeft = -1, opThrowMark;
+    private int routeIdx, opLeft = -1, opThrowMark, aimMiss;
     private long routeStart, blockStepIdle;
     private BastionRoutes.Step blockStep;
     private BastionScript.Runner scriptRun;
@@ -2827,8 +2827,14 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         me.getInventory().setSelectedSlot(slot);
         baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true); // do not open a chest or door we click on
         baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim, ctx.playerRotations()), true);
-        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(sup) && h.getDirection() == face)
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(sup) && h.getDirection() == face) {
             baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            aimMiss = 0;
+        } else if (++aimMiss > 30) {
+            // r146: a pillar side face is hidden from on top of the pillar; 30 ticks without sight of the face is a miss, not 10 s
+            aimMiss = 0;
+            return BastionScript.Result.FAILED;
+        }
         return BastionScript.Result.WORKING;
     }
 
@@ -2845,7 +2851,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         me.getInventory().setSelectedSlot(pick);
         Rotation rot = RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(cell), ctx.playerRotations());
         baritone.getLookBehavior().updateTarget(rot, true);
-        if (ctx.isLookingAt(cell)) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+        if (ctx.isLookingAt(cell)) { baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true); aimMiss = 0; }
+        else if (++aimMiss > 40) { aimMiss = 0; return BastionScript.Result.FAILED; } // something in the way of the cell
         return BastionScript.Result.WORKING;
     }
 
