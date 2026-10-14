@@ -156,4 +156,13 @@ public final class BastionPriors {
         if (anyTriple) return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.TRIPLE_GOLD, StablesStep.TRIPLE_CHESTS, StablesStep.MIDDLE_BOTTOM_CHEST);
         return J8.listOf(StablesStep.TOP_OF_MIDDLE_STAIRS, StablesStep.MIDDLE_BOTTOM_CHEST, StablesStep.UPPER_CHESTS);
     }
+
+    /** Ticks we try to close in on one piglin to hand it gold before giving up (s1161-b01 looped ~3 min). */
+    public static final int CLOSE_IN_TICKS = 100;
+
+    /** Give up closing in: too long overall, or it is close but out of sight (behind a wall) for 2 s. */
+    public static boolean giveUpCloseIn(long startTick, long now, double dist, boolean visible) {
+        long t = now - startTick;
+        return t > CLOSE_IN_TICKS || (!visible && dist <= 8 && t > 40);
+    }
 }

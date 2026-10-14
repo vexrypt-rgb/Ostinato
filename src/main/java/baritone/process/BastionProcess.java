@@ -167,7 +167,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         camping = false;
         unreachable.clear();
         usefulSeen = -1;
-        distractTries.clear();
+        distractTries.clear(); closeInStart.clear();
         startTick = 0;
         doorPos = null;
         descentSteps = 0;
@@ -953,11 +953,19 @@ public final class BastionProcess extends BaritoneProcessHelper {
     public int distractions;
 
     private final Map<java.util.UUID, Integer> distractTries = new HashMap<>();
+    private final Map<java.util.UUID, Long> closeInStart = new HashMap<>();
 
     private PathingCommand distract(PlayerEntity me, PiglinEntity angry) {
         PathingCommand pause = new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         if (ticks - lastDistract < 30) return pause;
         if (me.getDistance(angry) > THROW_RANGE || !me.canEntityBeSeen(angry)) {
+            long since = closeInStart.computeIfAbsent(angry.getUniqueID(), k -> ticks);
+            if (BastionPriors.giveUpCloseIn(since, ticks, me.getDistance(angry), me.canEntityBeSeen(angry))) {
+                // s1161-b01: closed in on walled-off treasure piglins for ~3 min; give up on that piglin
+                distractTries.put(angry.getUniqueID(), 2);
+                logDirect("Bastion: distract gave up on unreachable piglin at " + String.format("%.1f", me.getDistance(angry)));
+                return pause;
+            }
             status = "distract: close in";
             return new PathingCommand(new GoalNear(angry.getPosition(), 2), PathingCommandType.SET_GOAL_AND_PATH);
         }
@@ -2525,7 +2533,7 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
         for (LivingEntity e : near) {
             if (!(e instanceof PiglinEntity)) continue;
             PiglinEntity p = (PiglinEntity) e;
-            if (!p.isChild() && p.isAlive() && !admiring.containsKey(p.getUniqueID()) && p.getHeldItemOffhand().getItem() != Items.GOLD_INGOT
+            if (!p.isChild() && p.isAlive() && !admiring.containsKey(p.getUniqueID()) && p.getHeldItemOffhand().getItem() != Items.GOLD_INGOT && distractTries.getOrDefault(p.getUniqueID(), 0) < 2
                 && me.getDistance(p) <= BastionPriors.AGGRO_RANGE && (best == null || me.getDistance(p) < me.getDistance(best))) best = p;
         }
         return best;

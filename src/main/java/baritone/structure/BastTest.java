@@ -127,7 +127,7 @@ public final class BastTest implements AbstractGameEventListener {
     private void monitor(Minecraft mc) {
         ClientPlayerEntity p = mc.player;
         String st = b.getBastionProcess().status();
-        if (p.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + st); state = 9; mc.execute(mc::shutdown); return; }
+        if (p.getHealth() <= 0) { say("BAST END died t=" + ticks + " st=" + st + " pearls=" + p.inventory.count(net.minecraft.item.Items.ENDER_PEARL)); state = 9; mc.execute(mc::shutdown); return; }
         if (ticks % 20 == 0) {
             List<LivingEntity> near = mc.world.getEntitiesWithinAABB(LivingEntity.class, p.getBoundingBox().grow(16), x -> x != p);
             List<String> ns = new ArrayList<>();
