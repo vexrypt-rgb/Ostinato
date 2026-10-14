@@ -2622,6 +2622,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     private BlockPos scriptAt, opLava;
     private int sfx = 1, sfz = 0;
     private PathingCommand opCmd;
+    private BlockPos opTarget;
+    private int opTargetIdx = -1;
+    private BastionRoutes.Step opTargetStep;
 
     /** True while the plan still holds an unlooted chest or unmined gold block claimed by this step. */
     private boolean stepHasTargets(BastionRoutes.Step s) {
@@ -2686,7 +2689,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                 return BastionScript.Result.WORKING;
             }
             case MOVE_TARGET: {
-                BlockPos t = routeTarget(me, s);
+                // scanned once per op (a 65x17x65 sweep), not every tick
+                if (opTarget == null || opTargetIdx != scriptRun.index() || opTargetStep != s) { opTarget = routeTarget(me, s); opTargetIdx = scriptRun.index(); opTargetStep = s; }
+                BlockPos t = opTarget;
                 if (t == null) return BastionScript.Result.FAILED;
                 if (Math.hypot(me.getX() - (t.getX() + 0.5), me.getZ() - (t.getZ() + 0.5)) < 1.5 && Math.abs(me.getY() - t.getY()) < 2) return BastionScript.Result.DONE;
                 opCmd = new PathingCommand(new GoalNear(t, 1), PathingCommandType.SET_GOAL_AND_PATH);
@@ -2756,7 +2761,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         if (s == BastionRoutes.Step.TAKE_THIRD_BASALT_BRIDGE) {
             // basalt bridge columns between us and the centre; lateral offset along our right-hand axis
             List<BlockPos> tops = new ArrayList<>();
-            for (BlockPos b : BlockPos.betweenClosed(at.offset(-20, -6, -20), at.offset(20, 6, 20))) {
+            for (BlockPos b : BlockPos.betweenClosed(at.offset(-32, -10, -32), at.offset(32, 6, 32))) {
                 if (!ctx.world().getBlockState(b).is(Blocks.BASALT) && !ctx.world().getBlockState(b).is(Blocks.POLISHED_BASALT)) continue;
                 if (!ctx.world().getBlockState(b.above()).isAir()) continue;
                 tops.add(b.immutable());

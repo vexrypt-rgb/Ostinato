@@ -40,7 +40,9 @@ public final class BastionScript {
             // ---- treasure
             case TAKE_THIRD_BASALT_BRIDGE: o.add(Op.n(Kind.MOVE_TARGET, 0)); break;
             case PILLAR_3_HUG: o.add(Op.n(Kind.PILLAR, 3)); break;
-            case COVER_2_BLOCKS: o.add(Op.at(Kind.PLACE, 0, -1, 1)); o.add(Op.at(Kind.PLACE, 0, 1, 1)); break;
+            case COVER_2_BLOCKS:
+                // on a bare pillar the only support is the pillar block: a footing beside it first, then 2 cover blocks on top (r142: both skipped, no support)
+                o.add(Op.at(Kind.PLACE, 1, 0, -1)); o.add(Op.at(Kind.PLACE, 1, 0, 0)); o.add(Op.at(Kind.PLACE, 1, 0, 1)); break;
             case DISTRACT_CROSSBOWS: o.add(Op.n(Kind.THROW, 3)); break;
             case BRIDGE_GAP:
                 o.add(Op.at(Kind.PLACE, 1, 0, -1)); o.add(Op.at(Kind.PLACE, 2, 0, -1)); o.add(Op.at(Kind.MOVE, 2, 0, 0));

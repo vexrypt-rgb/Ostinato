@@ -23,6 +23,9 @@ public class BastionScriptTest {
     @Test
     public void pillarPocketAndGap() {
         assertEquals(new Op(Kind.PILLAR, 0, 0, 0, 3), BastionScript.ops(Step.PILLAR_3_HUG).get(0));
+        List<Op> cv = BastionScript.ops(Step.COVER_2_BLOCKS);
+        assertEquals(new Op(Kind.PLACE, 1, 0, -1, 0), cv.get(0)); // footing on the pillar side first
+        assertEquals(new Op(Kind.PLACE, 1, 0, 1, 0), cv.get(2));
         List<Op> p = BastionScript.ops(Step.BUILD_POCKET);
         assertEquals(5, p.size());
         assertTrue(p.stream().allMatch(o -> o.kind() == Kind.PLACE));
@@ -68,7 +71,7 @@ public class BastionScriptTest {
 
     @Test
     public void runnerAdvancesAndSkips() {
-        Runner r = new Runner(BastionScript.ops(Step.COVER_2_BLOCKS));
+        Runner r = new Runner(BastionScript.ops(Step.STAIR_2));
         r.report(Result.WORKING);
         assertEquals(0, r.index());
         r.report(Result.DONE);
