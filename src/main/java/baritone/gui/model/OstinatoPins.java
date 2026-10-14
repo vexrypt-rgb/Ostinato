@@ -35,7 +35,8 @@ public final class OstinatoPins {
             "allowBoats", "allowBoatFall", "maxFallHeightBoat", "allowDoorAirPockets", "swimInWater",
             "elytraGlideWithoutFireworks", "elytraGlideRatio", "elytraGlidePitch",
             "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor",
-            "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale"
+            "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale",
+            "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch"
     )));
 
     private OstinatoPins() {}

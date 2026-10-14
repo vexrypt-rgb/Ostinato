@@ -23,6 +23,7 @@ import baritone.pathing.movement.movements.MovementDiagonal;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementTraverse;
+import baritone.pathing.viz.PathViz;
 import baritone.utils.BlockStateInterface;
 
 import java.util.List;
@@ -54,7 +55,7 @@ public final class PhysicsTravel {
         this.world = new ClientWorld(ctx);
         this.real = new PlayerSim(world);
         this.predicted = new PlayerSim(world);
-        this.finder = new PhysicsPathfinder(world, NODE_BUDGET);
+        this.finder = new PhysicsPathfinder(world, NODE_BUDGET).viz(PathViz.get());
     }
 
     /** @return the path position to continue from if this drove the tick, or -1 to let Baritone run it */
@@ -91,7 +92,9 @@ public final class PhysicsTravel {
 
         boolean drifted = plan != null && step > 0
                 && Math.abs(predicted.x - real.x) + Math.abs(predicted.y - real.y) + Math.abs(predicted.z - real.z) > DRIFT;
+        PathViz viz = PathViz.get();
         if (plan == null || step >= plan.size() || drifted || end != target) {
+            String why = plan == null ? null : drifted ? "drift" : end != target ? "new target" : "plan done";
             target = end;
             step = 0;
             plan = finder.plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
@@ -99,8 +102,22 @@ public final class PhysicsTravel {
                 cooldown = 20;
                 return drop();
             }
+            if (viz.searchOn()) {
+                // Ostinato path viz (P3): the states the plan predicts, one per tick
+                viz.newPlan(real.x, real.y, real.z, why);
+                PlayerSim p = new PlayerSim(world).copyFrom(real);
+                viz.plannedPoint(p.x, p.y, p.z);
+                for (int i = 0; i < plan.size() && i < PathViz.MAX_PLAN - 1; i++) {
+                    PhysicsPathfinder.Action pa = plan.get(i);
+                    p.tick(pa.yaw, pa.forward, pa.sprint, pa.jump);
+                    viz.plannedPoint(p.x, p.y, p.z);
+                }
+            }
         }
         PhysicsPathfinder.Action a = plan.get(step++);
+        viz.actualPoint(real.x, real.y, real.z);
+        viz.physTick(real.x, real.y, real.z, real.vx, real.vy, real.vz, real.onGround, real.climbable(), a.yaw,
+                (a.forward ? PathViz.IN_W : 0) | (a.sprint ? PathViz.IN_SPRINT : 0) | (a.jump ? PathViz.IN_JUMP : 0));
         predicted.copyFrom(real);
         predicted.tick(a.yaw, a.forward, a.sprint, a.jump);
         jumpTicks = predicted.jumpTicks;
