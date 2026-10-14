@@ -29,6 +29,7 @@ import baritone.utils.BlockStateInterface;
 import baritone.utils.BoatUtil;
 import baritone.utils.ToolSet;
 import baritone.utils.pathing.BetterWorldBorder;
+import baritone.utils.pathing.SearchCache;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -112,6 +113,22 @@ public class CalculationContext {
     public final double walkOnWaterOnePenalty;
     public final boolean allowWalkOnMagmaBlocks;
     public final BetterWorldBorder worldBorder;
+    /** world.dimensionType() goes through a Holder; read once (from Soprano's CalculationContext). */
+    public final int minY;
+    public final int maxY;
+
+    // Per-search memo for MovementHelper.getMiningDurationTicks, keyed by position: the answer cannot change mid
+    // search and the same block is costed by many neighbouring movements. Two tables because includeFalling is part
+    // of the question. Present only while a search has claimed it (claimSearchCaches). Ported from Soprano
+    // (https://github.com/AverWasTaken/soprano, LGPL-3.0, by AverWasTaken),
+    // src/main/java/baritone/pathing/movement/CalculationContext.java.
+    private SearchCache.MiningBuffers miningBuffers;
+    long[] miningKeys;
+    long[] miningKeysFalling;
+    double[] miningVals;
+    double[] miningValsFalling;
+    int miningCacheBits;
+    Thread miningOwner;
 
     public final PrecomputedData precomputedData;
     /** The walk hooks of {@link AltoClefSettings} as they stood when planning began; the lists are null while no hook is registered, which is nearly always. */
@@ -219,6 +236,35 @@ public class CalculationContext {
         // because if some movements are calculated one way and others are calculated another way,
         // then you get a wildly inconsistent path that isn't optimal for either scenario.
         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
+        this.minY = world.dimensionType().minY();
+        this.maxY = world.dimensionType().height();
+    }
+
+    /** Called by the search thread before A* starts; see the mining memo fields. */
+    public synchronized void claimSearchCaches() {
+        if (miningOwner != null) {
+            return; // someone else is searching with this context, they keep it
+        }
+        miningBuffers = SearchCache.acquireMining();
+        miningKeys = miningBuffers.keys;
+        miningKeysFalling = miningBuffers.fallingKeys;
+        miningVals = miningBuffers.values;
+        miningValsFalling = miningBuffers.fallingValues;
+        miningCacheBits = miningBuffers.bits;
+        miningOwner = Thread.currentThread();
+    }
+
+    public synchronized void releaseSearchCaches() {
+        if (miningOwner != Thread.currentThread()) {
+            return;
+        }
+        miningOwner = null;
+        miningKeys = null;
+        miningKeysFalling = null;
+        miningVals = null;
+        miningValsFalling = null;
+        SearchCache.release(miningBuffers);
+        miningBuffers = null;
     }
 
     public final IBaritone getBaritone() {
