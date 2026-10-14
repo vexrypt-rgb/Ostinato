@@ -55,12 +55,13 @@ public final class BastionPlan {
                 if (p.horiz(cx, cz) > TREASURE_CORE) c += 60;
             }
             case "bridge" -> {
-                // the bridge chest (and the gold under it) is the prize: chests first, stray gold on the way back
-                if (!chest) c += 25;
+                // Couriway ch. 4: all the gold is in the chalice; mine all of it first, then loot and trade at a triple rampart
+                if (!chest) c -= 25;
             }
             case "stables" -> {
                 // stables gold sits along the ramps; chests are scattered and often guarded: plain nearest-first, chests slightly ahead
-                if (chest) c -= 4;
+                // Couriway ch. 4: good-gap / triple gold first, then chests
+                if (!chest) c -= 4;
             }
             default -> {
                 // housing: nearest-first; chests are many and cheap, gold is mined only when we run out

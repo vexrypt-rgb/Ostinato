@@ -1,5 +1,7 @@
 package baritone.process;
 
+import baritone.bastion.BastionRoutes;
+import baritone.bastion.ThrowAdapt;
 import baritone.Baritone;
 import baritone.api.pathing.goals.GoalRunAway;
 import baritone.api.pathing.goals.GoalNear;
@@ -88,6 +90,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long throwTick = -1000, ticks;
     public int throwsDone, lootPicked;
     private boolean throwJump;
+    private BlockPos throwTarget;
+    private final ThrowAdapt throwAdapt = new ThrowAdapt();
     private int lastLootId = -1;
     private String status = "-";
     /** Breaking a gold block angers every idle piglin within 16 blocks of the miner, seen or not; stay well clear. */
@@ -1529,6 +1533,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         if (throwPred != null && ticks == throwTick + 25) {
             final double[] tp = throwPred; throwPred = null;
+            if (throwTarget != null) {
+                // ingots that come back into our own column hit the shared pit corner: lob higher next time (ThrowAdapt)
+                final BlockPos tgt = throwTarget; throwTarget = null; final BlockPos ours = me.blockPosition();
+                ctx.world().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, me.getBoundingBox().inflate(6), it -> it.getItem().is(Items.GOLD_INGOT))
+                        .stream().min(java.util.Comparator.comparingDouble(it -> it.distanceToSqr(tp[0], tp[1], tp[2])))
+                        .ifPresent(it -> throwAdapt.landed(it.getBlockX(), it.getBlockZ(), ours.getX(), ours.getZ(), tgt.getX(), tgt.getZ()));
+            }
             ctx.world().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, me.getBoundingBox().inflate(6), it -> it.getItem().is(Items.GOLD_INGOT))
                 .stream().min(java.util.Comparator.comparingDouble(it -> it.distanceToSqr(tp[0], tp[1], tp[2])))
                 .ifPresentOrElse(it -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, actual %.2f %.2f %.2f (err %.2f)", tp[0], tp[1], tp[2], it.getX(), it.getY(), it.getZ(), Math.sqrt(it.distanceToSqr(tp[0], tp[1], tp[2])))),
@@ -2476,6 +2487,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     private final Set<BlockPos> looted = new HashSet<>();
     private final Map<BlockPos, Long> badChest = new HashMap<>();
     private List<BastionPlan.Point> plan = List.of();
+    /** Objective-level route for the layout (BastionRoutes); the block plan above executes its chest/gold steps. */
+    private List<BastionRoutes.Step> route = List.of();
     private BlockPos planFor, chestTarget, openedChest, entry;
     private long chestScan = -1000, chestSince, chestWaitSince, chestClickTick = -1000, lastTake;
     private boolean exiting, goldSourceGone, chestsExhausted;
@@ -2559,6 +2572,8 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         }
         BlockPos at = me.blockPosition();
         plan = BastionPlan.order(layout(), bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
+        route = BastionRoutes.forLayout(layout(), false, false);
+        logDirect("Bastion: route " + layout() + " " + route);
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {
@@ -3432,12 +3447,13 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             // over 65 throws). Throw at the top of a jump, about 1.25 above the standing eye height.
             double throwEye = me.onGround() ? me.getEyeY() + 1.25 : me.getEyeY();
             float[] aim = ItemThrow.aim(me.getX(), throwEye, me.getZ(), far.x, far.z, fl);
+            aim[1] = throwAdapt.pitch(aim[1]);
                 baritone.getLookBehavior().updateTarget(new Rotation(aim[0], aim[1]), true);
                 float farYaw = aim[0];
                 boolean aimed = Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4;
             if (aimed && me.onGround()) { throwJump = true; baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true); return pause0(); }
             boolean apex = !me.onGround() && Math.abs(me.getDeltaMovement().y) < 0.12 && me.getY() > stand.getY() + 0.9;
-            if (aimed && apex && safeDrop(me)) { throwJump = false;
+            if (aimed && apex && safeDrop(me)) { throwJump = false; throwTarget = caughtHole;
                     throwPred = ItemThrow.land(me.getX(), me.getEyeY(), me.getZ(), me.getYRot(), me.getXRot(), fl); admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
                 status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
                 return pause0();
