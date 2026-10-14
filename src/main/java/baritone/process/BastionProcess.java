@@ -1,5 +1,8 @@
 package baritone.process;
 
+import baritone.bastion.OutsideTrade;
+import baritone.bastion.EndermanHunt;
+import net.minecraft.world.entity.monster.Enderman;
 import baritone.bastion.DamageBudget;
 import baritone.bastion.BruteTactics;
 import baritone.bastion.LavaFlow;
@@ -1899,6 +1902,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (target == null) {
             status = admiring.isEmpty() ? "no free piglin n=" + piglins.size() : "admiring x" + admiring.size() + ", no other free piglin";
             if (!admiring.isEmpty() || bastion == null) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            // after the route, with every piglin guarded by a brute: lure them out, go to the wastes, or hunt endermen
+            PathingCommand of = outsideFallback(me, piglins, counts(me), BastionGoals.met(counts(me), BastionSettings.TARGETS));
+            if (of != null) return of;
             // run 16 (bridge) stood here for minutes: walk the bastion to find calm piglins instead of waiting
             status += ", searching";
             int k = (int) (ticks / 200 % 4);
@@ -3064,6 +3070,108 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             return opCmd != null ? opCmd : pause0();
         }
         return null;
+    }
+
+    // ---- post-route fallbacks: trade outside the bastion, then warped-forest endermen (OutsideTrade, EndermanHunt, DamageBudget)
+    private OutsideTrade.Mode otMode = OutsideTrade.Mode.INSIDE;
+    private BlockPos otGoal, ehStand;
+    private long otSince, otLastDrop, ehSince;
+    private boolean ehActive;
+
+    private boolean routeFinished() { return !BastionSettings.scriptedRoutes || route.isEmpty() || routeIdx >= route.size(); }
+
+    /** Nearest sampled cell (16-block grid, radius r) whose biome id path is one of {@code ids}, or null. */
+    private BlockPos nearestBiome(Player me, int r, String... ids) {
+        BlockPos best = null; double bd = Double.MAX_VALUE;
+        for (int x = -r; x <= r; x += 16) for (int z = -r; z <= r; z += 16) {
+            BlockPos q = new BlockPos(me.getBlockX() + x, me.getBlockY(), me.getBlockZ() + z);
+            if (!ctx.world().isLoaded(q)) continue;
+            String id = ctx.world().getBiome(q).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
+            for (String s : ids) if (s.equals(id) && Math.hypot(x, z) < bd) { bd = Math.hypot(x, z); best = q; }
+        }
+        return best;
+    }
+
+    private PathingCommand outsideFallback(Player me, List<Piglin> piglins, Map<String, Integer> have, boolean done) {
+        int free = 0, guarded = 0;
+        for (Piglin p : piglins) { if (!p.isAlive() || p.isBaby()) continue; if (brutesAround(p) > 0) guarded++; else free++; }
+        if (otMode == OutsideTrade.Mode.INSIDE || ticks - otSince > 2400) {
+            BlockPos w = nearestBiome(me, 160, "nether_wastes", "crimson_forest");
+            OutsideTrade.Mode m = OutsideTrade.choose(OutsideTrade.setting, routeFinished(), done, free, guarded, w == null ? -1 : Math.sqrt(me.blockPosition().distSqr(w)));
+            if (m != otMode) {
+                logDirect("Bastion: outside trade: " + m + " (free " + free + ", guarded " + guarded + (w == null ? ", no wastes in 160" : ", wastes at " + w.toShortString()) + ")");
+                otMode = m; otSince = ticks;
+                if (m == OutsideTrade.Mode.LURE_OUT) {
+                    BlockPos c = bastion.pos; double dx = me.getX() - c.getX(), dz = me.getZ() - c.getZ(), l = Math.max(1, Math.hypot(dx, dz));
+                    int r = BastionSettings.exitDistance + 8;
+                    otGoal = new BlockPos(c.getX() + (int) (dx / l * r), me.getBlockY(), c.getZ() + (int) (dz / l * r));
+                } else if (m == OutsideTrade.Mode.WASTES) otGoal = w;
+            }
+        }
+        if (otMode == OutsideTrade.Mode.LURE_OUT) {
+            if (OutsideTrade.outside(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ(), BastionSettings.exitDistance)) {
+                long followers = piglins.stream().filter(p -> p.isAlive() && !p.isBaby() && me.distanceTo(p) < 10 && brutesAround(p) == 0).count();
+                logDirect("Bastion: outside trade: outside the walls, " + followers + " piglins followed; trading here");
+                otMode = OutsideTrade.Mode.DONE; return null; // the normal trade hole/pit logic takes the free piglins from here
+            }
+            // drop an ingot every 5 s as we walk out: piglins go for it and follow the trail
+            if (ticks - otLastDrop > 100 && ingotCount(me) > 6) { int s = slotOf(me, Items.GOLD_INGOT); if (s >= 0 && s < 9) { me.getInventory().setSelectedSlot(s); if (safeDrop(me)) otLastDrop = ticks; } }
+            status = "outside trade: luring piglins out";
+            return new PathingCommand(new GoalXZ(otGoal.getX(), otGoal.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (otMode == OutsideTrade.Mode.WASTES) {
+            if (me.blockPosition().distSqr(otGoal) < 64) { logDirect("Bastion: outside trade: in the wastes, trading here"); otMode = OutsideTrade.Mode.DONE; return null; }
+            status = "outside trade: to the wastes at " + otGoal.toShortString();
+            return new PathingCommand(new GoalXZ(otGoal.getX(), otGoal.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (otMode == OutsideTrade.Mode.INSIDE && routeFinished()) return endermanHunt(me, free > 0, have);
+        return null;
+    }
+
+    private PathingCommand endermanHunt(Player me, boolean freePiglins, Map<String, Integer> have) {
+        int pearls = have.getOrDefault("ender_pearl", 0), target = BastionSettings.TARGETS.getOrDefault("ender_pearl", 12);
+        BlockPos warped = ehStand != null ? ehStand : nearestBiome(me, EndermanHunt.maxWarpedDist, "warped_forest");
+        if (!EndermanHunt.go(EndermanHunt.setting, otMode, freePiglins, warped == null ? -1 : Math.sqrt(me.blockPosition().distSqr(warped)), pearls, target)) {
+            if (ehActive) { logDirect("Bastion: enderman hunt: stop, pearls " + pearls + "/" + target); ehActive = false; }
+            return null;
+        }
+        if (!ehActive) { ehActive = true; ehSince = ticks; logDirect("Bastion: enderman hunt: warped forest at " + warped.toShortString() + ", pearls " + pearls + "/" + target); }
+        // 1. reach the forest and find a 2-high gap (endermen are 3 tall and cannot follow us in)
+        if (ehStand == null) {
+            if (me.blockPosition().distSqr(warped) > 400) { status = "enderman hunt: to the warped forest"; return new PathingCommand(new GoalNear(warped, 4), PathingCommandType.SET_GOAL_AND_PATH); }
+            BlockPos m = me.blockPosition();
+            for (int dx = -8; dx <= 8 && ehStand == null; dx++) for (int dz = -8; dz <= 8 && ehStand == null; dz++) for (int dy = -3; dy <= 3 && ehStand == null; dy++) {
+                BlockPos q = m.offset(dx, dy, dz);
+                if (EndermanHunt.safeGap(solid(q.below()), ctx.world().getBlockState(q).isAir(), ctx.world().getBlockState(q.above()).isAir(), solid(q.above(2)), lavaBeside(q))) ehStand = q;
+            }
+            if (ehStand == null) {
+                // none here: dig one: stand cell plus head cell into a solid face, leaving the ceiling
+                for (Direction d : Direction.Plane.HORIZONTAL) { BlockPos q = m.relative(d); if (solid(q) && solid(q.above()) && solid(q.above(2)) && solid(q.below()) && !lavaBeside(q)) { ehStand = q; logDirect("Bastion: enderman hunt: digging a 2-high gap at " + q.toShortString()); break; } }
+                if (ehStand == null) { status = "enderman hunt: looking for a gap"; return new PathingCommand(new GoalNear(warped.offset((int) (ticks / 200 % 3 - 1) * 8, 0, 8), 2), PathingCommandType.SET_GOAL_AND_PATH); }
+            }
+        }
+        if (solid(ehStand) || solid(ehStand.above())) {
+            BastionScript.Result r = mineCell(me, solid(ehStand) ? ehStand : ehStand.above());
+            if (r == BastionScript.Result.FAILED) { ehStand = null; return pause0(); }
+            status = "enderman hunt: digging the gap"; return opCmd != null ? opCmd : pause0();
+        }
+        if (!me.blockPosition().equals(ehStand)) { status = "enderman hunt: into the gap"; return new PathingCommand(new GoalBlock(ehStand), PathingCommandType.SET_GOAL_AND_PATH); }
+        // 2. in the gap: fight an angry one in reach, else stare at the nearest calm one to provoke it
+        List<Enderman> ems = ctx.world().getEntitiesOfClass(Enderman.class, me.getBoundingBox().inflate(32), Enderman::isAlive);
+        int angry = (int) ems.stream().filter(Enderman::isCreepy).count();
+        if (DamageBudget.abort(me.getHealth(), 7) && angry > 0) status = "enderman hunt: low hp, holding the gap";
+        Vec3 eye = me.getEyePosition(1.0F);
+        Enderman best = null;
+        for (Enderman e : ems) if (best == null || me.distanceTo(e) < me.distanceTo(best)) best = e;
+        if (best == null) { status = "enderman hunt: waiting for endermen"; return pause0(); }
+        int sw = slotOf(me, Items.DIAMOND_SWORD); if (sw >= 0 && sw < 9) me.getInventory().setSelectedSlot(sw);
+        if (best.isCreepy() || EndermanHunt.provoke(me.distanceTo(best), angry)) {
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, best.getEyePosition(1.0F), ctx.playerRotations()), true);
+            if (best.isCreepy() && me.distanceTo(best) < 3.2 && me.getAttackStrengthScale(0) >= 0.95F && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult h && h.getEntity() == best)
+                baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+            status = best.isCreepy() ? "enderman hunt: fighting from the gap" : "enderman hunt: provoking at " + String.format("%.0f", me.distanceTo(best));
+        } else status = "enderman hunt: waiting (" + angry + " angry)";
+        return pause0();
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {
