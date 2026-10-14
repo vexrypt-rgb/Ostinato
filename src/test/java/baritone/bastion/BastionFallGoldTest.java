@@ -1,0 +1,95 @@
+package baritone.bastion;
+
+import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.*;
+
+public class BastionFallGoldTest {
+    private static BastionDrops.Ledge ledge(int x, int y, int landY, boolean safe) { return new BastionDrops.Ledge(x, y, 0, 1, 0, landY, safe); }
+
+    @Test
+    public void damageIsBlocksPastThree() {
+        assertEquals(0f, BastionDrops.damage(3), 0);
+        assertEquals(9f, BastionDrops.damage(12), 0);
+    }
+
+    @Test
+    public void choosesSurvivableDropThatSavesTheStairs() {
+        BastionDrops.Ledge good = ledge(2, 70, 58, true), lava = ledge(1, 70, 58, false), deadly = ledge(1, 70, 40, true), small = ledge(1, 70, 68, true);
+        // target 12 below and 6 across: the 12-block drop (9 damage at 20 hp) beats ~30 blocks of stairs
+        assertEquals(good, BastionDrops.choose(J8.listOf(lava, deadly, small, good), 0, 70, 0, 6, 58, 0, 20, 3));
+        // at 12 hp the same drop leaves less than the margin
+        assertNull(BastionDrops.choose(J8.listOf(good), 0, 70, 0, 6, 58, 0, 12, 3));
+    }
+
+    @Test
+    public void aFallPastThePlannedLandingIsNotPlanned() {
+        assertTrue(BastionDrops.planned(true, 1.0, 4.0, 5));
+        assertFalse(BastionDrops.planned(false, 1.0, 4.0, 5));
+        // run 120: a 5-block drop that missed its shelf, 22 to the floor
+        assertFalse(BastionDrops.planned(true, 3.0, 19.0, 5));
+        assertEquals(BastionDrops.Clutch.PLACE, BastionDrops.clutch(3.0, 19.0, false, BastionDrops.planned(true, 3.0, 19.0, 5), 18f, 3, true));
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(1.0, 4.0, false, BastionDrops.planned(true, 1.0, 4.0, 5), 18f, 3, true));
+    }
+
+    @Test
+    public void aDropMayNotLandBesideABrute() {
+        // run 118: ledge at -435,81,-151 stepping north, landing at y=72; a brute stood six blocks from the landing
+        BastionDrops.Ledge l = new BastionDrops.Ledge(-435, 81, -151, 0, -1, 72, true);
+        assertTrue(BastionDrops.landsNear(l, -429.5, 72, -151.5, BastionDrops.THREAT_CLEAR));
+        assertTrue(BastionDrops.landsNear(l, -434.5, 69, -144.5, BastionDrops.THREAT_CLEAR));   // a level below still counts
+        assertFalse(BastionDrops.landsNear(l, -420.5, 72, -151.5, BastionDrops.THREAT_CLEAR));  // far along the floor
+        assertFalse(BastionDrops.landsNear(l, -434.5, 81, -150.5, BastionDrops.THREAT_CLEAR));  // up where we came from
+    }
+
+    @Test
+    public void aDropMustLeaveTheHealthWeFightWith() {
+        // in-game: 14 down at 19 hp is 11 damage, which lands us on 8 with brutes about
+        BastionDrops.Ledge deep = ledge(2, 70, 56, true), shallow = ledge(2, 70, 62, true);
+        assertNull(BastionDrops.choose(J8.listOf(deep), 0, 70, 0, 6, 56, 0, 19, 3, 12));
+        // 8 down is 5 damage: 14 left, still above the 12 we keep
+        assertEquals(shallow, BastionDrops.choose(J8.listOf(deep, shallow), 0, 70, 0, 6, 56, 0, 19, 3, 12));
+        assertTrue(BastionDrops.survivable(shallow, 19, 12));
+        assertFalse(BastionDrops.survivable(shallow, 16, 12));
+        // a smaller figure than the plain margin never loosens it
+        assertFalse(BastionDrops.survivable(deep, 16, 0));
+    }
+
+    @Test
+    public void noDropWhenTargetIsNotBelow() {
+        assertNull(BastionDrops.choose(J8.listOf(ledge(2, 70, 58, true)), 0, 70, 0, 6, 70, 0, 20, 3));
+    }
+
+    @Test
+    public void clutchEarlyNotAtTheBottom() {
+        // 2 fallen, 14 to go: place now
+        assertEquals(BastionDrops.Clutch.PLACE, BastionDrops.clutch(2, 14, false, false, 20, 3, true));
+        // a short hop
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(1, 2, false, false, 20, 3, true));
+        // a planned verified drop is left alone, unless it turned out to end in lava
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 10, false, true, 20, 3, true));
+        assertEquals(BastionDrops.Clutch.PLACE, BastionDrops.clutch(2, 10, true, true, 20, 3, true));
+        // a 4-block fall (1 damage) is not worth a block
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 2.2, false, false, 20, 3, true));
+        // nothing to place
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(2, 14, false, false, 20, 3, false));
+        // landing next tick: a block now saves nothing
+        assertEquals(BastionDrops.Clutch.NONE, BastionDrops.clutch(10, 1, false, false, 20, 3, true));
+    }
+
+    @Test
+    public void goldBookkeeping() {
+        assertEquals(9 + 18 + 2, BastionGoals.ingotEquivalent(9, 20, 2));
+        assertEquals(9 + 18, BastionGoals.throwable(9, 2));
+        Map<String, Integer> miss = J8.mapOf("obsidian", 2);
+        int need = BastionGoals.throwsNeeded(miss, 64);
+        assertEquals((int) Math.ceil(2 / (40 / 423.0)), need);
+        assertTrue(BastionGoals.needGold(miss, need - 1, 0, 64));
+        assertFalse(BastionGoals.needGold(miss, need, 0, 64));
+        assertFalse(BastionGoals.needGold(java.util.Collections.emptyMap(), 0, 0, 64));
+        assertEquals((int) Math.ceil(12 / (20 / 423.0 * 6)), BastionGoals.throwsNeeded(J8.mapOf("ender_pearl", 12), 64)); // 1.16.1 table: 43 throws
+    }
+}

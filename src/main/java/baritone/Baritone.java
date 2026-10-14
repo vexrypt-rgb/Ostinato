@@ -81,6 +81,9 @@ public class Baritone implements IBaritone {
     private final FarmProcess farmProcess;
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
+    private final baritone.structure.StructureBehavior structureBehavior;
+    private final baritone.process.PveProcess pveProcess;
+    private final baritone.process.BastionProcess bastionProcess;
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -129,6 +132,10 @@ public class Baritone implements IBaritone {
             this.registerProcess(BackfillProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
+            this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
+            this.pveProcess              = this.registerProcess(baritone.process.PveProcess::new);
+            baritone.structure.BastTest.install(this); // no-op unless -Dostinato.basttest=true
+            this.bastionProcess          = this.registerProcess(baritone.process.BastionProcess::new);
         }
 
         this.worldProvider = new WorldProvider(this);
@@ -274,5 +281,17 @@ public class Baritone implements IBaritone {
 
     public static Executor getExecutor() {
         return threadPool;
+    }
+
+    public baritone.structure.StructureBehavior getStructureBehavior() {
+        return this.structureBehavior;
+    }
+
+    public baritone.process.BastionProcess getBastionProcess() {
+        return this.bastionProcess;
+    }
+
+    public baritone.process.PveProcess getPveProcess() {
+        return this.pveProcess;
     }
 }

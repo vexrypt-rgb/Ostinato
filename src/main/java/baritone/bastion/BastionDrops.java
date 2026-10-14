@@ -1,0 +1,134 @@
+package baritone.bastion;
+
+import java.util.List;
+
+/**
+ * Pure fall logic. A "verified" drop is a ledge whose landing column has been checked (solid floor, no lava or magma beside it)
+ * and whose fall damage leaves a margin; those may exceed the planner's 3-block cap, which is how the fast speedrun lines
+ * (treasure: straight down into the central room) beat the long stairs.
+ */
+public final class BastionDrops {
+    private BastionDrops() {}
+
+    /** Hearts margin (half-hearts) a verified drop must leave. */
+    public static final float MARGIN = 6;
+
+    /** Vanilla fall damage: one per block past three (no feather falling or armour assumed: conservative). */
+    public static float damage(double fallBlocks) {
+        return (float) Math.max(0, Math.ceil(fallBlocks - 3));
+    }
+
+    /** One candidate: stand on (x, y, z), step off in direction (dx, dz), land with feet at landY. */
+    public static final class Ledge {
+        public final int x;
+        public final int y;
+        public final int z;
+        public final int dx;
+        public final int dz;
+        public final int landY;
+        public final boolean landingSafe;
+        public Ledge(int x, int y, int z, int dx, int dz, int landY, boolean landingSafe) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.dx = dx;
+            this.dz = dz;
+            this.landY = landY;
+            this.landingSafe = landingSafe;
+        }
+        public int x() { return x; }
+        public int y() { return y; }
+        public int z() { return z; }
+        public int dx() { return dx; }
+        public int dz() { return dz; }
+        public int landY() { return landY; }
+        public boolean landingSafe() { return landingSafe; }
+        @Override public boolean equals(Object o) { if (this == o) return true; if (!(o instanceof Ledge)) return false; Ledge that__ = (Ledge) o; return java.util.Objects.equals(x, that__.x) && java.util.Objects.equals(y, that__.y) && java.util.Objects.equals(z, that__.z) && java.util.Objects.equals(dx, that__.dx) && java.util.Objects.equals(dz, that__.dz) && java.util.Objects.equals(landY, that__.landY) && java.util.Objects.equals(landingSafe, that__.landingSafe); }
+        @Override public int hashCode() { return java.util.Objects.hash(x, y, z, dx, dz, landY, landingSafe); }
+        @Override public String toString() { return "Ledge[x=" + x + ", y=" + y + ", z=" + z + ", dx=" + dx + ", dz=" + dz + ", landY=" + landY + ", landingSafe=" + landingSafe + "]"; }
+        public int height() { return y - landY; }
+    }
+
+    public static boolean survivable(Ledge l, float health) {
+        return survivable(l, health, MARGIN);
+    }
+
+    /**
+     * As above, but the fall must leave at least {@code keep} health. Run 114 took a 14-block drop at 19 hp, landed on 7
+     * among brutes that hit for more, and spent longer recovering than the stairs would have taken.
+     */
+    public static boolean survivable(Ledge l, float health, float keep) {
+        return l.landingSafe && damage(l.height()) <= health - Math.max(MARGIN, keep);
+    }
+
+    /** How close to a brute a drop may land: a brute covers this in about two seconds, and two hits kill. */
+    public static final double THREAT_CLEAR = 10;
+
+    /**
+     * Whether the landing of a drop is within {@code r} blocks (and six levels) of something at (bx, by, bz). Run 118 came
+     * down off a tower by a planned drop that landed six blocks from a brute.
+     */
+    public static boolean landsNear(Ledge l, double bx, double by, double bz, double r) {
+        return Math.abs(by - l.landY) <= 6 && Math.hypot(l.x + l.dx + 0.5 - bx, l.z + l.dz + 0.5 - bz) <= r;
+    }
+
+    /**
+     * Best ledge for getting from (mx, my, mz) to a target (tx, ty, tz) that sits below us: walk to the ledge, drop, walk on.
+     * Only drops that save height worth the detour are taken; null when walking is as good.
+     */
+    public static Ledge choose(List<Ledge> ledges, int mx, int my, int mz, int tx, int ty, int tz, float health, int cap) {
+        return choose(ledges, mx, my, mz, tx, ty, tz, health, cap, MARGIN);
+    }
+
+    /** {@link #choose(List, int, int, int, int, int, int, float, int)} with the health the fall must leave. */
+    public static Ledge choose(List<Ledge> ledges, int mx, int my, int mz, int tx, int ty, int tz, float health, int cap, float keep) {
+        Ledge best = null;
+        double bestCost = Double.MAX_VALUE;
+        for (Ledge l : ledges) {
+            if (l.height() <= cap || !survivable(l, health, keep)) continue;
+            // must actually bring us down toward the target, not past it
+            if (l.landY < ty - 2) continue;
+            double walk = Math.hypot(l.x - mx, l.z - mz) + 2.0 * Math.max(0, l.y - my);
+            double after = Math.hypot(l.x + l.dx - tx, l.z + l.dz - tz) + 2.0 * Math.abs(l.landY - ty); // what is left to go down (or back up) after the landing
+            double c = walk + after + 0.5 * damage(l.height());
+            if (c < bestCost) { bestCost = c; best = l; }
+        }
+        // walking down costs about two blocks of path per block of height: the drop must beat that clearly
+        double walkDown = Math.hypot(tx - mx, tz - mz) + 2.0 * Math.max(0, my - ty);
+        return best != null && bestCost < walkDown - 4 ? best : null;
+    }
+
+    public enum Clutch { NONE, PLACE }
+
+    /**
+     * A fall stays the drop we chose only while it ends where we verified. Run 120 overshot a one-block shelf five down
+     * and fell 22 with the clutch stood down for a "planned" fall.
+     */
+    public static boolean planned(boolean inWindow, double fallen, double remaining, int plannedHeight) {
+        return inWindow && fallen + remaining <= plannedHeight + 1.5;
+    }
+
+    /** Smallest fall damage worth a clutch (half-hearts). */
+    public static final float MIN_CLUTCH_DAMAGE = 4;
+
+    /**
+     * While falling: place a block to stop now when the rest of the fall would hurt too much. Damage counts the whole fall, so
+     * the clutch has to happen early: a block under us after 2 blocks lands us with no damage; one at the bottom saves nothing.
+     *
+     * @param fallen     blocks already fallen this fall
+     * @param remaining  blocks still to fall (to the first solid floor, lava counted as no floor)
+     * @param intoLava   the floor below is lava
+     * @param planned    this fall is a verified drop we chose
+     */
+    public static Clutch clutch(double fallen, double remaining, boolean intoLava, boolean planned, float health, int cap, boolean haveBlock) {
+        if (!haveBlock || remaining < 1.2) return Clutch.NONE;
+        if (planned && !intoLava) return Clutch.NONE;
+        float dmg = damage(fallen + remaining);
+        // a heart or so of damage is cheaper than the stray block and the pause (in-game: a 4-block fall clutched for 1 damage)
+        if (intoLava || dmg >= health - 2 || dmg >= MIN_CLUTCH_DAMAGE) {
+            // too late to help: we would land on our own block with the same damage, but still out of lava
+            return damage(fallen + 1) < dmg || intoLava ? Clutch.PLACE : Clutch.NONE;
+        }
+        return Clutch.NONE;
+    }
+}
