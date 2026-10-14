@@ -139,6 +139,10 @@ public class MovementJump extends Movement {
     private boolean running, landed;
     private int settle;
     private int replans, replanCooldown;
+    private int turnWait;
+    /** Takeoff waits for the look to come within this many degrees of the plan's first yaw, for at most TICKS. */
+    private static final float TURN_FIRST_DEG = 12;
+    private static final int TURN_FIRST_TICKS = 12;
     private PlayerSim.World hopWorld;
     private boolean hopPrev;
 
@@ -509,6 +513,14 @@ public class MovementJump extends Movement {
             }
             if (still && !js.search(real, true) && !js.search(real, false)) {
                 return fail(state, "no jump from here");
+            }
+            // The plan steers as if we faced its yaw from tick 0, but the look turns ~32 degrees a tick. Walking back to a
+            // run-up start leaves us facing away (oreroute: 100-135 degrees off at takeoff, the first 4-5 ticks ran and
+            // jumped the wrong way and the jump missed): turn on the spot first, then search again from where we stand.
+            float want = js.yaw(js.plan, false, 0);
+            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot())) > TURN_FIRST_DEG && turnWait++ < TURN_FIRST_TICKS) {
+                state.setTarget(new MovementState.MovementTarget(new Rotation(want, ctx.playerRotations().getPitch()), true));
+                return state;
             }
             running = true;
             // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
