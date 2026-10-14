@@ -175,4 +175,9 @@ public final class BastionPriors {
     public static boolean overtime(long elapsedTicks, int budgetS, int pearls, int pearlTarget, int goldEq, int overtimeS, float hp) {
         return pearls < pearlTarget && goldEq >= 6 && hp >= 10 && elapsedTicks <= (budgetS + overtimeS) * 20L;
     }
+
+    /** A pickup hole is only dug where we stand next to it (s1161-b03 tried one 20 blocks below us). */
+    public static boolean pickupInReach(int dx, int dy, int dz) {
+        return Math.abs(dy) <= 2 && dx * dx + dz * dz <= 25;
+    }
 }

@@ -4046,7 +4046,8 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
                 holeDigging = false;
                 return pause0();
             }
-            if (ticks - digSince > 300) { logDirect("Bastion: hole dig stalled, skipping"); digHole = null; holeRetry = ticks + 1200; return null; }
+            // s1161-b03: a stalled pickup hole was re-picked at once (only holeRetry was set) and looped 4 min
+            if (ticks - digSince > 300) { logDirect("Bastion: hole dig stalled, skipping"); if (digPickup) pickRetry = ticks + 1200; digHole = null; holeRetry = ticks + 1200; return null; }
             if (feet.getX() == digHole.getX() && feet.getZ() == digHole.getZ()) { logDirect("Bastion: hole dig aborted (standing on it)"); digHole = null; holeRetry = ticks + 600; return null; }
             int pick = pickaxeSlot(me);
             if (pick < 0) { logDirect("Bastion: hole dig aborted (no pickaxe)"); digHole = null; holeRetry = ticks + 6000; return null; }
@@ -4071,6 +4072,7 @@ if (!solid(n) && !solid(n.up()) && !water(n) && !water(n.up())) {
                 for (int dx : new int[]{-1, 1}) for (int dz : new int[]{-1, 1}) {
                     BlockPos q = caughtHole.add(dx, 0, dz);
                     if (q.getX() == feet.getX() && q.getZ() == feet.getZ()) continue;
+                    if (!BastionPriors.pickupInReach(q.getX() - feet.getX(), q.getY() - feet.getY(), q.getZ() - feet.getZ())) continue;
                     BastionTrap.Site s = holeSite(me, piglins, q, dx, dz);
                     // we stand in it ourselves, so it needs no walls (run 83 rejected all four on walled=false)
                     if (s.open() && s.mineable() && s.floored() && !s.lavaNear() && !s.edge() && (bestPos == null || me.getPosition().distanceSq(q) < me.getPosition().distanceSq(bestPos))) { best = s; bestPos = q; }
