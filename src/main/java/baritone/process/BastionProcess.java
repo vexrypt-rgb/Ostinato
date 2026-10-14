@@ -1802,7 +1802,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (bastion != null) {
             // run 86: ran out of ingots with 3 gold blocks left; the camp returns every tick, so split blocks before it
                 if (craftStep > 0 || countOf(me, Items.GOLD_BLOCK) > 0 && ingotCount(me) < 2) { PathingCommand cr = craftGold(me); if (cr != null) return cr; }
-                PathingCommand camp = tradeCamp(me, piglins, have, done);
+                // the route loots and builds first and trades at its trade step (r143: the camp took the whole run, no route step ran);
+                // after 4 minutes on the route the camp is allowed anyway
+                boolean routeTrades = !BastionSettings.scriptedRoutes || route.isEmpty() || routeIdx >= BastionRoutes.firstTradeIndex(route) || ticks - routeStart > 4800;
+                PathingCommand camp = routeTrades ? tradeCamp(me, piglins, have, done) : null;
             if (camp != null) return camp;
             // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
             PathingCommand bt0 = barterOnTheWay(me, near);
@@ -2619,11 +2622,12 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         planStep.clear();
         for (BastionRouteResolver.Target t : targets) { ordered.add(t.point()); if (t.step() != null) planStep.put(new BlockPos(t.point().x(), t.point().y(), t.point().z()), t.step()); }
         plan = ordered;
-        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
+        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; routeStart = ticks; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
     }
 
     // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
     private int routeIdx, opLeft = -1, opThrowMark;
+    private long routeStart;
     private BastionScript.Runner scriptRun;
     private BastionRoutes.Step scriptStep;
     private BlockPos scriptAt, opLava;

@@ -148,6 +148,16 @@ public final class BastionRoutes {
         return s;
     }
 
+    /** Index of the first step that trades (the trade camp waits for it); the route size if none. */
+    public static int firstTradeIndex(List<Step> route) {
+        for (int i = 0; i < route.size(); i++) {
+            Step s = route.get(i);
+            if (s == Step.TRADE || s == Step.TRADE_AT_PIT || s == Step.TRADE_CORNER || s == Step.TRADE_TRIPLE || s == Step.TRADE_SINGLE
+                    || s == Step.GOLD_ELEVATOR || s == Step.HOUSING_PIT || s == Step.PIGLIN_PIT) return i;
+        }
+        return route.size();
+    }
+
     /** Route for a scanned layout name; unknown layouts fall back to trade-and-leave. */
     public static List<Step> forLayout(String layout, boolean goldArmor, boolean intermediate) {
         switch (layout) {

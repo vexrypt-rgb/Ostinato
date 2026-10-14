@@ -56,6 +56,17 @@ public class BastionRoutesTest {
     }
 
     @Test
+    public void tradeWaitsForTheRoute() {
+        List<Step> h = housing(HousingVariant.BEGINNER);
+        assertEquals(h.indexOf(Step.HOUSING_PIT), firstTradeIndex(h));
+        List<Step> t = treasure(false, false, false);
+        assertEquals(t.indexOf(Step.PIGLIN_PIT), firstTradeIndex(t));
+        assertEquals(1, firstTradeIndex(bridge(true, false)));
+        assertEquals(0, firstTradeIndex(List.of(Step.TRADE)));
+        assertEquals(1, firstTradeIndex(List.of(Step.LEAVE)));
+    }
+
+    @Test
     public void distractGate() {
         assertTrue(needsDistractFirst(Step.MINE_CHALICE, 10));
         assertFalse(needsDistractFirst(Step.MINE_CHALICE, 20));
