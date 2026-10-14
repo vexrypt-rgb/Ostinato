@@ -940,7 +940,34 @@ public interface MovementHelper extends ActionCosts, Helper {
                 || possiblyFlowing(bsi.get0(x, y, z - 1));
     }
 
+    /**
+     * Ostinato: per-state memo of {@link #isBlockNormalCube}, indexed by block-state id (0 = not computed, 1 = no, 2 = yes).
+     * The answer only depends on the state, and the uncached path goes through vanilla's Guava shape cache
+     * ({@code Block.isShapeFullBlock}), which profiling showed at ~17% of planning time and most of its allocation.
+     * Racy writes are benign: every thread computes the same value (same scheme as PrecomputedData).
+     */
+    final class NormalCubeMemo {
+        static final byte[] MEMO = new byte[Block.BLOCK_STATE_REGISTRY.size()];
+
+        private NormalCubeMemo() {}
+    }
+
     static boolean isBlockNormalCube(BlockState state) {
+        byte[] memo = NormalCubeMemo.MEMO;
+        int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+        if (id < 0 || id >= memo.length) {
+            return isBlockNormalCube0(state);
+        }
+        byte v = memo[id];
+        if (v == 0) {
+            v = isBlockNormalCube0(state) ? (byte) 2 : (byte) 1;
+            memo[id] = v;
+        }
+        return v == 2;
+    }
+
+    // Ostinato: the original Baritone isBlockNormalCube body, unchanged, now behind the memo above.
+    private static boolean isBlockNormalCube0(BlockState state) {
         Block block = state.getBlock();
         if (block instanceof BambooStalkBlock
                 || block instanceof MovingPistonBlock

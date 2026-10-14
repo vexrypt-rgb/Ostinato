@@ -146,6 +146,8 @@ public class CalculationContext {
     // Ostinato: vertical world bounds cached once, so the pathfinder and movement costs no longer read world.dimensionType()
     // / world.getMinY() / world.getMaxY() per call, and so a headless context (no Level) works. Same values as before.
     public final int worldMinY;
+    /** Ostinato: per-context scratch caches of MovementJump / MovementSwim (were ThreadLocals). Only touched by the planning thread. */
+    public Object jumpCache, swimCache;
     /** dimensionType().height(), the number of block rows. */
     public final int worldHeight;
     /** Level.getMaxY(): the top block row, worldMinY + worldHeight - 1. */
