@@ -87,6 +87,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private UUID throwAt;
     private long throwTick = -1000, ticks;
     public int throwsDone, lootPicked;
+    private boolean throwJump;
     private int lastLootId = -1;
     private String status = "-";
     /** Breaking a gold block angers every idle piglin within 16 blocks of the miner, seen or not; stay well clear. */
@@ -3407,7 +3408,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             }
             if (pickHole != null) {
                 BlockPos stand = pickHole.below(2);
-                if (!me.blockPosition().equals(stand)) {
+            // a jump to throw over the rim leaves the stand block for a moment; that is still "in the hole"
+            boolean inStandColumn = me.blockPosition().getX() == stand.getX() && me.blockPosition().getZ() == stand.getZ() && me.getY() >= stand.getY() && me.getY() < stand.getY() + 1.6;
+                if (!me.blockPosition().equals(stand) && !(inStandColumn && throwJump)) {
                     if (me.blockPosition().getX() == pickHole.getX() && me.blockPosition().getZ() == pickHole.getZ() && !me.onGround()) return pause0();
                     status = "camp: into pickup hole";
                     return new PathingCommand(new GoalBlock(stand), PathingCommandType.SET_GOAL_AND_PATH);
@@ -3425,10 +3428,16 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                     for (int by = Mth.floor(me.getEyeY()); by > me.getBlockY() - 5; by--) if (floor(new BlockPos(bx, by, bz))) return by + 1;
                     return me.getBlockY() - 5;
                 };
-                float[] aim = ItemThrow.aim(me.getX(), me.getEyeY(), me.getZ(), far.x, far.z, fl);
+                // our eyes are below the rim in the pit: the ingot hit the shared corner and fell back to us (r138: ingots 152 -> 151
+            // over 65 throws). Throw at the top of a jump, about 1.25 above the standing eye height.
+            double throwEye = me.onGround() ? me.getEyeY() + 1.25 : me.getEyeY();
+            float[] aim = ItemThrow.aim(me.getX(), throwEye, me.getZ(), far.x, far.z, fl);
                 baritone.getLookBehavior().updateTarget(new Rotation(aim[0], aim[1]), true);
                 float farYaw = aim[0];
-                if (Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4 && safeDrop(me)) {
+                boolean aimed = Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4;
+            if (aimed && me.onGround()) { throwJump = true; baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true); return pause0(); }
+            boolean apex = !me.onGround() && Math.abs(me.getDeltaMovement().y) < 0.12 && me.getY() > stand.getY() + 0.9;
+            if (aimed && apex && safeDrop(me)) { throwJump = false;
                     throwPred = ItemThrow.land(me.getX(), me.getEyeY(), me.getZ(), me.getYRot(), me.getXRot(), fl); admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
                 status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
                 return pause0();
