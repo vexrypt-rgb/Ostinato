@@ -95,7 +95,7 @@ public class MovementParkour extends Movement {
         if (!context.allowParkour || disabled) {
             return;
         }
-        if (!context.allowJumpAtBuildLimit && y >= context.world.getMaxY()) {
+        if (!context.allowJumpAtBuildLimit && y >= context.worldMaxY /* Ostinato: was context.world.getMaxY() */) {
             return;
         }
         int xDiff = dir.getStepX();

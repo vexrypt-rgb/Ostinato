@@ -76,6 +76,32 @@ public class BlockStateInterface {
         this.access = new BlockStateInterfaceAccessWrapper(this);
     }
 
+    // Ostinato: headless constructor for snapshot/synthetic worlds (pathfinding benchmark and tests). A subclass overrides
+    // get0, isLoaded and worldContainsLoadedChunk; there is no client world or chunk provider. New, replaces nothing.
+    protected BlockStateInterface(int minY, int height, BetterWorldBorder worldBorder) {
+        this.world = null;
+        this.provider = null;
+        this.worldData = null;
+        this.worldBorder = worldBorder;
+        this.useTheRealWorld = false;
+        this.headlessMinY = minY;
+        this.headlessHeight = height;
+        this.isPassableBlockPos = new BlockPos.MutableBlockPos();
+        this.access = new BlockStateInterfaceAccessWrapper(this);
+    }
+
+    // Ostinato: world height bounds that also work headless; replaces direct bsi.world.getMinY()/getHeight() reads in BlockStateInterfaceAccessWrapper.
+    private int headlessMinY;
+    private int headlessHeight;
+
+    public int minY() {
+        return world != null ? world.getMinY() : headlessMinY;
+    }
+
+    public int height() {
+        return world != null ? world.getHeight() : headlessHeight;
+    }
+
     public boolean worldContainsLoadedChunk(int blockX, int blockZ) {
         return provider.hasChunk(blockX >> 4, blockZ >> 4);
     }

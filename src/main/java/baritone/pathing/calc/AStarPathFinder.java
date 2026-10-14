@@ -50,8 +50,8 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
 
     @Override
     protected Optional<IPath> calculate0(long primaryTimeout, long failureTimeout) {
-        int minY = calcContext.world.dimensionType().minY();
-        int height = calcContext.world.dimensionType().height();
+        int minY = calcContext.worldMinY; // Ostinato: was calcContext.world.dimensionType().minY(), same value cached in the context
+        int height = calcContext.worldHeight; // Ostinato: was calcContext.world.dimensionType().height()
         startNode = getNodeAtPosition(startX, startY, startZ, BetterBlockPos.longHash(startX, startY, startZ));
         startNode.cost = 0;
         startNode.combinedCost = startNode.estimatedCostToGoal;
@@ -63,7 +63,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             bestSoFar[i] = startNode;
         }
         MutableMoveResult res = new MutableMoveResult();
-        BetterWorldBorder worldBorder = new BetterWorldBorder(calcContext.world.getWorldBorder());
+        BetterWorldBorder worldBorder = calcContext.worldBorder; // Ostinato: was new BetterWorldBorder(calcContext.world.getWorldBorder()); the context already snapshots the same border
         long startTime = System.currentTimeMillis();
         boolean slowPath = Baritone.settings().slowPath.value;
         if (slowPath) {
