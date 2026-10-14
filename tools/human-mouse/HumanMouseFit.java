@@ -42,7 +42,7 @@ public class HumanMouseFit {
 
     // ------------------------------------------------------------------ segmentation
     static final class Seg {
-        String kind; double d, w, u, onsetMs, dur, angle; double[] along, perp; double[] speed; int subs; boolean overshoot; double peakAt, maxPerp;
+        String kind; double d, w, u, onsetMs, dwellMs, peakSpeed, primaryMs, primaryReach, clickErr, dur, angle; double[] along, perp; double[] speed; int subs; boolean overshoot; double peakAt, maxPerp;
         double[] residual; // high-passed position noise along the path (counts)
     }
 
@@ -135,53 +135,65 @@ public class HumanMouseFit {
     static Seg segment(Track tr, double tOn, double tEnd, double tx, double ty, double w, double u) {
         double D = Math.hypot(tx, ty);
         if (D < 3 || tEnd - tOn < 60 || tEnd - tOn > 6000) return null;
-        int n = (int) ((tEnd - tOn) / GRID) + 1;
+        // kinematics on a 1 ms grid with an 8 ms Gaussian: a 250 Hz mouse reports a step every ~4 ms, a coarser grid
+        // or a box filter smears the onset, the peak and the stop
+        int n = (int) (tEnd - tOn) + 1;
         double[] px = new double[n], py = new double[n];
         double[] p0 = tr.at(tOn);
-        for (int i = 0; i < n; i++) { double[] p = tr.at(tOn + i * GRID); px[i] = p[0] - p0[0]; py[i] = p[1] - p0[1]; }
-        double[] sx = smooth(px, 5), sy = smooth(py, 5);   // 25 ms box filter kills report quantization
+        for (int i = 0; i < n; i++) { double[] p = tr.at(tOn + i); px[i] = p[0] - p0[0]; py[i] = p[1] - p0[1]; }
+        double[] sx = gauss(px, 8), sy = gauss(py, 8);
         double[] v = new double[n];
-        for (int i = 1; i < n; i++) v[i] = Math.hypot(sx[i] - sx[i - 1], sy[i] - sy[i - 1]) / GRID;
+        for (int i = 1; i < n; i++) v[i] = Math.hypot(sx[i] - sx[i - 1], sy[i] - sy[i - 1]); // counts per ms
         double peak = 0; int pk = 0; for (int i = 0; i < n; i++) if (v[i] > peak) { peak = v[i]; pk = i; }
         if (peak <= 0) return null;
-        int on = 0; while (on < pk && v[on] < 0.06 * peak) on++;
-        int off = n - 1; while (off > pk && v[off] < 0.04 * peak) off--;
-        if (off - on < 6) return null;
+        // onset: back from the peak to 10% of it; stop: the last time above 10% before the click. The time before the
+        // onset is reaction (target spawn to moving), after the stop it is the dwell before the click: neither is movement
+        int on = pk; while (on > 0 && v[on] > 0.1 * peak) on--;
+        int off = n - 1; while (off > pk && v[off] < 0.1 * peak) off--;
+        if (off - on < 20) return null;
         Seg s = new Seg();
         s.d = D; s.w = Math.max(1, w); s.u = u; s.angle = Math.atan2(ty, tx);
-        s.onsetMs = on * GRID; s.dur = (off - on) * GRID;
+        s.clickErr = Math.hypot(px[n - 1] - tx, py[n - 1] - ty); // where the click was, after any slow final creep
+        s.onsetMs = on; s.dur = off - on; s.dwellMs = tEnd - tOn - off; s.peakSpeed = peak * 1000; // counts per second
         double ux = tx / D, uy = ty / D, ox = px[on], oy = py[on];
         s.along = new double[N + 1]; s.perp = new double[N + 1];
         for (int k = 0; k <= N; k++) {
-            double f = on + (off - on) * (double) k / N; int i = (int) f; double a = f - i; int j = Math.min(i + 1, n - 1);
-            double qx = px[i] + (px[j] - px[i]) * a - ox, qy = py[i] + (py[j] - py[i]) * a - oy;
+            int i = on + (int) Math.round((off - on) * (double) k / N);
+            double qx = px[i] - ox, qy = py[i] - oy;
             s.along[k] = (qx * ux + qy * uy) / D; s.perp[k] = (-qx * uy + qy * ux) / D;
         }
-        // submovements: speed peaks above 10% of the main one with a dip below 70% of the lower peak between them
-        // (on a 45 ms smoothed speed, so report quantization doesn't count as a submovement)
-        double[] vs = smooth(v, 4);
+        // submovements: speed peaks above 15% of the main one with a dip below 70% of the lower peak between them
         int subs = 0; double lastPk = 0, minSince = Double.MAX_VALUE;
         for (int i = on + 1; i < off; i++) {
-            if (vs[i] < minSince) minSince = vs[i];
-            if (vs[i] >= vs[i - 1] && vs[i] >= vs[i + 1] && vs[i] > 0.15 * peak) {
-                if (subs == 0 || minSince < 0.7 * Math.min(vs[i], lastPk)) { subs++; lastPk = vs[i]; minSince = vs[i]; }
-                else lastPk = Math.max(lastPk, vs[i]);
+            if (v[i] < minSince) minSince = v[i];
+            if (v[i] >= v[i - 1] && v[i] >= v[i + 1] && v[i] > 0.15 * peak) {
+                if (subs == 0 || minSince < 0.7 * Math.min(v[i], lastPk)) { subs++; lastPk = v[i]; minSince = v[i]; }
+                else lastPk = Math.max(lastPk, v[i]);
             }
         }
         s.subs = Math.max(1, subs);
-        double mx = 0, mp = 0; for (int k = 0; k <= N; k++) { mx = Math.max(mx, s.along[k]); mp = Math.max(mp, Math.abs(s.perp[k])); }
+        // primary submovement: from the onset to the first dip below 30% of the peak
+        int pe = pk; while (pe < off && !(v[pe] < 0.3 * peak && v[pe] <= v[pe + 1])) pe++;
+        s.primaryMs = pe - on; s.primaryReach = ((px[pe] - ox) * ux + (py[pe] - oy) * uy) / D;
+        double mx = 0, mp = 0; for (int i = on; i <= off; i++) { double a = ((sx[i] - sx[on]) * ux + (sy[i] - sy[on]) * uy) / D, b = (-(sx[i] - sx[on]) * uy + (sy[i] - sy[on]) * ux) / D; mx = Math.max(mx, a); mp = Math.max(mp, Math.abs(b)); }
         s.overshoot = mx > 1 + 0.5 * s.w / D; s.maxPerp = mp; s.peakAt = (pk - on) / (double) (off - on);
-        // tremor: raw position minus a 35 ms smoothed path, only where the hand is slow (homing in, dwelling);
-        // in the fast part the high-pass would measure the movement itself, not the jitter
-        double[] lx = smooth(px, 3), ly = smooth(py, 3);
+        // tremor: raw position minus the smoothed path, only where the hand is slow (homing in, dwelling), on a 5 ms grid
         List<Double> res = new ArrayList<>();
-        for (int i = Math.max(1, on); i < n; i++) {
-            if (vs[Math.min(i, vs.length - 1)] > 0.15 * peak) { if (!res.isEmpty() && !Double.isNaN(res.get(res.size() - 1))) res.add(Double.NaN); continue; }
-            res.add((px[i] - lx[i]) * ux + (py[i] - ly[i]) * uy);
+        for (int i = Math.max(on, 5); i < n; i += (int) GRID) {
+            if (v[i] > 0.15 * peak) { if (!res.isEmpty() && !Double.isNaN(res.get(res.size() - 1))) res.add(Double.NaN); continue; }
+            res.add((px[i] - sx[i]) * ux + (py[i] - sy[i]) * uy);
         }
         s.residual = new double[res.size()];
         for (int i = 0; i < res.size(); i++) s.residual[i] = res.get(i);
         return s;
+    }
+
+    static double[] gauss(double[] a, double sigma) {
+        int r = (int) Math.ceil(3 * sigma); double[] k = new double[2 * r + 1];
+        for (int j = -r; j <= r; j++) k[j + r] = Math.exp(-j * j / (2 * sigma * sigma));
+        double[] o = new double[a.length];
+        for (int i = 0; i < a.length; i++) { double s = 0, w = 0; for (int j = -r; j <= r; j++) { int q = i + j; if (q < 0 || q >= a.length) continue; s += a[q] * k[j + r]; w += k[j + r]; } o[i] = s / w; }
+        return o;
     }
 
     /** Why a segmented movement is not usable as a template, or null. */
@@ -189,7 +201,7 @@ public class HumanMouseFit {
         // a target about as close as it is wide is already under (or next to) the cursor: the "move" is a wander,
         // not an aimed movement (the capture game placed these before 2026-10-14)
         if (s.d < 0.75 * s.w) return "target closer than its width";
-        double endErr = Math.hypot(s.along[N] - 1, s.perp[N]) * s.d;
+        double endErr = s.clickErr;
         // the move ended far from the target: the virtual cursor was pinned at a screen edge, or segmentation failed
         if (endErr > Math.max(s.w, 0.35 * s.d)) return "ended far from the target";
         double mx = 0; for (double v : s.along) mx = Math.max(mx, v);
@@ -204,20 +216,25 @@ public class HumanMouseFit {
     static void report(List<Seg> segs, Map<String, Integer> rejected) {
         Map<String, List<Seg>> byKind = new TreeMap<>();
         for (Seg s : segs) byKind.computeIfAbsent(s.kind, k -> new ArrayList<>()).add(s);
-        System.out.println("kind        moves  median ms  overshoot  subs  maxPerp/D(median)");
+        System.out.println("times: reaction = spawn to onset, movement = onset to stop (10% of peak speed), dwell = stop to click");
+        System.out.println("kind        moves  median ms  overshoot  subs  maxPerp/D(median)  reaction  dwell");
         for (Map.Entry<String, List<Seg>> e : byKind.entrySet()) {
             List<Seg> l = e.getValue(); int os = 0; double sub = 0; double[] du = new double[l.size()], pe = new double[l.size()];
             for (int i = 0; i < l.size(); i++) { Seg s = l.get(i); if (s.overshoot) os++; sub += s.subs; du[i] = s.dur; pe[i] = s.maxPerp; }
             Arrays.sort(du); Arrays.sort(pe);
-            System.out.printf(Locale.ROOT, "%-10s %6d %10.0f %9.0f%% %5.2f %8.3f%n", e.getKey(), l.size(), du[du.length / 2], 100.0 * os / l.size(), sub / l.size(), pe[pe.length / 2]);
+            double[] rt = new double[l.size()], dw = new double[l.size()];
+            for (int i = 0; i < l.size(); i++) { rt[i] = l.get(i).onsetMs; dw[i] = l.get(i).dwellMs; }
+            Arrays.sort(rt); Arrays.sort(dw);
+            System.out.printf(Locale.ROOT, "%-10s %6d %10.0f %9.0f%% %5.2f %8.3f %17.0f %6.0f%n", e.getKey(), l.size(), du[du.length / 2], 100.0 * os / l.size(), sub / l.size(), pe[pe.length / 2], rt[rt.length / 2], dw[dw.length / 2]);
         }
         double[] edges = {0, 50, 150, 400, 1000, 1e9};
-        System.out.println("distance (counts)  moves  median ms");
+        System.out.println("distance (counts)  moves  median movement ms");
         for (int b = 0; b + 1 < edges.length; b++) {
-            List<Double> d = new ArrayList<>();
-            for (Seg s : segs) if (s.d >= edges[b] && s.d < edges[b + 1]) d.add(s.dur);
-            Collections.sort(d);
-            System.out.printf(Locale.ROOT, "%6.0f-%-8s %8d %10s%n", edges[b], edges[b + 1] > 1e8 ? "up" : String.valueOf((int) edges[b + 1]), d.size(), d.isEmpty() ? "-" : String.valueOf(Math.round(d.get(d.size() / 2))));
+            List<Double> d = new ArrayList<>(), pv = new ArrayList<>(), pm = new ArrayList<>();
+            for (Seg s : segs) if (s.d >= edges[b] && s.d < edges[b + 1]) { d.add(s.dur); pv.add(s.peakSpeed); pm.add(s.primaryMs); }
+            Collections.sort(d); Collections.sort(pv); Collections.sort(pm);
+            System.out.printf(Locale.ROOT, "%6.0f-%-8s %8d %10s   peak %s counts/s, primary %s ms%n", edges[b], edges[b + 1] > 1e8 ? "up" : String.valueOf((int) edges[b + 1]), d.size(),
+                    d.isEmpty() ? "-" : String.valueOf(Math.round(d.get(d.size() / 2))), pv.isEmpty() ? "-" : String.valueOf(Math.round(pv.get(pv.size() / 2))), pm.isEmpty() ? "-" : String.valueOf(Math.round(pm.get(pm.size() / 2))));
         }
         if (!rejected.isEmpty()) System.out.println("rejected: " + rejected);
     }
@@ -268,7 +285,7 @@ public class HumanMouseFit {
         p.put("noise", map("sd", nsd, "rho", rho, "dtMs", GRID, "spectrum", spectrum(noise)));
         int subsSum = 0, os = 0; double pkSum = 0, cv = 0; for (Seg s : segs) { subsSum += s.subs; if (s.overshoot) os++; pkSum += s.peakAt; cv += s.maxPerp; }
         p.put("stats", map("movements", (double) n, "meanSubmovements", subsSum / (double) n, "overshootRate", os / (double) n,
-                "meanPeakVelocityAt", pkSum / n, "meanMaxPerpOverD", cv / n, "medianMaxPerpOverD", medianPerp(segs)));
+                "meanPeakVelocityAt", pkSum / n, "meanMaxPerpOverD", cv / n, "medianMaxPerpOverD", medianPerp(segs), "medianReactionMs", med(segs, 0), "medianDwellMs", med(segs, 1), "medianPrimaryMs", med(segs, 2), "medianPrimaryReach", med(segs, 3)));
         // keep a spread of templates
         List<Seg> keep = new ArrayList<>(segs);
         Collections.shuffle(keep, new Random(7));
@@ -351,7 +368,9 @@ public class HumanMouseFit {
         return p;
     }
 
-    static double medianPerp(List<Seg> segs) { double[] v = new double[segs.size()]; for (int i = 0; i < v.length; i++) v[i] = segs.get(i).maxPerp; Arrays.sort(v); return v.length == 0 ? 0 : v[v.length / 2]; }
+    static double med(List<Seg> segs, int f) { double[] v = new double[segs.size()]; for (int i = 0; i < v.length; i++) { Seg s = segs.get(i); v[i] = f == 0 ? s.onsetMs : f == 1 ? s.dwellMs : f == 2 ? s.primaryMs : s.primaryReach; } Arrays.sort(v); return v.length == 0 ? 0 : v[v.length / 2]; }
+
+    static double medianPerp(List<Seg> segs) { List<Double> l = new ArrayList<>(); for (Seg s : segs) if (s.d >= 100) l.add(s.maxPerp); Collections.sort(l); return l.isEmpty() ? 0 : l.get(l.size() / 2); } // moves of 100+ counts: short ones are mostly jitter
 
     static double minJerk(double t) { return t * t * t * (10 - 15 * t + 6 * t * t); }
 

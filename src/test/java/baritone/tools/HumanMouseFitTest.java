@@ -100,6 +100,10 @@ public class HumanMouseFitTest {
         assertTrue(log + " b=" + b, b > 70 && b < 135);
         // tremor of ~0.3 counts plus count rounding, not the movement itself
         assertTrue(log + " noise sd=" + no.get("sd").getAsDouble(), no.get("sd").getAsDouble() < 1.0);
+        // movement time is onset to stop: the 200 ms before moving (reaction) and the dwell before the click are not in it
+        assertEquals(log, 230, st.get("medianReactionMs").getAsDouble(), 60); // 200 ms still, then the min-jerk speed reaches 10%
+        assertTrue(log + " a=" + du.get("a").getAsDouble(), du.get("a").getAsDouble() < 160);
+        assertTrue(log, st.get("medianDwellMs").getAsDouble() > 30);
         // straight moves
         assertTrue(st.get("medianMaxPerpOverD").getAsDouble() < 0.05);
         assertTrue(log, log.contains("rejected"));
