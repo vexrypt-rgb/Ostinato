@@ -189,6 +189,15 @@ public final class KinematicController {
             baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, along || here[1] > 0.05);
             return newPos;
         }
+        if (narrowFlight) {
+            // Ostinato: after a narrowTakeoff fly the arrival steering (airArrive) all the way down, not the rollouts
+            if (!real.onGround) {
+                return arrive(baritone, newPos, line.get(line.size() - 1));
+            }
+            if (ctx.player().tickCount - narrowJumpTick > 2) {
+                narrowFlight = false;
+            }
+        }
         if (arriving) {
             return arrive(baritone, newPos, line.get(line.size() - 1));
         }
@@ -286,6 +295,13 @@ public final class KinematicController {
         boolean committed = !real.onGround && ctx.player().tickCount - lastDrivenTick <= 1;
         if (bestScore <= here[0] + 0.05) {
             if (!committed) {
+                if (narrowEnd && real.onGround) {
+                    // Ostinato: onto a candle/lantern the rollouts (sprinting) overshoot; own the takeoff instead
+                    int nt = narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
+                    if (nt >= 0) {
+                        return nt;
+                    }
+                }
                 return -1; // nothing makes progress safely; Baritone knows how to recover
             }
             best = 0; // mid-air with no plan left: keep steering at the line rather than hand over in flight
@@ -318,6 +334,71 @@ public final class KinematicController {
             st = ctx.world().getBlockState(feet.below());
         }
         return MovementHelper.collisionWidth(st) < 0.9;
+    }
+
+    /**
+     * Ostinato: takeoff onto a narrow landing (candle, lantern, pot). Tries, in the sim, walking (then sprinting) for
+     * 0..12 ticks toward its middle and jumping, then the same mid-air steering {@link #airArrive} flies; a plan counts
+     * only if the feet land on the real support top overlapping its collision shape by at least {@link #NARROW_OVERLAP}.
+     * Acts on the first tick of the first plan found (fewest ticks, walking before sprinting), searched again each tick.
+     */
+    private int narrowTakeoff(Baritone baritone, int newPos, double[] to) {
+        double top = to[1] - to[4], cx = to[0], cz = to[2];
+        BlockPos feet = BlockPos.containing(cx, to[1] + 0.01, cz);
+        BlockState st = ctx.world().getBlockState(feet);
+        if (MovementHelper.collisionTop(st) <= 0) {
+            st = ctx.world().getBlockState(feet.below());
+        }
+        double reach = 0.3 + MovementHelper.collisionWidth(st) / 2 - NARROW_OVERLAP;
+        for (int sp = 0; sp <= 1; sp++) {
+            for (int delay = 0; delay <= 12; delay++) {
+                if (narrowLands(sp == 1, delay, top, cx, cz, reach)) {
+                    float yaw = (float) Math.toDegrees(Math.atan2(-(cx - real.x), cz - real.z));
+                    baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
+                    InputOverrideHandler in = baritone.getInputOverrideHandler();
+                    in.clearAllKeys();
+                    in.setInputForceState(Input.MOVE_FORWARD, true);
+                    in.setInputForceState(Input.SPRINT, sp == 1);
+                    in.setInputForceState(Input.JUMP, delay == 0);
+                    if (delay == 0) {
+                        narrowFlight = true;
+                        narrowJumpTick = ctx.player().tickCount;
+                    }
+                    lastDrivenTick = ctx.player().tickCount;
+                    if (Baritone.settings().kinematicTrace.value) {
+                        System.out.printf("KTRACE narrowTakeoff sprint=%b delay=%d reach=%.3f%n", sp == 1, delay, reach);
+                    }
+                    return newPos;
+                }
+            }
+        }
+        return -1;
+    }
+
+    static final double NARROW_OVERLAP = 0.05;
+    private boolean narrowFlight;
+    private int narrowJumpTick;
+
+    private boolean narrowLands(boolean sprint, int delay, double top, double cx, double cz, double reach) {
+        sim.copyFrom(real);
+        boolean air = false;
+        for (int t = 0; t < delay + 40; t++) {
+            float yaw = (float) Math.toDegrees(Math.atan2(-(cx - sim.x), cz - sim.z));
+            if (t <= delay) {
+                if (!sim.onGround) return false; // walked off the edge before the jump
+                sim.tick(yaw, 1, sprint, t == delay);
+                continue;
+            }
+            if (!sim.onGround) air = true;
+            if (air && sim.onGround) {
+                return Math.abs(sim.y - top) < 0.02 && Math.abs(sim.x - cx) <= reach && Math.abs(sim.z - cz) <= reach;
+            }
+            if (sim.y < top - 1.0) return false;
+            double d = Math.hypot(cx - sim.x, cz - sim.z);
+            int a = airArrive(d, Math.hypot(sim.vx, sim.vz));
+            sim.tick(yaw, a, false, false);
+        }
+        return false;
     }
 
     /** Ostinato: mid-air over a narrow landing: 1 hold forward toward its middle, -1 brake, 0 coast. */
