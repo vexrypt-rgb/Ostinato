@@ -3776,14 +3776,16 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                 };
                 // our eyes are below the rim in the pit: the ingot hit the shared corner and fell back to us (r138: ingots 152 -> 151
             // over 65 throws). Throw at the top of a jump, about 1.25 above the standing eye height.
-            double throwEye = me.onGround() ? me.getEyeY() + 1.25 : me.getEyeY();
+            // a roof over the pit stops the jump at +0.12 (r145: 167 s of jumping, no throw): throw from the ground then
+            boolean canJump = ctx.world().getBlockState(stand.above(2)).getCollisionShape(ctx.world(), stand.above(2)).isEmpty();
+            double throwEye = me.onGround() && canJump ? me.getEyeY() + 1.25 : me.getEyeY();
             float[] aim = ItemThrow.aim(me.getX(), throwEye, me.getZ(), far.x, far.z, fl);
             aim[1] = throwAdapt.pitch(aim[1]);
                 baritone.getLookBehavior().updateTarget(new Rotation(aim[0], aim[1]), true);
                 float farYaw = aim[0];
                 boolean aimed = Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4;
-            if (aimed && me.onGround()) { throwJump = true; baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true); return pause0(); }
-            boolean apex = !me.onGround() && Math.abs(me.getDeltaMovement().y) < 0.12 && me.getY() > stand.getY() + 0.9;
+            if (aimed && me.onGround() && canJump) { throwJump = true; baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true); return pause0(); }
+            boolean apex = !canJump ? me.onGround() : !me.onGround() && Math.abs(me.getDeltaMovement().y) < 0.12 && me.getY() > stand.getY() + 0.9;
             if (aimed && apex && safeDrop(me)) { throwJump = false; throwTarget = caughtHole;
                     throwPred = ItemThrow.land(me.getX(), me.getEyeY(), me.getZ(), me.getYRot(), me.getXRot(), fl); admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
                 status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
