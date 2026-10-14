@@ -276,6 +276,44 @@ public final class Settings {
      */
     public final Setting<Double> fallDamageCost = new Setting<>(20D);
 
+    // Ostinato: hunger-aware planning (baritone.utils.hunger).
+
+    /**
+     * Price planned damage (hurting falls, lava or fire hits) from the hunger model: the hunger regen spends on it, at
+     * the best carried food's eat time, plus time spent below full health. Off falls back to fallDamageCost per half heart.
+     */
+    public final Setting<Boolean> hungerPlanning = new Setting<>(true);
+
+    /**
+     * Never plan or accept damage that leaves you under this much health (half hearts). Also the bastion damage floor.
+     */
+    public final Setting<Double> healthFloor = new Setting<>(8D);
+
+    /**
+     * Ticks of cost per tick spent below full health while regen heals planned damage.
+     */
+    public final Setting<Double> hungerExposureWeight = new Setting<>(0.05D);
+
+    /**
+     * Eat while pathing: in natural pauses (path search, ladders, long falls, idle) or when food or health is urgent.
+     */
+    public final Setting<Boolean> autoEat = new Setting<>(true);
+
+    /**
+     * Food-saving mode on by hand: no sprinting or sprint-jumping, fewer jumps, digs and attacks, walking costs.
+     */
+    public final Setting<Boolean> foodSavingMode = new Setting<>(false);
+
+    /**
+     * Switch food-saving mode on by itself when the food you have and carry cannot cover the route, and off once restored.
+     */
+    public final Setting<Boolean> autoFoodSaving = new Setting<>(true);
+
+    /**
+     * Extra cost in ticks of each jump and each block mined while food-saving mode is on.
+     */
+    public final Setting<Double> foodSavingPenalty = new Setting<>(2D);
+
     /**
      * Allow mining the block directly beneath its feet
      * <p>

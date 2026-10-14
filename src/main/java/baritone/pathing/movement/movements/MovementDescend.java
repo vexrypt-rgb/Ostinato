@@ -357,7 +357,7 @@ public class MovementDescend extends Movement {
             return;
         }
         int damage = ExperimentalMovement.fallDamage(blocks);
-        if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
+        if (!ExperimentalMovement.canAffordFall(context.health, damage, context.minHealth())) { // Ostinato: healthFloor too
             return;
         }
         // canWalkOn lets some of these through (we can sneak on magma, that is not the same as landing on it)
@@ -367,7 +367,7 @@ public class MovementDescend extends Movement {
         res.x = destX;
         res.y = newY + 1;
         res.z = destZ;
-        res.cost = tentativeCost + damage * context.fallDamageCost;
+        res.cost = tentativeCost + context.damageCost(damage, false); // Ostinato: hunger-priced damage (eat time + regen), not a fixed penalty
         res.damage = damage;
     }
 

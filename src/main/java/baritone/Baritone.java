@@ -69,6 +69,7 @@ public class Baritone implements IBaritone {
     private final PathingBehavior pathingBehavior;
     private final LookBehavior lookBehavior;
     private final InventoryBehavior inventoryBehavior;
+    private baritone.behavior.HungerBehavior hungerBehavior; // Ostinato: hunger planning
     private final SwarmBehavior swarmBehavior;
     private final FreecamBehavior freecamBehavior;
     private final InputOverrideHandler inputOverrideHandler;
@@ -117,6 +118,7 @@ public class Baritone implements IBaritone {
             this.inventoryBehavior    = this.registerBehavior(InventoryBehavior::new);
             this.inputOverrideHandler = this.registerBehavior(InputOverrideHandler::new);
             this.registerBehavior(WaypointBehavior::new);
+            this.hungerBehavior = this.registerBehavior(baritone.behavior.HungerBehavior::new); // Ostinato: hunger planning
             this.swarmBehavior        = this.registerBehavior(SwarmBehavior::new);
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
         }
@@ -218,6 +220,11 @@ public class Baritone implements IBaritone {
     @Override
     public BuilderProcess getBuilderProcess() {
         return this.builderProcess;
+    }
+
+    /** Ostinato: hunger prediction, auto-eat and food-saving mode. Null before the behaviors are registered. */
+    public baritone.behavior.HungerBehavior getHungerBehavior() {
+        return hungerBehavior;
     }
 
     public InventoryBehavior getInventoryBehavior() {

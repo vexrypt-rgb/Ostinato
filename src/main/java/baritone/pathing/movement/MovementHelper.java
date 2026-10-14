@@ -175,6 +175,13 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (Baritone.settings().blocksToAvoid.value.contains(block)) {
             return NO;
         }
+        // Ostinato: no-collision harmless blocks (plants, torches, dust, rails, signs, ...) are air: free and never mined
+        if (baritone.utils.PassableBlocks.isFreeAir(state)) {
+            return YES;
+        }
+        if (block == Blocks.WITHER_ROSE) {
+            return NO; // Ostinato: walking through gives Wither, break it instead
+        }
         if (block instanceof DoorBlock || block instanceof FenceGateBlock) {
             // TODO this assumes that all doors in all mods are openable
             if (block == Blocks.IRON_DOOR) {
@@ -253,6 +260,10 @@ public interface MovementHelper extends ActionCosts, Helper {
     static Ternary fullyPassableBlockState(BlockState state) {
         Block block = state.getBlock();
         if (block instanceof AirBlock) { // early return for most common case
+            return YES;
+        }
+        // Ostinato: no-collision harmless blocks are air (see PassableBlocks)
+        if (baritone.utils.PassableBlocks.isFreeAir(state) && !Baritone.settings().blocksToAvoid.value.contains(block)) {
             return YES;
         }
         // exceptions - blocks that are isPassable true, but we can't actually jump through
@@ -943,10 +954,23 @@ public interface MovementHelper extends ActionCosts, Helper {
                 double faceX = (placeAt.getX() + against1.getX() + 1.0D) * 0.5D;
                 double faceY = (placeAt.getY() + against1.getY() + 0.5D) * 0.5D;
                 double faceZ = (placeAt.getZ() + against1.getZ() + 1.0D) * 0.5D;
-                Rotation place = RotationUtils.calcRotationFromVec3d(wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.playerHead(), new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
-                Rotation actual = baritone.getLookBehavior().getAimProcessor().peekRotation(place);
-                HitResult res = RayTraceUtils.rayTraceTowards(ctx.player(), actual, ctx.playerController().getBlockReachDistance(), wouldSneak);
-                if (res != null && res.getType() == HitResult.Type.BLOCK && ((BlockHitResult) res).getBlockPos().equals(against1) && ((BlockHitResult) res).getBlockPos().relative(((BlockHitResult) res).getDirection()).equals(placeAt)) {
+                // Ostinato: a passable block (grass, a torch...) can stop the ray short of the face; try off-centre points
+                // on the face before giving up. Hitting placeAt itself is fine when it is replaceable (vanilla replaces it).
+                Direction toward = HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[i];
+                Rotation place = null;
+                for (int k = 0; k < 5 && place == null; k++) {
+                    double u = k == 0 ? 0 : (k == 1 || k == 2 ? 0.3 : -0.3), v = k == 0 ? 0 : (k == 1 || k == 3 ? 0.3 : -0.3);
+                    double px = faceX, py = faceY, pz = faceZ;
+                    if (toward.getAxis() == Direction.Axis.Y) { px += u; pz += v; } else if (toward.getAxis() == Direction.Axis.X) { pz += u; py += v; } else { px += u; py += v; }
+                    Rotation cand = RotationUtils.calcRotationFromVec3d(wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.playerHead(), new Vec3(px, py, pz), ctx.playerRotations());
+                    Rotation actual = baritone.getLookBehavior().getAimProcessor().peekRotation(cand);
+                    HitResult res = RayTraceUtils.rayTraceTowards(ctx.player(), actual, ctx.playerController().getBlockReachDistance(), wouldSneak);
+                    if (res != null && res.getType() == HitResult.Type.BLOCK && (((BlockHitResult) res).getBlockPos().equals(against1) && ((BlockHitResult) res).getBlockPos().relative(((BlockHitResult) res).getDirection()).equals(placeAt)
+                            || k > 0 && ((BlockHitResult) res).getBlockPos().equals(placeAt) && BlockStateInterface.get(ctx, placeAt).canBeReplaced())) {
+                        place = cand;
+                    }
+                }
+                if (place != null) {
                     state.setTarget(new MovementTarget(place, true));
                     found = true;
 

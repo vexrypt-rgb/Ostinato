@@ -320,5 +320,12 @@
  "renderKinJumps": "Kinematic travel: mark template jump take-offs, apexes and landings, and a red marker where the controller got stuck and handed back to Baritone.",
  "renderPhysSpeedTrail": "Physics travel: draw the tick trajectory colored by horizontal speed, blue slow to red fast.",
  "renderPhysInputs": "Physics travel: draw a glyph per tick for the keys held (W, sprint, jump, A/D) and ghost hitboxes at jump, apex, landing and grab.",
- "renderPhysSearch": "Physics travel: draw the explored search tree, faint and fading by depth, and the planned against the actual trajectory with error links and replan markers."
+ "renderPhysSearch": "Physics travel: draw the explored search tree, faint and fading by depth, and the planned against the actual trajectory with error links and replan markers.",
+ "hungerPlanning": "Price planned damage (hurting falls, lava or fire hits) from the hunger model: the hunger regen spends on it, at the best carried food's eat time, plus time spent below full health. Off falls back to fallDamageCost per half heart.",
+ "healthFloor": "Never plan or accept damage that leaves you under this much health (half hearts). Also the bastion damage floor.",
+ "hungerExposureWeight": "Ticks of cost per tick spent below full health while regen heals planned damage.",
+ "autoEat": "Eat while pathing: in natural pauses (path search, ladders, long falls, idle) or when food or health is urgent.",
+ "foodSavingMode": "Food-saving mode on by hand: no sprinting or sprint-jumping, fewer jumps, digs and attacks, walking costs.",
+ "autoFoodSaving": "Switch food-saving mode on by itself when the food you have and carry cannot cover the route, and off once restored.",
+ "foodSavingPenalty": "Extra cost in ticks of each jump and each block mined while food-saving mode is on."
 }

@@ -17,6 +17,10 @@
 
 package baritone.pathing.movement;
 
+import baritone.utils.hunger.HungerModel;
+import baritone.utils.hunger.EatPlanner;
+import baritone.utils.hunger.InventoryFood;
+import baritone.utils.hunger.Food;
 import baritone.Baritone;
 import baritone.utils.ExperimentalMovement;
 import baritone.altoclef.AltoClefSettings;
@@ -92,6 +96,16 @@ public class CalculationContext {
     public final boolean experimental;
     public final double experimentalMinHealth;
     public final double fallDamageCost;
+    // Ostinato: hunger-aware costs
+    public final HungerModel hunger;
+    /** Emergency food-saving: walk, no sprint-jumps, fewer jumps and digs. */
+    public final boolean foodSaving;
+    public final double healthFloor;
+    public final boolean hungerPlanning;
+    /** Best non-reserve food carried for re-buying hunger, null with none. */
+    public final Food bestFood;
+    private final double hungerExposureWeight;
+    private final double[] damageTicks = new double[41];
     /** 1 unless experimentalMovement wants jumps to look a bit cheaper. */
     public final double jumpBias;
     /** Health plus absorption when the context was made, for falls that hurt. */
@@ -140,7 +154,20 @@ public class CalculationContext {
         this.freeBoats = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
                 ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
         this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
-        this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
+        // Ostinato: hunger model snapshot and food-saving mode
+        this.hunger = InventoryFood.model(player);
+        this.foodSaving = baritone instanceof Baritone && ((Baritone) baritone).getHungerBehavior() != null
+                ? ((Baritone) baritone).getHungerBehavior().foodSaving() : Baritone.settings().foodSavingMode.value;
+        this.healthFloor = Baritone.settings().healthFloor.value;
+        this.hungerPlanning = Baritone.settings().hungerPlanning.value;
+        this.hungerExposureWeight = Baritone.settings().hungerExposureWeight.value;
+        java.util.List<Food> carriedFood = new java.util.ArrayList<>();
+        for (Food f : InventoryFood.foods(InventoryFood.carried(player))) {
+            if (!f.reserve && !f.risky) carriedFood.add(f);
+        }
+        this.bestFood = bestByPoints(carriedFood);
+        java.util.Arrays.fill(this.damageTicks, Double.NaN);
+        this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6 && !foodSaving;
         this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
         this.allowBreak = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowBreak.value;
         this.swimThroughLava = AltoClefSettings.getInstance().canSwimThroughLava();
@@ -210,9 +237,9 @@ public class CalculationContext {
             }
         }
         this.waterWalkSpeed = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier) + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
-        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
+        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value + (foodSaving ? Baritone.settings().foodSavingPenalty.value : 0);
         this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
-        this.jumpPenalty = Baritone.settings().jumpPenalty.value;
+        this.jumpPenalty = Baritone.settings().jumpPenalty.value + (foodSaving ? Baritone.settings().foodSavingPenalty.value : 0);
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         // why cache these things here, why not let the movements just get directly from settings?
@@ -320,5 +347,52 @@ public class CalculationContext {
     public boolean isPossiblyProtected(int x, int y, int z) {
         // TODO more protection logic here; see #220
         return false;
+    }
+
+    // Ostinato: hunger pricing of damage
+    private static Food bestByPoints(java.util.List<Food> foods) {
+        Food best = null;
+        double bestRate = -1;
+        for (Food f : foods) {
+            double rate = (f.nutrition + f.saturation) / (double) f.eatTicks;
+            if (rate > bestRate) {
+                bestRate = rate;
+                best = f;
+            }
+        }
+        return best;
+    }
+
+    /** The planner's minimum health: the higher of healthFloor and, under experimentalMovement, experimentalMinHealth. */
+    public double minHealth() {
+        return experimental ? Math.max(healthFloor, experimentalMinHealth) : healthFloor;
+    }
+
+    /**
+     * Cost in ticks of taking {@code hp} damage on this route: eat time plus regen exposure from the hunger model
+     * (see EatPlanner.damageCostTicks), or the old fixed fallDamageCost per half heart with hungerPlanning off.
+     * {@link baritone.api.pathing.movement.ActionCosts#COST_INF} when it would take us under the floor.
+     */
+    public double damageCost(double hp, boolean typeExhausts) {
+        if (hp <= 0) {
+            return 0;
+        }
+        if (health - hp < minHealth()) {
+            return ActionCosts.COST_INF;
+        }
+        if (!hungerPlanning) {
+            return hp * fallDamageCost;
+        }
+        int k = (int) Math.min(40, Math.ceil(hp));
+        double cached = typeExhausts ? Double.NaN : damageTicks[k];
+        if (!Double.isNaN(cached)) {
+            return cached;
+        }
+        double v = EatPlanner.damageCostTicks(hunger, k, typeExhausts ? HungerModel.EXHAUSTION_DAMAGE : 0,
+                bestFood, hungerExposureWeight, -1e9);
+        if (!typeExhausts) {
+            damageTicks[k] = v;
+        }
+        return v;
     }
 }

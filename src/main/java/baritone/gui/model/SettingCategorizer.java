@@ -57,7 +57,8 @@ public final class SettingCategorizer {
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
                 "movementBackend", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
                 "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "experimentalMovement", "experimentalJumpBias",
-                "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
+                "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost",
+                "hungerPlanning", "healthFloor", "hungerExposureWeight", "autoEat", "foodSavingMode", "autoFoodSaving", "foodSavingPenalty");
         put(m, PATHING, "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",

@@ -196,6 +196,9 @@ public class PathExecutor implements IPathExecutor, Helper {
         lastDriver = Driver.BARITONE;
         if (driverRest > 0) {
             driverRest--;
+        } else if (foodSavingOnGround()) {
+            // Ostinato: the physics/kinematic movers sprint and their jumps are planned at sprint speed; food-saving
+            // mode walks, so Baritone's movements (which follow canSprint) drive. A hop already in the air finishes.
         } else {
             long t0 = System.nanoTime(); // Ostinato: planning-time stats
             driven = physics.tick(behavior.baritone, path, pathPosition);
@@ -971,6 +974,11 @@ public class PathExecutor implements IPathExecutor, Helper {
 
     public Set<BlockPos> toWalkInto() {
         return Collections.unmodifiableSet(toWalkInto);
+    }
+
+    private boolean foodSavingOnGround() {
+        baritone.behavior.HungerBehavior hunger = behavior.baritone.getHungerBehavior();
+        return hunger != null && hunger.foodSaving() && ctx.player().onGround();
     }
 
     public boolean isSprinting() {

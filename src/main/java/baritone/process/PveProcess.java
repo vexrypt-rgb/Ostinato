@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.utils.PassableBlocks;
 import baritone.Baritone;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.pathing.goals.GoalRunAway;
@@ -306,9 +307,18 @@ public final class PveProcess extends BaritoneProcessHelper {
         if (weapon >= 0) select(me, weapon);
         use(false);
         boolean low = prof.kind == MobProfile.Kind.BOMB || target instanceof net.minecraft.world.entity.monster.Enderman;
-        look(low ? new Vec3(target.getX(), target.getY() + 0.3, target.getZ()) : swing.swingPoint(me, target, target.getDeltaMovement()));
+        Vec3 want = low ? new Vec3(target.getX(), target.getY() + 0.3, target.getZ()) : swing.swingPoint(me, target, target.getDeltaMovement());
+        // Ostinato: grass, torches and the like stop the crosshair; aim around them, break one only with no clear angle
+        Vec3 clearAim = PassableBlocks.clearAim(me.level(), me, me.getEyePosition(), target, want);
+        look(clearAim != null ? clearAim : want);
         double er = exactReach(me, target);
         float charge = me.getAttackStrengthScale(0.5f);
+        if (clearAim == null && er <= REACH - 0.05 && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.BlockHitResult bh
+                && bh.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                && PassableBlocks.isFreeAir(me.level().getBlockState(bh.getBlockPos()))) {
+            press(ctx.minecraft().options.keyAttack);
+            return decide("clear passable block in the way");
+        }
 
         if (er <= REACH - 0.05 && charge >= CHARGED && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult hr && hr.getEntity() == target) {
             press(ctx.minecraft().options.keyAttack);
