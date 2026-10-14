@@ -2044,6 +2044,26 @@ public final class Settings {
      */
     public final Setting<Boolean> physicsTravel = new Setting<>(false);
 
+    // Ostinato: in-game path visualizations for the kinematic and physics movers (baritone.pathing.viz.PathViz).
+
+    /** Kinematic travel: draw the corridor tube around the block path (rings and side rails), the next target and the walked part greyed. */
+    public final Setting<Boolean> renderKinCorridor = new Setting<>(true);
+
+    /** Kinematic travel: draw this tick's candidate rollouts, the chosen one green with tick dots, rejected ones red or orange with an X at the end. */
+    public final Setting<Boolean> renderKinRollouts = new Setting<>(true);
+
+    /** Kinematic travel: mark template jump take-offs, apexes and landings, and a red marker where the controller got stuck and handed back to Baritone. */
+    public final Setting<Boolean> renderKinJumps = new Setting<>(true);
+
+    /** Physics travel: draw the tick trajectory colored by horizontal speed, blue slow to red fast. */
+    public final Setting<Boolean> renderPhysSpeedTrail = new Setting<>(true);
+
+    /** Physics travel: draw a glyph per tick for the keys held (W, sprint, jump, A/D) and ghost hitboxes at jump, apex, landing and grab. */
+    public final Setting<Boolean> renderPhysInputs = new Setting<>(true);
+
+    /** Physics travel: draw the explored search tree, faint and fading by depth, and the planned against the actual trajectory with error links and replan markers. */
+    public final Setting<Boolean> renderPhysSearch = new Setting<>(true);
+
     /**
      * Key that opens the Ostinato settings screen in game, polled every client tick while no screen is open.
      * Takes a key name such as {@code RCONTROL}, {@code RSHIFT}, {@code F8}, {@code K} or {@code NONE} to disable.

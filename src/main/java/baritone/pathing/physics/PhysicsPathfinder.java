@@ -47,10 +47,12 @@ public final class PhysicsPathfinder {
         final Action action;
         final int ticks;
         final double f;
+        final int depth;
 
         Node(PlayerSim sim, Node parent, Action action, int ticks, double f) {
             this.sim = sim;
             this.parent = parent;
+            this.depth = parent == null ? 0 : parent.depth + 1;
             this.action = action;
             this.ticks = ticks;
             this.f = f;
@@ -85,8 +87,28 @@ public final class PhysicsPathfinder {
         this.maxNodes = maxNodes;
     }
 
-    /** Plans from {@code start} until standing within {@code radius} of the goal; null if none found. */
+    /** Ostinato path viz: where the explored tree goes (P3), or null to record nothing. */
+    private baritone.pathing.viz.PathViz viz;
+
+    public PhysicsPathfinder viz(baritone.pathing.viz.PathViz viz) {
+        this.viz = viz;
+        return this;
+    }
+
+    /** Plans from {@code start} until standing within {@code radius} of the goal (null if none found), recording the explored edges when the search view is on. */
     public List<Action> plan(PlayerSim start, double gx, double gy, double gz, double radius) {
+        boolean rec = viz != null && viz.beginTree();
+        try {
+            return plan0(start, gx, gy, gz, radius, rec);
+        } finally {
+            if (rec) {
+                viz.endTree();
+            }
+        }
+    }
+
+    /** Plans from {@code start} until standing within {@code radius} of the goal; null if none found. */
+    private List<Action> plan0(PlayerSim start, double gx, double gy, double gz, double radius, boolean rec) {
         PriorityQueue<Node> open = new PriorityQueue<>();
         Map<Long, Integer> best = new HashMap<>();
         open.add(new Node(new PlayerSim(world).copyFrom(start), null, null, 0, h(start, gx, gy, gz)));
@@ -107,7 +129,11 @@ public final class PhysicsPathfinder {
                     if (seen <= g) continue;
                     best.put(key(c), g);
                 }
-                open.add(new Node(c, n, a, g, g + h(c, gx, gy, gz)));
+                Node child = new Node(c, n, a, g, g + h(c, gx, gy, gz));
+                open.add(child);
+                if (rec) {
+                    viz.treeEdge(s.x, s.y, s.z, c.x, c.y, c.z, child.depth);
+                }
             }
         }
         return null;

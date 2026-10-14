@@ -35,6 +35,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.pathing.viz.PathViz;
 import baritone.utils.pathing.MutableMoveResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -455,6 +456,17 @@ public class MovementJump extends Movement {
                 state.setInput(Input.MOVE_FORWARD, false);
                 state.setInput(Input.MOVE_BACK, false);
                 state.setInput(Input.SPRINT, false);
+            }
+        }
+        // Ostinato path viz (K3): take-off, apex and landing of the template jump
+        if (js.jumped) {
+            PathViz viz = PathViz.get();
+            if (js.airTicks == 0) {
+                viz.jumpTakeoff(this, PathViz.JUMP, "jump " + t.a + "," + t.dy + "," + t.b, real.x, real.y, real.z);
+            } else if (landed) {
+                viz.jumpLand(this, real.x, real.y, real.z, false);
+            } else {
+                viz.jumpAir(this, real.x, real.y, real.z);
             }
         }
         return state;

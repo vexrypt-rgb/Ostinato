@@ -18,6 +18,8 @@ import baritone.pathing.movement.movements.MovementDiagonal;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementTraverse;
+import baritone.api.utils.Helper;
+import baritone.pathing.viz.PathViz;
 import baritone.utils.BlockStateInterface;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.util.Mth;
@@ -98,6 +100,11 @@ public final class KinematicController {
     /** Ticks the controller has driven the player, so callers can verify the backend is in use. */
     public static volatile long drivenTicks;
 
+    /** Path visualization: whether rollouts now are the fan of this tick's choice (not margin or strafe checks). */
+    private boolean vizRec;
+    /** The slot the running rollout records into, null when not recording. */
+    private PathViz.Rollout vizR;
+
     public KinematicController(IPlayerContext ctx) {
         this.ctx = ctx;
         this.world = new ClientWorld(ctx);
@@ -138,6 +145,8 @@ public final class KinematicController {
         if (here[1] > WIDE + 0.2) {
             return -1;
         }
+        PathViz viz = PathViz.get();
+        viz.corridor(line, here[0], WIDE);
         boolean arriving = end - here[0] < handback;
         narrowEnd = narrowAt(line.get(line.size() - 1));
         double moved = (real.x - lastX) * (real.x - lastX) + (real.z - lastZ) * (real.z - lastZ);
@@ -153,6 +162,7 @@ public final class KinematicController {
             } else {
                 recenters = 0;
                 cooldown = 60;
+                viz.stuck(real.x, real.y, real.z, "M01 kinematic stuck");
                 Baritone.settings().movementFault.value.accept("M01", "kinematic stuck at " + ctx.playerFeet() + ", handing back to Baritone");
                 return -1;
             }
@@ -189,37 +199,50 @@ public final class KinematicController {
         float walkOff = 0;
         boolean walkShort = false;
         double walkScore = -1e9;
+        vizRec = viz.beginRollouts();
+        int bestR = -1, walkR = -1;
         for (int delay : longJump ? DELAYS : JUMP_OR_NOT) {
             for (float off : delay <= 0 ? YAW_OFFSETS : NO_OFFSET) {
                 double score = rollout(off, delay, false, here[0]);
+                PathViz.Rollout r = vizR;
+                int ri = viz.rolloutCount - 1;
                 if (score > bestScore + 1e-6 && !holdsWithMargin(off, delay, here[0])) {
                     score = -1e9; // the real jump leaves a little later or shorter than the sim's: a barely-landing plan is out
+                    if (r != null) {
+                        r.reason = "barely lands";
+                        r.score = score;
+                    }
                 }
                 if (score > bestScore + 1e-6) {
                     bestScore = score;
                     best = off;
                     bestDelay = delay;
                     bestShort = false;
+                    bestR = r != null ? ri : -1;
                 }
                 if (delay == NEVER && score > walkScore + 1e-6) {
                     walkScore = score;
                     walkOff = off;
                     walkShort = false;
+                    walkR = r != null ? ri : -1;
                 }
             }
             if (delay <= 0) {
                 // steering at the line right beside the player first: gets the box off a corner it snagged on
                 double score = rollout(0, delay, true, here[0]);
+                int ri = vizR != null ? viz.rolloutCount - 1 : -1;
                 if (delay == NEVER && score > walkScore + 1e-6) {
                     walkScore = score;
                     walkOff = 0;
                     walkShort = true;
+                    walkR = ri;
                 }
                 if (score > bestScore + 1e-6) {
                     bestScore = score;
                     best = 0;
                     bestDelay = delay;
                     bestShort = true;
+                    bestR = ri;
                 }
             }
         }
@@ -229,6 +252,14 @@ public final class KinematicController {
             best = walkOff;
             bestShort = walkShort;
             bestDelay = NEVER;
+            bestR = walkR;
+        }
+        if (vizRec) {
+            vizRec = false;
+            viz.chooseRollout(bestScore <= here[0] + 0.05 ? -1 : bestR);
+            if (Baritone.settings().chatDebug.value && ctx.player().tickCount % 20 == 0 && !viz.rolloutSummary.isEmpty()) {
+                Helper.HELPER.logDebug("kinematic rejects: " + viz.rolloutSummary);
+            }
         }
         boolean bestJump = bestDelay == 0 && real.onGround;
         int strafe = 0;
@@ -322,6 +353,22 @@ public final class KinematicController {
     }
 
         private double rollout(float yawOffset, int delay, boolean shortAim, double s0) {
+        vizR = vizRec ? PathViz.get().startRollout(yawOffset, delay) : null;
+        double r = rollout0(yawOffset, delay, shortAim, s0);
+        if (vizR != null) {
+            vizR.score = r;
+        }
+        return r;
+    }
+
+    private double reject(String why) {
+        if (vizR != null) {
+            vizR.reason = why;
+        }
+        return -1e9;
+    }
+
+    private double rollout0(float yawOffset, int delay, boolean shortAim, double s0) {
         sim.copyFrom(real);
         simTop = real.y + (real.onGround ? 0 : ctx.player().fallDistance);
         double s = s0, score = Double.NaN;
@@ -346,13 +393,23 @@ public final class KinematicController {
                 bumps++; // grazing a wall or trunk cancels sprint (and the sprint-jump boost) in vanilla
             }
             wasBumping = sim.collidedH;
+            if (vizR != null) {
+                vizR.point(sim.x, sim.y, sim.z);
+            }
             double[] pr = project(line, sim.x, sim.y, sim.z, s + REACH_AHEAD);
-            if (hardLanding() || pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
+            if (vizR != null) {
+                // Ostinato path viz: the same tests as below, one at a time, to name the reason
+                if (hardLanding()) return reject("hard landing");
+                if (pr[1] > WIDE) return reject("exits corridor");
+                if (hazard(sim.x, sim.y, sim.z)) return reject("hazard");
+                if (sim.y < floorAt(pr[0]) - 0.4) return reject("falls below path");
+                if (climbedOff(pr[0])) return reject("climbs off path");
+            } else if (hardLanding() || pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
                 return -1e9;
             }
             s = Math.max(s, pr[0]);
             if (Double.isNaN(score) && s >= end - 0.3) {
-                return settles(cam, camVel, s) ? s + (HORIZON - t) * 0.3 - BUMP * bumps : -1e9; // reached the end early
+                return settles(cam, camVel, s) ? s + (HORIZON - t) * 0.3 - BUMP * bumps : reject("lands in gap"); // reached the end early
             }
             if (t == HORIZON - 1) {
                 // keep a little credit for speed along the path so it prefers carrying momentum
@@ -362,7 +419,7 @@ public final class KinematicController {
                 return score; // on the path with no jump pending: nothing later in this plan can fall in
             }
         }
-        return settles(cam, camVel, s) ? score : -1e9;
+        return settles(cam, camVel, s) ? score : reject("lands in gap");
     }
 
     /** Call after every rollout tick: whether the rollout just touched down from further up than is safe. */
@@ -405,7 +462,10 @@ public final class KinematicController {
         double x = real.x, z = real.z;
         real.x -= real.vx / hs * 0.25;
         real.z -= real.vz / hs * 0.25;
+        boolean rec = vizRec;
+        vizRec = false;
         double r = rollout(off, delay, false, s0);
+        vizRec = rec;
         real.x = x;
         real.z = z;
         return r > -1e8;

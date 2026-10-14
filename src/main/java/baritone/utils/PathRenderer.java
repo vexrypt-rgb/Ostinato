@@ -90,6 +90,11 @@ public final class PathRenderer implements IRenderer {
             return;
         }
 
+        // Ostinato: kinematic / physics mover visualizations (PathVizRenderer), for the player's own bot only
+        if (behavior.baritone == BaritoneAPI.getProvider().getPrimaryBaritone()) {
+            PathVizRenderer.render(event.getModelViewStack());
+        }
+
         if (goal != null && settings.renderGoal.value) {
             drawGoal(event.getModelViewStack(), ctx, goal, partialTicks, settings.colorGoalBox.value);
         }

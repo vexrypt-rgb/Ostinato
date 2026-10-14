@@ -314,5 +314,11 @@
  "renderAcsHud": "Show the Autotune Combat System card on the HUD while #pvp is fighting. Hidden while F3 is open.",
  "acsHudAnchor": "Where the Autotune card sits: TOP_LEFT, LEFT, TOP_RIGHT or RIGHT.",
  "acsHudOpacity": "How solid the Autotune card's background is, from 0 (text only) to 1.",
- "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale."
+ "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.",
+ "renderKinCorridor": "Kinematic travel: draw the corridor tube around the block path (rings and side rails), the next target and the walked part greyed.",
+ "renderKinRollouts": "Kinematic travel: draw this tick's candidate rollouts, the chosen one green with tick dots, rejected ones red or orange with an X at the end.",
+ "renderKinJumps": "Kinematic travel: mark template jump take-offs, apexes and landings, and a red marker where the controller got stuck and handed back to Baritone.",
+ "renderPhysSpeedTrail": "Physics travel: draw the tick trajectory colored by horizontal speed, blue slow to red fast.",
+ "renderPhysInputs": "Physics travel: draw a glyph per tick for the keys held (W, sprint, jump, A/D) and ghost hitboxes at jump, apex, landing and grab.",
+ "renderPhysSearch": "Physics travel: draw the explored search tree, faint and fading by depth, and the planned against the actual trajectory with error links and replan markers."
 }
