@@ -44,15 +44,17 @@ import java.awt.Color;
 import java.util.*;
 
 /**
- * The Ostinato settings screen: category sidebar, search, typed rows with inline editors, hover tooltips,
- * per-setting reset and debounced saving of GUI edits only. Layout is in GUI units and matches the approved
- * 640x360 (1280x720 at GUI scale 2) mockup.
+ * The Ostinato menu. Settings keep the category sidebar, search, typed rows, and inline editors.
+ * Studio is a schematic builder with an orbit camera. Arcade is three small games.
+ * GUI edits still save to settings.txt. The studio writes its own file when asked.
  */
 public final class OstinatoScreen extends Screen {
 
     private enum Kind { TOGGLE, SLIDER, NUMBER, CYCLE, COLOR, TEXT, KEYBIND }
 
     private enum Filter { ALL, TOGGLES, MODIFIED }
+
+    private enum Desk { SETTINGS, TASKS, STUDIO, ARCADE }
 
     private static final class Entry {
         final Settings.Setting<?> s;
@@ -133,7 +135,11 @@ public final class OstinatoScreen extends Screen {
     private final Map<SettingCategory, Anim> catHover = new EnumMap<>(SettingCategory.class);
     private final Anim modHover = new Anim(0, 18);
     private final Anim tasksHover = new Anim(0, 18);
+    private final Anim studioHover = new Anim(0, 18);
+    private final Anim arcadeHover = new Anim(0, 18);
     private static final ItemStack TASKS_ICON = new ItemStack(Items.MAP);
+    private static final ItemStack STUDIO_ICON = new ItemStack(Items.STRUCTURE_BLOCK);
+    private static final ItemStack ARCADE_ICON = new ItemStack(Items.NOTE_BLOCK);
     private final Anim open = new Anim(0, 14);
     private final Anim scrollAnim = new Anim(0, 20);
     private final TextInput search = new TextInput(48);
@@ -141,8 +147,10 @@ public final class OstinatoScreen extends Screen {
 
     private SettingCategory selected = SettingCategory.MOVEMENT;
     private boolean modifiedView;
-    private boolean tasksView;
+    private Desk desk = Desk.SETTINGS;
     private final TasksPanel tasks = new TasksPanel(this);
+    private final StudioPanel studio = new StudioPanel(this);
+    private final ArcadePanel arcade = new ArcadePanel(this);
     private Filter filter = Filter.ALL;
     private boolean searchFocused;
     private List<Entry> rows = new ArrayList<>();
@@ -420,8 +428,9 @@ public final class OstinatoScreen extends Screen {
 
     // ------------------------------------------------------------------ layout
 
+    /** Studio, Arcade, Tasks, and Modified, then one row per category that has settings. */
     private int sideItemCount() {
-        int n = 2;
+        int n = 4;
         for (SettingCategory c : SettingCategory.values()) {
             List<Entry> l = byCat.get(c);
             if (l != null && !l.isEmpty()) {
@@ -448,8 +457,9 @@ public final class OstinatoScreen extends Screen {
     }
 
     private void layout() {
-        float w = width >= 444 ? Math.max(340, Math.min(620, width - 104)) : width - 16;
-        float h = Math.max(200, Math.min(400, height - 46));
+        boolean roomy = (desk == Desk.STUDIO || desk == Desk.ARCADE) && search.get().trim().isEmpty();
+        float w = width >= 444 ? Math.max(340, Math.min(roomy ? 760 : 620, width - (roomy ? 48 : 104))) : width - 16;
+        float h = Math.max(200, Math.min(roomy ? 460 : 400, height - (roomy ? 32 : 46)));
         if (h > height - 8) {
             h = height - 8;
         }
@@ -578,11 +588,14 @@ public final class OstinatoScreen extends Screen {
         GuiDraw.scissor(x0, hb + 1, sbx1, fy);
         float iy = hb + 8 - sideScroll;
         boolean searching = !search.get().trim().isEmpty();
-        iy = sideItem(ms, iy, "Tasks", TaskService.INSTANCE.list().size(), TASKS_ICON, tasksView && !searching, tasksHover, mx, my, accent, false,
+        boolean onSettings = desk == Desk.SETTINGS;
+        iy = sideItem(ms, iy, "Studio", studio.blockCount(), STUDIO_ICON, desk == Desk.STUDIO && !searching, studioHover, mx, my, accent, false, false);
+        iy = sideItem(ms, iy, "Arcade", 3, ARCADE_ICON, desk == Desk.ARCADE && !searching, arcadeHover, mx, my, accent, false, false);
+        iy = sideItem(ms, iy, "Tasks", TaskService.INSTANCE.list().size(), TASKS_ICON, desk == Desk.TASKS && !searching, tasksHover, mx, my, accent, false,
                 TaskService.INSTANCE.runner.active());
         GuiDraw.rect(ms, x0 + 10, iy + 2, sbx1 - 10, iy + 3, 0x10FFFFFF);
         iy += 6;
-        iy = sideItem(ms, iy, "Modified", countModified(), null, modifiedView && !tasksView && !searching, modHover, mx, my, accent, true, false);
+        iy = sideItem(ms, iy, "Modified", countModified(), null, modifiedView && onSettings && !searching, modHover, mx, my, accent, true, false);
         GuiDraw.rect(ms, x0 + 10, iy + 2, sbx1 - 10, iy + 3, 0x10FFFFFF);
         iy += 6;
         for (SettingCategory c : SettingCategory.values()) {
@@ -590,7 +603,7 @@ public final class OstinatoScreen extends Screen {
             if (l == null || l.isEmpty()) {
                 continue;
             }
-            iy = sideItem(ms, iy, c.displayName, l.size(), icon(c), !modifiedView && !tasksView && !searching && c == selected, catHover.get(c), mx, my, accent, false, false);
+            iy = sideItem(ms, iy, c.displayName, l.size(), icon(c), onSettings && !modifiedView && !searching && c == selected, catHover.get(c), mx, my, accent, false, false);
         }
         GuiDraw.endScissor();
         if (maxSideScroll > 0) {
@@ -671,7 +684,23 @@ public final class OstinatoScreen extends Screen {
     }
 
     private boolean showTasks() {
-        return tasksView && search.get().trim().isEmpty();
+        return desk == Desk.TASKS && search.get().trim().isEmpty();
+    }
+
+    private boolean showStudio() {
+        return desk == Desk.STUDIO && search.get().trim().isEmpty();
+    }
+
+    private boolean showArcade() {
+        return desk == Desk.ARCADE && search.get().trim().isEmpty();
+    }
+
+    private void layoutStudio() {
+        studio.layout(px0, px1, hb + 6, fy - 4);
+    }
+
+    private void layoutArcade() {
+        arcade.layout(px0, px1, hb + 6, fy - 4);
     }
 
     private static final float DROP_ITEM_H = 12;
@@ -734,6 +763,16 @@ public final class OstinatoScreen extends Screen {
     }
 
     private Entry drawContent(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
+        if (showStudio()) {
+            layoutStudio();
+            studio.draw(ms, mx, my, accent, now);
+            return null;
+        }
+        if (showArcade()) {
+            layoutArcade();
+            arcade.draw(ms, mx, my, accent, now);
+            return null;
+        }
         if (showTasks()) {
             tasks.layout(px0, px1, hb, fy);
             tasks.draw(ms, mx, my, accent, now);
@@ -936,6 +975,8 @@ public final class OstinatoScreen extends Screen {
         float ty = fy + 9;
         float fx = x0 + 12;
         boolean tv = showTasks();
+        boolean studioOn = showStudio();
+        boolean arcadeOn = showArcade();
         if (tv) {
             int n = TaskService.INSTANCE.list().size();
             fx += GuiDraw.text(ms, n + (n == 1 ? " step" : " steps"), fx, ty, Theme.MUTED, false) + 5;
@@ -943,6 +984,11 @@ public final class OstinatoScreen extends Screen {
             fx += 6;
             boolean loop = TaskService.INSTANCE.list().loop();
             fx += GuiDraw.text(ms, loop ? "loop on" : "loop off", fx, ty, loop ? accent : Theme.MUTED, false) + 5;
+        } else if (studioOn) {
+            int n = studio.blockCount();
+            fx += GuiDraw.text(ms, n + (n == 1 ? " block" : " blocks"), fx, ty, Theme.MUTED, false) + 5;
+        } else if (arcadeOn) {
+            fx += GuiDraw.text(ms, "Arcade", fx, ty, Theme.MUTED, false) + 5;
         } else {
             fx += GuiDraw.text(ms, all.size() + " settings", fx, ty, Theme.MUTED, false) + 5;
             GuiDraw.rect(ms, fx, ty + 3, fx + 1.5f, ty + 4.5f, Theme.DIM);
@@ -960,6 +1006,12 @@ public final class OstinatoScreen extends Screen {
         } else if (tv) {
             info = tasks.footerStatus();
             infoCol = tasks.footerStatusColor();
+        } else if (studioOn) {
+            info = "Drag orbits. Scroll zooms. Left click places.";
+            infoCol = Theme.DIM;
+        } else if (arcadeOn) {
+            info = arcade.hint();
+            infoCol = Theme.DIM;
         } else if (store.lastError() != null) {
             info = "Save failed: " + store.lastError();
             infoCol = Theme.DANGER;
@@ -977,7 +1029,7 @@ public final class OstinatoScreen extends Screen {
         float bxr = button(ms, "Done", x1 - 10, true, mx, my, accent) - 5;
         bxr = button(ms, freecamLabel(), bxr, false, mx, my, accent) - 5;
         boolean confirm = now < resetConfirmUntil;
-        if (!tv) {
+        if (!tv && !studioOn && !arcadeOn) {
             bxr = button(ms, confirm ? "Click to confirm" : resetLabel(), bxr, false, mx, my, confirm ? Theme.DANGER : accent) - 10;
         } else {
             bxr -= 5;
@@ -1139,11 +1191,29 @@ public final class OstinatoScreen extends Screen {
             return true;
         }
         searchFocused = false;
-        // sidebar
+        // sidebar — same order as drawSidebar: Studio, Arcade, Tasks, divider, Modified, divider, categories
         float iy = hb + 8 - sideScroll;
         boolean inSide = in(mx, my, x0, hb + 1, sbx1, fy);
         if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
-            tasksView = true;
+            desk = Desk.STUDIO;
+            modifiedView = false;
+            search.set("");
+            searchFocused = false;
+            rebuild();
+            return true;
+        }
+        iy += sideH + 1;
+        if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
+            desk = Desk.ARCADE;
+            modifiedView = false;
+            search.set("");
+            searchFocused = false;
+            rebuild();
+            return true;
+        }
+        iy += sideH + 1;
+        if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
+            desk = Desk.TASKS;
             modifiedView = false;
             search.set("");
             searchFocused = false;
@@ -1152,7 +1222,7 @@ public final class OstinatoScreen extends Screen {
         }
         iy += sideH + 1 + 6;
         if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
-            tasksView = false;
+            desk = Desk.SETTINGS;
             modifiedView = true;
             search.set("");
             filter = Filter.ALL;
@@ -1166,7 +1236,7 @@ public final class OstinatoScreen extends Screen {
                 continue;
             }
             if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
-                tasksView = false;
+                desk = Desk.SETTINGS;
                 modifiedView = false;
                 selected = c;
                 search.set("");
@@ -1192,11 +1262,21 @@ public final class OstinatoScreen extends Screen {
             }
             return true;
         }
-        if (showTasks()) {
+        if (showStudio() || showArcade() || showTasks()) {
             if (in(mx, my, x1 - 10 - doneW0, fy + 5, x1 - 10, fy + 19)) {
                 onClose();
                 return true;
             }
+        }
+        if (showStudio()) {
+            layoutStudio();
+            return studio.mouseClicked(mx, my, button);
+        }
+        if (showArcade()) {
+            layoutArcade();
+            return arcade.mouseClicked(mx, my, button);
+        }
+        if (showTasks()) {
             tasks.layout(px0, px1, hb, fy);
             return tasks.mouseClicked(mx, my, button) || false;
         }
@@ -1350,6 +1430,12 @@ public final class OstinatoScreen extends Screen {
     @Override
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent ev, double dx, double dy) {
         double mx = ev.x(), my = ev.y();
+        if (studio.dragging()) {
+            layout();
+            layoutStudio();
+            studio.mouseDragged(mx, my);
+            return true;
+        }
         if (dragging != null) {
             dragSlider(dragging, mx);
             return true;
@@ -1363,6 +1449,9 @@ public final class OstinatoScreen extends Screen {
 
     @Override
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent ev) {
+        if (studio.dragging()) {
+            studio.mouseReleased(ev.x(), ev.y());
+        }
         dragging = null;
         draggingThumb = false;
         return super.mouseReleased(ev);
@@ -1373,6 +1462,15 @@ public final class OstinatoScreen extends Screen {
         layout();
         if (dropdown != null) {
             dropScroll += delta > 0 ? -1 : 1;
+            return true;
+        }
+        if (showStudio()) {
+            layoutStudio();
+            if (studio.mouseScrolled(mx, my, delta)) {
+                return true;
+            }
+        }
+        if (showArcade() && in(mx, my, px0, hb, px1, fy)) {
             return true;
         }
         if (showTasks()) {
@@ -1433,6 +1531,10 @@ public final class OstinatoScreen extends Screen {
             }
             return true;
         }
+        if (showStudio() && studio.nameFocused()) {
+            studio.keyPressed(key);
+            return true;
+        }
         if (key == InputConstants.KEY_F && Keys.ctrl()) {
             searchFocused = true;
             search.selectAll();
@@ -1464,6 +1566,27 @@ public final class OstinatoScreen extends Screen {
         if (key == InputConstants.KEY_ESCAPE || (!searchFocused && key == KeyNames.parse(settings.guiKeybind.value))) {
             onClose();
             return true;
+        }
+        if (showStudio() && studio.keyPressed(key)) {
+            return true;
+        }
+        if (showArcade()) {
+            if (arcade.keyPressed(key)) {
+                return true;
+            }
+            switch (key) {
+                case InputConstants.KEY_LEFT:
+                case InputConstants.KEY_RIGHT:
+                case InputConstants.KEY_UP:
+                case InputConstants.KEY_DOWN:
+                case InputConstants.KEY_PAGEUP:
+                case InputConstants.KEY_PAGEDOWN:
+                case InputConstants.KEY_HOME:
+                case InputConstants.KEY_END:
+                    return true;
+                default:
+                    break;
+            }
         }
         float page = listBottom - ry0 - ROW_H;
         switch (key) {
@@ -1522,8 +1645,11 @@ public final class OstinatoScreen extends Screen {
             tasks.charTyped(c);
             return true;
         }
-        if (!searchFocused && showTasks()) {
-            return false; // typing on the Tasks tab does not jump to settings search
+        if (showStudio() && studio.nameFocused()) {
+            return studio.charTyped(c);
+        }
+        if (!searchFocused && (showTasks() || showStudio() || showArcade())) {
+            return false; // typing in Studio, Arcade, or Tasks does not jump to settings search
         }
         if (!searchFocused) {
             searchFocused = true;
