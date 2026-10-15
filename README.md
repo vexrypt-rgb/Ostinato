@@ -46,6 +46,81 @@ The first build may take some time: Unimined downloads and remaps Minecraft for
 the enabled loaders. `available_loaders` on `main` is Fabric. Build outputs go
 to `dist/`. The Fabric artifact TenorClef consumes is `:fabric:build`.
 
+## Menu
+
+Right Control opens the menu in a world (`guiKeybind`). Settings are still the first page, and the search box still filters them. Studio, Arcade, and Tasks are at the top of the sidebar. These pictures are from the 26.3 dev client.
+
+### Settings
+
+![Settings, on the Movement page](docs/images/gui-settings.png)
+
+Movement, pathing, and the rest of the settings. A change is written to `settings.txt`.
+
+### Studio
+
+![Studio orbit view of a small house](docs/images/gui-studio.png)
+
+Studio is a schematic editor in the menu. Drag orbits the camera, shift-drag or middle-drag pans, and the scroll wheel zooms. Left click places the selected block, right click erases, `[` and `]` change the block, the arrow keys nudge the camera, Ctrl+Z undoes, and Ctrl+S saves. The volume starts at 24×12×24 and will not grow past 32 on a side. A save is `schematics/<name>.ostinato`. Build hands that schematic to the builder at your feet and leaves the menu open. The house in the picture is oak and stone brick; the glass and the door are on the far side of this view.
+
+### Arcade
+
+Three small games, for when a path is running and there is nothing to click.
+
+![Slide](docs/images/gui-arcade-slide.png)
+
+Slide is a 4×4 board. Arrows or WASD move the tiles.
+
+![Mines](docs/images/gui-arcade-mines.png)
+
+Mines is a 9×9 field with 10 mines. Left click opens a cell, right click plants a flag, and the first open cell is never a mine.
+
+![Motif](docs/images/gui-arcade-motif.png)
+
+Motif plays a short pattern on four pads. Watch, then press 1 to 4 or click the pads.
+
+## Path view
+
+While kinematic or physics travel is driving, Ostinato draws that plan in the world and hides Baritone's path ribbon. The card in the corner is the path status (block, distance, ETA, and the current movement). Six settings, on by default:
+
+| Setting | What it draws |
+| --- | --- |
+| `renderKinCorridor` | The corridor around the block path. The next node is a green frame, the centerline is peach, and the part already walked goes grey. After a hand-back the frame goes orange, or red if the move is stuck. |
+| `renderKinRollouts` | The candidate arcs for this tick. The chosen plan is green. The others are lifted beside it, orange, or red when rejected. |
+| `renderKinJumps` | Takeoff, the flown arc, climb marks, and the landing. A hand-back is orange. A stuck move is a red marker. |
+| `renderPhysSpeedTrail` | The tick path colored by horizontal speed, blue when slow and red when fast. |
+| `renderPhysInputs` | A mark for the keys of each tick (W, sprint, jump, A, D) and a ghost box at the jump, the apex, the landing, and a grab. |
+| `renderPhysSearch` | The explored search, the chosen path against the path actually flown, and a purple diamond where a replan happened. |
+
+The pictures below are from a dev client on a parkour course. Each one is a single moment, so it does not show every color in the table.
+
+### Kinematic
+
+![Kinematic corridor on a beam](docs/images/path-kinematic-corridor.png)
+
+The corridor: a green frame on the next node and a peach centerline along the beam.
+
+![Kinematic rollout fan](docs/images/path-kinematic-rollouts.png)
+
+Rollouts on a chain jump. The chosen arc is green. The other candidates sit beside it.
+
+![Kinematic jump marks](docs/images/path-kinematic-jumps.png)
+
+Jump marks on a climb: pink diamonds over the lip, the flown arc in yellow, and the landing in cyan.
+
+### Physics
+
+![Physics input marks](docs/images/path-physics-inputs.png)
+
+Input marks on a jump: orange jump ticks stepping out from the player, with ghost boxes for the jump and the landing.
+
+![Physics speed trail](docs/images/path-physics-speed.png)
+
+The speed trail on a fast climb, white through orange. The corridor frame is in this shot as well.
+
+![Physics search marker](docs/images/path-physics-search.png)
+
+A replan on a chain jump. The purple diamond is the search marker. The peach line is the path under the player.
+
 ## TenorClef integration
 
 Keep the trees as siblings. Build Ostinato first, then TenorClef.
