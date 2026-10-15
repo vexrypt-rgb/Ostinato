@@ -58,6 +58,10 @@ public class ZeroCycleTest {
         assertEquals(6, ZeroCycle.nearestPillar(7));
         assertEquals(0, ZeroCycle.nearestPillar(0));
         assertEquals(5, ZeroCycle.nearestPillar(6));
+        assertArrayEquals(new int[]{42, 77, 0}, ZeroCycle.crystalBlock(0, 0));
+        assertArrayEquals(new int[]{-42, 104, -1}, ZeroCycle.crystalBlock(5, 9));
+        assertEquals(13, ZeroCycle.perchSides(10));
+        assertEquals(3, ZeroCycle.perchSides(0));
     }
 
     @Test
