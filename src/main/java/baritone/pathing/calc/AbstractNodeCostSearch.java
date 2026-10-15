@@ -47,13 +47,34 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     private final CalculationContext context;
 
     /**
+     * Nodes live in 16x8x16 cells and only the cells go in the map, so neighbouring lookups hit the cell just used
+     * instead of missing the cache in one big position-to-node map. Ported from Soprano
+     * (https://github.com/AverWasTaken/soprano, LGPL-3.0, by AverWasTaken),
+     * src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java.
+     *
      * @see <a href="https://github.com/cabaletta/baritone/issues/107">Issue #107</a>
      */
-    private final Long2ObjectOpenHashMap<PathNode> map;
+    private final Long2ObjectOpenHashMap<PathNode[]> cells;
+    private PathNode[] prevCell;
+    private long prevCellKey = Long.MIN_VALUE;
+    private int numNodesCreated;
+
+    private static final int CELL_BITS_X = 4;
+    private static final int CELL_BITS_Y = 3;
+    private static final int CELL_BITS_Z = 4;
+    private static final int CELL_SIZE = 1 << (CELL_BITS_X + CELL_BITS_Y + CELL_BITS_Z);
 
     /** Ostinato: every node the search has reached. */
     protected Iterable<PathNode> nodes() {
-        return map.values();
+        java.util.ArrayList<PathNode> all = new java.util.ArrayList<>(numNodesCreated);
+        for (PathNode[] cell : cells.values()) {
+            for (int i = 0; i < cell.length; i++) {
+                if (cell[i] != null) {
+                    all.add(cell[i]);
+                }
+            }
+        }
+        return all;
     }
 
     protected PathNode startNode;
@@ -77,6 +98,15 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
      */
     protected static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10};
 
+    /** 1 / COEFFICIENTS, so the inner loop multiplies instead of dividing (from Soprano's AbstractNodeCostSearch). */
+    protected static final double[] INVERSE_COEFFICIENTS = new double[COEFFICIENTS.length];
+
+    static {
+        for (int i = 0; i < COEFFICIENTS.length; i++) {
+            INVERSE_COEFFICIENTS[i] = 1 / COEFFICIENTS[i];
+        }
+    }
+
     /**
      * If a path goes less than 5 blocks and doesn't make it to its goal, it's not worth considering.
      */
@@ -98,7 +128,7 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         this.startZ = startZ;
         this.goal = goal;
         this.context = context;
-        this.map = new Long2ObjectOpenHashMap<>(Baritone.settings().pathingMapDefaultSize.value, Baritone.settings().pathingMapLoadFactor.value);
+        this.cells = new Long2ObjectOpenHashMap<>(Baritone.settings().pathingMapDefaultSize.value, Baritone.settings().pathingMapLoadFactor.value);
     }
 
     public void cancel() {
@@ -111,6 +141,7 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
             throw new IllegalStateException("Path finder cannot be reused!");
         }
         cancelRequested = false;
+        context.claimSearchCaches();
         try {
             long t0 = System.nanoTime(); // Ostinato: planning-time stats
             IPath path = allowReuse ? RouteReuse.cut(startX, startY, startZ, goal, context) : null;
@@ -154,6 +185,7 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         } finally {
             // this is run regardless of what exception may or may not be raised by calculate0
             isFinished = true;
+            context.releaseSearchCaches();
         }
     }
 
@@ -188,10 +220,29 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
      */
 
     protected PathNode getNodeAtPosition(int x, int y, int z, long hashCode) {
-        PathNode node = map.get(hashCode);
+        long cellKey = ((long) ((x >> CELL_BITS_X) & 0xFFFFFFF) << 36)
+                | ((long) ((z >> CELL_BITS_Z) & 0xFFFFFFF) << 8)
+                | ((y >> CELL_BITS_Y) & 0xFF);
+        PathNode[] cell;
+        if (cellKey == prevCellKey) {
+            cell = prevCell;
+        } else {
+            cell = cells.get(cellKey);
+            if (cell == null) {
+                cell = new PathNode[CELL_SIZE];
+                cells.put(cellKey, cell);
+            }
+            prevCell = cell;
+            prevCellKey = cellKey;
+        }
+        int index = ((y & ((1 << CELL_BITS_Y) - 1)) << (CELL_BITS_X + CELL_BITS_Z))
+                | ((z & ((1 << CELL_BITS_Z) - 1)) << CELL_BITS_X)
+                | (x & ((1 << CELL_BITS_X) - 1));
+        PathNode node = cell[index];
         if (node == null) {
             node = new PathNode(x, y, z, goal);
-            map.put(hashCode, node);
+            cell[index] = node;
+            numNodesCreated++;
         }
         return node;
     }
@@ -257,6 +308,6 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     }
 
     protected int mapSize() {
-        return map.size();
+        return numNodesCreated;
     }
 }

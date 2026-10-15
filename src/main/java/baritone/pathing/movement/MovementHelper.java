@@ -723,6 +723,25 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static double getMiningDurationTicks(CalculationContext context, int x, int y, int z, BlockState state, boolean includeFalling) {
+        // per-search memo, ported from Soprano's MovementHelper (https://github.com/AverWasTaken/soprano, LGPL-3.0)
+        long[] keys = includeFalling ? context.miningKeysFalling : context.miningKeys;
+        if (keys == null || context.miningOwner != Thread.currentThread()) {
+            return getMiningDurationTicks0(context, x, y, z, state, includeFalling);
+        }
+        // y is shifted so it's never negative, so the all-ones key (the empty marker) would need y=4095
+        long key = ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | ((y - context.minY) & 0xFFF);
+        int slot = (int) ((key * 0x9E3779B97F4A7C15L) >>> (64 - context.miningCacheBits));
+        double[] vals = includeFalling ? context.miningValsFalling : context.miningVals;
+        if (keys[slot] == key) {
+            return vals[slot];
+        }
+        double result = getMiningDurationTicks0(context, x, y, z, state, includeFalling);
+        keys[slot] = key;
+        vals[slot] = result;
+        return result;
+    }
+
+    static double getMiningDurationTicks0(CalculationContext context, int x, int y, int z, BlockState state, boolean includeFalling) {
         Block block = state.getBlock();
         if (!canWalkThrough(context, x, y, z, state)) {
             if (!state.getFluidState().isEmpty()) {
