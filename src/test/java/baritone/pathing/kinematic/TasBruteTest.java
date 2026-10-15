@@ -188,6 +188,31 @@ public class TasBruteTest {
     }
 
     /**
+     * The two-yaw grid misses headhitter_gap2 from the lip facing the gap. MovementJump uses this budget when that
+     * happens: 2500 wide, 22 ticks, back allowed. The jump stays in front of its start, so the path does not rewind.
+     */
+    @Test
+    public void headHitterLipFacingTheGap() {
+        BoxWorld w = new BoxWorld().fill(-1, -1, 0, 1, -1, 2, BoxWorld.FULL).put(0, -1, 5, BoxWorld.FULL).put(0, 2, 2, BoxWorld.FULL);
+        TasBrute b = new TasBrute(w);
+        b.allowBack = true;
+        b.maxTurn = 32;
+        b.beam = 2500;
+        b.maxTicks = 22;
+        long t0 = System.nanoTime();
+        TasBrute.Result r = b.search(standing(w, 0.5, 0, 2.2), 0, new TasBrute.Landing(0, 0, 5));
+        System.out.printf("TAS hh-lip-face %s (%d ms)%n", r == null ? "NONE" : r.ticks() + "t " + r, (System.nanoTime() - t0) / 1_000_000);
+        assertNotNull(r);
+        PlayerSim p = standing(w, 0.5, 0, 2.2);
+        double minZ = p.z;
+        for (int t = 0; t < r.ticks(); t++) {
+            p.tick(r.yaw[t], r.input[t], r.input[t] > 0, r.jump[t]);
+            minZ = Math.min(minZ, p.z);
+        }
+        assertTrue("the lip jump stays in front of its start, so the path does not rewind", minZ >= 2.2 - 1e-6);
+    }
+
+    /**
      * Ground friction is 0.546 a tick. A sprint jump still has enough speed to jump again if the next jump is pressed
      * on the landing tick; three ticks of no keys (the old settle) leaves a walk. MovementJump hands a centered fast
      * landing straight to the next movement for that reason.

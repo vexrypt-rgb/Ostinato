@@ -23,6 +23,7 @@ import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.pathing.kinematic.SimTrace;
+import baritone.pathing.kinematic.TasBrute;
 import baritone.api.pathing.movement.MovementStatus;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Rotation;
@@ -150,6 +151,12 @@ public class MovementJump extends Movement {
     private boolean carrySearched;
     /** The moving take-off was already given one capped-yaw search. */
     private boolean slewTried;
+    /**
+     * The two-yaw grid missed, so one beam search is flying instead. Same budget as
+     * {@code TasBruteTest.headHitterLipFacingTheGap}: 2500 wide, 22 ticks, back allowed, 32° a tick.
+     */
+    private TasBrute.Result tasPlan;
+    private int tasTick;
     /** Takeoff waits for the look to come within this many degrees of the plan's first yaw, for at most TICKS. */
     private static final float TURN_FIRST_DEG = 12;
     private static final int TURN_FIRST_TICKS = 12;
@@ -586,6 +593,27 @@ public class MovementJump extends Movement {
         state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, ctx.playerRotations().getPitch()), true));
     }
 
+    /** Fly the one beam plan tick for tick. It already lands; this does not search again. */
+    private MovementState playTas(MovementState state) {
+        if (tasTick < tasPlan.ticks()) {
+            int in = tasPlan.input[tasTick];
+            state.setTarget(new MovementState.MovementTarget(new Rotation(tasPlan.yaw[tasTick], ctx.playerRotations().getPitch()), true));
+            state.setInput(Input.MOVE_FORWARD, in > 0);
+            state.setInput(Input.MOVE_BACK, in < 0);
+            state.setInput(Input.SPRINT, in > 0);
+            state.setInput(Input.JUMP, tasPlan.jump[tasTick]);
+            tasTick++;
+            return state;
+        }
+        if (ctx.playerFeet().equals(dest) && ctx.player().onGround()) {
+            return state.setStatus(MovementStatus.SUCCESS);
+        }
+        if (++settle > 10) {
+            return fail(state, "beam jump missed");
+        }
+        return state;
+    }
+
     /** World x/z of frame point (a, b), block (0, 0) being src. */
     private double wx(double a, double b) {
         return src.x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2];
@@ -602,7 +630,8 @@ public class MovementJump extends Movement {
         js = null;
         real = null;
         running = landed = carrySearched = slewTried = false;
-        settle = replans = replanCooldown = 0;
+        tasPlan = null;
+        tasTick = settle = replans = replanCooldown = 0;
         if (trace != null) {
             trace.finish(false);
             trace = null;
@@ -736,13 +765,25 @@ public class MovementJump extends Movement {
                     } else {
                         js.slewYaw = false;
                         if (!js.search(real, true) && !js.search(real, false)) {
-                            return fail(state, "no jump from here");
-                        }
-                        // Stopped, so face the plan before the first tick. The search assumed that facing.
-                        float want = js.yaw(js.plan, false, 0);
-                        if (Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot())) > TURN_FIRST_DEG && turnWait++ < TURN_FIRST_TICKS) {
-                            lookAt(state, want);
-                            return state;
+                            // Head-hitter lip, facing the gap: the grid has no plan. One beam search does
+                            // (17 ticks, and it never steps back onto the previous block, so the path does not rewind).
+                            TasBrute brute = new TasBrute(real.world());
+                            brute.allowBack = true;
+                            brute.maxTurn = JumpSearch.YAW_STEP;
+                            brute.beam = 2500;
+                            brute.maxTicks = 22;
+                            tasPlan = brute.search(real, ctx.player().getYRot(), new TasBrute.Landing(dest.x, dest.y, dest.z));
+                            tasTick = 0;
+                            if (tasPlan == null) {
+                                return fail(state, "no jump from here");
+                            }
+                        } else {
+                            // Stopped, so face the plan before the first tick. The search assumed that facing.
+                            float want = js.yaw(js.plan, false, 0);
+                            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot())) > TURN_FIRST_DEG && turnWait++ < TURN_FIRST_TICKS) {
+                                lookAt(state, want);
+                                return state;
+                            }
                         }
                     }
                     running = true;
@@ -751,6 +792,9 @@ public class MovementJump extends Movement {
                     PositionSync.sync(ctx.player());
                 }
             }
+        }
+        if (tasPlan != null) {
+            return playTas(state);
         }
         if (JumpTemplates.MOMENTUM.contains(t)) {
             return momentumTick(state);

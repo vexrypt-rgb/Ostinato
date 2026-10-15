@@ -59,10 +59,10 @@ public final class JumpSearch {
     public boolean jumped;
     public int airTicks;
     /**
-     * The look turns at most {@link #YAW_STEP} degrees a tick (LookBehavior's aim cap). Left off for template search
-     * and for execution: the stored plans snap to a new yaw in the air, and the live player still lands some of
-     * those. Execution leaves it off: waiting out a 45° error dropped the run-up speed and the 2-wall neo missed.
-     * Set this, and {@link #faceYaw}, to ask whether a plan survives the cap.
+     * The look turns at most {@link #YAW_STEP} degrees a tick (LookBehavior's aim cap). Template search leaves it off.
+     * MovementJump turns it on for one search when the player is facing away from the plan, then flies that plan.
+     * Waiting out a yaw error dropped the run-up speed and the 2-wall neo missed, so a failed capped search still
+     * flies the snap plan. Set this, and {@link #faceYaw}, to ask whether a plan survives the cap.
      */
     public boolean slewYaw;
     public float faceYaw;
