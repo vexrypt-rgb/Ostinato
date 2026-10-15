@@ -12,7 +12,8 @@ import net.minecraft.util.Mth;
  * On a flat podium the four inner nodes tie and the earliest wins, so the common target is the back
  * diagonal and the rare one is the south straight. Real terrain moves the closest node.
  *
- * One roll in (living crystals + 3) perches before any of this. This class does not roll that.
+ * The first path is chosen on the first tick, while no path exists yet. After a path finishes, one
+ * roll in (living crystals + 3) perches instead of picking another node. This class does not roll that.
  *
  * The stand is the public front-tower cheat sheet: from the outer corner, west and north by the tower
  * class. A back tower uses the same steps on the opposite corner. A side node is not that sheet.
@@ -128,6 +129,19 @@ public final class ZeroCycle {
     /** Iron bars. Ranks 1 and 2 only. */
     public static boolean caged(int rank) {
         return rank == 1 || rank == 2;
+    }
+
+    /**
+     * Block the crystal is snapped into: the pillar centre, one above the obsidian top.
+     * That block is fire, and the block under it is bedrock.
+     */
+    public static int[] crystalBlock(int pillar, int rank) {
+        return new int[]{PILLAR_X[pillar], pillarHeight(rank) + 1, PILLAR_Z[pillar]};
+    }
+
+    /** Sides on the perch roll once a path has finished. Rolling a zero leaves the pattern to land. */
+    public static int perchSides(int aliveCrystals) {
+        return aliveCrystals + 3;
     }
 
     /**
