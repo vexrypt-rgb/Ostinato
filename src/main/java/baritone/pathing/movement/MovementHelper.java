@@ -805,6 +805,21 @@ public interface MovementHelper extends ActionCosts, Helper {
         )).setInput(Input.MOVE_FORWARD, true);
     }
 
+    /**
+     * Ostinato: walk to a run-up start (dx, dz) away. Walking on while the look still turns orbits a close target
+     * (practice parkour: circled a start 0.6 away for 5 s), so only walk once roughly facing it.
+     */
+    static void walkToSpot(IPlayerContext ctx, MovementState state, double dx, double dz) {
+        float to = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        state.setTarget(new MovementTarget(new Rotation(to, ctx.playerRotations().getPitch()), true));
+        double d2 = dx * dx + dz * dz;
+        net.minecraft.world.phys.Vec3 m = ctx.player().getDeltaMovement();
+        boolean facing = Math.abs(Mth.wrapDegrees(to - ctx.player().getYRot())) < (d2 > 1 ? 60 : 30);
+        if (facing && (d2 > 0.05 || Math.abs(m.x) + Math.abs(m.z) < 0.05)) {
+            state.setInput(Input.MOVE_FORWARD, true);
+        }
+    }
+
     static void moveTowardsWithoutRotation(IPlayerContext ctx, MovementState state, float idealYaw) {
         MovementOption.getOptions(
                 Mth.sin(ctx.playerRotations().getYaw() * DEG_TO_RAD_F),

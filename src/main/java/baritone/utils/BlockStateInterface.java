@@ -22,6 +22,7 @@ import baritone.api.utils.IPlayerContext;
 import baritone.cache.CachedRegion;
 import baritone.cache.WorldData;
 import baritone.utils.accessor.IClientChunkProvider;
+import baritone.pathing.SeedPlan;
 import baritone.utils.pathing.BetterWorldBorder;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.core.BlockPos;
@@ -95,6 +96,7 @@ public class BlockStateInterface {
     }
 
     public BlockState get0(int x, int y, int z) { // Mickey resigned
+        int worldY = y;
         y -= world.dimensionType().minY();
         // Invalid vertical position
         if (y < 0 || y >= world.dimensionType().height()) {
@@ -123,20 +125,23 @@ public class BlockStateInterface {
         CachedRegion cached = prevCached;
         if (cached == null || cached.getX() != x >> 9 || cached.getZ() != z >> 9) {
             if (worldData == null) {
-                return AIR;
+                BlockState hinted = SeedPlan.predict(x, worldY, z);
+                return hinted != null ? hinted : AIR;
             }
             CachedRegion region = worldData.cache.getRegion(x >> 9, z >> 9);
             if (region == null) {
-                return AIR;
+                BlockState hinted = SeedPlan.predict(x, worldY, z);
+                return hinted != null ? hinted : AIR;
             }
             prevCached = region;
             cached = region;
         }
         BlockState type = cached.getBlock(x & 511, y + world.dimensionType().minY(), z & 511);
-        if (type == null) {
-            return AIR;
+        if (type != null) {
+            return type;
         }
-        return type;
+        BlockState hinted = SeedPlan.predict(x, worldY, z);
+        return hinted != null ? hinted : AIR;
     }
 
     public boolean isLoaded(int x, int z) {
@@ -151,17 +156,17 @@ public class BlockStateInterface {
         }
         CachedRegion prevRegion = prevCached;
         if (prevRegion != null && prevRegion.getX() == x >> 9 && prevRegion.getZ() == z >> 9) {
-            return prevRegion.isCached(x & 511, z & 511);
+            return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
         }
         if (worldData == null) {
-            return false;
+            return SeedPlan.covers(x, z);
         }
         prevRegion = worldData.cache.getRegion(x >> 9, z >> 9);
         if (prevRegion == null) {
-            return false;
+            return SeedPlan.covers(x, z);
         }
         prevCached = prevRegion;
-        return prevRegion.isCached(x & 511, z & 511);
+        return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
     }
 
     // get the block at x,y,z from this chunk WITHOUT creating a single blockpos object

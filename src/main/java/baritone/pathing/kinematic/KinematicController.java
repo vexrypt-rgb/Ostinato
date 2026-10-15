@@ -121,10 +121,12 @@ public final class KinematicController {
         if (r >= 0) {
             drivenTicks++;
         }
-        if (narrowEnd && Baritone.settings().kinematicTrace.value) {
-            // Ostinato: per-tick trace onto a narrow landing: who drives, where the player is, how it moves
+        boolean jumpNext = pathPosition < path.movements().size() && (path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementParkour
+                || path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementJump);
+        if ((narrowEnd || jumpNext) && Baritone.settings().kinematicTrace.value) {
+            // Ostinato: per-tick trace onto a narrow landing or through a jump: who drives, where the player is, how it moves
             net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
-            System.out.printf("KTRACE narrow r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
+            System.out.printf("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
                     ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround());
         }
         return r;
@@ -197,6 +199,10 @@ public final class KinematicController {
             if (ctx.player().tickCount - narrowJumpTick > 2) {
                 narrowFlight = false;
             }
+        }
+        if (narrowStart && real.onGround) {
+            // no run-up on a block an eighth wide: jump from where we stand (or hand the takeoff to TakeoffController)
+            return narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
         }
         if (arriving) {
             return arrive(baritone, newPos, line.get(line.size() - 1));
@@ -326,6 +332,8 @@ public final class KinematicController {
 
     // Ostinato: the stretch ends on a block narrower than a full one (real collision shape), see arrive
     private boolean narrowEnd;
+    // Ostinato: the stretch is one gap jump off a narrow block
+    private boolean narrowStart;
 
     private boolean narrowAt(double[] to) {
         BlockPos feet = BlockPos.containing(to[0], to[1] + 0.01, to[2]);
@@ -662,6 +670,7 @@ public final class KinematicController {
         add(src);
         int i = pathPosition;
         endsAtPlace = false;
+        narrowStart = false;
         for (; i < moves.size() && i < pathPosition + MAX_LOOKAHEAD_MOVES; i++) {
             IMovement mv = moves.get(i);
             if (!drivable(mv)) {
@@ -690,6 +699,14 @@ public final class KinematicController {
                 break;
             }
             add(mv.getDest());
+            // Ostinato: a candle or lantern is stood on, not run over: end the stretch on it, and a gap off one is a
+            // stretch of its own, flown as a standing jump (narrowTakeoff)
+            boolean offNarrow = i == pathPosition && mv instanceof MovementParkour && narrowAt(line.get(0));
+            if (offNarrow || narrowAt(line.get(line.size() - 1))) {
+                narrowStart = offNarrow;
+                i++;
+                break;
+            }
         }
         lastMove = i - 1;
         longJump = false;

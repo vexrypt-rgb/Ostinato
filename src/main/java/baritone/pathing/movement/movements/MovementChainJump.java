@@ -143,6 +143,11 @@ public class MovementChainJump extends Movement {
         }
         for (int i = 0; i < FRAMES.length; i++) {
             int[] f = FRAMES[i];
+            // The first block is a walk. A chain from here is just that walk plus a later jump, and the scan is most
+            // of the cost of a parkour search on open ground (flat short went from 4 ms to 145 ms in the bench).
+            if (MovementHelper.canWalkOn(context, x + f[0], y - 1, z + f[1]) && MovementHelper.fullyPassable(context, x + f[0], y, z + f[1])) {
+                continue;
+            }
             templates:
             for (ChainTemplates.Template t : ChainTemplates.ALL) {
                 int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3], dy = y + t.dy;
@@ -332,10 +337,7 @@ public class MovementChainJump extends Movement {
             double tx = wx(-t.runUp + 0.5, 0.5 + lat), tz = wz(-t.runUp + 0.5, 0.5 + lat);
             double dx = tx - p.x, dz = tz - p.z;
             if (dx * dx + dz * dz > 0.15 * 0.15) {
-                state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-dx, dz)), ctx.playerRotations().getPitch()), true));
-                if (dx * dx + dz * dz > 0.05 || Math.abs(m.x) + Math.abs(m.z) < 0.05) {
-                    state.setInput(Input.MOVE_FORWARD, true);
-                }
+                MovementHelper.walkToSpot(ctx, state, dx, dz);
                 return state;
             }
             if (!real.onGround) {

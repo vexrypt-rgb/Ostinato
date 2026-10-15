@@ -27,6 +27,7 @@ import baritone.api.pathing.path.IPathExecutor;
 import baritone.api.utils.*;
 import baritone.api.utils.input.Input;
 import baritone.behavior.PathingBehavior;
+import baritone.pathing.CostCalibration;
 import baritone.pathing.calc.AbstractNodeCostSearch;
 import baritone.pathing.kinematic.BoatFallController;
 import baritone.pathing.kinematic.ClutchController;
@@ -194,7 +195,15 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         int driven = -1;
         lastDriver = Driver.BARITONE;
-        if (driverRest > 0) {
+        if (takeoff.engaged()) {
+            driven = takeoff.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.EXTEND;
+            }
+        }
+        if (driven >= 0) {
+            // a standing takeoff keeps the controls until it hands over
+        } else if (driverRest > 0) {
             driverRest--;
         } else {
             long t0 = System.nanoTime(); // Ostinato: planning-time stats
@@ -426,6 +435,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         if (movementStatus == SUCCESS) {
+            CostCalibration.record(movement.calibrationKey(), currentMovementOriginalCostEstimate, ticksOnCurrent);
             //System.out.println("Movement done, next path");
             pathPosition++;
             onChangeInPathPosition();

@@ -8,8 +8,8 @@ import net.minecraft.world.entity.monster.Enemy;
  * What a mob does to us, read from its vanilla behaviour class rather than a table of names: how it reaches us
  * (touch, shot, blast), how much a hit hurts, and whether it is worth fighting at all.
  */
-final class MobProfile {
-    enum Kind {
+public final class MobProfile {
+    public enum Kind {
         /** Walks up and hits: zombies, spiders, husks, piglins, silverfish... */
         MELEE,
         /** Shoots from range: skeletons, strays, pillagers, blazes, ghasts, witches. */
@@ -20,9 +20,9 @@ final class MobProfile {
         AVOID
     }
 
-    final Kind kind;
+    public final Kind kind;
     /** Rough damage per hit, used to rank who to kill first. */
-    final double threat;
+    public final double threat;
 
     private static final MobProfile BOMB = new MobProfile(Kind.BOMB, 12);
     private static final MobProfile AVOID = new MobProfile(Kind.AVOID, 30);
@@ -34,11 +34,11 @@ final class MobProfile {
         this.threat = threat;
     }
 
-    static boolean hostile(LivingEntity e) {
+    public static boolean hostile(LivingEntity e) {
         return e instanceof Enemy && e.isAlive() && !e.isRemoved();
     }
 
-    static MobProfile of(LivingEntity e) {
+    public static MobProfile of(LivingEntity e) {
         if (e instanceof net.minecraft.world.entity.monster.Creeper) return BOMB;
         if (e instanceof net.minecraft.world.entity.monster.warden.Warden
                 || e instanceof net.minecraft.world.entity.monster.Guardian
@@ -56,5 +56,40 @@ final class MobProfile {
         }
         double dmg = e.getAttributes().hasAttribute(Attributes.ATTACK_DAMAGE) ? e.getAttributeValue(Attributes.ATTACK_DAMAGE) : 3;
         return new MobProfile(Kind.MELEE, dmg);
+    }
+
+    /** How far a step gets more expensive, in blocks. A ghast's fireball outranges a skeleton. */
+    public int pathRadius() {
+        switch (kind) {
+            case MELEE:
+                return 4;
+            case BOMB:
+                return 7;
+            case RANGED:
+                return threat >= 9 ? 24 : 16;
+            case AVOID:
+                return 16;
+            default:
+                return 4;
+        }
+    }
+
+    /**
+     * Cost multiplier on the mob's own block. A melee hit is a small detour. A creeper is not. A warden is a
+     * reason to take another corridor.
+     */
+    public double pathCenter() {
+        switch (kind) {
+            case MELEE:
+                return 1 + Math.min(threat, 8) * 0.3;
+            case BOMB:
+                return 8;
+            case RANGED:
+                return 1 + threat * 0.4;
+            case AVOID:
+                return 12;
+            default:
+                return 2;
+        }
     }
 }

@@ -121,7 +121,7 @@ public class MovementClimbJump extends Movement {
     private JumpSearch js;
     private PlayerSim real;
     private boolean running, landed;
-    private int settle, waited, hug, nudges;
+    private int settle, waited, hug, climbed, nudges;
     private int replans, replanCooldown;
 
     private MovementClimbJump(IBaritone baritone, BetterBlockPos src, ClimbTemplates.Template t, int frame) {
@@ -181,6 +181,11 @@ public class MovementClimbJump extends Movement {
         }
         for (int i = 0; i < FRAMES.length; i++) {
             int[] f = FRAMES[i];
+            // Same as a normal jump: a walkable first step needs no climb. A ladder in that cell is not fully
+            // passable, so a grab onto it still runs. Leaps off a ladder keep every direction.
+            if (!onLadder && MovementHelper.canWalkOn(context, x + f[0], y - 1, z + f[1]) && MovementHelper.fullyPassable(context, x + f[0], y, z + f[1])) {
+                continue;
+            }
             templates:
             for (ClimbTemplates.Template t : ClimbTemplates.ALL) {
                 if ((t.mode == ClimbTemplates.LEAP) != onLadder) {
@@ -196,7 +201,8 @@ public class MovementClimbJump extends Movement {
                 }
                 BlockState dest = context.get(dx, dy, dz);
                 if (t.destLadder) {
-                    if (!stuckTo(dest, wall[0], wall[1])) {
+                    int[] destWall = wallDir(f, t.destWall);
+                    if (!stuckTo(dest, destWall[0], destWall[1])) {
                         continue;
                     }
                 } else if (!MovementHelper.canWalkOn(context, dx, dy - 1, dz)) {
@@ -309,7 +315,7 @@ public class MovementClimbJump extends Movement {
         js = null;
         real = null;
         running = landed = false;
-        settle = waited = hug = nudges = replans = replanCooldown = 0;
+        settle = waited = hug = climbed = nudges = replans = replanCooldown = 0;
         if (trace != null) {
             trace.finish(false);
             trace = null;
@@ -335,7 +341,7 @@ public class MovementClimbJump extends Movement {
         }
         SimTrace.files = true;
         if (trace == null) {
-            trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder" : ""), new ClientWorld(ctx));
+            trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? t.stand ? "stand-leap" : "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder wall=" + t.destWall : ""), new ClientWorld(ctx));
         }
         trace.observe(real, ctx.player().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);
@@ -364,8 +370,9 @@ public class MovementClimbJump extends Movement {
             js.destZ = dest.z;
             js.side = f[4];
             js.grab = t.destLadder;
-            js.noJump = leap;
-            js.jumped = leap;
+            js.noJump = leap && !t.stand;
+            js.jumped = leap && !t.stand;
+            js.standJump = t.stand;
             System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
         Vec3 m = ctx.player().getDeltaMovement();
@@ -401,6 +408,12 @@ public class MovementClimbJump extends Movement {
                     state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-wv[0], wv[1])), ctx.playerRotations().getPitch()), true));
                     return state.setInput(Input.MOVE_FORWARD, true).setInput(Input.SNEAK, true);
                 }
+                // climb to the template's height in the cell first (round a corner and up), stopping short: the climb
+                // carries on about 0.15 after letting go
+                if (p.y - src.y < t.rise - 0.12 && climbed++ < 30) {
+                    state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-wv[0], wv[1])), ctx.playerRotations().getPitch()), true));
+                    return state.setInput(Input.MOVE_FORWARD, true);
+                }
                 if ((Math.abs(m.y) > 0.03 || Math.abs(m.x) + Math.abs(m.z) > 0.02) && waited++ < 20) {
                     return state.setInput(Input.SNEAK, true);
                 }
@@ -415,10 +428,7 @@ public class MovementClimbJump extends Movement {
                 double tx = wx(-t.runUp + 0.5, 0.5 + lat), tz = wz(-t.runUp + 0.5, 0.5 + lat);
                 double dx = tx - p.x, dz = tz - p.z;
                 if (dx * dx + dz * dz > 0.15 * 0.15) {
-                    state.setTarget(new MovementState.MovementTarget(new Rotation((float) Math.toDegrees(Math.atan2(-dx, dz)), ctx.playerRotations().getPitch()), true));
-                    if (dx * dx + dz * dz > 0.05 || Math.abs(m.x) + Math.abs(m.z) < 0.05) {
-                        state.setInput(Input.MOVE_FORWARD, true);
-                    }
+                    MovementHelper.walkToSpot(ctx, state, dx, dz);
                     return state;
                 }
                 if (!real.onGround) {
@@ -458,7 +468,7 @@ public class MovementClimbJump extends Movement {
         state.setInput(Input.MOVE_BACK, in < 0);
         state.setInput(Input.SPRINT, in > 0);
         state.setInput(Input.JUMP, jump);
-        if (!js.jumped && jump && real.x * js.dirX + real.z * js.dirZ >= js.edge + JumpSearch.EDGE[js.plan[2]]) {
+        if (!js.jumped && jump && (js.standJump || real.x * js.dirX + real.z * js.dirZ >= js.edge + JumpSearch.EDGE[js.plan[2]])) {
             js.jumped = true;
             js.airTicks = 0;
         } else if (js.jumped) {

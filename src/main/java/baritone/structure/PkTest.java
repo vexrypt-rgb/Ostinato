@@ -52,7 +52,7 @@ public final class PkTest implements AbstractGameEventListener {
     }
 
     private static final class Attempt {
-        int goal; String cls; BetterBlockPos src, dst; List<String> tags; boolean ok; String why = ""; int ticks;
+        int goal; String cls; BetterBlockPos src, dst; List<String> tags; boolean ok; String why = ""; int ticks, startTick;
     }
 
     /** One course-script line. kind: tp, cmd, goal, near. */
@@ -65,7 +65,7 @@ public final class PkTest implements AbstractGameEventListener {
     private final List<Step> steps = new ArrayList<>();
     private final List<Attempt> attempts = new ArrayList<>();
     private final Map<BlockPos, Integer> jumpFails = new HashMap<>();
-    private Attempt active, pending; private IMovement activeMv; private int activeStart;
+    private Attempt active, pending; private IMovement activeMv;
     private String drillTag; private boolean resume, reissue; private int idleNoPlan; private Vec3 lastPos; private BlockPos lastGood, checkpoint; private double bestDist; private int bestTick;
 
     private PkTest(Baritone b) { this.b = b; }
@@ -230,7 +230,7 @@ public final class PkTest implements AbstractGameEventListener {
         s.allowBreak.value = false; s.allowPlace.value = false; s.allowInventory.value = false;
         s.allowWaterBucketFall.value = false; s.allowSprint.value = true; s.experimentalMovement.value = false;
         s.allowParkour.value = true; s.allowParkourAscend.value = true; s.allowNeos.value = true;
-        s.allowClimbJumps.value = true; s.allowMomentumJumps.value = true; s.allowDiagonalAscend.value = true; s.allowDiagonalDescend.value = true;
+        s.allowClimbJumps.value = true; s.allowTasJumps.value = true; s.allowMomentumJumps.value = true; s.allowDiagonalAscend.value = true; s.allowDiagonalDescend.value = true;
         s.movementBackend.value = "baritone"; s.slowKinematic.value = false;
         boolean phys = MODE.equals("physics");
         s.physicsTravel.value = phys; s.kinematicTravel.value = !phys;
@@ -537,8 +537,8 @@ public final class PkTest implements AbstractGameEventListener {
         if (tags == null) return;
         if (drillTag != null) { tags = new ArrayList<>(tags); tags.add(0, "drill:" + drillTag); }
         Attempt a = new Attempt();
-        a.goal = goalNo; a.cls = cls; a.src = s; a.dst = d; a.tags = tags;
-        active = a; activeStart = tick;
+        a.goal = goalNo; a.cls = cls; a.src = s; a.dst = d; a.tags = tags; a.startTick = tick;
+        active = a;
     }
 
     /** Close whatever is open: a pending jump that ended on the ground with ok, the active one with ok/why. */
@@ -582,7 +582,7 @@ public final class PkTest implements AbstractGameEventListener {
     }
 
     private void finish(Attempt a, boolean ok, String why) {
-        a.ok = ok; a.why = ok ? "" : why; a.ticks = tick - activeStart;
+        a.ok = ok; a.why = ok ? "" : why; a.ticks = tick - a.startTick;
         attempts.add(a);
         trackTrouble(a);
         if (ok) lastGood = a.dst;

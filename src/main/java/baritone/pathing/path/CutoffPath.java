@@ -53,6 +53,12 @@ public class CutoffPath extends PathBase {
         return goal;
     }
 
+    /** Already assembled from a verified path. */
+    @Override
+    public IPath postProcess() {
+        return this;
+    }
+
     @Override
     public List<IMovement> movements() {
         return Collections.unmodifiableList(movements);

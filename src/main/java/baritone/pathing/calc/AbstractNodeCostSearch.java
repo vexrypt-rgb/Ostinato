@@ -24,6 +24,7 @@ import baritone.api.pathing.goals.Goal;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Helper;
 import baritone.api.utils.PathCalculationResult;
+import baritone.pathing.RouteReuse;
 import baritone.pathing.movement.CalculationContext;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 
@@ -50,6 +51,11 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
      */
     private final Long2ObjectOpenHashMap<PathNode> map;
 
+    /** Ostinato: every node the search has reached. */
+    protected Iterable<PathNode> nodes() {
+        return map.values();
+    }
+
     protected PathNode startNode;
 
     protected PathNode mostRecentConsidered;
@@ -59,6 +65,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     private volatile boolean isFinished;
 
     protected boolean cancelRequested;
+
+    /** Replay a stored route only when this search's costs were not shaped by mobs. */
+    protected boolean allowReuse;
 
     /**
      * This is really complicated and hard to explain. I wrote a comment in the old version of MineBot but it was so
@@ -104,7 +113,12 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         cancelRequested = false;
         try {
             long t0 = System.nanoTime(); // Ostinato: planning-time stats
-            IPath path = calculate0(primaryTimeout, failureTimeout).map(IPath::postProcess).orElse(null);
+            IPath path = allowReuse ? RouteReuse.cut(startX, startY, startZ, goal, context) : null;
+            if (path != null) {
+                logDebug("Reused a route of " + path.length() + " from " + startX + " " + startY + " " + startZ);
+            } else {
+                path = calculate0(primaryTimeout, failureTimeout).map(IPath::postProcess).orElse(null);
+            }
             baritone.utils.PlanStats.astarNs.addAndGet(System.nanoTime() - t0);
             if (cancelRequested) {
                 return new PathCalculationResult(PathCalculationResult.Type.CANCELLATION);
@@ -126,6 +140,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
                 Helper.HELPER.logDebug("Static cutoff " + previousLength + " to " + path.length());
             }
             if (goal.isInGoal(path.getDest())) {
+                if (allowReuse) {
+                    RouteReuse.remember(path, context);
+                }
                 return new PathCalculationResult(PathCalculationResult.Type.SUCCESS_TO_GOAL, path);
             } else {
                 return new PathCalculationResult(PathCalculationResult.Type.SUCCESS_SEGMENT, path);

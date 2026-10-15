@@ -19,6 +19,8 @@ public final class JumpTemplates {
         public final int a, dy, b, runUp, ticks;
         /** Start this far to the +b side of the run-up's centre line. */
         public final double lateral;
+        /** Ostinato: and this far behind the run-up block's centre (a neo off a short run-up starts near the back edge). */
+        public final double back;
         /** {@link JumpSearch} plan indices found offline; the run-time search starts around them. */
         public final int[] plan;
         /** Cells {a, y, b, solid} the player's box (plus a small margin) touches: passable, or solid when the box only slides along it (a neo's wall). */
@@ -26,8 +28,30 @@ public final class JumpTemplates {
         /** Swings round the end of a wall: some cell is solid. */
         public final boolean neo;
 
+        /** Along-a coordinate of the run-up start, the take-off block's centre being 0.5. */
+        public double startA() {
+            return -runUp + 0.5 - back;
+        }
+
         Template(int a, int dy, int b, int runUp, double lateral, int ticks, int[] plan, int[][] cells) {
+            this(a, dy, b, runUp, lateral, 0, ticks, plan, cells);
+        }
+
+        /**
+         * Ostinato: off a lone block whose front edge juts out at its top (a ladder's plate): a copy of a run-up template
+         * flown from a standstill, taking off from the ledge. Kept only once the sim flies it against the real blocks.
+         */
+        public final boolean ledge;
+        private Template ledgeCopy;
+
+        Template(int a, int dy, int b, int runUp, double lateral, double back, int ticks, int[] plan, int[][] cells) {
+            this(a, dy, b, runUp, lateral, back, ticks, plan, cells, false);
+        }
+
+        private Template(int a, int dy, int b, int runUp, double lateral, double back, int ticks, int[] plan, int[][] cells, boolean ledge) {
+            this.ledge = ledge;
             this.lateral = lateral;
+            this.back = back;
             this.plan = plan;
             this.a = a;
             this.dy = dy;
@@ -38,6 +62,16 @@ public final class JumpTemplates {
             boolean wall = false;
             for (int[] c : cells) wall |= c[3] == 1;
             this.neo = wall;
+        }
+
+        /** This jump without its run-up, off a ledge (see {@link #ledge}); the run-up's cells are dropped. */
+        public Template ledgeVariant() {
+            if (ledgeCopy == null) {
+                List<int[]> kept = new ArrayList<>();
+                for (int[] c : cells) if (c[0] >= 0) kept.add(c);
+                ledgeCopy = new Template(a, dy, b, 0, lateral, 0, ticks, plan, kept.toArray(new int[0][]), true);
+            }
+            return ledgeCopy;
         }
     }
 
@@ -54,8 +88,10 @@ public final class JumpTemplates {
             }
             int[] plan = new int[JumpSearch.DIMS];
             for (int k = 0; k < plan.length; k++) plan[k] = parts[6].charAt(k) - '0';
+            String[] run = parts[3].split("b"); // runUp, or runUp"b"back(tenths)
             ALL.add(new Template(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),
-                    Integer.parseInt(parts[3]), Integer.parseInt(parts[4]) / 10.0, Integer.parseInt(parts[5]), plan, cells));
+                    Integer.parseInt(run[0]), Integer.parseInt(parts[4]) / 10.0, run.length > 1 ? Integer.parseInt(run[1]) / 10.0 : 0,
+                    Integer.parseInt(parts[5]), plan, cells));
         }
     }
 
@@ -95,7 +131,9 @@ public final class JumpTemplates {
 
     private static final double MARGIN = 0.05;
     private static final int[] RUN_UPS = {0, 1, 2, 3};
-    private static final int[] LATERAL = {0, 3, 6, 7, 8}; // tenths of a block
+    /** Ostinato: start offsets behind the run-up block's centre, in tenths; tried for neos only, after the centre. */
+    private static final int[] NEO_BACKS = {0, 2};
+    private static final int[] LATERAL = {0, 3, 6, 7, 8, 1}; // tenths of a block; 1 last: a 1-wall neo only works from about there
 
     /** Plain full blocks, slipperiness 0.6. */
     private static final class BoxWorld implements PlayerSim.World {
@@ -131,14 +169,17 @@ public final class JumpTemplates {
         }
         // neos: a wall {wall} thick straight ahead, running off to the -b side; the jump swings round its end
         for (int wall = 1; wall <= 3; wall++) for (int b = 0; b >= -1; b--) for (int dy = 0; dy >= -1; dy--) dests.add(new int[]{wall + 1, dy, b, wall});
+        // Ostinato: the wall ending one column to the side (-b) of the take-off: fly past its end and drift back in behind it
+        for (int wall = 1; wall <= 3; wall++) for (int dy = 0; dy >= -1; dy--) dests.add(new int[]{wall + 1, dy, -1, wall, 1});
         List<String> out = new ArrayList<>();
         for (int[] d : dests) {
             search:
-            for (int r : RUN_UPS) for (int lat : LATERAL) {
+            for (int r : RUN_UPS) for (int lat : LATERAL) for (int back : d[3] > 0 ? NEO_BACKS : new int[]{0}) {
                 BoxWorld w = new BoxWorld();
                 for (int a = -r; a <= 0; a++) w.add(a, -1, 0);
                 w.add(d[0], d[1] - 1, d[2]);
-                for (int a = 1; a <= d[3]; a++) for (int b = -4; b <= 0; b++) for (int y = 0; y <= 2; y++) w.add(a, y, b);
+                int wallEnd = d.length > 4 ? -d[4] : 0;
+                for (int a = 1; a <= d[3]; a++) for (int b = -4; b <= wallEnd; b++) for (int y = 0; y <= 2; y++) w.add(a, y, b);
                 JumpSearch js = new JumpSearch(w);
                 js.dirX = 1;
                 js.dirZ = 0;
@@ -147,7 +188,7 @@ public final class JumpTemplates {
                 js.destY = d[1];
                 js.destZ = d[2];
                 PlayerSim start = new PlayerSim(w);
-                start.x = -r + 0.5;
+                start.x = -r + 0.5 - back / 10.0;
                 start.z = 0.5 + lat / 10.0;
                 start.onGround = true;
                 start.vy = -0.0784000015258789; // vanilla's resting value: gravity pulls into the ground every tick, else the first tick counts as airborne
@@ -184,8 +225,8 @@ public final class JumpTemplates {
                 js.run(start, js.plan, false, 0, sink);
                 StringBuilder plan = new StringBuilder();
                 for (int k : js.plan) plan.append(k);
-                out.add(d[0] + " " + d[1] + " " + d[2] + " " + r + " " + lat + " " + js.ticks + " " + plan + " " + String.join(" ", cells));
-                System.err.println("ok " + d[0] + " " + d[1] + " " + d[2] + " wall=" + d[3] + " runUp=" + r + " lat=" + lat + " ticks=" + js.ticks + " miss=" + String.format("%.2f", js.miss));
+                out.add(d[0] + " " + d[1] + " " + d[2] + " " + r + (back > 0 ? "b" + back : "") + " " + lat + " " + js.ticks + " " + plan + " " + String.join(" ", cells));
+                System.err.println("ok " + d[0] + " " + d[1] + " " + d[2] + " wall=" + d[3] + " runUp=" + r + " back=" + back + " lat=" + lat + " ticks=" + js.ticks + " miss=" + String.format("%.2f", js.miss));
                 break search;
             }
         }

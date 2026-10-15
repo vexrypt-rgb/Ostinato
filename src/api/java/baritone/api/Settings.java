@@ -235,6 +235,13 @@ public final class Settings {
     public final Setting<Boolean> allowClimbJumps = new Setting<>(false);
 
     /**
+     * When a path can't reach its goal, search per-tick inputs (a TAS style brute force in the movement sim) for a jump
+     * from the explored blocks nearest the goal to ones the planner never reached, and fly what it finds. Seconds of
+     * background work per failed path; needs allowParkour. Part of experimentalMovement.
+     */
+    public final Setting<Boolean> allowTasJumps = new Setting<>(false);
+
+    /**
      * Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it, like a water bucket clutch.
      * Needs a ladder or vine on the hotbar.
      */
@@ -247,7 +254,7 @@ public final class Settings {
 
     /**
      * Move like a speedrunner: allowParkour, allowParkourAscend, allowNeos, allowMomentumJumps, allowClimbJumps,
-     * allowDiagonalAscend, allowDiagonalDescend and kinematicTravel behave as if they were on, whatever their own value
+     * allowTasJumps, allowDiagonalAscend, allowDiagonalDescend and kinematicTravel behave as if they were on, whatever their own value
      * (the settings are left alone, so turning this off hands your choices back). Jumps get cheaper by
      * experimentalJumpBias, block placement by at most experimentalBlockPlacementPenalty, and falls that hurt are allowed
      * down to experimentalMinHealth.
@@ -555,14 +562,10 @@ public final class Settings {
     public final Setting<Double> backtrackCostFavoringCoefficient = new Setting<>(0.5);
 
     /**
-     * Toggle the following 4 settings
-     * <p>
-     * They have a noticeable performance impact, so they default off
-     * <p>
-     * Specifically, building up the avoidance map on the main thread before pathing starts actually takes a noticeable
-     * amount of time, especially when there are a lot of mobs around, and your game jitters for like 200ms while doing so
+     * Price hostile mobs and spawners into the path. On by default. Each mob is costed from its own reach while the
+     * search runs, so a crowd does not paint a sphere onto the game thread before the search starts.
      */
-    public final Setting<Boolean> avoidance = new Setting<>(false);
+    public final Setting<Boolean> avoidance = new Setting<>(true);
 
     /**
      * Set to 1.0 to effectively disable this feature
@@ -577,14 +580,15 @@ public final class Settings {
     public final Setting<Integer> mobSpawnerAvoidanceRadius = new Setting<>(16);
 
     /**
-     * Set to 1.0 to effectively disable this feature
-     * <p>
-     * Set below 1.0 to go out of your way to walk near mobs
+     * Scales mob danger. 1.5 is a zombie as a short detour, a creeper as a real one, and a lit creeper as a reason
+     * to leave the corridor. 1.0 prices mobs like empty ground. Below 1.0 the path prefers walking up to them, out
+     * to {@link #mobAvoidanceRadius}.
      */
     public final Setting<Double> mobAvoidanceCoefficient = new Setting<>(1.5);
 
     /**
-     * Distance to avoid mobs.
+     * At 8, each mob is avoided out to its own reach (melee about 4, a creeper about 7, a shooter about 16, a ghast
+     * farther). Other values scale that reach. Below {@link #mobAvoidanceCoefficient} of 1 this is the flat radius.
      */
     public final Setting<Integer> mobAvoidanceRadius = new Setting<>(8);
 

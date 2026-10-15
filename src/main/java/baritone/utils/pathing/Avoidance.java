@@ -20,9 +20,11 @@ package baritone.utils.pathing;
 import baritone.Baritone;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.IPlayerContext;
+import baritone.process.MobProfile;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.entity.monster.spider.Spider;
 import net.minecraft.world.entity.monster.zombie.ZombifiedPiglin;
@@ -39,25 +41,47 @@ public class Avoidance {
     private final double coefficient;
     private final int radius;
     private final int radiusSq;
+    /** Asked per step during the search. A sphere painted into the favor map hitches the game thread when many exist. */
+    private final boolean query;
 
     public Avoidance(BlockPos center, double coefficient, int radius) {
-        this(center.getX(), center.getY(), center.getZ(), coefficient, radius);
+        this(center.getX(), center.getY(), center.getZ(), coefficient, radius, false);
     }
 
     public Avoidance(int centerX, int centerY, int centerZ, double coefficient, int radius) {
+        this(centerX, centerY, centerZ, coefficient, radius, false);
+    }
+
+    public Avoidance(int centerX, int centerY, int centerZ, double coefficient, int radius, boolean query) {
         this.centerX = centerX;
         this.centerY = centerY;
         this.centerZ = centerZ;
         this.coefficient = coefficient;
         this.radius = radius;
         this.radiusSq = radius * radius;
+        this.query = query;
     }
 
+    public boolean queried() {
+        return query;
+    }
+
+    /**
+     * Multiplier for a step at this block. The center is {@link #coefficient}; it falls to 1 at the edge of the reach.
+     */
     public double coefficient(int x, int y, int z) {
         int xDiff = x - centerX;
         int yDiff = y - centerY;
         int zDiff = z - centerZ;
-        return xDiff * xDiff + yDiff * yDiff + zDiff * zDiff <= radiusSq ? coefficient : 1.0D;
+        int d2 = xDiff * xDiff + yDiff * yDiff + zDiff * zDiff;
+        if (d2 > radiusSq) {
+            return 1.0D;
+        }
+        if (coefficient == 1.0D || radius <= 0) {
+            return coefficient;
+        }
+        double t = 1.0D - Math.sqrt(d2) / radius;
+        return 1.0D + (coefficient - 1.0D) * t * t;
     }
 
     public static List<Avoidance> create(IPlayerContext ctx) {
@@ -72,12 +96,38 @@ public class Avoidance {
                     .forEach(mobspawner -> res.add(new Avoidance(mobspawner, mobSpawnerCoeff, Baritone.settings().mobSpawnerAvoidanceRadius.value)));
         }
         if (mobCoeff != 1.0D) {
+            BlockPos feet = ctx.playerFeet();
+            int fx = feet.getX(), fy = feet.getY(), fz = feet.getZ();
+            double scale = (mobCoeff - 1.0D) / 0.5D;
+            double reachScale = Baritone.settings().mobAvoidanceRadius.value / 8.0D;
+            int flatRadius = Baritone.settings().mobAvoidanceRadius.value;
             ctx.entitiesStream()
-                    .filter(entity -> entity instanceof Mob)
-                    .filter(entity -> (!(entity instanceof Spider)) || ctx.player().getLightLevelDependentMagicValue() < 0.5)
+                    .filter(entity -> entity instanceof LivingEntity)
+                    .map(entity -> (LivingEntity) entity)
+                    .filter(MobProfile::hostile)
+                    .filter(entity -> !(entity instanceof Spider) || ctx.player().getLightLevelDependentMagicValue() < 0.5)
                     .filter(entity -> !(entity instanceof ZombifiedPiglin) || ((ZombifiedPiglin) entity).getLastHurtByMob() != null)
                     .filter(entity -> !(entity instanceof Enderman) || ((Enderman) entity).isCreepy())
-                    .forEach(entity -> res.add(new Avoidance(entity.blockPosition(), mobCoeff, Baritone.settings().mobAvoidanceRadius.value)));
+                    .forEach(entity -> {
+                        BlockPos at = entity.blockPosition();
+                        int dx = at.getX() - fx, dy = at.getY() - fy, dz = at.getZ() - fz;
+                        if (dx * dx + dy * dy + dz * dz > 64 * 64) {
+                            return;
+                        }
+                        if (scale <= 0) {
+                            res.add(new Avoidance(at, mobCoeff, flatRadius));
+                            return;
+                        }
+                        MobProfile prof = MobProfile.of(entity);
+                        double center = prof.pathCenter();
+                        int reach = prof.pathRadius();
+                        if (entity instanceof Creeper creeper && (creeper.isIgnited() || creeper.getSwelling(0f) > 0)) {
+                            center = 20;
+                            reach = 8;
+                        }
+                        int radius = Math.max(2, (int) Math.round(reach * reachScale));
+                        res.add(new Avoidance(at.getX(), at.getY(), at.getZ(), 1 + (center - 1) * scale, radius, true));
+                    });
         }
         return res;
     }

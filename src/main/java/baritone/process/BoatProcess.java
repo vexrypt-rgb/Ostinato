@@ -98,6 +98,10 @@ public final class BoatProcess extends BaritoneProcessHelper {
         if (lastCheck > ctx.player().tickCount + 200) {
             lastCheck = 0; // tickCount starts again with a new player entity (respawn, another dimension)
         }
+        // Grace already swims faster than a boat, and the swim costs use that speed.
+        if (ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.DOLPHINS_GRACE)) {
+            return false;
+        }
         if (ctx.player().tickCount - lastCheck < 40) {
             return false;
         }

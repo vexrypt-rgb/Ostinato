@@ -1,5 +1,6 @@
 package baritone.pathing.kinematic;
 
+import baritone.utils.ExperimentalMovement;
 import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
@@ -15,7 +16,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Slow kinematic, standing takeoffs: a plain parkour jump the sprinting driver does not fly (the 1 block gap, or a run
+ * Slow kinematic (and kinematic travel, plain parkour only), standing takeoffs: a plain parkour jump the sprinting driver does not fly (the 1 block gap, or a run
  * that gave up). Walks back to a run-up spot, searches the exact takeoff (where to jump, when to turn, when to let go
  * of W) with {@link JumpSearch} against the real world, flies it, and steps onto the landing block's centre.
  */
@@ -26,7 +27,7 @@ public final class TakeoffController {
     private final PlayerSim real;
     private JumpSearch js;
     private IMovement current;
-    private boolean running, landed;
+    private boolean running, landed, inPlay, engaged;
     private int settle, ticks, cooldown;
     /** Ticks driven, so callers can verify the mode is in use. */
     public static volatile long drivenTicks;
@@ -39,11 +40,28 @@ public final class TakeoffController {
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
     public int tick(Baritone baritone, IPath path, int pathPosition) {
+        inPlay = false;
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
         }
+        engaged = r >= 0 && r == pathPosition && current != null;
+        if (inPlay && Baritone.settings().kinematicTrace.value) {
+            // Ostinato: per-tick trace of a standing takeoff: who drives, the phase, where the player is, how it moves
+            Vec3 v = ctx.player().getDeltaMovement();
+            System.out.printf("KTRACE takeoff r=%d run=%b jumped=%b landed=%b air=%d cd=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
+                    running, js != null && js.jumped, landed, js != null ? js.airTicks : -1, cooldown,
+                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround());
+        }
         return r;
+    }
+
+    /**
+     * Whether a takeoff has started (walking back, in flight or settling): the other movers keep out until it hands
+     * over. Switching back and forth lost the run-up: the sprinting driver jumped from the takeoff's braking walk.
+     */
+    public boolean engaged() {
+        return current != null && engaged;
     }
 
     /** Whether the camera already points within 30 degrees of the offset. */
@@ -67,7 +85,8 @@ public final class TakeoffController {
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
-        if (!Baritone.settings().slowKinematic.value || player.isInWater() || player.isInLava() || player.onClimbable()
+        boolean slowMode = Baritone.settings().slowKinematic.value;
+        if (!slowMode && !ExperimentalMovement.kinematicTravel() || player.isInWater() || player.isInLava() || player.onClimbable()
                 || player.isFallFlying() || player.isPassenger() || player.getAbilities().flying
                 || pathPosition >= path.movements().size() || !ClientWorld.plainGravity(ctx)) {
             return -1;
@@ -76,6 +95,10 @@ public final class TakeoffController {
         MovementJump jump = im instanceof MovementJump j ? j : null;
         if (jump == null && (!(im instanceof MovementParkour pk) || pk.extensions() > 0)) {
             return -1;
+        }
+        if (jump != null && !slowMode) {
+            return -1; // kinematic travel: the template jump's own mover flies it; a plain parkour jump handed back
+            // by the sprinting driver is taken here rather than walked off at Baritone's pace (honey, soul sand)
         }
         IMovement mv = im;
         if (cooldown > 0) {
@@ -96,6 +119,7 @@ public final class TakeoffController {
         if (mv != current) {
             reset(mv);
         }
+        inPlay = true;
         if (++ticks > 240) {
             cooldown = 60;
             reset(null);
@@ -127,7 +151,7 @@ public final class TakeoffController {
             double tx, tz;
             if (jump != null) {
                 double lat = Math.min(jump.lateral(), 0.75);
-                double[] pt = jump.point(-jump.runUp() + 0.5, 0.5 + lat);
+                double[] pt = jump.point(jump.startA(), 0.5 + lat);
                 tx = pt[0];
                 tz = pt[1];
             } else {
@@ -178,6 +202,11 @@ public final class TakeoffController {
                 js.plan[0] = 1; // straight ahead, no turn
                 js.plan[3] = 4;
                 found = js.search(real, false);
+            }
+            if (Baritone.settings().kinematicTrace.value) {
+                StringBuilder plan = new StringBuilder();
+                for (int k : js.plan) plan.append(k);
+                System.out.printf("KTRACE takeoff search found=%b plan=%s edge=%.3f%n", found, plan, js.edge);
             }
             if (!found) {
                 if (jump != null) {

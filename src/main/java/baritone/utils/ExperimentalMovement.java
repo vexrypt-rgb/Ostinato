@@ -51,6 +51,10 @@ public final class ExperimentalMovement {
         return on() || Baritone.settings().allowClimbJumps.value;
     }
 
+    public static boolean allowTasJumps() {
+        return on() || Baritone.settings().allowTasJumps.value;
+    }
+
     public static boolean allowMomentumJumps() {
         return on() || Baritone.settings().allowMomentumJumps.value;
     }

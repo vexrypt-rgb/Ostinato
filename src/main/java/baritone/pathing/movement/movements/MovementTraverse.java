@@ -27,9 +27,11 @@ import baritone.api.utils.RotationUtils;
 import baritone.api.utils.VecUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
+import baritone.pathing.movement.DoorPass;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
@@ -109,6 +111,17 @@ public class MovementTraverse extends Movement {
                     sneaking = true;
                     WC += (SNEAK_ONE_BLOCK_COST - WALK_ONE_BLOCK_COST) / 2;
                 }
+                WC *= SurfaceSpeed.pair(
+                        srcDownBlock.getSpeedFactor(), srcDownBlock.getFriction(), srcDownBlock == Blocks.SOUL_SAND,
+                        destOn.getBlock().getSpeedFactor(), destOn.getBlock().getFriction(), destOn.getBlock() == Blocks.SOUL_SAND);
+            }
+            double walked = WC;
+            if (!water && !sneaking && context.canSprint) {
+                walked *= SPRINT_MULTIPLIER;
+            }
+            double door = ironDoor(context, x, y, z, destX, destZ, pb0, pb1, walked);
+            if (door >= 0) {
+                return door;
             }
             double hardness1 = MovementHelper.getMiningDurationTicks(context, destX, y, destZ, pb1, false);
             if (hardness1 >= COST_INF) {
@@ -234,6 +247,16 @@ public class MovementTraverse extends Movement {
 
         //sneak may have been set to true in the PREPPING state while mining an adjacent block, but we still want it to be true if the player is about to go on magma
         state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
+
+        if (ironClosed(pb0) || ironClosed(pb1)) {
+            BlockPos opener = ironOpener(dest, dest.getX() - src.getX(), dest.getZ() - src.getZ());
+            if (opener != null) {
+                Optional<Rotation> rotation = RotationUtils.reachable(ctx, opener);
+                if (rotation.isPresent()) {
+                    return state.setTarget(new MovementState.MovementTarget(rotation.get(), true)).setInput(Input.CLICK_RIGHT, true);
+                }
+            }
+        }
 
         if (pb0.getBlock() instanceof DoorBlock || pb1.getBlock() instanceof DoorBlock) {
             boolean notPassable = pb0.getBlock() instanceof DoorBlock && !MovementHelper.isDoorPassable(ctx, src, dest) || pb1.getBlock() instanceof DoorBlock && !MovementHelper.isDoorPassable(ctx, dest, src);
@@ -396,5 +419,84 @@ public class MovementTraverse extends Movement {
             }
         }
         return super.prepared(state);
+    }
+
+    /** -1 when this cell is not an iron door we can open. Otherwise the walk plus the click. */
+    private static double ironDoor(CalculationContext context, int x, int y, int z, int destX, int destZ, BlockState head, BlockState feet, double walk) {
+        if (head.getBlock() != Blocks.IRON_DOOR && feet.getBlock() != Blocks.IRON_DOOR) {
+            return -1;
+        }
+        if (!ironClosed(head) && !ironClosed(feet)) {
+            return walk;
+        }
+        int stepX = destX - x;
+        int stepZ = destZ - z;
+        double best = COST_INF;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int ox = -1; ox <= 1; ox++) {
+                for (int oz = -1; oz <= 1; oz++) {
+                    if (ox == 0 && oz == 0 && dy == 0) {
+                        continue;
+                    }
+                    if (!DoorPass.fromThisSide(stepX, stepZ, ox, oz)) {
+                        continue;
+                    }
+                    Block block = context.get(destX + ox, y + dy, destZ + oz).getBlock();
+                    DoorPass.Kind kind = openerKind(block);
+                    if (kind == DoorPass.Kind.NONE) {
+                        continue;
+                    }
+                    best = Math.min(best, DoorPass.price(kind, walk));
+                }
+            }
+        }
+        if (best >= COST_INF) {
+            return -1;
+        }
+        return walk + best;
+    }
+
+    private BlockPos ironOpener(BlockPos door, int stepX, int stepZ) {
+        BlockPos found = null;
+        double best = COST_INF;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int ox = -1; ox <= 1; ox++) {
+                for (int oz = -1; oz <= 1; oz++) {
+                    if (ox == 0 && oz == 0 && dy == 0) {
+                        continue;
+                    }
+                    if (!DoorPass.fromThisSide(stepX, stepZ, ox, oz)) {
+                        continue;
+                    }
+                    BlockPos at = door.offset(ox, dy, oz);
+                    double price = DoorPass.price(openerKind(BlockStateInterface.get(ctx, at).getBlock()), WALK_ONE_BLOCK_COST);
+                    if (price < best) {
+                        best = price;
+                        found = at;
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    private static boolean ironClosed(BlockState state) {
+        return state.getBlock() == Blocks.IRON_DOOR && state.hasProperty(DoorBlock.OPEN) && !state.getValue(DoorBlock.OPEN);
+    }
+
+    private static DoorPass.Kind openerKind(Block block) {
+        if (block instanceof net.minecraft.world.level.block.BasePressurePlateBlock) {
+            return DoorPass.Kind.PLATE;
+        }
+        if (block instanceof net.minecraft.world.level.block.LeverBlock) {
+            return DoorPass.Kind.LEVER;
+        }
+        if (block == Blocks.STONE_BUTTON) {
+            return DoorPass.Kind.STONE_BUTTON;
+        }
+        if (block instanceof net.minecraft.world.level.block.ButtonBlock) {
+            return DoorPass.Kind.WOOD_BUTTON;
+        }
+        return DoorPass.Kind.NONE;
     }
 }

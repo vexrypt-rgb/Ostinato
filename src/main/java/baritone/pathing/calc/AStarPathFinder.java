@@ -26,6 +26,7 @@ import baritone.api.utils.SettingsUtil;
 import baritone.pathing.calc.openset.BinaryHeapOpenSet;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Moves;
+import baritone.pathing.CostCalibration;
 import baritone.utils.pathing.BetterWorldBorder;
 import baritone.utils.pathing.Favoring;
 import baritone.utils.pathing.MutableMoveResult;
@@ -46,6 +47,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         super(realStart, startX, startY, startZ, goal, context);
         this.favoring = favoring;
         this.calcContext = context;
+        allowReuse = !favoring.hasAvoidance();
     }
 
     @Override
@@ -75,6 +77,8 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int numNodes = 0;
         int numMovementsConsidered = 0;
         int numEmptyChunk = 0;
+        int numRejected = 0;
+        int numFavored = 0;
         boolean isFavoring = !favoring.isEmpty();
         int timeCheckInterval = 1 << 6;
         int pathingMaxChunkBorderFetch = Baritone.settings().pathingMaxChunkBorderFetch.value; // grab all settings beforehand so that changing settings during pathing doesn't cause a crash or unpredictable behavior
@@ -96,6 +100,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             mostRecentConsidered = currentNode;
             numNodes++;
             if (goal.isInGoal(currentNode.x, currentNode.y, currentNode.z)) {
+                logDebug(profileLine(numNodes, numMovementsConsidered, numRejected, numEmptyChunk, numFavored));
                 logDebug("Took " + (System.currentTimeMillis() - startTime) + "ms, " + numMovementsConsidered + " movements considered");
                 return Optional.of(new Path(realStart, startNode, currentNode, numNodes, goal, calcContext));
             }
@@ -120,8 +125,10 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 numMovementsConsidered++;
                 double actionCost = res.cost;
                 if (actionCost >= ActionCosts.COST_INF) {
+                    numRejected++;
                     continue;
                 }
+                actionCost *= CostCalibration.scale(moves.family());
                 if (actionCost <= 0 || Double.isNaN(actionCost)) {
                     throw new IllegalStateException(String.format(
                             "%s from %s %s %s calculated implausible cost %s",
@@ -160,7 +167,8 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 long hashCode = BetterBlockPos.longHash(res.x, res.y, res.z);
                 if (isFavoring) {
                     // see issue #18
-                    actionCost *= favoring.calculate(hashCode);
+                    numFavored++;
+                    actionCost *= favoring.calculate(res.x, res.y, res.z);
                 }
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 double tentativeCost = currentNode.cost + actionCost;
@@ -195,8 +203,19 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         System.out.println((int) (numNodes * 1.0 / ((System.currentTimeMillis() - startTime) / 1000F)) + " nodes per second");
         Optional<IPath> result = bestSoFar(true, numNodes);
         if (result.isPresent()) {
+            logDebug(profileLine(numNodes, numMovementsConsidered, numRejected, numEmptyChunk, numFavored));
             logDebug("Took " + (System.currentTimeMillis() - startTime) + "ms, " + numMovementsConsidered + " movements considered");
         }
         return result;
+    }
+
+    private static String profileLine(int nodes, int movements, int rejected, int emptyChunks, int favored) {
+        SearchProfile profile = new SearchProfile();
+        profile.nodes = nodes;
+        profile.movements = movements;
+        profile.rejected = rejected;
+        profile.emptyChunks = emptyChunks;
+        profile.favored = favored;
+        return profile.line();
     }
 }

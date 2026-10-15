@@ -76,6 +76,10 @@ public final class PlayerSim {
         this.world = world;
     }
 
+    public World world() {
+        return world;
+    }
+
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
         onGround = o.onGround; sprinting = o.sprinting; swimming = o.swimming; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
@@ -335,6 +339,15 @@ public final class PlayerSim {
      */
     public static int feetCell(double y) {
         return floor(y + 0.1251);
+    }
+
+    /**
+     * Ostinato: whether feet at {@code y} stand in the planner's node at height {@code nodeY}: its feet cell, or a low
+     * top (candle, bed, slab, 3+ layers of snow: 0.25 to 0.875 high) in the cell below, which the planner counts as
+     * the node above it.
+     */
+    public static boolean nodeHeight(double y, int nodeY) {
+        return feetCell(y) == nodeY || y < nodeY && y >= nodeY - 0.75 - 1e-9;
     }
 
     public static int floor(double v) {

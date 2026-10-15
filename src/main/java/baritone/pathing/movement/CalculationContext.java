@@ -81,6 +81,7 @@ public class CalculationContext {
     public final boolean allowParkourFourGap;
     public final boolean allowNeos;
     public final boolean allowClimbJumps;
+    public final boolean allowTasJumps;
     public final boolean allowMomentumJumps;
     /** A ladder or vine on the hotbar and allowLadderClutch on, see MovementDescend.dynamicFallCost. */
     public final boolean hasClutchItem;
@@ -159,6 +160,7 @@ public class CalculationContext {
         this.allowParkourFourGap = ExperimentalMovement.kinematicTravel() && fullPace;
         this.allowNeos = ExperimentalMovement.allowNeos() && fullPace;
         this.allowClimbJumps = ExperimentalMovement.allowClimbJumps() && fullPace;
+        this.allowTasJumps = ExperimentalMovement.allowTasJumps() && fullPace;
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps() && fullPace;
         net.minecraft.world.item.Item clutchItem = Baritone.settings().allowLadderClutch.value ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
@@ -209,7 +211,12 @@ public class CalculationContext {
                 }
             }
         }
-        this.waterWalkSpeed = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier) + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
+        double swim = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier) + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
+        // Dolphin's Grace is about 9 blocks/s, faster than a boat. Depth Strider already lowered swim.
+        if (player.hasEffect(net.minecraft.world.effect.MobEffects.DOLPHINS_GRACE)) {
+            swim = Math.min(swim, ActionCosts.DOLPHIN_ONE_BLOCK_COST);
+        }
+        this.waterWalkSpeed = swim;
         this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
         this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
         this.jumpPenalty = Baritone.settings().jumpPenalty.value;

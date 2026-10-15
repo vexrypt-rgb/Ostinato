@@ -48,6 +48,54 @@ public class JumpSearchTest {
         assertTrue(gap2(gapWorld(-1, 0), 0));
     }
 
+    /** The look closes at most 32° a tick. A plan aimed 90° off the player is not that plan on the first tick. */
+    @Test
+    public void yawStepsTowardThePlan() {
+        assertEquals(58f, JumpSearch.stepYaw(90f, 0f), 0.01f);
+        assertEquals(-32f, JumpSearch.stepYaw(0f, -90f), 0.01f);
+        assertEquals(10f, JumpSearch.stepYaw(0f, 10f), 0.01f);
+    }
+
+    /**
+     * One-wide runway. Facing the jump, the plan lands. Started 90° off, the same inputs walk off the side while
+     * the look is still turning, so that plan must not be flown.
+     */
+    @Test
+    public void slewFromTheWrongYawDoesNotFlyTheSnap() {
+        PlayerSim.World w = new PlayerSim.World() {
+            @Override
+            public void collect(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, List<double[]> out) {
+                for (int bz = PlayerSim.floor(minZ); bz <= PlayerSim.floor(maxZ); bz++) {
+                    if (bz <= 2 || bz == 5) out.add(new double[]{0, -1, bz, 1, 0, bz + 1});
+                }
+            }
+
+            @Override
+            public float slipperiness(int x, int y, int z) {
+                return 0.6f;
+            }
+        };
+        JumpSearch js = new JumpSearch(w);
+        js.dirX = 0;
+        js.dirZ = 1;
+        js.edge = 3;
+        js.destX = 0;
+        js.destY = 0;
+        js.destZ = 5;
+        PlayerSim start = new PlayerSim(w);
+        start.x = 0.5;
+        start.y = 0;
+        start.z = 2.4;
+        start.vz = 0.28;
+        start.onGround = true;
+        assertTrue(js.search(start, false));
+        // The plan snaps to its air yaw. With the 32° cap it does not land. Execution still flies a snap plan
+        // when no capped plan exists: waiting out the yaw dropped the run-up speed and neo_2wall went 0/8.
+        js.slewYaw = true;
+        js.faceYaw = js.yaw(js.plan, false, 0);
+        assertFalse(js.run(start, js.plan, false, 0, null));
+    }
+
     @Test
     public void landsOnABlockTopBelowTheCellFloor() {
         // soul sand / chest / farmland one level down: the feet rest at -0.125, still cell 0 as playerFeet counts it
