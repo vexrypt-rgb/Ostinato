@@ -19,6 +19,7 @@ package baritone.utils.schematic.format;
 
 import baritone.api.schematic.IStaticSchematic;
 import baritone.api.schematic.format.ISchematicFormat;
+import baritone.gui.studio.OstinatoSchematic;
 import baritone.utils.schematic.format.defaults.LitematicaSchematic;
 import baritone.utils.schematic.format.defaults.MCEditSchematic;
 import baritone.utils.schematic.format.defaults.SpongeSchematic;
@@ -90,6 +91,14 @@ public enum DefaultSchematicFormats implements ISchematicFormat {
                 default:
                     throw new UnsupportedOperationException("Unsuported Version of a Litematica Schematic");
             }
+        }
+    },
+
+    /** Studio saves. One block per line, air omitted, so the builder only places what was drawn. */
+    OSTINATO("ostinato") {
+        @Override
+        public IStaticSchematic parse(InputStream input) throws IOException {
+            return OstinatoSchematic.read(input);
         }
     };
 
