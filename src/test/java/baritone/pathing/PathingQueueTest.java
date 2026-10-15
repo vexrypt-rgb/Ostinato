@@ -11,6 +11,7 @@ import baritone.pathing.movement.DoorPass;
 import baritone.pathing.movement.FallBudget;
 import baritone.pathing.movement.JumpFailures;
 import baritone.pathing.movement.LineWalk;
+import baritone.pathing.movement.Moves;
 import baritone.pathing.movement.SurfaceSpeed;
 import org.junit.Test;
 
@@ -23,6 +24,7 @@ import java.util.Map;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class PathingQueueTest {
@@ -137,6 +139,15 @@ public class PathingQueueTest {
         assertFalse(SeedPlan.covers(0, 0));
         SeedPlan.clear();
         assertFalse(SeedPlan.covers(3, 4));
+    }
+
+    @Test
+    public void moveFamilyIsCached() {
+        assertEquals("TRAVERSE", Moves.TRAVERSE_NORTH.family());
+        assertEquals("TRAVERSE", Moves.TRAVERSE_SOUTH.family());
+        assertEquals("LINE", Moves.LINE_EAST_NORTH.family());
+        assertSame(Moves.TRAVERSE_NORTH.family(), Moves.TRAVERSE_NORTH.family());
+        assertSame(Moves.all(), Moves.all());
     }
 
     @Test
