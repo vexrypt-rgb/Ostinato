@@ -7,22 +7,24 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.22.0's new work is the 26.3 line (`main`, Java 25). The 1.21.11, Conductor-module, 1.21.4, and 1.16.1 jars
-attached to this tag are rebuilt from the branches that shipped in v1.20.0. They do not include the menu, the
-path view, the parkour work, or the zero-cycle geometry below.
+v1.22.0 adds the menu, the path view, the parkour work, and the zero-cycle geometry on 26.3 (`main`, Java 25).
+The 1.21.11 jars, and the Conductor module jar, are that line's autotune, bastions, and command guard, which
+had not been tagged before. They do not include the menu, the path view, the parkour work, or the zero-cycle
+geometry. The 1.21.4 and 1.16.1 jars are the same lines as v1.20.0.
 
 | Minecraft | Branch | Java | This tag |
 | --- | --- | --- | --- |
 | 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.22.0.jar` |
-| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.20.0 |
-| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | Unchanged since v1.20.0 |
+| 1.21.11 | `1.21.11` | 21 | Autotune, bastions, and the command guard. `*-fabric-1.21.0.jar` |
+| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | The 1.21.11 work, built as a Conductor module |
 | 1.21.4 | `1.21.4` | 21 | Unchanged since v1.20.0 |
 | 1.16.1 | `1.16.1` | 8 | Unchanged since v1.20.0 |
 
-## New in v1.22.0 (26.3)
+## New in v1.22.0
 
 `main` is the Minecraft 26.3 line (Java 25). 1.21.11 stays on branch `1.21.11`. Pictures of the menu and of the
-path view are in the README.
+path view are in the README. The menu, the path view, the parkour work, and the zero-cycle geometry below are
+26.3 only.
 
 - **Menu.** Right Control opens it (`guiKeybind`). Settings stay, with search. Studio is a schematic editor:
   drag orbits, shift-drag or middle-drag pans, scroll zooms, left click places, right click erases, Ctrl+Z
@@ -49,17 +51,19 @@ path view are in the README.
 - **Soprano.** A* search speedups (open-set heap, cell node map, mining-cost memo, favoring cache) and the boat
   steering controller, ported from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken. See
   CREDITS.md.
-- **Autotune Combat System** (`#pvp`, setting `pvpAutotune`, off by default): learns the combat timing numbers and
+- **Autotune Combat System** (26.3 and 1.21.11; `#pvp`, setting `pvpAutotune`, off by default): learns the combat timing numbers and
   the healing, totem and reserve numbers on its own, one at a time, against the baseline, keeping a change only
   when it does better and never when the damage-taken guard is breached. `#pvp tune` shows and sets them; the HUD
   card shows what it is trying. Gear is picked by wear as well as tier, and spares replace worn pieces before they
   break. Learned values are not claimed as improvements: the learners have run live against one bot only.
-- **Bastions** (`#bastion`, `#structures`): bastion layouts recognised from loaded blocks; fights with brutes from
+- **Bastions** (26.3 and 1.21.11; `#bastion`, `#structures`): bastion layouts recognised from loaded blocks; fights with brutes from
   behind walls, towers and slits; piglin bartering camps; lava and fire recovery; water-pocket escapes; and a
   lava-flow forecast priced into paths.
-- **Command execution guard** (API): `ICommandManager.setExecutionGuard` lets another mod be asked before any
-  command runs, from chat, the GUI, or code. With no guard set, nothing changes. The Conductor module jar is
-  still the 1.21.11 `conductor-module` branch. It is not inside the 26.3 jar.
+- **Command execution guard** (API, 26.3 and 1.21.11): `ICommandManager.setExecutionGuard` lets another mod be
+  asked before any command runs, from chat, the GUI, or code. With no guard set, nothing changes. The Conductor
+  module edition is the separate `conductor-module` jar. It is not inside the plain 26.3 jar or the plain 1.21.11 jar.
+
+Autotune, bastions, and the command guard are on 26.3 and on 1.21.11. The other bullets in this section are 26.3 only.
 
 ## New in v1.20.0
 
