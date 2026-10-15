@@ -52,6 +52,12 @@ public class ZeroCycleTest {
         assertTrue(ZeroCycle.caged(1));
         assertTrue(ZeroCycle.caged(2));
         assertFalse(ZeroCycle.caged(3));
+        assertEquals(8, ZeroCycle.nearestPillar(10));
+        assertEquals(12, ZeroCycle.pillarX(8));
+        assertEquals(-40, ZeroCycle.pillarZ(8));
+        assertEquals(6, ZeroCycle.nearestPillar(7));
+        assertEquals(0, ZeroCycle.nearestPillar(0));
+        assertEquals(5, ZeroCycle.nearestPillar(6));
     }
 
     @Test
@@ -123,5 +129,27 @@ public class ZeroCycleTest {
         assertEquals(steps[bed][0] + 1, steps[bed + 1][0]);
         assertArrayEquals(new int[]{1, 0}, ZeroCycle.forward(0, 0, 10, 1));
         assertArrayEquals(new int[]{0, -1}, ZeroCycle.left(1, 0));
+    }
+
+    @Test
+    public void rigFacesTheNodeFromTheFrontStand() {
+        int[] stand = ZeroCycle.standXZ(12, -40, 2, ZeroCycle.Tower.SMALL, ZeroCycle.Approach.FRONT_DIAGONAL);
+        int y = ZeroCycle.standY(ZeroCycle.Approach.FRONT_DIAGONAL, 76);
+        int[][] world = ZeroCycle.rigAt(stand[0], y, stand[1], ZeroCycle.nodeX(10), ZeroCycle.nodeZ(10));
+        ZeroCycle.Piece[] pieces = ZeroCycle.rigPieces();
+        int bed = 0;
+        while (pieces[bed] != ZeroCycle.Piece.BED) {
+            bed++;
+        }
+        // Stand (7, 95, -43), node 10 is east of it, so left is north. The bed sits between the anchors.
+        assertArrayEquals(new int[]{11, 98, -44}, world[bed]);
+        assertArrayEquals(new int[]{10, 98, -44}, world[bed - 1]);
+        assertArrayEquals(new int[]{12, 98, -44}, world[bed + 1]);
+        assertEquals(ZeroCycle.Piece.ANCHOR, pieces[bed - 1]);
+        assertEquals(ZeroCycle.Piece.ANCHOR, pieces[bed + 1]);
+
+        // Facing south, left is east, so the bed is one block east of the forward line.
+        int[][] south = ZeroCycle.rigAt(0, 95, 0, ZeroCycle.nodeX(3), ZeroCycle.nodeZ(3));
+        assertArrayEquals(new int[]{1, 98, 4}, south[bed]);
     }
 }
