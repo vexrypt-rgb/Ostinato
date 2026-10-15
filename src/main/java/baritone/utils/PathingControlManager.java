@@ -143,10 +143,14 @@ public class PathingControlManager implements IPathingControlManager {
                 p.secretInternalSetGoalAndPath(command);
                 break;
             case REVALIDATE_GOAL_AND_PATH:
-                if (Baritone.settings().cancelOnGoalInvalidation.value && (command.goal == null || revalidateGoal(command.goal))) {
+                BlockPos horizon = command.goal == null ? null : p.movingGoalHorizon(command.goal);
+                if (Baritone.settings().cancelOnGoalInvalidation.value && (command.goal == null || (horizon == null && revalidateGoal(command.goal)))) {
                     p.softCancelIfSafe();
                 }
                 p.secretInternalSetGoalAndPath(command);
+                if (horizon != null && Baritone.settings().cancelOnGoalInvalidation.value) {
+                    p.retargetMovingGoal(horizon);
+                }
                 break;
             default:
         }
@@ -170,7 +174,7 @@ public class PathingControlManager implements IPathingControlManager {
             BlockPos end = current.getPath().getDest();
             if (intended.isInGoal(end) && !newGoal.isInGoal(end)) {
                 // this path used to end in the goal
-                // but the goal has changed, so there's no reason to continue...
+                // but the goal has changed, so cancel it
                 return true;
             }
         }

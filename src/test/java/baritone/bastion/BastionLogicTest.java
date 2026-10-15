@@ -21,10 +21,10 @@ public class BastionLogicTest {
     }
 
     @Test
-    public void bridgePrefersChestsOverGold() {
-        BastionPlan.Point g = gold(5, 64, 0), c = chest(20, 64, 0);
+    public void bridgeMinesChaliceGoldFirst() { // Couriway ch. 4
+        BastionPlan.Point g = gold(20, 64, 0), c = chest(5, 64, 0);
         List<BastionPlan.Point> o = BastionPlan.order("bridge", 0, 64, 0, 0, 64, 0, List.of(g, c));
-        assertEquals(c, o.get(0));
+        assertEquals(g, o.get(0));
     }
 
     @Test

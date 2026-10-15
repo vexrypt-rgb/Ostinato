@@ -26,6 +26,7 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
+import baritone.pathing.movement.FallBudget;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
@@ -353,11 +354,15 @@ public class MovementDescend extends Movement {
      * Everything that protects us gets its say first, a fall that hurts never beats one that doesn't.
      */
     private static void hurtingFall(CalculationContext context, int destX, int destZ, int newY, int blocks, double tentativeCost, BlockState onto, MutableMoveResult res) {
-        if (!context.experimental || blocks > ExperimentalMovement.MAX_HURT_FALL) {
-            return;
-        }
         int damage = ExperimentalMovement.fallDamage(blocks);
-        if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
+        if (context.experimental) {
+            if (blocks > ExperimentalMovement.MAX_HURT_FALL) {
+                return;
+            }
+            if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
+                return;
+            }
+        } else if (blocks > FallBudget.maxBlocks(context.health, FallBudget.FLOOR, context.maxFallHeightNoWater, FallBudget.CAP)) {
             return;
         }
         // canWalkOn lets some of these through (we can sneak on magma, that is not the same as landing on it)

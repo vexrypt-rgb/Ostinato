@@ -1,5 +1,16 @@
 package baritone.process;
 
+import baritone.bastion.OutsideTrade;
+import baritone.bastion.EndermanHunt;
+import net.minecraft.world.entity.monster.Enderman;
+import baritone.bastion.DamageBudget;
+import baritone.bastion.BruteTactics;
+import baritone.bastion.LavaFlow;
+import baritone.bastion.BastionScript;
+import baritone.bastion.BastionPriors;
+import baritone.bastion.BastionRouteResolver;
+import baritone.bastion.BastionRoutes;
+import baritone.bastion.ThrowAdapt;
 import baritone.Baritone;
 import baritone.api.pathing.goals.GoalRunAway;
 import baritone.api.pathing.goals.GoalNear;
@@ -87,6 +98,10 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private UUID throwAt;
     private long throwTick = -1000, ticks;
     public int throwsDone, lootPicked;
+    private boolean throwJump;
+    private int jumpTries;
+    private BlockPos throwTarget;
+    private final ThrowAdapt throwAdapt = new ThrowAdapt();
     private int lastLootId = -1;
     private String status = "-";
     /** Breaking a gold block angers every idle piglin within 16 blocks of the miner, seen or not; stay well clear. */
@@ -139,7 +154,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
         shelterRounds = 0;
         shelterSlit = null;
         shelterTearing = false;
-        shelterNoLure = false;
+        shelterNoLure = false; shelterSlitCycles = 0;
         shelterKills = 0;
         shelterShy.clear();
         lastHunter = null;
@@ -405,6 +420,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     private long shelterSlitAt, shelterSlitHold, shelterStruckAt, shelterSeenAt;
     private int shelterSlitOff, shelterSlitHurts, shelterSlitBad, shelterStrikes, shelterKills;
     private boolean shelterNoLure, shelterTearing;
+    private int shelterSlitCycles;
     private LivingEntity shelterMark;
     private final java.util.LinkedHashSet<BlockPos> shelterPlaced = new java.util.LinkedHashSet<>();
     private long shelterTearAt, shelterTearDone;
@@ -515,7 +531,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
             shelterMark = null;
             // what one brute could not see from its post says nothing of the next (run 133: seven brutes stood at the
             // walls after the first, half a minute each, and no slit was opened for any of them)
-            shelterNoLure = false;
+            shelterNoLure = false; shelterSlitCycles = 0;
             shelterShoves = 0;
             perching = false;
             baritone.getPveProcess().hold = false;
@@ -619,6 +635,12 @@ public final class BastionProcess extends BaritoneProcessHelper {
                 shut = "nothing to strike with";
             } else if (shelterSlitOff > 40) {
                 shut = mark == null ? "nobody left at the slit" : "the brute is round another side";
+                // r142: a brute circling the ring had the slit shut and reopened every few seconds for 13 minutes
+                if (mark != null && ++shelterSlitCycles >= 6) {
+                    shut = "the brute keeps circling (" + shelterSlitCycles + " slits)";
+                    shelterNoLure = true;
+                    shelterShy.put(mark.getUUID(), ticks + 6000L);
+                }
             } else if (ticks - shelterSlitAt > 300 && ticks - shelterSeenAt > 300 && shelterStruckAt < shelterSlitAt) {
                 // fifteen seconds and it has not once looked our way: it is over us or under us, or round a corner
                 shut = "the brute" + (mark != null ? where(mark, me) : "") + " cannot see the slit";
@@ -1261,6 +1283,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         // runs 100-131: of fourteen first hits from a brute, eleven landed while we stood at a tower half built, on one
         // it could reach from a ledge, or clicking at a tunnel wall; and in nine towers the brute at the foot never once
         // gave up. Out of its sight it does. With the blocks for it, wall in before anything else
+        // user-chosen brute tactics (lava bucket / sealed pit) come before walls and towers; null when they do not apply
+        PathingCommand btc = bruteTactic(me, heavies);
+        if (btc != null) return btc;
         PathingCommand sh = shelter(me);
         if (sh != null) return sh;
         // run 133: between two ticks of waiting to land, a tower was begun and a tunnel wall clicked at; the tower was
@@ -1326,7 +1351,8 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         // run 121: on the way out a brute closed from 11 blocks to 1 over four seconds while the exit path stood stalled,
         // and nothing but the exit was allowed to act. Leaving does not outrank the tower
-        if (exiting && bastion != null && !canTower && !perching) return exit(me, counts(me));
+        // r147: on the way out the exit path dug into lava at y87 and this early return skipped the lava walk-out; burned 20 -> 0 in 4 s
+        if (exiting && bastion != null && !canTower && !perching && !me.isInLava() && !me.isOnFire()) return exit(me, counts(me));
         if (canTower) {
             // kiting on foot loses (run 26: a brute is as fast as us, 19 -> 9 hp in 4 s); three blocks up it cannot reach us
             if (fighting) { pveP.clearEnemies(); fighting = false; }
@@ -1528,6 +1554,13 @@ public final class BastionProcess extends BaritoneProcessHelper {
         }
         if (throwPred != null && ticks == throwTick + 25) {
             final double[] tp = throwPred; throwPred = null;
+            if (throwTarget != null) {
+                // ingots that come back into our own column hit the shared pit corner: lob higher next time (ThrowAdapt)
+                final BlockPos tgt = throwTarget; throwTarget = null; final BlockPos ours = me.blockPosition();
+                ctx.world().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, me.getBoundingBox().inflate(6), it -> it.getItem().is(Items.GOLD_INGOT))
+                        .stream().min(java.util.Comparator.comparingDouble(it -> it.distanceToSqr(tp[0], tp[1], tp[2])))
+                        .ifPresent(it -> throwAdapt.landed(it.getBlockX(), it.getBlockZ(), ours.getX(), ours.getZ(), tgt.getX(), tgt.getZ()));
+            }
             ctx.world().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, me.getBoundingBox().inflate(6), it -> it.getItem().is(Items.GOLD_INGOT))
                 .stream().min(java.util.Comparator.comparingDouble(it -> it.distanceToSqr(tp[0], tp[1], tp[2])))
                 .ifPresentOrElse(it -> logDirect(String.format("Bastion: throw landing predicted %.2f %.2f %.2f, actual %.2f %.2f %.2f (err %.2f)", tp[0], tp[1], tp[2], it.getX(), it.getY(), it.getZ(), Math.sqrt(it.distanceToSqr(tp[0], tp[1], tp[2])))),
@@ -1780,11 +1813,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (bastion != null) {
             // run 86: ran out of ingots with 3 gold blocks left; the camp returns every tick, so split blocks before it
                 if (craftStep > 0 || countOf(me, Items.GOLD_BLOCK) > 0 && ingotCount(me) < 2) { PathingCommand cr = craftGold(me); if (cr != null) return cr; }
-                PathingCommand camp = tradeCamp(me, piglins, have, done);
+                // the route loots and builds first and trades at its trade step (r143: the camp took the whole run, no route step ran);
+                // after 4 minutes on the route the camp is allowed anyway
+                boolean routeTrades = !BastionSettings.scriptedRoutes || route.isEmpty() || routeIdx >= BastionRoutes.firstTradeIndex(route) || ticks - routeStart > 4800;
+                PathingCommand camp = routeTrades ? tradeCamp(me, piglins, have, done) : null;
             if (camp != null) return camp;
             // trades first: a free piglin in reach gets an ingot before the next chest (run 36: 3 min on chests, 4 throws)
             PathingCommand bt0 = barterOnTheWay(me, near);
             if (bt0 != null) return bt0;
+            PathingCommand rs = runRoute(me, near);
+            if (rs != null) return rs;
             PathingCommand c = lootChests(me, near);
             if (c != null) return c;
         }
@@ -1864,6 +1902,9 @@ public final class BastionProcess extends BaritoneProcessHelper {
         if (target == null) {
             status = admiring.isEmpty() ? "no free piglin n=" + piglins.size() : "admiring x" + admiring.size() + ", no other free piglin";
             if (!admiring.isEmpty() || bastion == null) return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+            // after the route, with every piglin guarded by a brute: lure them out, go to the wastes, or hunt endermen
+            PathingCommand of = outsideFallback(me, piglins, counts(me), BastionGoals.met(counts(me), BastionSettings.TARGETS));
+            if (of != null) return of;
             // run 16 (bridge) stood here for minutes: walk the bastion to find calm piglins instead of waiting
             status += ", searching";
             int k = (int) (ticks / 200 % 4);
@@ -2475,6 +2516,33 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
     private final Set<BlockPos> looted = new HashSet<>();
     private final Map<BlockPos, Long> badChest = new HashMap<>();
     private List<BastionPlan.Point> plan = List.of();
+    /** Objective-level route for the layout (BastionRoutes); the block plan above executes its chest/gold steps. */
+    private List<BastionRoutes.Step> route = List.of(), loggedRoute = List.of();
+    private final Map<BlockPos, BastionRoutes.Step> planStep = new HashMap<>();
+    private BastionRoutes.Step currentStep;
+    private int[] floorCells = {0, 0};
+
+    /** Adult piglin within 16 that is not admiring and not holding our gold. */
+    private Piglin nearestUndistracted(Player me, List<LivingEntity> near) {
+        Piglin best = null;
+        for (LivingEntity e : near) if (e instanceof Piglin p && !p.isBaby() && p.isAlive() && !admiring.containsKey(p.getUUID()) && !p.getOffhandItem().is(Items.GOLD_INGOT)
+                && me.distanceTo(p) <= BastionPriors.AGGRO_RANGE && (best == null || me.distanceTo(p) < me.distanceTo(best))) best = p;
+        return best;
+    }
+
+    /** Housing lava variant: sample netherrack floor cells around the bastion and count those with lava on top. */
+    private int[] lavaFloorSample() {
+        int floor = 0, lava = 0;
+        BlockPos c = bastion.pos;
+        for (int dx = -24; dx <= 24; dx += 3) for (int dz = -24; dz <= 24; dz += 3) for (int dy = -12; dy <= 4; dy++) {
+            BlockPos b = c.offset(dx, dy, dz);
+            if (!ctx.world().hasChunkAt(b) || !ctx.world().getBlockState(b).is(Blocks.NETHERRACK)) continue;
+            net.minecraft.world.level.block.state.BlockState up = ctx.world().getBlockState(b.above());
+            if (up.isAir()) { floor++; break; }
+            if (up.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) { floor++; lava++; break; }
+        }
+        return new int[]{floor, lava};
+    }
     private BlockPos planFor, chestTarget, openedChest, entry;
     private long chestScan = -1000, chestSince, chestWaitSince, chestClickTick = -1000, lastTake;
     private boolean exiting, goldSourceGone, chestsExhausted;
@@ -2546,6 +2614,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
         chestScan = ticks;
         planFor = bastion.pos;
         List<BlockPos> chests = BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, new BlockOptionalMetaLookup(Blocks.CHEST), 64, 64, 64);
+        floorCells = lavaFloorSample();
         List<BastionPlan.Point> pts = new ArrayList<>();
         for (BlockPos b : chests) {
             if (Math.hypot(b.getX() - bastion.pos.getX(), b.getZ() - bastion.pos.getZ()) > 56 || looted.contains(b)) continue;
@@ -2557,7 +2626,552 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             pts.add(new BastionPlan.Point(b.getX(), b.getY(), b.getZ(), BastionPlan.Kind.GOLD));
         }
         BlockPos at = me.blockPosition();
-        plan = BastionPlan.order(layout(), bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
+        // the route (BastionRoutes) decides the order of objectives; the resolver maps each to the scanned blocks
+        if ("housing".equals(layout())) {
+            BastionRoutes.HousingVariant hv = BastionRoutes.housingVariant(floorCells[0], floorCells[1], BastionSettings.intermediateRoutes);
+            route = BastionRoutes.housing(hv);
+        } else route = BastionRoutes.forLayout(layout(), false, BastionSettings.intermediateRoutes);
+        List<BastionRouteResolver.Target> targets = BastionRouteResolver.resolve(layout(), route, bastion.pos.getX(), bastion.pos.getY(), bastion.pos.getZ(), at.getX(), at.getY(), at.getZ(), pts);
+        List<BastionPlan.Point> ordered = new ArrayList<>();
+        planStep.clear();
+        for (BastionRouteResolver.Target t : targets) { ordered.add(t.point()); if (t.step() != null) planStep.put(new BlockPos(t.point().x(), t.point().y(), t.point().z()), t.step()); }
+        plan = ordered;
+        if (!route.equals(loggedRoute)) { loggedRoute = route; routeIdx = 0; scriptStep = null; routeStart = ticks; logDirect("Bastion: route " + layout() + " (" + targets.size() + " targets) " + route); }
+    }
+
+    // ---- route scripts (BastionScript): the movement steps of Couriway's treasure / housing routes
+    private int routeIdx, opLeft = -1, opThrowMark, aimMiss;
+    private long routeStart, blockStepIdle;
+    private BastionRoutes.Step blockStep;
+    private BastionScript.Runner scriptRun;
+    private BastionRoutes.Step scriptStep;
+    private BlockPos scriptAt, opLava;
+    private int sfx = 1, sfz = 0;
+    private PathingCommand opCmd;
+    private BlockPos opTarget;
+    private int opTargetIdx = -1;
+    private BastionRoutes.Step opTargetStep;
+
+    /** True while the plan still holds an unlooted chest or unmined gold block claimed by this step. */
+    private boolean stepHasTargets(BastionRoutes.Step s) {
+        for (Map.Entry<BlockPos, BastionRoutes.Step> e : planStep.entrySet()) {
+            if (e.getValue() != s || looted.contains(e.getKey()) || badChest.getOrDefault(e.getKey(), 0L) > ticks || badGold.getOrDefault(e.getKey(), 0L) > ticks) continue;
+            if (!ctx.world().hasChunkAt(e.getKey())) return true;
+            net.minecraft.world.level.block.state.BlockState st = ctx.world().getBlockState(e.getKey());
+            if (st.is(Blocks.CHEST) || st.is(Blocks.GOLD_BLOCK)) return true;
+        }
+        return false;
+    }
+
+    /** Walk the route: block steps are left to lootChests while they have targets; scripted steps run their ops here. */
+    private PathingCommand runRoute(Player me, List<LivingEntity> near) {
+        if (route.isEmpty() || !BastionSettings.scriptedRoutes) return null;
+        while (routeIdx < route.size()) {
+            BastionRoutes.Step s = route.get(routeIdx);
+            List<BastionScript.Op> ops = BastionScript.ops(s);
+            if (ops.isEmpty()) {
+                // a block step is over when its targets are gone, or when the loot loop has been working on another
+                // step's targets for 20 s (r144: top chests deferred behind a brute, the route never moved past them)
+                if (blockStep != s) { blockStep = s; blockStepIdle = ticks; }
+                if (currentStep == s) blockStepIdle = ticks;
+                if (stepHasTargets(s) && ticks - blockStepIdle < 400) return null;
+                if (stepHasTargets(s)) logDirect("Bastion: step " + s + " left for later, the loot loop is elsewhere");
+                routeIdx++;
+                continue;
+            }
+            if (scriptStep != s) {
+                scriptStep = s;
+                scriptRun = new BastionScript.Runner(ops);
+                scriptAt = me.blockPosition();
+                int dx = bastion.pos.getX() - scriptAt.getX(), dz = bastion.pos.getZ() - scriptAt.getZ();
+                if (Math.abs(dx) >= Math.abs(dz)) { sfx = dx >= 0 ? 1 : -1; sfz = 0; } else { sfx = 0; sfz = dz >= 0 ? 1 : -1; }
+                opLeft = -1; opLava = null;
+                logDirect("Bastion: step " + s + " (" + ops.size() + " ops, facing " + sfx + "," + sfz + ")");
+            }
+            if (scriptRun.done()) {
+                logDirect("Bastion: step " + s + " done" + (scriptRun.skipped() > 0 ? ", " + scriptRun.skipped() + " ops skipped" : ""));
+                routeIdx++;
+                scriptStep = null;
+                continue;
+            }
+            BastionScript.Op op = scriptRun.current();
+            int idx = scriptRun.index();
+            opCmd = null;
+            BastionScript.Result r = execOp(me, near, s, op);
+            scriptRun.report(r);
+            if (scriptRun.index() != idx) opLeft = -1;
+            status = "route " + s + " op " + (idx + 1) + "/" + ops.size() + " " + op.kind() + (r == BastionScript.Result.FAILED ? " (failed, skipping)" : "");
+            return opCmd != null ? opCmd : pause0();
+        }
+        return null;
+    }
+
+    private BlockPos opCell(BastionScript.Op op) {
+        int[] w = BastionScript.toWorld(sfx, sfz, op.f(), op.r(), op.u());
+        return scriptAt.offset(w[0], w[1], w[2]);
+    }
+
+    private BastionScript.Result execOp(Player me, List<LivingEntity> near, BastionRoutes.Step s, BastionScript.Op op) {
+        switch (op.kind()) {
+            case MOVE: {
+                BlockPos c = opCell(op);
+                if (me.blockPosition().equals(c)) return BastionScript.Result.DONE;
+                opCmd = new PathingCommand(new GoalBlock(c), PathingCommandType.SET_GOAL_AND_PATH);
+                return BastionScript.Result.WORKING;
+            }
+            case MOVE_TARGET: {
+                // scanned once per op (a 65x17x65 sweep), not every tick
+                if (opTarget == null || opTargetIdx != scriptRun.index() || opTargetStep != s) { opTarget = routeTarget(me, s); opTargetIdx = scriptRun.index(); opTargetStep = s; }
+                BlockPos t = opTarget;
+                if (t == null) return BastionScript.Result.FAILED;
+                if (Math.hypot(me.getX() - (t.getX() + 0.5), me.getZ() - (t.getZ() + 0.5)) < 1.5 && Math.abs(me.getY() - t.getY()) < 2) return BastionScript.Result.DONE;
+                opCmd = new PathingCommand(new GoalNear(t, 1), PathingCommandType.SET_GOAL_AND_PATH);
+                return BastionScript.Result.WORKING;
+            }
+            case PLACE: return placeCell(me, opCell(op));
+            case MINE: return mineCell(me, opCell(op));
+            case PILLAR: return pillarStep(me, op.n());
+            case THROW: {
+                int ingots = ingotCount(me);
+                if (opLeft < 0) { opLeft = op.n() == 0 ? ingots / 2 : op.n(); opThrowMark = distractions; }
+                opLeft -= distractions - opThrowMark;
+                opThrowMark = distractions;
+                if (opLeft <= 0 || ingots <= 0) return BastionScript.Result.DONE;
+                Piglin p = nearestUndistracted(me, near);
+                if (p == null) for (LivingEntity e : near) if (e instanceof Piglin q && !q.isBaby() && q.isAlive() && me.distanceTo(q) <= 16 && (p == null || me.distanceTo(q) < me.distanceTo(p))) p = q;
+                if (p == null) return BastionScript.Result.DONE;
+                opCmd = distract(me, p);
+                return BastionScript.Result.WORKING;
+            }
+            case PUSH_ITEMS: {
+                for (ItemEntity i : ctx.world().getEntitiesOfClass(ItemEntity.class, me.getBoundingBox().inflate(4), i -> i.getItem().is(Items.GOLD_BLOCK))) {
+                    BlockPos c = i.blockPosition();
+                    if (c.equals(me.blockPosition()) || c.equals(me.blockPosition().above()) || !ctx.world().getBlockState(c).canBeReplaced()) continue;
+                    BastionScript.Result r = placeCell(me, c);
+                    return r == BastionScript.Result.DONE ? BastionScript.Result.WORKING : r;
+                }
+                return BastionScript.Result.DONE;
+            }
+            case BLOCK_LAVA: {
+                if (opLeft < 0) opLeft = op.n();
+                if (opLeft <= 0) return BastionScript.Result.DONE;
+                BlockPos best = null;
+                BlockPos at = me.blockPosition();
+                for (BlockPos b : BlockPos.betweenClosed(at.offset(-5, -3, -5), at.offset(5, 1, 5))) {
+                    if (!ctx.world().getFluidState(b).is(net.minecraft.tags.FluidTags.LAVA) || !ctx.world().getFluidState(b).isSource()) continue;
+                    if (best == null || b.distSqr(at) < best.distSqr(at)) best = b.immutable();
+                }
+                if (best == null) return BastionScript.Result.DONE;
+                BastionScript.Result r = placeCell(me, best);
+                if (r == BastionScript.Result.DONE) { opLeft--; return opLeft <= 0 ? BastionScript.Result.DONE : BastionScript.Result.WORKING; }
+                return r;
+            }
+            case LAVA_ON_PIGLIN: return lavaOnStraggler(me, near);
+            case WEAR_GOLD: {
+                if (wearingGold(me)) return BastionScript.Result.DONE;
+                return wearGold(me) ? BastionScript.Result.WORKING : BastionScript.Result.FAILED;
+            }
+            case UNSTICK: {
+                for (LivingEntity e : near) {
+                    if (!(e instanceof Piglin p) || !p.isAlive() || me.distanceTo(p) > 6 || !stuck(me, p)) continue;
+                    BlockPos pb = p.blockPosition();
+                    Direction d = Direction.getApproximateNearest(me.getX() - p.getX(), 0, me.getZ() - p.getZ());
+                    BlockPos c = pb.relative(d);
+                    if (ctx.world().getBlockState(c).canBeReplaced()) c = pb.below();
+                    return mineCell(me, c) == BastionScript.Result.DONE ? BastionScript.Result.DONE : BastionScript.Result.WORKING;
+                }
+                return BastionScript.Result.DONE;
+            }
+            default: return BastionScript.Result.FAILED;
+        }
+    }
+
+    /** World target of a MOVE_TARGET step. */
+    private BlockPos routeTarget(Player me, BastionRoutes.Step s) {
+        BlockPos at = me.blockPosition();
+        if (s == BastionRoutes.Step.TAKE_THIRD_BASALT_BRIDGE) {
+            // basalt bridge columns between us and the centre; lateral offset along our right-hand axis
+            List<BlockPos> tops = new ArrayList<>();
+            for (BlockPos b : BlockPos.betweenClosed(at.offset(-32, -10, -32), at.offset(32, 6, 32))) {
+                if (!ctx.world().getBlockState(b).is(Blocks.BASALT) && !ctx.world().getBlockState(b).is(Blocks.POLISHED_BASALT)) continue;
+                if (!ctx.world().getBlockState(b.above()).isAir()) continue;
+                tops.add(b.immutable());
+            }
+            if (tops.isEmpty()) return null;
+            List<Integer> lat = new ArrayList<>();
+            for (BlockPos b : tops) { int l = -sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()); if (!lat.contains(l)) lat.add(l); }
+            int want = BastionScript.thirdFromLeft(lat);
+            BlockPos best = null;
+            for (BlockPos b : tops) if (-sfz * (b.getX() - at.getX()) + sfx * (b.getZ() - at.getZ()) == want && (best == null || b.distSqr(at) < best.distSqr(at))) best = b;
+            return best == null ? null : best.above();
+        }
+        if (s == BastionRoutes.Step.CROSS_BRICK_BRIDGE) {
+            BlockPos best = null;
+            for (BlockPos b : BlockPos.betweenClosed(at.offset(-24, -6, -24), at.offset(24, 8, 24))) {
+                if (!(ctx.world().getBlockState(b).getBlock() instanceof net.minecraft.world.level.block.StairBlock) || !ctx.world().getBlockState(b.above()).isAir()) continue;
+                if (b.distSqr(bastion.pos) >= at.distSqr(bastion.pos)) continue; // stairs on the far side of the bridge
+                if (best == null || b.distSqr(at) < best.distSqr(at)) best = b.immutable();
+            }
+            return best == null ? bastion.pos : best.above();
+        }
+        return bastion.pos;
+    }
+
+    /** Place a throwaway block into the cell from any solid neighbour face in reach. */
+    private BastionScript.Result placeCell(Player me, BlockPos cell) {
+        if (!ctx.world().getBlockState(cell).canBeReplaced()) return BastionScript.Result.DONE;
+        if (me.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(cell))) return BastionScript.Result.FAILED;
+        int slot = shelterBlock(me, false);
+        if (slot < 0) return BastionScript.Result.FAILED;
+        Vec3 eye = me.getEyePosition(1.0F);
+        BlockPos sup = null; Direction face = null; Vec3 aim = null;
+        for (Direction d : Direction.values()) {
+            BlockPos n = cell.relative(d);
+            if (!solid(n)) continue;
+            Vec3 a = Vec3.atCenterOf(n).add(d.getOpposite().getStepX() * 0.5, d.getOpposite().getStepY() * 0.5, d.getOpposite().getStepZ() * 0.5);
+            if (eye.distanceTo(a) > 4.4) continue;
+            if (aim == null || eye.distanceTo(a) < eye.distanceTo(aim)) { sup = n; face = d.getOpposite(); aim = a; }
+        }
+        if (aim == null) {
+            if (eye.distanceTo(Vec3.atCenterOf(cell)) > 4.4) { opCmd = new PathingCommand(new GoalNear(cell, 2), PathingCommandType.SET_GOAL_AND_PATH); return BastionScript.Result.WORKING; }
+            return BastionScript.Result.FAILED;
+        }
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 8, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(slot);
+        baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true); // do not open a chest or door we click on
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, aim, ctx.playerRotations()), true);
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(sup) && h.getDirection() == face) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            aimMiss = 0;
+        } else if (++aimMiss > 30) {
+            // r146: a pillar side face is hidden from on top of the pillar; 30 ticks without sight of the face is a miss, not 10 s
+            aimMiss = 0;
+            return BastionScript.Result.FAILED;
+        }
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Mine the cell with the pickaxe; never one that opens onto lava. */
+    private BastionScript.Result mineCell(Player me, BlockPos cell) {
+        net.minecraft.world.level.block.state.BlockState st = ctx.world().getBlockState(cell);
+        if (st.isAir() || st.canBeReplaced() && st.getFluidState().isEmpty()) return BastionScript.Result.DONE;
+        if (!st.getFluidState().isEmpty() || lavaBeside(cell)) return BastionScript.Result.FAILED;
+        Vec3 eye = me.getEyePosition(1.0F);
+        if (eye.distanceTo(Vec3.atCenterOf(cell)) > 4.4) { opCmd = new PathingCommand(new GoalNear(cell, 2), PathingCommandType.SET_GOAL_AND_PATH); return BastionScript.Result.WORKING; }
+        int pick = pickaxeSlot(me);
+        if (pick < 0) return BastionScript.Result.FAILED;
+        if (pick >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, pick, 7, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(pick);
+        Rotation rot = RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(cell), ctx.playerRotations());
+        baritone.getLookBehavior().updateTarget(rot, true);
+        if (ctx.isLookingAt(cell)) { baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true); aimMiss = 0; }
+        else if (++aimMiss > 40) { aimMiss = 0; return BastionScript.Result.FAILED; } // something in the way of the cell
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Jump-place under ourselves until we stand n above where the step began. */
+    private BastionScript.Result pillarStep(Player me, int n) {
+        if (me.blockPosition().getY() >= scriptAt.getY() + n && me.onGround()) return BastionScript.Result.DONE;
+        if (!headroom(me, me.blockPosition().getY())) return BastionScript.Result.FAILED;
+        int slot = shelterBlock(me, false);
+        if (slot < 0) return BastionScript.Result.FAILED;
+        if (slot >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, slot, 8, ContainerInput.SWAP, me); return BastionScript.Result.WORKING; }
+        me.getInventory().setSelectedSlot(slot);
+        baritone.getLookBehavior().updateTarget(new Rotation(me.getYRot(), 90), true);
+        if (me.onGround()) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
+        else if (me.getY() - Math.floor(me.getY()) > 0.15 || me.getDeltaMovement().y < 0) {
+            BlockPos under = BlockPos.containing(me.getX(), me.getY() - 0.2, me.getZ());
+            if (ctx.world().getBlockState(under).canBeReplaced() && solid(under.below())) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+        }
+        return BastionScript.Result.WORKING;
+    }
+
+    /** Pour lava under the nearest hostile piglin within 6, then scoop it back up. */
+    private BastionScript.Result lavaOnStraggler(Player me, List<LivingEntity> near) {
+        Vec3 eye = me.getEyePosition(1.0F);
+        if (opLava != null) {
+            if (!realLava(opLava)) { opLava = null; return BastionScript.Result.DONE; }
+            int b = slotOf(me, Items.BUCKET);
+            if (b < 0 || b >= 9) { opLava = null; return BastionScript.Result.DONE; }
+            me.getInventory().setSelectedSlot(b);
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(opLava), ctx.playerRotations()), true);
+            if (ticks % 4 == 0) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            return BastionScript.Result.WORKING;
+        }
+        LivingEntity t = null;
+        for (LivingEntity e : near) if ((e instanceof Piglin p && p.isAggressive() || e instanceof net.minecraft.world.entity.monster.hoglin.Hoglin) && e.isAlive()
+                && me.distanceTo(e) > 2 && me.distanceTo(e) < 6 && (t == null || me.distanceTo(e) < me.distanceTo(t))) t = e;
+        if (t == null) return BastionScript.Result.DONE;
+        int lb = slotOf(me, Items.LAVA_BUCKET);
+        if (lb < 0 || lb >= 9) return BastionScript.Result.FAILED;
+        BlockPos fl = t.blockPosition().below();
+        if (!solid(fl)) return BastionScript.Result.WORKING;
+        me.getInventory().setSelectedSlot(lb);
+        Vec3 a = Vec3.atCenterOf(fl).add(0, 0.5, 0);
+        if (eye.distanceTo(a) > 4.4) return BastionScript.Result.WORKING;
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, a, ctx.playerRotations()), true);
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(fl) && h.getDirection() == Direction.UP) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            opLava = fl.above();
+        }
+        return BastionScript.Result.WORKING;
+    }
+
+    // ---- brute tactics (BruteTactics): lava bucket, or a sealed brute pit; never a direct hit
+    private BlockPos btLava, btPit, btPitCover;
+    private long btPourTick, btPitSince, btDbg = -1000;
+    private int btPitPhase; // 0 none, 1 dig, 2 lure, 3 cover, 4 holding
+    private java.util.UUID btBrute;
+
+    private LavaFlow.Grid liveGrid() {
+        var w = ctx.world();
+        return new LavaFlow.Grid() {
+            public int lava(int x, int y, int z) {
+                var fs = w.getFluidState(new BlockPos(x, y, z));
+                if (!fs.is(net.minecraft.tags.FluidTags.LAVA)) return -1;
+                if (fs.isSource() || fs.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING)) return 0;
+                return Math.max(0, 8 - fs.getAmount());
+            }
+            public boolean open(int x, int y, int z) {
+                BlockPos q = new BlockPos(x, y, z);
+                if (!w.isLoaded(q)) return false;
+                net.minecraft.world.level.block.state.BlockState s = w.getBlockState(q);
+                return s.getFluidState().isEmpty() && (s.isAir() || s.canBeReplaced());
+            }
+        };
+    }
+
+    private PathingCommand bruteTactic(Player me, List<LivingEntity> heavies) {
+        String setting = BastionSettings.bruteTactic;
+        if ("off".equals(setting)) return null;
+        Vec3 eye = me.getEyePosition(1.0F);
+        // 1. lava already poured: wait while it burns, then scoop it back
+        if (btLava != null) {
+            LivingEntity b = null;
+            for (LivingEntity e : heavies) if (e.getUUID().equals(btBrute)) b = e;
+            boolean drops = !ctx.world().getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(btLava).inflate(3), i -> !i.getItem().is(Items.GOLD_INGOT)).isEmpty();
+            if (!realLava(btLava)) { logDirect("Bastion: brute lava: lava gone" + (b == null ? ", brute dead or away" : ", brute at " + String.format("%.1f", me.distanceTo(b)))); btLava = null; return null; }
+            if (b != null && me.distanceTo(b) < 2.5) return null; // too close: the shelter takes it
+            if (BruteTactics.scoopNow(ticks - btPourTick, b != null && b.isAlive(), b != null && b.isInLava(), drops)) {
+                int s = slotOf(me, Items.BUCKET);
+                if (s < 0 || s >= 9) { logDirect("Bastion: brute lava: no empty bucket in the hotbar to scoop"); btLava = null; return null; }
+                me.getInventory().setSelectedSlot(s);
+                baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, Vec3.atCenterOf(btLava), ctx.playerRotations()), true);
+                if (eye.distanceTo(Vec3.atCenterOf(btLava)) > 4.4) return new PathingCommand(new GoalNear(btLava, 3), PathingCommandType.SET_GOAL_AND_PATH);
+                if (ticks % 4 == 0) baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+                status = "brute lava: scooping";
+                if (ticks - btPourTick > BruteTactics.BURN_TICKS + 200) { logDirect("Bastion: brute lava: could not scoop, leaving it"); btLava = null; }
+                return pause0();
+            }
+            status = "brute lava: burning (" + (b == null ? "gone" : String.format("%.0f hp", b.getHealth())) + ")";
+            return pause0();
+        }
+        // 2. brute pit in progress
+        if (btPitPhase > 0) return brutePit(me, heavies);
+        // 3. a brute to deal with?
+        LivingEntity b = null;
+        // own query: heavies drops brutes on other levels or out of reach, but a brute standing at the piglins still blocks trading (r150/r151)
+        for (PiglinBrute e : ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(24), PiglinBrute::isAlive))
+            if (b == null || me.distanceTo(e) < me.distanceTo(b)) b = e;
+        if (b == null) return null;
+        final LivingEntity fb = b;
+        boolean blocksTrading = !ctx.world().getEntitiesOfClass(Piglin.class, b.getBoundingBox().inflate(BruteTactics.BLOCKS_TRADE), p -> p.isAlive() && !p.isBaby()).isEmpty() && me.distanceTo(b) < 20;
+        int lb = slotOf(me, Items.LAVA_BUCKET);
+        boolean hasLava = lb >= 0;
+        BlockPos target = null;
+        if (hasLava) {
+            LavaFlow.Grid g = liveGrid();
+            BlockPos m = me.blockPosition();
+            for (int[] c : BruteTactics.pourCandidates(b.getBlockX(), b.getBlockY(), b.getBlockZ(), m.getX(), m.getZ())) {
+                BlockPos t = new BlockPos(c[0], c[1], c[2]);
+                if (!solid(t.below()) || !ctx.world().getBlockState(t).canBeReplaced()) continue;
+                if (eye.distanceTo(Vec3.atCenterOf(t.below()).add(0, 0.5, 0)) > 4.4) continue;
+                if (BruteTactics.pourSafe(g, t.getX(), t.getY(), t.getZ(), m.getX(), m.getY(), m.getZ())) { target = t; break; }
+            }
+        }
+        BlockPos hole = holes.isEmpty() ? me.blockPosition() : holes.get(0);
+        int[] site = null;
+        for (int[] s : BruteTactics.pitSites(hole.getX(), hole.getY(), hole.getZ(), me.getBlockX(), me.getBlockZ())) {
+            BlockPos p = new BlockPos(s[0], s[1], s[2]);
+            if (!solid(p.below(2)) || lavaBeside(p) || lavaBeside(p.below())) continue;
+            if (!solid(p) && !ctx.world().getBlockState(p).canBeReplaced()) continue;
+            site = s; break;
+        }
+        BruteTactics.Plan plan = BruteTactics.choose(setting, me.distanceTo(b), blocksTrading, hasLava, target != null, site != null);
+        if (plan == BruteTactics.Plan.NONE && ticks - btDbg >= 200 && (btDbg = ticks) >= 0) logDirect("BAST dbg brute tactic: none (dist " + String.format("%.1f", me.distanceTo(b)) + ", blocksTrade=" + blocksTrading + ", lava=" + hasLava + ", safePour=" + (target != null) + ", pitSite=" + (site != null) + ", holes=" + holes.size() + ")");
+        if (plan == BruteTactics.Plan.NONE && hasLava && blocksTrading && !((Mob) b).isAggressive() && me.distanceTo(b) > 6 && me.getHealth() >= 14) {
+            // a calm brute guarding the piglins: walk up to pouring range (it ignores us until hit or close)
+            status = "brute lava: closing on the brute guarding the piglins";
+            return new PathingCommand(new GoalNear(b.blockPosition(), 5), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (plan == BruteTactics.Plan.NONE) return null;
+        if (plan == BruteTactics.Plan.PIT) {
+            btPit = new BlockPos(site[0], site[1], site[2]);
+            btPitPhase = 1; btPitSince = ticks; btBrute = b.getUUID();
+            logDirect("Bastion: brute pit: digging at " + btPit.toShortString() + " (brute at " + String.format("%.1f", me.distanceTo(b)) + ")");
+            return brutePit(me, heavies);
+        }
+        if (lb >= 9) { ctx.playerController().windowClick(me.inventoryMenu.containerId, lb, 6, ContainerInput.SWAP, me); return pause0(); }
+        me.getInventory().setSelectedSlot(lb);
+        BlockPos fl = target.below();
+        Vec3 a = Vec3.atCenterOf(fl).add(0, 0.5, 0);
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, a, ctx.playerRotations()), true);
+        status = "brute lava: aiming at " + target.toShortString();
+        if (ctx.minecraft().hitResult instanceof BlockHitResult h && h.getBlockPos().equals(fl) && h.getDirection() == Direction.UP) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+            btLava = target; btPourTick = ticks; btBrute = b.getUUID();
+            logDirect("Bastion: brute lava: poured at " + target.toShortString() + " (brute at " + String.format("%.1f", me.distanceTo(b)) + ", " + (int) b.getHealth() + " hp" + (blocksTrading ? ", by the piglins" : "") + ")");
+        }
+        return pause0();
+    }
+
+    private PathingCommand brutePit(Player me, List<LivingEntity> heavies) {
+        LivingEntity b = null;
+        for (LivingEntity e : heavies) if (e.getUUID().equals(btBrute)) b = e;
+        if (b == null) for (LivingEntity e : ctx.world().getEntitiesOfClass(PiglinBrute.class, me.getBoundingBox().inflate(32), PiglinBrute::isAlive)) if (e.getUUID().equals(btBrute)) b = e;
+        boolean in = b != null && BruteTactics.inPit(btPit.getX(), btPit.getY(), btPit.getZ(), b.getBlockX(), b.getY(), b.getBlockZ());
+        if (btPitPhase == 4) {
+            // holding: watch it, log an escape or a broken wall once
+            if (b == null || !b.isAlive()) { logDirect("Bastion: brute pit: brute gone"); btPitPhase = 0; return null; }
+            if (!in) { logDirect("Bastion: brute pit: escaped (" + where(b, me) + ", cover " + (solid(btPitCover) ? "intact" : "broken") + ", " + (ticks - btPitSince) / 20 + " s)"); btPitPhase = 0; return null; }
+            for (Direction d : Direction.Plane.HORIZONTAL) if (!solid(btPit.relative(d)) || !solid(btPit.below().relative(d))) { logDirect("Bastion: brute pit: wall open at " + d + " (aggressive=" + ((Mob) b).isAggressive() + ")"); btPitPhase = 0; return null; }
+            return null; // trapped: carry on trading
+        }
+        if (b == null || !b.isAlive()) { logDirect("Bastion: brute pit: brute gone before it was trapped"); btPitPhase = 0; return null; }
+        if (ticks - btPitSince > 1200) { logDirect("Bastion: brute pit: gave up in phase " + btPitPhase); btPitPhase = 0; return null; }
+        if (btPitPhase == 1) {
+            BastionScript.Result r = mineCell(me, btPit);
+            if (r == BastionScript.Result.DONE) r = mineCell(me, btPit.below());
+            if (r == BastionScript.Result.FAILED) { logDirect("Bastion: brute pit: could not dig"); btPitPhase = 0; return null; }
+            if (ctx.world().getBlockState(btPit).canBeReplaced() && ctx.world().getBlockState(btPit.below()).canBeReplaced()) { btPitPhase = 2; btPitSince = ticks; logDirect("Bastion: brute pit: dug, luring"); }
+            status = "brute pit: digging";
+            return opCmd != null ? opCmd : pause0();
+        }
+        if (btPitPhase == 2) {
+            if (DamageBudget.abort(me.getHealth(), DamageBudget.BRUTE_HIT) && me.getHealth() < me.getMaxHealth()) { logDirect("Bastion: brute pit: hp " + (int) me.getHealth() + " under the damage budget, retreating"); btPitPhase = 0; return null; }
+            if (in) { btPitPhase = 3; btPitSince = ticks; btPitCover = btPit.above(); logDirect("Bastion: brute pit: trapped, covering"); return pause0(); }
+            if (ticks - btPitSince > BruteTactics.LURE_TICKS) { logDirect("Bastion: brute pit: lure failed (brute " + where(b, me) + ")"); btPitPhase = 0; return null; }
+            int[] st = BruteTactics.lureStand(btPit.getX(), btPit.getY(), btPit.getZ(), b.getX(), b.getZ());
+            BlockPos s = new BlockPos(st[0], st[1], st[2]);
+            if (solid(s)) s = s.above(); // the stand is on the surface beside the pit, not in its wall
+            status = "brute pit: luring from " + s.toShortString();
+            if (!me.blockPosition().equals(s)) return new PathingCommand(new GoalBlock(s), PathingCommandType.SET_GOAL_AND_PATH);
+            return pause0();
+        }
+        if (btPitPhase == 3) {
+            opCmd = null;
+            // r152: placeCell walked 15 blocks off to build a footing; the cover sits on the pit walls, so place it from here
+            if (ticks - btPitSince > 200) { logDirect("Bastion: brute pit: could not cover in 10 s"); btPitPhase = 0; return null; }
+            if (me.getEyePosition(1.0F).distanceTo(Vec3.atCenterOf(btPitCover)) > 4.4) return new PathingCommand(new GoalNear(btPitCover, 2), PathingCommandType.SET_GOAL_AND_PATH);
+            BastionScript.Result r = placeCell(me, btPitCover);
+            if (r == BastionScript.Result.DONE) { btPitPhase = 4; btPitSince = ticks; logDirect("Bastion: brute pit: covered, brute trapped"); return null; }
+            if (r == BastionScript.Result.FAILED) { logDirect("Bastion: brute pit: could not cover"); btPitPhase = 0; return null; }
+            status = "brute pit: covering";
+            return opCmd != null ? opCmd : pause0();
+        }
+        return null;
+    }
+
+    // ---- post-route fallbacks: trade outside the bastion, then warped-forest endermen (OutsideTrade, EndermanHunt, DamageBudget)
+    private OutsideTrade.Mode otMode = OutsideTrade.Mode.INSIDE;
+    private BlockPos otGoal, ehStand;
+    private long otSince, otLastDrop, ehSince;
+    private boolean ehActive;
+
+    private boolean routeFinished() { return !BastionSettings.scriptedRoutes || route.isEmpty() || routeIdx >= route.size(); }
+
+    /** Nearest sampled cell (16-block grid, radius r) whose biome id path is one of {@code ids}, or null. */
+    private BlockPos nearestBiome(Player me, int r, String... ids) {
+        BlockPos best = null; double bd = Double.MAX_VALUE;
+        for (int x = -r; x <= r; x += 16) for (int z = -r; z <= r; z += 16) {
+            BlockPos q = new BlockPos(me.getBlockX() + x, me.getBlockY(), me.getBlockZ() + z);
+            if (!ctx.world().isLoaded(q)) continue;
+            String id = ctx.world().getBiome(q).unwrapKey().map(k -> k.identifier().getPath()).orElse("");
+            for (String s : ids) if (s.equals(id) && Math.hypot(x, z) < bd) { bd = Math.hypot(x, z); best = q; }
+        }
+        return best;
+    }
+
+    private PathingCommand outsideFallback(Player me, List<Piglin> piglins, Map<String, Integer> have, boolean done) {
+        int free = 0, guarded = 0;
+        for (Piglin p : piglins) { if (!p.isAlive() || p.isBaby()) continue; if (brutesAround(p) > 0) guarded++; else free++; }
+        if (otMode == OutsideTrade.Mode.INSIDE || ticks - otSince > 2400) {
+            BlockPos w = nearestBiome(me, 160, "nether_wastes", "crimson_forest");
+            OutsideTrade.Mode m = OutsideTrade.choose(OutsideTrade.setting, routeFinished(), done, free, guarded, w == null ? -1 : Math.sqrt(me.blockPosition().distSqr(w)));
+            if (m != otMode) {
+                logDirect("Bastion: outside trade: " + m + " (free " + free + ", guarded " + guarded + (w == null ? ", no wastes in 160" : ", wastes at " + w.toShortString()) + ")");
+                otMode = m; otSince = ticks;
+                if (m == OutsideTrade.Mode.LURE_OUT) {
+                    BlockPos c = bastion.pos; double dx = me.getX() - c.getX(), dz = me.getZ() - c.getZ(), l = Math.max(1, Math.hypot(dx, dz));
+                    int r = BastionSettings.exitDistance + 8;
+                    otGoal = new BlockPos(c.getX() + (int) (dx / l * r), me.getBlockY(), c.getZ() + (int) (dz / l * r));
+                } else if (m == OutsideTrade.Mode.WASTES) otGoal = w;
+            }
+        }
+        if (otMode == OutsideTrade.Mode.LURE_OUT) {
+            if (OutsideTrade.outside(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ(), BastionSettings.exitDistance)) {
+                long followers = piglins.stream().filter(p -> p.isAlive() && !p.isBaby() && me.distanceTo(p) < 10 && brutesAround(p) == 0).count();
+                logDirect("Bastion: outside trade: outside the walls, " + followers + " piglins followed; trading here");
+                otMode = OutsideTrade.Mode.DONE; return null; // the normal trade hole/pit logic takes the free piglins from here
+            }
+            // drop an ingot every 5 s as we walk out: piglins go for it and follow the trail
+            if (ticks - otLastDrop > 100 && ingotCount(me) > 6) { int s = slotOf(me, Items.GOLD_INGOT); if (s >= 0 && s < 9) { me.getInventory().setSelectedSlot(s); if (safeDrop(me)) otLastDrop = ticks; } }
+            status = "outside trade: luring piglins out";
+            return new PathingCommand(new GoalXZ(otGoal.getX(), otGoal.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (otMode == OutsideTrade.Mode.WASTES) {
+            if (me.blockPosition().distSqr(otGoal) < 64) { logDirect("Bastion: outside trade: in the wastes, trading here"); otMode = OutsideTrade.Mode.DONE; return null; }
+            status = "outside trade: to the wastes at " + otGoal.toShortString();
+            return new PathingCommand(new GoalXZ(otGoal.getX(), otGoal.getZ()), PathingCommandType.SET_GOAL_AND_PATH);
+        }
+        if (otMode == OutsideTrade.Mode.INSIDE && routeFinished()) return endermanHunt(me, free > 0, have);
+        return null;
+    }
+
+    private PathingCommand endermanHunt(Player me, boolean freePiglins, Map<String, Integer> have) {
+        int pearls = have.getOrDefault("ender_pearl", 0), target = BastionSettings.TARGETS.getOrDefault("ender_pearl", 12);
+        BlockPos warped = ehStand != null ? ehStand : nearestBiome(me, EndermanHunt.maxWarpedDist, "warped_forest");
+        if (!EndermanHunt.go(EndermanHunt.setting, otMode, freePiglins, warped == null ? -1 : Math.sqrt(me.blockPosition().distSqr(warped)), pearls, target)) {
+            if (ehActive) { logDirect("Bastion: enderman hunt: stop, pearls " + pearls + "/" + target); ehActive = false; }
+            return null;
+        }
+        if (!ehActive) { ehActive = true; ehSince = ticks; logDirect("Bastion: enderman hunt: warped forest at " + warped.toShortString() + ", pearls " + pearls + "/" + target); }
+        // 1. reach the forest and find a 2-high gap (endermen are 3 tall and cannot follow us in)
+        if (ehStand == null) {
+            if (me.blockPosition().distSqr(warped) > 400) { status = "enderman hunt: to the warped forest"; return new PathingCommand(new GoalNear(warped, 4), PathingCommandType.SET_GOAL_AND_PATH); }
+            BlockPos m = me.blockPosition();
+            for (int dx = -8; dx <= 8 && ehStand == null; dx++) for (int dz = -8; dz <= 8 && ehStand == null; dz++) for (int dy = -3; dy <= 3 && ehStand == null; dy++) {
+                BlockPos q = m.offset(dx, dy, dz);
+                if (EndermanHunt.safeGap(solid(q.below()), ctx.world().getBlockState(q).isAir(), ctx.world().getBlockState(q.above()).isAir(), solid(q.above(2)), lavaBeside(q))) ehStand = q;
+            }
+            if (ehStand == null) {
+                // none here: dig one: stand cell plus head cell into a solid face, leaving the ceiling
+                for (Direction d : Direction.Plane.HORIZONTAL) { BlockPos q = m.relative(d); if (solid(q) && solid(q.above()) && solid(q.above(2)) && solid(q.below()) && !lavaBeside(q)) { ehStand = q; logDirect("Bastion: enderman hunt: digging a 2-high gap at " + q.toShortString()); break; } }
+                if (ehStand == null) { status = "enderman hunt: looking for a gap"; return new PathingCommand(new GoalNear(warped.offset((int) (ticks / 200 % 3 - 1) * 8, 0, 8), 2), PathingCommandType.SET_GOAL_AND_PATH); }
+            }
+        }
+        if (solid(ehStand) || solid(ehStand.above())) {
+            BastionScript.Result r = mineCell(me, solid(ehStand) ? ehStand : ehStand.above());
+            if (r == BastionScript.Result.FAILED) { ehStand = null; return pause0(); }
+            status = "enderman hunt: digging the gap"; return opCmd != null ? opCmd : pause0();
+        }
+        if (!me.blockPosition().equals(ehStand)) { status = "enderman hunt: into the gap"; return new PathingCommand(new GoalBlock(ehStand), PathingCommandType.SET_GOAL_AND_PATH); }
+        // 2. in the gap: fight an angry one in reach, else stare at the nearest calm one to provoke it
+        List<Enderman> ems = ctx.world().getEntitiesOfClass(Enderman.class, me.getBoundingBox().inflate(32), Enderman::isAlive);
+        int angry = (int) ems.stream().filter(Enderman::isCreepy).count();
+        if (DamageBudget.abort(me.getHealth(), 7) && angry > 0) status = "enderman hunt: low hp, holding the gap";
+        Vec3 eye = me.getEyePosition(1.0F);
+        Enderman best = null;
+        for (Enderman e : ems) if (best == null || me.distanceTo(e) < me.distanceTo(best)) best = e;
+        if (best == null) { status = "enderman hunt: waiting for endermen"; return pause0(); }
+        int sw = slotOf(me, Items.DIAMOND_SWORD); if (sw >= 0 && sw < 9) me.getInventory().setSelectedSlot(sw);
+        if (best.isCreepy() || EndermanHunt.provoke(me.distanceTo(best), angry)) {
+            baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(eye, best.getEyePosition(1.0F), ctx.playerRotations()), true);
+            if (best.isCreepy() && me.distanceTo(best) < 3.2 && me.getAttackStrengthScale(0) >= 0.95F && ctx.minecraft().hitResult instanceof net.minecraft.world.phys.EntityHitResult h && h.getEntity() == best)
+                baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+            status = best.isCreepy() ? "enderman hunt: fighting from the gap" : "enderman hunt: provoking at " + String.format("%.0f", me.distanceTo(best));
+        } else status = "enderman hunt: waiting (" + angry + " angry)";
+        return pause0();
     }
 
     private PathingCommand lootChests(Player me, List<LivingEntity> near) {
@@ -2580,21 +3194,35 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             // a brute guarding it (even one we gave up fighting) kills a speedrun kit: come back when it has moved
             if (!ctx.world().getEntitiesOfClass(PiglinBrute.class, new net.minecraft.world.phys.AABB(b).inflate(9), PiglinBrute::isAlive).isEmpty()) { unloaded = true; continue; } // deferred, not done
             if (pt.kind() == BastionPlan.Kind.GOLD) {
-                if (!wantGold || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
+                boolean rg = BastionSettings.scriptedRoutes && planStep.containsKey(b) && BastionRouteResolver.breaksGold(planStep.get(b));
+                if (!(wantGold || rg) || !ctx.world().getBlockState(b).is(Blocks.GOLD_BLOCK)) continue;
             } else if (!ctx.world().getBlockState(b).is(Blocks.CHEST)) continue;
             next = b;
+            BastionRoutes.Step ps = planStep.get(b);
+            if (ps != null && ps != currentStep && pt.kind() == BastionPlan.Kind.CHEST) { currentStep = ps; logDirect("Bastion: step " + ps); }
             break;
         }
         // only "no chest left" once we stand in the bastion with its chunks loaded; from outside an empty plan means nothing
         chestsExhausted = next == null && !unloaded && Math.hypot(me.getX() - bastion.pos.getX(), me.getZ() - bastion.pos.getZ()) < 40;
         if (next == null) return null;
-        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK) && ingotCount(me) >= 4) {
+        // a route gold step (bridge chalice, treasure pit gold, housing wall gold) mines regardless of the ingots we hold
+        boolean routeGold = BastionSettings.scriptedRoutes && planStep.containsKey(next) && BastionRouteResolver.breaksGold(planStep.get(next));
+        if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK) && ingotCount(me) >= 4 && !routeGold) {
             // runs 20/27 walked to gold blocks holding 20+ ingots: trade those first, mine only when nearly out
             badGold.put(next, ticks + 600);
             return null;
         }
         if (ctx.world().getBlockState(next).is(Blocks.GOLD_BLOCK)) {
             // gold block next in the plan: the miner handles the piglin rule (breaking gold angers every piglin in 16, seen or not)
+            // Couriway ch. 3: distract undistracted piglins within 16 with an ingot before breaking gold
+            BastionRoutes.Step st = planStep.getOrDefault(next, BastionRoutes.Step.TRADE);
+            Piglin undistracted = nearestUndistracted(me, near);
+            double ud = undistracted == null ? Double.MAX_VALUE : me.distanceTo(undistracted);
+            if (undistracted != null && ingotCount(me) > 0 && (planStep.containsKey(next) ? BastionRoutes.needsDistractFirst(st, ud) : !BastionPriors.mayBreakGold(ud))) {
+                status = "distract first (" + st + ", piglin at " + String.format("%.1f", ud) + ")";
+                return distract(me, undistracted);
+            }
+            if (currentStep != st) { currentStep = st; logDirect("Bastion: step " + st); }
             preferGold = next;
             PathingCommand g = drop(me, next);
             if (g != null) return g;
@@ -3407,7 +4035,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             }
             if (pickHole != null) {
                 BlockPos stand = pickHole.below(2);
-                if (!me.blockPosition().equals(stand)) {
+            // a jump to throw over the rim leaves the stand block for a moment; that is still "in the hole"
+            boolean inStandColumn = me.blockPosition().getX() == stand.getX() && me.blockPosition().getZ() == stand.getZ() && me.getY() >= stand.getY() && me.getY() < stand.getY() + 1.6;
+                if (!me.blockPosition().equals(stand) && !(inStandColumn && throwJump)) {
                     if (me.blockPosition().getX() == pickHole.getX() && me.blockPosition().getZ() == pickHole.getZ() && !me.onGround()) return pause0();
                     status = "camp: into pickup hole";
                     return new PathingCommand(new GoalBlock(stand), PathingCommandType.SET_GOAL_AND_PATH);
@@ -3425,10 +4055,19 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
                     for (int by = Mth.floor(me.getEyeY()); by > me.getBlockY() - 5; by--) if (floor(new BlockPos(bx, by, bz))) return by + 1;
                     return me.getBlockY() - 5;
                 };
-                float[] aim = ItemThrow.aim(me.getX(), me.getEyeY(), me.getZ(), far.x, far.z, fl);
+                // our eyes are below the rim in the pit: the ingot hit the shared corner and fell back to us (r138: ingots 152 -> 151
+            // over 65 throws). Throw at the top of a jump, about 1.25 above the standing eye height.
+            // a roof over the pit stops the jump at +0.12 (r145: 167 s of jumping, no throw): throw from the ground then
+            boolean canJump = jumpTries < 3 && ctx.world().getBlockState(stand.above(2)).getCollisionShape(ctx.world(), stand.above(2)).isEmpty();
+            double throwEye = me.onGround() && canJump ? me.getEyeY() + 1.25 : me.getEyeY();
+            float[] aim = ItemThrow.aim(me.getX(), throwEye, me.getZ(), far.x, far.z, fl);
+            aim[1] = throwAdapt.pitch(aim[1]);
                 baritone.getLookBehavior().updateTarget(new Rotation(aim[0], aim[1]), true);
                 float farYaw = aim[0];
-                if (Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4 && safeDrop(me)) {
+                boolean aimed = Math.abs(Mth.wrapDegrees(me.getYRot() - farYaw)) < 6 && Math.abs(me.getXRot() - aim[1]) < 4;
+            if (aimed && me.onGround() && canJump) { if (throwJump) jumpTries++; throwJump = true; baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true); return pause0(); }
+            boolean apex = !canJump ? me.onGround() : !me.onGround() && Math.abs(me.getDeltaMovement().y) < 0.12 && me.getY() > stand.getY() + 0.9;
+            if (aimed && apex && safeDrop(me)) { throwJump = false; jumpTries = 0; throwTarget = caughtHole;
                     throwPred = ItemThrow.land(me.getX(), me.getEyeY(), me.getZ(), me.getYRot(), me.getXRot(), fl); admiring.put(caught.getUUID(), ticks); throwTick = ticks; throwsDone++; logDirect("Bastion: pickup-hole throw " + throwsDone + " ingots=" + (ingots - 1)); }
                 status = "camp: pickup hole, throwing (throws=" + throwsDone + ")";
                 return pause0();

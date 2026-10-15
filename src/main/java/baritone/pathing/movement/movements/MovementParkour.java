@@ -17,6 +17,9 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.pathing.kinematic.BsiWorld;
+import baritone.pathing.kinematic.JumpTemplates;
+
 import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
@@ -91,6 +94,61 @@ public class MovementParkour extends Movement {
         return new MovementParkour(context.getBaritone(), src, dist, direction, res.y > src.y);
     }
 
+    /** Ostinato: a takeoff block that slows the run-up or the jump (honey, soul sand). */
+    static boolean slowTakeoff(BlockState standingOn) {
+        return slowTakeoff(standingOn.getBlock().getSpeedFactor(), standingOn.getBlock().getJumpFactor());
+    }
+
+    static boolean slowTakeoff(float speedFactor, float jumpFactor) {
+        return speedFactor < 1 || jumpFactor < 1;
+    }
+
+    /** Ostinato: fly a straight jump of distance i from the run-up actually there, in the sim, against the real blocks. */
+    private static boolean slowTakeoffLands(CalculationContext context, int x, int y, int z, int xDiff, int zDiff, int i) {
+        int r = 0;
+        while (r < 2 && MovementHelper.canWalkOn(context, x - (r + 1) * xDiff, y - 1, z - (r + 1) * zDiff)) r++;
+        int frame = xDiff == 1 ? 0 : zDiff == 1 ? 2 : xDiff == -1 ? 4 : 6;
+        int[] f = MovementJump.FRAMES[frame];
+        for (JumpTemplates.Template t : JumpTemplates.HEAD_HITTERS) {
+            if (t.a == i && t.dy == 0 && t.runUp == r
+                    && MovementJump.headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, x + xDiff * i, y, z + zDiff * i, standingY(context, x, y, z))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    /** Ostinato: feet height standing at node (x, y, z): the top of the block below, which soul sand leaves 1/8 short. */
+    static double standingY(CalculationContext context, int x, int y, int z) {
+        double top = MovementHelper.collisionTop(context.get(x, y - 1, z));
+        return top > 0 && top < 1 ? y - 1 + top : y;
+    }
+
+    /** Ostinato: honey halves a jump (about 0.4 blocks high): nothing can be jumped up onto from it. */
+    /**
+     * Ostinato: the block whose jump and speed factors apply to a player standing at node (x, y, z), as vanilla picks it:
+     * the block at the feet, else the one at floor(feetY - 0.500001). On a slab or carpet laid over honey that is the
+     * honey a cell down, so the jump is halved there too (vanilla Entity.getBlockJumpFactor / getBlockSpeedFactor).
+     */
+    public static BlockState factorBlock(CalculationContext context, int x, int y, int z) {
+        BlockState feet = context.get(x, y, z);
+        if (feet.getBlock().getJumpFactor() != 1 || feet.getBlock().getSpeedFactor() != 1) return feet;
+        return context.get(x, factorCellY(y, MovementHelper.collisionTop(context.get(x, y - 1, z)), MovementHelper.collisionTop(feet)), z);
+    }
+
+    /** Feet height on whatever holds the player at node y (a low top in the feet cell, else the top of the block below), less half a block. */
+    static int factorCellY(int y, double belowTop, double feetTop) {
+        double feetY = feetTop > 0 && feetTop < 1 ? y + feetTop : belowTop > 0 ? y - 1 + Math.min(belowTop, 1) : y;
+        return (int) Math.floor(feetY - 0.500001);
+    }
+
+    public static boolean lowJump(BlockState standingOn) {
+        return lowJump(standingOn.getBlock().getJumpFactor());
+    }
+
+    static boolean lowJump(float jumpFactor) {
+        return jumpFactor < 0.9f;
+    }
+
     public static void cost(CalculationContext context, int x, int y, int z, Direction dir, MutableMoveResult res) {
         if (!context.allowParkour || disabled) {
             return;
@@ -122,7 +180,10 @@ public class MovementParkour extends Movement {
             return;
         }
         BlockState standingOn = context.get(x, y - 1, z);
-        if (MovementHelper.isClimbable(standingOn.getBlock()) || standingOn.getBlock() instanceof StairBlock || MovementHelper.isBottomSlab(standingOn)) {
+        // Ostinato: off a low top (candle, bed, chain, slab) the kinematic driver jumps too; flat jumps only, each one
+        // flown in the sim from the real surface below
+        boolean lowTakeoff = MovementHelper.isBottomSlab(standingOn);
+        if (MovementHelper.isClimbable(standingOn.getBlock()) || standingOn.getBlock() instanceof StairBlock || lowTakeoff && !context.allowParkourFourGap) {
             return;
         }
         // we can't jump from (frozen) water with assumeWalkOnWater because we can't be sure it will be frozen
@@ -135,8 +196,8 @@ public class MovementParkour extends Movement {
         int maxJump;
         if (context.allowWalkOnMagmaBlocks && standingOn.is(Blocks.MAGMA_BLOCK)) {
             maxJump = 2;
-        } else if (standingOn.getBlock() == Blocks.SOUL_SAND) {
-            maxJump = 2; // 1 block gap
+        } else if (standingOn.getBlock() == Blocks.SOUL_SAND && !context.allowParkourFourGap) {
+            maxJump = 2; // 1 block gap (Ostinato: the kinematic controller flies longer ones, each checked in the sim below)
         } else if (context.canSprint && context.allowParkourFourGap && hasRunUp(context, x, y, z, xDiff, zDiff)) {
             maxJump = 5; // 4 block gap: a hop timed onto the edge, driven by the kinematic controller
         } else if (context.canSprint) {
@@ -172,7 +233,8 @@ public class MovementParkour extends Movement {
             // check for ascend landing position
             BlockState destInto = context.bsi.get0(destX, y, destZ);
             if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && context.allowParkourAscend && context.canSprint && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
+                if (i <= 3 && !lowTakeoff && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z))
+                        && (i == 2 || standingOn.getBlock() != Blocks.SOUL_SAND) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
                     res.z = destZ;
@@ -185,7 +247,7 @@ public class MovementParkour extends Movement {
             // check for flat landing position
             BlockState landingOn = context.bsi.get0(destX, y - 1, destZ);
             // a fence or wall top is half a block up: reachable like an ascend, so only up to a 2 block gap
-            if (isTallTop(landingOn) && i <= 3 && (i < 3 || context.canSprint)) {
+            if (isTallTop(landingOn) && i <= 3 && (i < 3 || context.canSprint) && !lowTakeoff) {
                 if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y;
@@ -200,6 +262,9 @@ public class MovementParkour extends Movement {
             if ((landingOn.getBlock() != Blocks.FARMLAND && MovementHelper.canWalkOn(context, destX, y - 1, destZ, landingOn))
                     || (Math.min(16, context.frostWalker + 2) >= i && MovementHelper.canUseFrostWalker(context, landingOn))
             ) {
+                if ((lowTakeoff || slowTakeoff(factorBlock(context, x, y, z))) && !slowTakeoffLands(context, x, y, z, xDiff, zDiff, i)) {
+                    break; // Ostinato: off honey or soul sand, only what the sim lands from the run-up there is
+                }
                 if (checkOvershootSafety(context.bsi, destX + xDiff, y, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y;
@@ -217,6 +282,9 @@ public class MovementParkour extends Movement {
             verifiedMaxJump = i;
         }
 
+        if (lowTakeoff) {
+            return; // no extensions or placing off a low top
+        }
         if (context.hasThrowaway && context.canSprint && context.allowParkourFourGap) {
             for (int e = 1; e <= 2; e++) {
                 if (extendedJump(context, x, y, z, xDiff, zDiff, e, res)) {
@@ -230,6 +298,9 @@ public class MovementParkour extends Movement {
             return;
         }
         // check parkour jumps from largest to smallest for positions to place blocks
+        if (standingOn.getBlock() == Blocks.SOUL_SAND) {
+            verifiedMaxJump = Math.min(verifiedMaxJump, 2); // Ostinato: unchecked in the sim, so the 1 block gap it always had
+        }
         for (int i = verifiedMaxJump; i > 1; i--) {
             int destX = x + i * xDiff;
             int destZ = z + i * zDiff;
@@ -573,7 +644,7 @@ public class MovementParkour extends Movement {
             if (!sim.onGround) {
                 left = true;
             } else if (left || t > delay + 2) {
-                return left && Math.abs(sim.y - dest.y) < 0.01 && landsOn(sim.x, sim.z);
+                return left && PlayerSim.feetCell(sim.y) == dest.y && landsOn(sim.x, sim.z);
             }
             if (sim.y < dest.y - 1.5) {
                 return false;

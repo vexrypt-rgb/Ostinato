@@ -152,7 +152,7 @@ public final class ChainTemplates {
             PlayerSim start = start(w, r, lat);
             // every way onto the pad, one per distinct landing state: the best one for the second jump is rarely the tidiest
             Map<String, Landing> buckets = new HashMap<>();
-            int[] size = {JumpSearch.O0.length, JumpSearch.HOP.length, JumpSearch.EDGE.length, JumpSearch.O1.length,
+            int[] size = {JumpSearch.O0.length, JumpSearch.HOP.length, JumpSearch.PLAIN_EDGES, JumpSearch.O1.length,
                     JumpSearch.SWITCH.length, JumpSearch.RELEASE.length, JumpSearch.BRAKE.length};
             int[] p = new int[JumpSearch.DIMS];
             for (p[0] = 0; p[0] < size[0]; p[0]++) for (p[1] = 0; p[1] < size[1]; p[1]++) for (p[2] = 0; p[2] < size[2]; p[2]++)

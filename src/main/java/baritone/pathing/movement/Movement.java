@@ -82,6 +82,15 @@ public abstract class Movement implements IMovement, MovementHelper {
         return cost;
     }
 
+    /** Bucket shared with {@link baritone.pathing.movement.Moves#family()}. */
+    public String calibrationKey() {
+        String n = getClass().getSimpleName();
+        if (n.startsWith("Movement")) {
+            n = n.substring("Movement".length());
+        }
+        return n.toUpperCase(java.util.Locale.ROOT);
+    }
+
     public double getCost(CalculationContext context) {
         if (cost == null) {
             cost = calculateCost(context);

@@ -489,7 +489,64 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
             return YES;
         }
+        // Ostinato: fence, wall and closed gate tops (1.5 high) hold a player whose head then reaches a third cell up;
+        // canWalkOnPosition checks that cell.
+        if (isTallTop(state)) {
+            return MAYBE;
+        }
+        // Anything else with a flat top a player is held up by (candles, sea pickles, flower pots, heads, upright end
+        // rods and chains): its real collision shape decides. A low one is a low floor, see isBottomSlab.
+        if (!isHazardFloor(block) && holdsPlayer(collisionTop(state), collisionWidth(state))) {
+            return YES;
+        }
         return NO;
+    }
+
+    /** Floors with a collision top that still must not be stood on. */
+    static boolean isHazardFloor(Block block) {
+        return block instanceof CactusBlock || block instanceof CampfireBlock || block instanceof PointedDripstoneBlock
+                || block == Blocks.POWDER_SNOW || block instanceof ScaffoldingBlock || block instanceof BaseRailBlock
+                || block instanceof FenceBlock || block instanceof WallBlock || block instanceof FenceGateBlock; // tall tops: isTallTop
+    }
+
+    /** Ostinato: a fence, wall or closed gate, whose collision top is 1.5 high. */
+    static boolean isTallTop(BlockState state) {
+        Block b = state.getBlock();
+        if (b instanceof FenceGateBlock) return !state.getValue(FenceGateBlock.OPEN);
+        return b instanceof FenceBlock || b instanceof WallBlock;
+    }
+
+    /** Ostinato: a player standing on a top this high has feet in the cell above and head two cells above that. */
+    static int cellsAboveNeeded(double top) {
+        return top > 1.0 ? 3 : 2;
+    }
+
+    /** Top (0..1.5) of a state's own collision shape, -1 when it has none. */
+    public static double collisionTop(BlockState state) {
+        net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        return s.isEmpty() ? -1 : s.max(net.minecraft.core.Direction.Axis.Y);
+    }
+
+    /** The narrower horizontal extent of a state's collision shape, 0 when it has none. */
+    public static double collisionWidth(BlockState state) {
+        net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        if (s.isEmpty()) return 0;
+        net.minecraft.world.phys.AABB b = s.bounds();
+        return Math.min(b.maxX - b.minX, b.maxZ - b.minZ);
+    }
+
+    /**
+     * Whether a collision top this high and this wide holds a player standing in the block above. Below a quarter
+     * (carpet, plates, snow layers) the player stands in this block's own cell instead; above one (fences, walls)
+     * the player's feet are a cell up, which the node grid does not model.
+     */
+    static boolean holdsPlayer(double top, double width) {
+        return top >= 0.25 && top <= 1.0 && width >= 0.12;
+    }
+
+    /** A top this low leaves a jump short of a full block above, like a bottom slab (candle 6/16, skull 8/16). */
+    static boolean isLowTop(double top) {
+        return top >= 0.25 && top <= 0.5625;
     }
 
     static boolean canWalkOnPosition(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
@@ -511,10 +568,15 @@ public interface MovementHelper extends ActionCosts, Helper {
             return isWater(upState) ^ Baritone.settings().assumeWalkOnWater.value;
         }
 
+        if (isTallTop(state)) { // Ostinato: standing 1.5 up, the head is in the third cell
+            return canWalkThrough(bsi, x, y + cellsAboveNeeded(1.5), z);
+        }
         if (block instanceof FallingBlock) {
             // pitfall: sand/gravel/concrete powder resting on something without collision (air, open gate, sign...) drops out from under us
             BlockPos.MutableBlockPos below = bsi.isPassableBlockPos.set(x, y - 1, z);
-            return isBlockNormalCube(state) && !bsi.get0(x, y - 1, z).getCollisionShape(bsi.access, below).isEmpty();
+            // Ostinato: an anvil is a falling block that is not a full cube; its shape decides like any other low top
+            boolean holds = isBlockNormalCube(state) || holdsPlayer(collisionTop(state), collisionWidth(state));
+            return holds && !bsi.get0(x, y - 1, z).getCollisionShape(bsi.access, below).isEmpty();
         }
         if (MovementHelper.isLava(state) && !MovementHelper.isFlowing(x, y, z, state, bsi) && Baritone.settings().assumeWalkOnLava.value) { // if we get here it means that assumeWalkOnLava must be true, so put it last
             return true;
@@ -720,7 +782,9 @@ public interface MovementHelper extends ActionCosts, Helper {
     static boolean isBottomSlab(BlockState state) {
         return (state.getBlock() instanceof SlabBlock
                 && state.getValue(SlabBlock.TYPE) == SlabType.BOTTOM)
-                || isStandingLantern(state);
+                || isStandingLantern(state)
+                || (!(state.getBlock() instanceof SlabBlock) && !isBlockNormalCube(state) && canWalkOnBlockState(state) == YES
+                    && !isHazardFloor(state.getBlock()) && isLowTop(collisionTop(state)));
     }
 
     /** A lantern on the ground. One hanging has the block it hangs from where the player would stand. */
@@ -758,6 +822,21 @@ public interface MovementHelper extends ActionCosts, Helper {
                         ctx.playerRotations()).withPitch(ctx.playerRotations().getPitch()),
                 false
         )).setInput(Input.MOVE_FORWARD, true);
+    }
+
+    /**
+     * Ostinato: walk to a run-up start (dx, dz) away. Walking on while the look still turns orbits a close target
+     * (practice parkour: circled a start 0.6 away for 5 s), so only walk once roughly facing it.
+     */
+    static void walkToSpot(IPlayerContext ctx, MovementState state, double dx, double dz) {
+        float to = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        state.setTarget(new MovementTarget(new Rotation(to, ctx.playerRotations().getPitch()), true));
+        double d2 = dx * dx + dz * dz;
+        net.minecraft.world.phys.Vec3 m = ctx.player().getDeltaMovement();
+        boolean facing = Math.abs(Mth.wrapDegrees(to - ctx.player().getYRot())) < (d2 > 1 ? 60 : 30);
+        if (facing && (d2 > 0.05 || Math.abs(m.x) + Math.abs(m.z) < 0.05)) {
+            state.setInput(Input.MOVE_FORWARD, true);
+        }
     }
 
     static void moveTowardsWithoutRotation(IPlayerContext ctx, MovementState state, float idealYaw) {

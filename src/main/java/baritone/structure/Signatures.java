@@ -15,10 +15,16 @@ final class Signatures {
     static final class Hit {
         final String id;
         final double confidence;
+        final String variant;
 
         Hit(String id, double confidence) {
+            this(id, confidence, null);
+        }
+
+        Hit(String id, double confidence, String variant) {
             this.id = id;
             this.confidence = confidence;
+            this.variant = variant;
         }
     }
 

@@ -20,6 +20,21 @@ import java.util.Map;
 public final class ServerStructureSource {
     private ServerStructureSource() {}
 
+    /** Sub-type from the start piece's template path (bastions are picked by their first jigsaw pool). */
+    static String variantOf(String id, StructureStart s) {
+        if (!id.equals("bastion_remnant") || s.getPieces().isEmpty()) return null;
+        String d = s.getPieces().get(0).toString();
+        for (var p : s.getPieces()) {
+            String t = String.valueOf(p);
+            if (t.contains("bastion/")) { d = t; break; }
+        }
+        if (d.contains("/treasure/")) return "treasure";
+        if (d.contains("/hoglin_stable/")) return "stables";
+        if (d.contains("/bridge/")) return "bridge";
+        if (d.contains("/units/")) return "housing";
+        return null;
+    }
+
     public static boolean available() {
         return Minecraft.getInstance().getSingleplayerServer() != null;
     }
@@ -36,7 +51,7 @@ public final class ServerStructureSource {
                 ServerLevel level = server.getLevel(dimKey);
                 if (level == null) return;
                 var reg = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
-                String dim = dimKey.location().getPath();
+                String dim = dimKey.identifier().getPath();
                 int cx = center.getX() >> 4, cz = center.getZ() >> 4;
                 for (int x = cx - chunkRadius; x <= cx + chunkRadius; x++) {
                     for (int z = cz - chunkRadius; z <= cz + chunkRadius; z++) {
@@ -47,11 +62,11 @@ public final class ServerStructureSource {
                             if (!s.isValid()) continue;
                             // each start is stored in its own chunk only
                             ChunkPos sp = s.getChunkPos();
-                            if (sp.x != x || sp.z != z) continue;
+                            if (sp.x() != x || sp.z() != z) continue;
                             var key = reg.getKey(e.getKey());
                             if (key == null) continue;
                             BoundingBox bb = s.getBoundingBox();
-                            out.add(new DetectedStructure(key.getPath(), dim, bb.getCenter(), DetectedStructure.Source.SERVER, 1.0, tick));
+                            out.add(new DetectedStructure(key.getPath(), dim, bb.getCenter(), DetectedStructure.Source.SERVER, 1.0, tick, variantOf(key.getPath(), s)));
                         }
                     }
                 }

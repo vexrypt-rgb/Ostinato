@@ -24,21 +24,38 @@ import baritone.api.utils.IPlayerContext;
 import baritone.pathing.movement.CalculationContext;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class Favoring {
 
     private final Long2DoubleOpenHashMap favorings;
+    /** Mobs, asked per step. Spawners and the backtrack discount stay in {@link #favorings}. */
+    private List<Avoidance> live = List.of();
+    /** Spawners, bastion avoids, or live mobs priced this search. Backtrack favoring does not set it. */
+    private boolean avoidance;
 
     public Favoring(IPlayerContext ctx, IPath previous, CalculationContext context) {
         this(previous, context);
+        List<Avoidance> query = new ArrayList<>();
+        boolean any = false;
         for (Avoidance avoid : Avoidance.create(ctx)) {
-            avoid.applySpherical(favorings);
-        }
-        if (context.getBaritone() instanceof baritone.Baritone b) {
-            for (Avoidance avoid : b.getBastionProcess().avoid()) {
+            any = true;
+            if (avoid.queried()) {
+                query.add(avoid);
+            } else {
                 avoid.applySpherical(favorings);
             }
         }
-        Helper.HELPER.logDebug("Favoring size: " + favorings.size());
+        if (context.getBaritone() instanceof baritone.Baritone b) {
+            for (Avoidance avoid : b.getBastionProcess().avoid()) {
+                any = true;
+                avoid.applySpherical(favorings);
+            }
+        }
+        avoidance = any;
+        live = query.isEmpty() ? List.of() : query;
+        Helper.HELPER.logDebug("Favoring size: " + favorings.size() + " mobs: " + live.size());
     }
 
     public Favoring(IPath previous, CalculationContext context) { // create one just from previous path, no mob avoidances
@@ -51,10 +68,22 @@ public final class Favoring {
     }
 
     public boolean isEmpty() {
-        return favorings.isEmpty();
+        return favorings.isEmpty() && live.isEmpty();
     }
 
-    public double calculate(long hash) {
-        return favorings.get(hash);
+    /** True when mobs or spawners changed the costs. A stored route would not match this search. */
+    public boolean hasAvoidance() {
+        return avoidance;
+    }
+
+    public double calculate(int x, int y, int z) {
+        double cost = favorings.get(BetterBlockPos.longHash(x, y, z));
+        for (int i = 0, n = live.size(); i < n; i++) {
+            double mob = live.get(i).coefficient(x, y, z);
+            if (mob != 1.0D) {
+                cost *= mob;
+            }
+        }
+        return cost;
     }
 }

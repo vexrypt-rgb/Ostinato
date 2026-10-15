@@ -66,6 +66,9 @@ public class MovementAscend extends Movement {
 
     public static double cost(CalculationContext context, int x, int y, int z, int destX, int destZ) {
         BlockState toPlace = context.get(destX, y, destZ);
+        if (MovementHelper.isTallTop(toPlace) && !MovementHelper.isTallTop(context.get(x, y - 1, z))) {
+            return COST_INF; // Ostinato: a jump rises 1.25, a fence/wall top is 1.5 up
+        }
         double additionalPlacementCost = 0;
         if (!MovementHelper.canWalkOn(context, destX, y, destZ, toPlace)) {
             additionalPlacementCost = context.costOfPlacingAt(destX, y, destZ, toPlace);
@@ -119,6 +122,9 @@ public class MovementAscend extends Movement {
         BlockState srcDown = context.get(x, y - 1, z);
         if (MovementHelper.isClimbable(srcDown.getBlock())) {
             return COST_INF;
+        }
+        if (MovementParkour.lowJump(srcDown) || MovementParkour.lowJump(MovementParkour.factorBlock(context, x, y, z))) {
+            return COST_INF; // Ostinato: off honey a jump rises about 0.4 blocks
         }
         // we can jump from soul sand, but not from a bottom slab
         boolean jumpingFromBottomSlab = MovementHelper.isBottomSlab(srcDown);

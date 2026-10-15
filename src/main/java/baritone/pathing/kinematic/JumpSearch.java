@@ -10,7 +10,9 @@ public final class JumpSearch {
 
     public static final float[] O0 = {-15, 0, 15, 30, 45, 60};
     public static final int[] HOP = {0, 1};
-    public static final double[] EDGE = {-0.5, -0.3, -0.1, 0.1, 0.25};
+    /** The last is past where a plain block drops you: only searched with {@link #ledge}. */
+    public static final double[] EDGE = {-0.5, -0.3, -0.1, 0.1, 0.25, 0.4};
+    public static final int PLAIN_EDGES = 5;
     public static final float[] O1 = {-70, -45, -25, -10, 0, 10, 25, 45, 70};
     public static final int[] SWITCH = {0, 4};
     public static final int NEVER = 999;
@@ -38,14 +40,34 @@ public final class JumpSearch {
      */
     public boolean grab;
     /**
+     * Off a ladder by its top: climb from hanging until standing on the top edge of its plate (a 1 tall ladder ends
+     * there), and jump from it at once. Start hanging, with {@link #jumped} clear.
+     */
+    public boolean standJump;
+    /**
      * Done at the landing tick, on the block (destX, destY, destZ), with {@link #sim()} left in the landing state instead
      * of settling: the first half of a chain, whose second jump starts from that momentum.
      */
     public boolean carry;
+    /**
+     * The take-off block's front edge carries a ledge at its top (a ladder's plate juts 3/16 out): also try jumping from
+     * further out than a plain block holds the player.
+     */
+    public boolean ledge;
     /** Plan indices into the grids above, and the jumped/air-tick state carried between real ticks. */
     public final int[] plan = new int[DIMS];
     public boolean jumped;
     public int airTicks;
+    /**
+     * The look turns at most {@link #YAW_STEP} degrees a tick (LookBehavior's aim cap). Left off for template search
+     * and for execution: the stored plans snap to a new yaw in the air, and the live player still lands some of
+     * those. Execution leaves it off: waiting out a 45° error dropped the run-up speed and the 2-wall neo missed.
+     * Set this, and {@link #faceYaw}, to ask whether a plan survives the cap.
+     */
+    public boolean slewYaw;
+    public float faceYaw;
+    /** Degrees per tick, matching {@code LookBehavior}'s aim cap at the default mouse sensitivity. */
+    public static final float YAW_STEP = 32f;
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
     public int ticks;
     public double miss;
@@ -71,6 +93,24 @@ public final class JumpSearch {
         return approachYaw() + side * (jumped && airTicks >= SWITCH[p[4]] ? O1[p[3]] : O0[p[0]]);
     }
 
+    /** Shortest-path step from {@code from} toward {@code to}, at most {@link #YAW_STEP} degrees. */
+    public static float stepYaw(float from, float to) {
+        float d = to - from;
+        d %= 360f;
+        if (d >= 180f) {
+            d -= 360f;
+        }
+        if (d < -180f) {
+            d += 360f;
+        }
+        if (d > YAW_STEP) {
+            d = YAW_STEP;
+        } else if (d < -YAW_STEP) {
+            d = -YAW_STEP;
+        }
+        return from + d;
+    }
+
     /** Forward key impulse: 1 forward, 0 none, -1 back. */
     public int input(int[] p, boolean jumped, int airTicks) {
         return !jumped || airTicks < RELEASE[p[5]] ? 1 : -BRAKE[p[6]];
@@ -79,6 +119,9 @@ public final class JumpSearch {
     public boolean jump(int[] p, PlayerSim s, boolean jumped) {
         if (jumped || !s.onGround || noJump) {
             return false;
+        }
+        if (standJump) {
+            return true;
         }
         double along = s.x * dirX + s.z * dirZ;
         return along >= edge + EDGE[p[2]] || (HOP[p[1]] == 1 && along < edge + EDGE[p[2]] - 1.2);
@@ -95,15 +138,21 @@ public final class JumpSearch {
         boolean jumped = jumped0;
         int air = air0, settle = -1;
         boolean bounced = false;
+        float facing = faceYaw;
         double floor = Math.min(Math.min(PlayerSim.floor(start.y + 0.01), destY), bounceY) - 0.6;
         for (int t = 0; t < MAX_GROUND + MAX_AIR + SETTLE; t++) {
             if (!jumped && t >= MAX_GROUND) {
                 return false;
             }
             boolean j = jump(p, sim, jumped);
-            boolean takeoff = j && sim.x * dirX + sim.z * dirZ >= edge + EDGE[p[2]];
+            boolean takeoff = j && (standJump || sim.x * dirX + sim.z * dirZ >= edge + EDGE[p[2]]);
             int in = settle < 0 ? input(p, jumped, air) : 0;
-            sim.tick(yaw(p, jumped, air), in, in > 0, j);
+            float cmd = yaw(p, jumped, air);
+            if (slewYaw) {
+                facing = stepYaw(facing, cmd);
+                cmd = facing;
+            }
+            sim.tick(cmd, in, in > 0, j);
             if (takeoff || (!jumped && !sim.onGround && bounceY != Integer.MAX_VALUE && sim.x * dirX + sim.z * dirZ > edge)) {
                 jumped = true; // toward a slime pad, walking off the edge is a take-off too
                 air = 0;
@@ -129,10 +178,10 @@ public final class JumpSearch {
                         return false;
                     }
                     destX = PlayerSim.floor(sim.x);
-                    destY = PlayerSim.floor(sim.y + 0.01);
+                    destY = PlayerSim.feetCell(sim.y);
                     destZ = PlayerSim.floor(sim.z);
                 }
-                if (Math.abs(sim.y - destY) > 0.01) {
+                if (!PlayerSim.nodeHeight(sim.y, destY)) {
                     return false; // came down somewhere else first
                 }
                 if (carry) {
@@ -182,7 +231,7 @@ public final class JumpSearch {
     public boolean search(PlayerSim start, boolean local) {
         int[] best = null, p = new int[DIMS], c = plan.clone();
         double bestScore = Double.MAX_VALUE;
-        int[] size = {O0.length, HOP.length, EDGE.length, O1.length, SWITCH.length, RELEASE.length, BRAKE.length};
+        int[] size = {O0.length, HOP.length, ledge ? EDGE.length : PLAIN_EDGES, O1.length, SWITCH.length, RELEASE.length, BRAKE.length};
         int[] lo = new int[DIMS], hi = new int[DIMS];
         for (int k = 0; k < DIMS; k++) {
             boolean fixed = jumped && k <= 2; // run-up choices are spent once in the air
@@ -217,7 +266,7 @@ public final class JumpSearch {
         double bestScore = Double.MAX_VALUE;
         p[0] = 1; // O0 = 0
         p[3] = 4; // O1 = 0
-        for (p[1] = 0; p[1] < HOP.length; p[1]++) for (p[2] = 0; p[2] < EDGE.length; p[2]++)
+        for (p[1] = 0; p[1] < HOP.length; p[1]++) for (p[2] = 0; p[2] < (ledge ? EDGE.length : PLAIN_EDGES); p[2]++)
             for (p[5] = 0; p[5] < RELEASE.length; p[5]++) for (p[6] = 0; p[6] < BRAKE.length; p[6]++) {
                 if (p[5] == 0 && p[6] == 1) {
                     continue; // never released: the brake choice is moot

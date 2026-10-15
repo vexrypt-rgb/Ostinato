@@ -73,8 +73,26 @@ public interface IPlayerContext {
         // this does not impact performance at all since we're not null checking constantly
         // if there is an exception, the only overhead is Java generating the exception object... so we can ignore it
         try {
-            if (world().getBlockState(feet).getBlock() instanceof SlabBlock) {
+            var state = world().getBlockState(feet);
+            if (state.getBlock() instanceof SlabBlock) {
                 return feet.above();
+            }
+            // Ostinato: standing on any low top the planner counts as the node above it (candle, bed, chain, snow
+            // layers, lantern: a collision top 0.25 to 1 high), as the slab above; else a candle's node never matched
+            var shape = state.getCollisionShape(world(), feet);
+            if (!shape.isEmpty()) {
+                double top = shape.max(net.minecraft.core.Direction.Axis.Y);
+                if (top >= 0.25 && top <= 1.0 && player().position().y >= feet.y + top - 0.01) {
+                    return feet.above();
+                }
+            } else if (player().onGround() && player().mainSupportingBlockPos.isPresent()
+                    && world().getBlockState(feet.below()).getCollisionShape(world(), feet.below()).isEmpty()) {
+                // on the edge of a low top with the centre over air (a candle is 1/8 wide): the node is still above it
+                var on = player().mainSupportingBlockPos.get();
+                var onShape = world().getBlockState(on).getCollisionShape(world(), on);
+                if (on.getY() == feet.y && !onShape.isEmpty() && onShape.max(net.minecraft.core.Direction.Axis.Y) >= 0.25) {
+                    return new BetterBlockPos(on.getX(), on.getY() + 1, on.getZ());
+                }
             }
         } catch (NullPointerException ignored) {}
 

@@ -27,6 +27,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.pathing.MutableMoveResult;
 import com.google.common.collect.ImmutableSet;
@@ -163,6 +164,9 @@ public class MovementDiagonal extends Movement {
             multiplier += (SNEAK_ONE_BLOCK_COST - WALK_ONE_BLOCK_COST) / 2;
             sneaking = true;
         }
+        multiplier *= SurfaceSpeed.pair(
+                fromDownBlock.getSpeedFactor(), fromDownBlock.getFriction(), fromDownBlock == Blocks.SOUL_SAND,
+                destWalkOn.getBlock().getSpeedFactor(), destWalkOn.getBlock().getFriction(), destWalkOn.getBlock() == Blocks.SOUL_SAND);
         BlockState cuttingOver1 = context.get(x, y - 1, destZ);
         if ((!context.allowWalkOnMagmaBlocks && cuttingOver1.is(Blocks.MAGMA_BLOCK)) || MovementHelper.isLava(cuttingOver1)) {
             return;

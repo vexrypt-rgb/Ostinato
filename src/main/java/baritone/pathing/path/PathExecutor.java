@@ -27,6 +27,7 @@ import baritone.api.pathing.path.IPathExecutor;
 import baritone.api.utils.*;
 import baritone.api.utils.input.Input;
 import baritone.behavior.PathingBehavior;
+import baritone.pathing.CostCalibration;
 import baritone.pathing.calc.AbstractNodeCostSearch;
 import baritone.pathing.kinematic.BoatFallController;
 import baritone.pathing.kinematic.ClutchController;
@@ -39,6 +40,7 @@ import baritone.pathing.kinematic.PillarController;
 import baritone.pathing.kinematic.SwimController;
 import baritone.pathing.kinematic.TakeoffController;
 import baritone.pathing.physics.PhysicsTravel;
+import baritone.pathing.viz.PathViz;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
@@ -193,14 +195,26 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         int driven = -1;
         lastDriver = Driver.BARITONE;
-        if (driverRest > 0) {
+        if (takeoff.engaged()) {
+            driven = takeoff.tick(behavior.baritone, path, pathPosition);
+            if (driven >= 0) {
+                lastDriver = Driver.EXTEND;
+            }
+        }
+        if (driven >= 0) {
+            // a standing takeoff keeps the controls until it hands over
+        } else if (driverRest > 0) {
             driverRest--;
         } else {
+            long t0 = System.nanoTime(); // Ostinato: planning-time stats
             driven = physics.tick(behavior.baritone, path, pathPosition);
+            long t1 = System.nanoTime();
+            baritone.utils.PlanStats.physNs.addAndGet(t1 - t0);
             if (driven >= 0) {
                 lastDriver = Driver.PHYSICS;
             } else {
                 driven = kinematic.tick(behavior.baritone, path, pathPosition);
+                baritone.utils.PlanStats.kinNs.addAndGet(System.nanoTime() - t1);
                 if (driven >= 0) {
                     lastDriver = Driver.KINEMATIC;
                 }
@@ -269,6 +283,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // moving, yet not along the path: none of the timeouts below run while a mover drives, so it steps aside.
                 // Only the look-ahead movers: the others (mining, a long fall) hold a position for as long as the work takes.
                 Baritone.settings().movementFault.value.accept("M01", lastDriver + " held " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " for " + drivenOnCurrent + " ticks, handing back to Baritone");
+                PathViz.get().stuck(ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), "M01 " + lastDriver + " held a movement"); // Ostinato path viz
                 drivenOnCurrent = 0;
                 driverRest = DRIVER_REST;
                 lastDriver = Driver.BARITONE;
@@ -276,6 +291,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 driven = -1;
             }
         }
+        vizTick(movement); // Ostinato path viz
         if (driven >= 0) {
             sprintNextTick = true;
             // A pause or a cancel is only taken when this says it is safe. "Never while a controller drives" meant a
@@ -419,6 +435,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         if (movementStatus == SUCCESS) {
+            CostCalibration.record(movement.calibrationKey(), currentMovementOriginalCostEstimate, ticksOnCurrent);
             //System.out.println("Movement done, next path");
             pathPosition++;
             onChangeInPathPosition();
@@ -894,6 +911,51 @@ public class PathExecutor implements IPathExecutor, Helper {
      */
     public Driver getLastDriver() {
         return lastDriver;
+    }
+
+    /**
+     * Ostinato: whether kinematic or physics travel drove the last tick. Baritone's own path ribbon is hidden then; it
+     * shows again once they hand back (M01) or leave a segment to Baritone's movement logic.
+     */
+    private boolean vizTravel, vizAir;
+
+    /**
+     * Ostinato path viz (K3): marks where kinematic/physics travel hands back to Baritone, and the take-off, arc and
+     * landing of every jump that is not a template jump (those record their own, with the template name).
+     */
+    private void vizTick(Movement movement) {
+        PathViz viz = PathViz.get();
+        if (!viz.jumpsOn()) {
+            vizAir = false;
+            return;
+        }
+        Vec3 p = ctx.player().position();
+        boolean travel = travelDriving();
+        if (vizTravel && !travel) {
+            viz.handback(p.x, p.y, p.z, "to " + lastDriver + " at " + movement.getClass().getSimpleName());
+        }
+        vizTravel = travel;
+        if (movement instanceof MovementJump || movement instanceof MovementChainJump || movement instanceof MovementClimbJump) {
+            vizAir = false;
+            return;
+        }
+        boolean ground = ctx.player().onGround(), climb = ctx.player().onClimbable();
+        if (!vizAir) {
+            if (!ground && !climb && ctx.player().getDeltaMovement().y > 0.2) {
+                vizAir = true;
+                String label = travel ? lastDriver.name().toLowerCase(Locale.ROOT) + " hop" : movement.getClass().getSimpleName();
+                viz.jumpTakeoff(this, PathViz.JUMP, label, p.x, p.y, p.z);
+            }
+        } else if (ground || climb) {
+            vizAir = false;
+            viz.jumpLand(this, p.x, p.y, p.z, climb);
+        } else {
+            viz.jumpAir(this, p.x, p.y, p.z);
+        }
+    }
+
+    public boolean travelDriving() {
+        return lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS;
     }
 
     @Override

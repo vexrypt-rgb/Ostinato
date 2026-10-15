@@ -41,8 +41,11 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
+import baritone.pathing.calc.MovingGoal;
+
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -77,6 +80,8 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     private static final long OVERLONG_GOAL_COOLDOWN_MS = 5000;
 
     private final Object pathPlanLock = new Object();
+    /** Last time a moving goal replaced the in-progress search. */
+    private long lastMovingRetargetMs;
 
     /** Whether this goal's path was thrown away as too long a moment ago. Call with pathPlanLock held. */
     private boolean overlongCoolingDown(Goal goal) {
@@ -391,6 +396,83 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     public boolean calcFailedLastTick() { // NOT exposed on public api
         return calcFailedLastTick;
+    }
+
+    /**
+     * The current path used to end inside its goal and no longer does, but the next stretch still
+     * gets closer. The block to replan from, or null when the path should be cancelled or left alone.
+     */
+    public BlockPos movingGoalHorizon(Goal newGoal) {
+        if (current == null || newGoal == null) {
+            return null;
+        }
+        Goal intended = current.getPath().getGoal();
+        if (intended == null) {
+            return null;
+        }
+        BetterBlockPos end = current.getPath().getDest();
+        if (!intended.isInGoal(end) || newGoal.isInGoal(end)) {
+            return null;
+        }
+        List<BetterBlockPos> pos = current.getPath().positions();
+        if (pos.isEmpty()) {
+            return null;
+        }
+        int cursor = Math.max(0, Math.min(current.getPosition(), pos.size() - 1));
+        int horizon = MovingGoal.horizonIndex(pos.size(), cursor, 4, 16);
+        BetterBlockPos here = pos.get(cursor);
+        BetterBlockPos ahead = pos.get(horizon);
+        if (MovingGoal.decide(true, false, newGoal.heuristic(here.x, here.y, here.z), newGoal.heuristic(ahead.x, ahead.y, ahead.z))
+                != MovingGoal.Action.RETARGET) {
+            return null;
+        }
+        return ahead;
+    }
+
+    /** Drop a search aimed at the old goal and plan from {@code ahead} toward the goal set just now. */
+    public void retargetMovingGoal(BlockPos ahead) {
+        synchronized (pathPlanLock) {
+            synchronized (pathCalcLock) {
+                if (current == null || goal == null || context == null || ahead == null) {
+                    return;
+                }
+                long now = System.currentTimeMillis();
+                if (inProgress != null) {
+                    Goal old = inProgress.getGoal();
+                    if (old != null && goal.equals(old)) {
+                        return;
+                    }
+                    double shift = old == null ? 100 : Math.abs(
+                            goal.heuristic(ahead.getX(), ahead.getY(), ahead.getZ())
+                                    - old.heuristic(ahead.getX(), ahead.getY(), ahead.getZ()));
+                    if (shift < 2 && now - lastMovingRetargetMs < 1000) {
+                        return;
+                    }
+                    inProgress.cancel();
+                    inProgress = null;
+                } else if (now - lastMovingRetargetMs < 1000) {
+                    // A search that already finished is kept across a small drift. A teleport still starts one.
+                    Goal previous = current.getPath().getGoal();
+                    double shift = previous == null ? 100 : Math.abs(
+                            goal.heuristic(ahead.getX(), ahead.getY(), ahead.getZ())
+                                    - previous.heuristic(ahead.getX(), ahead.getY(), ahead.getZ()));
+                    if (shift < 2) {
+                        return;
+                    }
+                }
+                if (next != null) {
+                    if (goal.equals(next.getPath().getGoal())) {
+                        return;
+                    }
+                    next = null;
+                }
+                if (overlongCoolingDown(goal)) {
+                    return;
+                }
+                lastMovingRetargetMs = now;
+                findPathInNewThread(ahead, false, context);
+            }
+        }
     }
 
     public void softCancelIfSafe() {

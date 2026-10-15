@@ -596,6 +596,103 @@ public enum Moves {
         }
     },
 
+    LINE_EAST_NORTH(+2, 0, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, 2, -1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, 2, -1, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_EAST_SOUTH(+2, 0, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, 2, 1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, 2, 1, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_WEST_NORTH(-2, 0, -1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, -2, -1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, -2, -1, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_WEST_SOUTH(-2, 0, +1) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, -2, 1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, -2, 1, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_NORTH_EAST(+1, 0, -2) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, 1, -2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, 1, -2, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_NORTH_WEST(-1, 0, -2) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, -1, -2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, -1, -2, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_SOUTH_EAST(+1, 0, +2) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, 1, 2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, 1, 2, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+    LINE_SOUTH_WEST(-1, 0, +2) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return new MovementLine(context.getBaritone(), src, -1, 2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementLine.cost(context, x, y, z, -1, 2, result);
+            if (result.cost < baritone.api.pathing.movement.ActionCosts.COST_INF) result.cost += baritone.bastion.EdgeCost.penalty(context, result.x, result.y, result.z);
+        }
+    },
+
     PARKOUR_NORTH(0, 0, -4, true, true) {
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
@@ -1133,5 +1230,12 @@ public enum Moves {
 
     public double cost(CalculationContext context, int x, int y, int z) {
         throw new UnsupportedOperationException("Movements must override `cost` or `apply`");
+    }
+
+    /** TRAVERSE_NORTH and TRAVERSE_SOUTH share a calibration bucket. */
+    public String family() {
+        String n = name();
+        int i = n.indexOf('_');
+        return i < 0 ? n : n.substring(0, i);
     }
 }

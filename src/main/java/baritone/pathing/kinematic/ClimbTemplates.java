@@ -16,12 +16,15 @@ import java.util.TreeSet;
  * Two kinds: {@link #GRAB} runs up from the ground and catches a ladder in the air; {@link #LEAP} lets go of a ladder at
  * the origin and lands on the ground or on another ladder. {@code wall} says which side of the ladder is the wall it is
  * stuck to (of the destination ladder for a grab, of the origin ladder for a leap, and of both for a leap onto a
- * ladder: they hang on the same wall).
+ * ladder on the same wall); {@code destWall} is the destination ladder's own wall, which differs for a leap round a
+ * pillar's corner onto the next face (ladder spirals).
  * Regenerate with {@code main} after changing the search or the physics.
  */
 public final class ClimbTemplates {
 
     public static final int GRAB = 0, LEAP = 1;
+    /** Data only: a {@link #LEAP} with {@link Template#stand}. */
+    private static final int LEAP_STAND = 2;
     /** Where the wall is, relative to the ladder: ahead (+a), behind (-a), to the +b side, to the -b side. */
     public static final int AHEAD = 0, BEHIND = 1, LEFT = 2, RIGHT = 3;
 
@@ -30,20 +33,29 @@ public final class ClimbTemplates {
 
     public static final class Template {
         public final int mode, wall, a, dy, b, runUp, ticks;
+        /** A leap that climbs onto the ladder's top edge and jumps from it ({@link JumpSearch#standJump}). */
+        public final boolean stand;
+        /** Wall side of the destination ladder, or -1 when the destination is the ground. */
+        public final int destWall;
         public final boolean destLadder;
         public final double lateral;
+        /** Leaps: feet height above the origin ladder's cell floor at the leap (climbed to first). Stored in runUp's column. */
+        public final double rise;
         public final int[] plan;
         /** Cells {a, y, b, kind}: 0 passable, 1 solid, 2 the ladders themselves (not checked). */
         public final int[][] cells;
 
-        Template(int mode, int wall, int a, int dy, int b, boolean destLadder, int runUp, double lateral, int ticks, int[] plan, int[][] cells) {
-            this.mode = mode;
+        Template(int mode, int wall, int a, int dy, int b, int destWall, int runUp, double lateral, int ticks, int[] plan, int[][] cells) {
+            this.mode = mode == LEAP_STAND ? LEAP : mode;
+            this.stand = mode == LEAP_STAND;
             this.wall = wall;
             this.a = a;
             this.dy = dy;
             this.b = b;
-            this.destLadder = destLadder;
-            this.runUp = runUp;
+            this.destWall = destWall;
+            this.destLadder = destWall >= 0;
+            this.runUp = mode == GRAB ? runUp : 0;
+            this.rise = mode == GRAB ? 0 : runUp / 100.0;
             this.lateral = lateral;
             this.ticks = ticks;
             this.plan = plan;
@@ -66,9 +78,14 @@ public final class ClimbTemplates {
             int[] plan = new int[JumpSearch.DIMS];
             for (int k = 0; k < plan.length; k++) plan[k] = p[9].charAt(k) - '0';
             ALL.add(new Template(Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]),
-                    Integer.parseInt(p[4]), p[5].equals("1"), Integer.parseInt(p[6]), Integer.parseInt(p[7]) / 100.0,
+                    Integer.parseInt(p[4]), destWall(Integer.parseInt(p[1]), Integer.parseInt(p[5])), Integer.parseInt(p[6]), Integer.parseInt(p[7]) / 100.0,
                     Integer.parseInt(p[8]), plan, cells));
         }
+    }
+
+    /** Destination field: 0 ground, 1 a ladder on the same wall, 2 + w a ladder on wall w (a grab's wall is the dest's). */
+    private static int destWall(int wall, int field) {
+        return field == 0 ? -1 : field == 1 ? wall : field - 2;
     }
 
     /** Frame unit vector (a, b) of the wall side. */
@@ -138,8 +155,10 @@ public final class ClimbTemplates {
     private static final int[] RUN_UPS = {0, 1, 2, 3};
     private static final int[] LATERAL = {0, 30, 60, 80}; // hundredths of a block, grabs
     private static final int[] HANG_OFFSET = {-15, 0, 15}; // hundredths along the wall, leaps
+    /** Leaps: feet height in the origin ladder's cell (hundredths); up round a pillar's corner needs the top of it. */
+    private static final int[] RISES = {0, 50, 75};
 
-    private static JumpSearch search(World w, int[] d, boolean leap) {
+    private static JumpSearch search(World w, int[] d, boolean leap, boolean stand) {
         JumpSearch js = new JumpSearch(w);
         js.dirX = 1;
         js.dirZ = 0;
@@ -147,12 +166,14 @@ public final class ClimbTemplates {
         js.destX = d[2];
         js.destY = d[3];
         js.destZ = d[4];
-        js.grab = d[5] == 1;
-        js.noJump = leap;
-        js.jumped = leap;
+        js.grab = d[5] >= 1;
+        js.noJump = leap && !stand;
+        js.jumped = leap && !stand;
+        js.standJump = stand;
         return js;
     }
 
+    /** {@code runUp} is the rise (hundredths) for a leap. */
     private static PlayerSim startSim(World w, int mode, int wall, int runUp, int lat) {
         PlayerSim s = new PlayerSim(w);
         s.vy = -0.0784000015258789;
@@ -168,6 +189,10 @@ public final class ClimbTemplates {
             double cx = 0.5 + wv[0] * (0.5 - fromFace), cz = 0.5 + wv[1] * (0.5 - fromFace);
             s.x = cx + (wv[0] == 0 ? lat / 100.0 : 0);
             s.z = cz + (wv[1] == 0 ? lat / 100.0 : 0);
+            s.y = runUp / 100.0;
+            if (runUp > 0) {
+                s.vy = 0; // held there by sneaking
+            }
             s.onGround = false;
         }
         return s;
@@ -175,7 +200,7 @@ public final class ClimbTemplates {
 
     public static void main(String[] args) throws Exception {
         List<String> out = new ArrayList<>();
-        // d: mode, wall, a, dy, b, destLadder
+        // d: mode, wall, a, dy, b, dest (0 ground, 1 ladder on the same wall, 2 + w ladder on wall w)
         List<int[]> dests = new ArrayList<>();
         for (int wall : new int[]{AHEAD, LEFT, RIGHT})
             for (int a = 2; a <= 5; a++) for (int b = 0; b <= 2; b++) for (int dy = 1; dy >= -3; dy--)
@@ -184,34 +209,43 @@ public final class ClimbTemplates {
             for (int a = 1; a <= 4; a++) for (int b = -2; b <= 2; b++) for (int dy = 1; dy >= -3; dy--) {
                 dests.add(new int[]{LEAP, wall, a, dy, b, 0});
                 dests.add(new int[]{LEAP, wall, a, dy, b, 1});
+                // round a corner onto another face (a pillar's next side): never further than the next cell over
+                if (a <= 2 && Math.abs(b) <= 2) {
+                    for (int dw = AHEAD; dw <= RIGHT; dw++) if (dw != wall) dests.add(new int[]{LEAP, wall, a, dy, b, 2 + dw});
+                }
             }
         }
         for (int[] d : dests) {
             boolean leap = d[0] == LEAP;
             search:
-            for (int r : leap ? new int[]{0} : RUN_UPS) for (int lat : leap ? HANG_OFFSET : LATERAL) {
+            // a leap off the ladder's top (stand) only where a plain one finds nothing: it needs the cell above clear
+            for (int st = 0; st < (leap ? 2 : 1); st++) for (int r : leap ? RISES : RUN_UPS) for (int lat : leap ? HANG_OFFSET : LATERAL) {
+                boolean stand = st == 1;
                 World w = new World();
                 if (!leap) {
                     for (int a = -r; a <= 0; a++) w.add(a, -1, 0);
                     w.ladder(d[2], d[3], d[4], d[1]);
                 } else {
                     w.ladder(0, 0, 0, d[1]);
-                    if (d[5] == 1) w.ladder(d[2], d[3], d[4], d[1]);
-                    else w.add(d[2], d[3] - 1, d[4]);
                     int[] wv = wallVector(d[1]);
                     if (d[2] == wv[0] && d[4] == wv[1]) continue search; // inside the wall
+                    if (d[5] >= 1) w.ladder(d[2], d[3], d[4], destWall(d[1], d[5]));
+                    else w.add(d[2], d[3] - 1, d[4]);
+                    if (w.solid.contains(World.key(0, 0, 0)) || w.solid.contains(World.key(0, 1, 0))) continue search; // a wall in the start
                     if (w.solid.contains(World.key(d[2], d[3], d[4])) || w.solid.contains(World.key(d[2], d[3] + 1, d[4]))) continue search;
                     if (d[5] == 0 && d[3] <= 0 && d[2] == 0 && d[4] == 0) continue search;
                 }
-                JumpSearch js = search(w, d, leap);
+                JumpSearch js = search(w, d, leap, stand);
                 PlayerSim start = startSim(w, d[0], d[1], r, lat);
                 if (!js.search(start, false)) continue;
                 // the mover can be a little off the start: the jump must work from all of it
                 boolean robust = true;
-                for (int ox = leap ? 0 : -15; ox <= (leap ? 0 : 5) && robust; ox += 2) for (int oz = -5; oz <= 5 && robust; oz += 5) {
-                    JumpSearch rj = search(w, d, leap);
+                for (int ox = leap ? 0 : -15; ox <= (leap ? 0 : 5) && robust; ox += 2) for (int oz = -5; oz <= 5 && robust; oz += 5)
+                    for (int oy = leap && r > 0 ? -5 : 0; oy <= (leap && r > 0 ? 5 : 0) && robust; oy += 5) {
+                    JumpSearch rj = search(w, d, leap, stand);
                     PlayerSim rs = startSim(w, d[0], d[1], r, lat);
                     rs.x += ox / 100.0;
+                    rs.y += oy / 100.0;
                     rs.z += oz / 100.0;
                     robust = rj.search(rs, false);
                 }
@@ -234,15 +268,15 @@ public final class ClimbTemplates {
                 }
                 StringBuilder plan = new StringBuilder();
                 for (int k : js.plan) plan.append(k);
-                out.add(d[0] + " " + d[1] + " " + d[2] + " " + d[3] + " " + d[4] + " " + d[5] + " " + r + " " + lat + " " + js.ticks + " " + plan + " " + String.join(" ", cells));
-                System.err.println("ok " + (leap ? "leap" : "grab") + " wall=" + d[1] + " a=" + d[2] + " dy=" + d[3] + " b=" + d[4] + " ladder=" + d[5] + " runUp=" + r + " lat=" + lat + " ticks=" + js.ticks);
+                out.add((stand ? LEAP_STAND : d[0]) + " " + d[1] + " " + d[2] + " " + d[3] + " " + d[4] + " " + d[5] + " " + r + " " + lat + " " + js.ticks + " " + plan + " " + String.join(" ", cells));
+                System.err.println("ok " + (stand ? "stand-leap" : leap ? "leap" : "grab") + " wall=" + d[1] + " a=" + d[2] + " dy=" + d[3] + " b=" + d[4] + " ladder=" + d[5] + " runUp/rise=" + r + " lat=" + lat + " ticks=" + js.ticks);
                 break search;
             }
         }
         try (PrintWriter pw = new PrintWriter(args[0])) {
             pw.println("package baritone.pathing.kinematic;");
             pw.println();
-            pw.println("/** Generated by {@link ClimbTemplates#main}: mode wall a dy b destLadder runUp lateral(hundredths) ticks plan cells... */");
+            pw.println("/** Generated by {@link ClimbTemplates#main}: mode wall a dy b dest runUp(a leap's rise, hundredths) lateral(hundredths) ticks plan cells... */");
             pw.println("final class ClimbTemplateData {");
             pw.println("    static final String[] DATA = {");
             for (String s : out) pw.println("            \"" + s + "\",");

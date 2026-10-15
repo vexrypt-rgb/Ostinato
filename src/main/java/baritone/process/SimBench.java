@@ -168,7 +168,7 @@ public final class SimBench implements AbstractGameEventListener {
 
     private static Course climb(ClimbTemplates.Template t) {
         boolean leap = t.mode == ClimbTemplates.LEAP;
-        Course c = base("climb", "climb " + (leap ? "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder" : ""));
+        Course c = base("climb", "climb " + (leap ? "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder wall=" + t.destWall : ""));
         int[] wall = ClimbTemplates.wallVector(t.wall);
         if (!leap) {
             for (int a = -t.runUp; a <= 0; a++) c.cmds.add(block(a, -1, 0, "stone"));
@@ -176,7 +176,7 @@ public final class SimBench implements AbstractGameEventListener {
             start(c, 0.5, 0, 0.5);
         } else {
             ladder(c, 0, 0, 0, wall);
-            if (t.destLadder) ladder(c, t.a, t.dy, t.b, wall);
+            if (t.destLadder) ladder(c, t.a, t.dy, t.b, ClimbTemplates.wallVector(t.destWall));
             else c.cmds.add(block(t.a, t.dy - 1, t.b, "stone"));
             start(c, 0.5 - wall[0] * 0.2, 0, 0.5 - wall[1] * 0.2); // hanging off the ladder, on its open side
         }

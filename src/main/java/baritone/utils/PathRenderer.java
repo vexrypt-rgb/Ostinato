@@ -90,6 +90,11 @@ public final class PathRenderer implements IRenderer {
             return;
         }
 
+        // Ostinato: kinematic / physics mover visualizations (PathVizRenderer), for the player's own bot only
+        if (behavior.baritone == BaritoneAPI.getProvider().getPrimaryBaritone()) {
+            PathVizRenderer.render(event.getModelViewStack());
+        }
+
         if (goal != null && settings.renderGoal.value) {
             drawGoal(event.getModelViewStack(), ctx, goal, partialTicks, settings.colorGoalBox.value);
         }
@@ -100,6 +105,10 @@ public final class PathRenderer implements IRenderer {
 
         PathExecutor current = behavior.getCurrent(); // this should prevent most race conditions?
         PathExecutor next = behavior.getNext(); // like, now it's not possible for current!=null to be true, then suddenly false because of another thread
+        if (current != null && current.travelDriving()) {
+            // Ostinato: kinematic / physics travel is steering; its own corridor/trail views replace the ribbon
+            return;
+        }
         if (current != null && settings.renderSelectionBoxes.value) {
             drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toBreak(), settings.colorBlocksToBreak.value);
             drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toPlace(), settings.colorBlocksToPlace.value);
