@@ -107,6 +107,24 @@ public final class ZeroCycle {
         return 76 + rank * 3;
     }
 
+    /** Spike closest to that node in x and z. A tie keeps the earlier pillar. Height is still measured, not this. */
+    public static int nearestPillar(int node) {
+        int best = 0;
+        long bestD = Long.MAX_VALUE;
+        int x = NODE_X[node];
+        int z = NODE_Z[node];
+        for (int i = 0; i < PILLARS; i++) {
+            long dx = (long) PILLAR_X[i] - x;
+            long dz = (long) PILLAR_Z[i] - z;
+            long d = dx * dx + dz * dz;
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
+        return best;
+    }
+
     /** Iron bars. Ranks 1 and 2 only. */
     public static boolean caged(int rank) {
         return rank == 1 || rank == 2;
@@ -267,6 +285,23 @@ public final class ZeroCycle {
                 {4, 1, 3},
                 {5, 1, 3}
         };
+    }
+
+    /**
+     * World block of each rig step. Forward is the cardinal toward the node and left is the player's left.
+     * The block stood on is not in the list, and nothing is placed.
+     */
+    public static int[][] rigAt(int standX, int standY, int standZ, int nodeX, int nodeZ) {
+        int[] facing = forward(standX, standZ, nodeX, nodeZ);
+        int[] side = left(facing[0], facing[1]);
+        int[][] steps = rigSteps();
+        int[][] world = new int[steps.length][3];
+        for (int i = 0; i < steps.length; i++) {
+            world[i][0] = standX + steps[i][0] * facing[0] + steps[i][1] * side[0];
+            world[i][1] = standY + steps[i][2];
+            world[i][2] = standZ + steps[i][0] * facing[1] + steps[i][1] * side[1];
+        }
+        return world;
     }
 
     /** Cardinal step from the stand toward the node. Left is the player's left while facing that way. */
