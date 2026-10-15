@@ -83,7 +83,12 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int timeCheckInterval = 1 << 6;
         int pathingMaxChunkBorderFetch = Baritone.settings().pathingMaxChunkBorderFetch.value; // grab all settings beforehand so that changing settings during pathing doesn't cause a crash or unpredictable behavior
         double minimumImprovement = Baritone.settings().minimumImprovementRepropagation.value ? MIN_IMPROVEMENT : 0;
-        Moves[] allMoves = Moves.values();
+        Moves[] allMoves = Moves.all();
+        // One scale per move for this search. The old lookup built a family string and hit the map on every neighbor.
+        double[] moveScale = new double[allMoves.length];
+        for (int i = 0; i < allMoves.length; i++) {
+            moveScale[i] = CostCalibration.scale(allMoves[i].family());
+        }
         while (!openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // only call this once every 64 nodes (about half a millisecond)
                 long now = System.currentTimeMillis(); // since nanoTime is slow on windows (takes many microseconds)
@@ -128,7 +133,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     numRejected++;
                     continue;
                 }
-                actionCost *= CostCalibration.scale(moves.family());
+                actionCost *= moveScale[moves.ordinal()];
                 if (actionCost <= 0 || Double.isNaN(actionCost)) {
                     throw new IllegalStateException(String.format(
                             "%s from %s %s %s calculated implausible cost %s",

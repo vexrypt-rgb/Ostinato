@@ -1204,12 +1204,25 @@ public enum Moves {
     public final int yOffset;
     public final int zOffset;
 
+    /** TRAVERSE_NORTH and TRAVERSE_SOUTH share this. Computed once; the search used to substring it per neighbor. */
+    private final String family;
+
+    private static final Moves[] ALL = values();
+
+    /** The move set. The same array every call. Do not modify it. */
+    public static Moves[] all() {
+        return ALL;
+    }
+
     Moves(int x, int y, int z, boolean dynamicXZ, boolean dynamicY) {
         this.xOffset = x;
         this.yOffset = y;
         this.zOffset = z;
         this.dynamicXZ = dynamicXZ;
         this.dynamicY = dynamicY;
+        String n = name();
+        int cut = n.indexOf('_');
+        this.family = cut < 0 ? n : n.substring(0, cut);
     }
 
     Moves(int x, int y, int z) {
@@ -1234,8 +1247,6 @@ public enum Moves {
 
     /** TRAVERSE_NORTH and TRAVERSE_SOUTH share a calibration bucket. */
     public String family() {
-        String n = name();
-        int i = n.indexOf('_');
-        return i < 0 ? n : n.substring(0, i);
+        return family;
     }
 }
