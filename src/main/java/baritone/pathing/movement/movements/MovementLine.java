@@ -11,7 +11,10 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.pathing.MutableMoveResult;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashSet;
@@ -44,6 +47,11 @@ public class MovementLine extends Movement {
             if (MovementHelper.isWater(feet) || MovementHelper.isLava(feet) || MovementHelper.isLava(head)) {
                 return;
             }
+            // canWalkThrough answers YES for a wooden door or a gate, and for a ladder. This executor only sprints,
+            // so those cells stay on MovementTraverse, which is what opens them.
+            if (traverseOperates(feet) || traverseOperates(head)) {
+                return;
+            }
             if (!MovementHelper.canWalkThrough(context, cx, y, cz, feet) || !MovementHelper.canWalkThrough(context, cx, y + 1, cz, head)) {
                 return;
             }
@@ -72,6 +80,12 @@ public class MovementLine extends Movement {
             return COST_INF;
         }
         return result.cost;
+    }
+
+    /** A door, a gate, or a climb. MovementTraverse operates these; a line must not step on them. */
+    static boolean traverseOperates(BlockState state) {
+        Block block = state.getBlock();
+        return block instanceof DoorBlock || block instanceof FenceGateBlock || MovementHelper.isClimbable(block);
     }
 
     @Override
