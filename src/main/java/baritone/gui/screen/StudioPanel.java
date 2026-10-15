@@ -91,12 +91,13 @@ final class StudioPanel {
     }
 
     void draw(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
-        GuiDraw.round(ms, vx0, vy0, vx1, vy1, 4, 0xFF10141C);
-        GuiDraw.scissor(vx0, vy0, vx1, vy1);
+        // Frame first. roundBorder paints its whole rect, and a transparent fill does not
+        // punch that paint back out, so a border drawn after the raster hides every block.
+        GuiDraw.roundBorder(ms, vx0, vy0, vx1, vy1, 4, 0xFF2A3344, 0xFF10141C);
+        GuiDraw.scissor(vx0 + 1, vy0 + 1, vx1 - 1, vy1 - 1);
         drawStage(ms);
         drawBlocks(ms, mx, my);
         GuiDraw.endScissor();
-        GuiDraw.roundBorder(ms, vx0, vy0, vx1, vy1, 4, 0xFF2A3344, 0);
         if (volume.count() == 0) {
             String hint = "Left click the floor to place a block";
             GuiDraw.text(ms, hint, (vx0 + vx1) / 2 - GuiDraw.width(hint) / 2f, (vy0 + vy1) / 2 - 4, Theme.MUTED, false);
