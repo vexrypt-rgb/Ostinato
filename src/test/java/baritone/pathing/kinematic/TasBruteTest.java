@@ -156,6 +156,39 @@ public class TasBruteTest {
         }
     }
 
+    /**
+     * The teleport spot on drill_hh neo_3wall is the center column, where the two-yaw grid finds nothing.
+     * MovementJump's standstill beam is 2500 by 22, and that budget clears it. The landing overhangs; the
+     * executor steps back onto the block instead of treating the feet cell as done.
+     */
+    @Test
+    public void courseNeo3CenterColumnExecutorBudget() {
+        BoxWorld w = new BoxWorld()
+                .fill(-1, -1, 0, 1, -1, 2, BoxWorld.FULL)
+                .fill(-3, -1, 3, 0, 1, 5, BoxWorld.FULL)
+                .put(0, -1, 6, BoxWorld.FULL);
+        TasBrute b = new TasBrute(w);
+        b.allowBack = true;
+        b.maxTurn = 32;
+        b.beam = 2500;
+        b.maxTicks = 22;
+        long t0 = System.nanoTime();
+        TasBrute.Result found = b.search(standing(w, 0.5, 0, 1.5), 0, new TasBrute.Landing(0, 0, 6));
+        System.out.printf("TAS course-neo3-center %s (%d ms)%n", found == null ? "NONE" : found.ticks() + "t " + found, (System.nanoTime() - t0) / 1_000_000);
+        assertNotNull("center column of neo_3wall at the executor beam", found);
+        PlayerSim p = standing(w, 0.5, 0, 1.5);
+        for (int t = 0; t < found.ticks(); t++) {
+            p.tick(found.yaw[t], found.input[t], found.input[t] > 0, found.jump[t]);
+        }
+        float yaw = found.yaw[found.ticks() - 1];
+        for (int t = 0; t < 12 && !boxOn(p, 0, 6); t++) {
+            int[] k = StepIn.keys(yaw, 0.5 - p.x, 6.5 - p.z);
+            p.tick(yaw, k[0], k[1], false, false);
+            assertTrue("step-in t=" + t + " x=" + p.x + " z=" + p.z + " y=" + p.y, p.onGround && p.y > -0.1);
+        }
+        assertTrue("center neo stepped onto the landing, x=" + p.x + " z=" + p.z, boxOn(p, 0, 6));
+    }
+
     /** drill_hh headhitter_gap2: a 3-forward jump under one ceiling block at the lip. */
     @Test
     public void headHitterGap2UnderTheLookCap() {
