@@ -38,6 +38,7 @@ import baritone.pathing.kinematic.PlayerSim;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.JumpFailures;
 import baritone.pathing.movement.Movement;
+import baritone.pathing.movement.StepIn;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.viz.PathViz;
@@ -589,6 +590,26 @@ public class MovementJump extends Movement {
                 && nz > dest.z + PlayerSim.HALF_WIDTH && nz < dest.z + 1 - PlayerSim.HALF_WIDTH;
     }
 
+    /** The whole foot box is over dest, so the next tick cannot walk off the side. */
+    private boolean hitboxOnDest(PlayerSim s) {
+        return s.x > dest.x + PlayerSim.HALF_WIDTH && s.x < dest.x + 1 - PlayerSim.HALF_WIDTH
+                && s.z > dest.z + PlayerSim.HALF_WIDTH && s.z < dest.z + 1 - PlayerSim.HALF_WIDTH;
+    }
+
+    /** Sneak toward the middle without waiting for the look to turn. */
+    private void stepIn(MovementState state) {
+        double dx = dest.x + 0.5 - ctx.player().getX();
+        double dz = dest.z + 0.5 - ctx.player().getZ();
+        int[] k = StepIn.keys(ctx.player().getYRot(), dx, dz);
+        state.setInput(Input.MOVE_FORWARD, k[0] > 0);
+        state.setInput(Input.MOVE_BACK, k[0] < 0);
+        state.setInput(Input.MOVE_LEFT, k[1] > 0);
+        state.setInput(Input.MOVE_RIGHT, k[1] < 0);
+        state.setInput(Input.SPRINT, false);
+        state.setInput(Input.JUMP, false);
+        state.setInput(Input.SNEAK, true);
+    }
+
     private void lookAt(MovementState state, float yaw) {
         state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, ctx.playerRotations().getPitch()), true));
     }
@@ -605,8 +626,16 @@ public class MovementJump extends Movement {
             tasTick++;
             return state;
         }
-        if (ctx.playerFeet().equals(dest) && ctx.player().onGround()) {
-            return state.setStatus(MovementStatus.SUCCESS);
+        // Landing.on accepts a centre past the side of dest, and the feet block is then the next column.
+        // Success used to release every key on that tick. A fast landing that stays on the block is handed
+        // straight on; anything else steps toward the middle, the same as a grid landing.
+        if (ctx.player().onGround()) {
+            if (ctx.playerFeet().equals(dest) && keepsSpeed(real)) {
+                return state.setStatus(MovementStatus.SUCCESS);
+            }
+            landed = true;
+            stepIn(state);
+            return state;
         }
         if (++settle > 10) {
             return fail(state, "beam jump missed");
@@ -690,15 +719,20 @@ public class MovementJump extends Movement {
         Vec3 m = ctx.player().getDeltaMovement();
         ClientWorld.readPlayer(ctx, real);
         if (landed) {
-            // let the landing settle, then step to the middle for the next movement
-            // (a neo lands hanging over the side, feet outside dest: step in once the landing has settled)
+            // A neo lands with its centre past the side. Three ticks of no keys, the old settle, slides that
+            // landing off. Step toward the middle on the keys the current look can press, from this tick.
             settle++;
-            if (ctx.playerFeet().equals(dest) && (settle > 3 || Math.abs(m.x) + Math.abs(m.z) < 0.03)) {
+            double speed = Math.abs(m.x) + Math.abs(m.z);
+            if (hitboxOnDest(real) && (speed < 0.03 || keepsSpeed(real))) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
-            if (settle > 3) {
-                MovementHelper.moveTowards(ctx, state, dest);
+            if (settle > 12 && ctx.playerFeet().equals(dest) && speed < 0.05) {
+                return state.setStatus(MovementStatus.SUCCESS);
             }
+            if (settle > 12) {
+                return fail(state, "landing slid off");
+            }
+            stepIn(state);
             return state;
         }
         if (!running) {
@@ -836,9 +870,7 @@ public class MovementJump extends Movement {
                     return state.setStatus(MovementStatus.SUCCESS);
                 }
                 landed = true;
-                state.setInput(Input.MOVE_FORWARD, false);
-                state.setInput(Input.MOVE_BACK, false);
-                state.setInput(Input.SPRINT, false);
+                stepIn(state);
             }
         }
         // Ostinato path viz (K3): take-off, apex and landing of the template jump
@@ -865,6 +897,7 @@ public class MovementJump extends Movement {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
             landed = true;
+            stepIn(state);
             return state;
         }
         boolean jump = false;

@@ -1,6 +1,7 @@
 package baritone.pathing.kinematic;
 
 import baritone.pathing.kinematic.TasBrute.BoxWorld;
+import baritone.pathing.movement.StepIn;
 import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
@@ -188,6 +189,31 @@ public class TasBruteTest {
     }
 
     /**
+     * A neo lands with its centre past the side and speed still outward. No keys for a few ticks walks off.
+     * The keys {@link StepIn} presses on the landing tick stay on the block. The look is along the block, not toward
+     * the middle, which is the case the old settle waited out.
+     */
+    @Test
+    public void overhangStepsBackOnInsteadOfSlidingOff() {
+        BoxWorld w = new BoxWorld().put(0, -1, 0, BoxWorld.FULL);
+        PlayerSim coast = standing(w, 1.08, 0, 0.5);
+        coast.vx = 0.22;
+        for (int t = 0; t < 4 && coast.onGround; t++) {
+            coast.tick(0, 0, false, false);
+        }
+        assertFalse(coast.onGround);
+
+        PlayerSim held = standing(w, 1.08, 0, 0.5);
+        held.vx = 0.22;
+        for (int t = 0; t < 8; t++) {
+            int[] k = StepIn.keys(0, 0.5 - held.x, 0.5 - held.z);
+            held.tick(0, k[0], k[1], false, false);
+            assertTrue("t=" + t + " x=" + held.x, held.onGround && held.y > -0.1);
+        }
+        assertTrue(held.x > PlayerSim.HALF_WIDTH && held.x < 1 - PlayerSim.HALF_WIDTH);
+    }
+
+    /**
      * The two-yaw grid misses headhitter_gap2 from the lip facing the gap. MovementJump uses this budget when that
      * happens: 2500 wide, 22 ticks, back allowed. The jump stays in front of its start, so the path does not rewind.
      */
@@ -210,6 +236,21 @@ public class TasBruteTest {
             minZ = Math.min(minZ, p.z);
         }
         assertTrue("the lip jump stays in front of its start, so the path does not rewind", minZ >= 2.2 - 1e-6);
+        // The plan can finish with the centre past the side. The executor steps in on the look it already has
+        // instead of releasing the keys. Three coast ticks still count as a landing; this is the walk back on.
+        float yaw = r.yaw[r.ticks() - 1];
+        for (int t = 0; t < 12 && !boxOn(p, 0, 5); t++) {
+            int[] k = StepIn.keys(yaw, 0.5 - p.x, 5.5 - p.z);
+            p.tick(yaw, k[0], k[1], false, false);
+            assertTrue("step-in t=" + t + " x=" + p.x + " z=" + p.z, p.onGround && p.y > -0.1);
+        }
+        assertTrue("beam landing is on the block, x=" + p.x + " z=" + p.z, boxOn(p, 0, 5));
+    }
+
+    /** The whole foot box is over block (bx, bz). */
+    private static boolean boxOn(PlayerSim s, int bx, int bz) {
+        return s.x > bx + PlayerSim.HALF_WIDTH && s.x < bx + 1 - PlayerSim.HALF_WIDTH
+                && s.z > bz + PlayerSim.HALF_WIDTH && s.z < bz + 1 - PlayerSim.HALF_WIDTH;
     }
 
     /**
