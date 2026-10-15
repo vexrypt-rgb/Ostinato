@@ -118,6 +118,8 @@ public class MovementJump extends Movement {
         /** Ostinato: partial-block sims spent this calculation, and how many of those ran the whole plan grid. */
         int partialSims, partialFull;
         final List<Option> options = new ArrayList<>();
+        /** Ledge stand-ins already tried for this node. Cleared each call so the set is not allocated per node. */
+        final java.util.Set<Long> ledgeTried = new java.util.HashSet<>();
     }
 
     /** Forget which jumps failed (benches reuse the same coordinates for every course). */
@@ -231,7 +233,7 @@ public class MovementJump extends Movement {
         boolean low = MovementParkour.lowJump(MovementParkour.factorBlock(context, x, y, z));
         double startY = MovementParkour.standingY(context, x, y, z);
         int partialSims = 0;
-        java.util.Set<Long> ledgeTried = new java.util.HashSet<>();
+        c.ledgeTried.clear();
         for (int i = 0; i < FRAMES.length; i++) {
             int[] f = FRAMES[i];
             // straight ahead is walkable: nothing to jump over
@@ -254,7 +256,7 @@ public class MovementJump extends Movement {
                 for (int r = 1; r <= t.runUp; r++) {
                     if (!MovementHelper.canWalkOn(context, x - r * f[0], y - 1, z - r * f[1])) {
                         // Ostinato: no room to run up, but a ledge juts from the front edge: try it from a standstill
-                        if (!t.neo && ledgeAt(context, x + f[0], y - 1, z + f[1], startY) && ledgeTried.add(((long) i << 32) ^ (t.a << 16) ^ ((t.dy & 0xFF) << 8) ^ (t.b & 0xFF))) {
+                        if (!t.neo && ledgeAt(context, x + f[0], y - 1, z + f[1], startY) && c.ledgeTried.add(((long) i << 32) ^ (t.a << 16) ^ ((t.dy & 0xFF) << 8) ^ (t.b & 0xFF))) {
                             t = t.ledgeVariant();
                             break;
                         }
