@@ -61,6 +61,51 @@ public final class PathBench {
 
     public static final Finder ASTAR = (s, g, c) -> new AStarPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c);
 
+    /**
+     * Planner configurations. Physics does not have its own search: it walks a Baritone path, so its
+     * plan times match Baritone. Soprano here is the hand-cost jump set (parkour, neo, momentum, climb)
+     * with the kinematic 4-block gap left off. Kinematic is that set plus the 4-block gap.
+     */
+    public enum Engine {
+        BARITONE, PHYSICS, SOPRANO, KINEMATIC
+    }
+
+    public static void apply(Engine engine) {
+        var s = Baritone.settings();
+        s.experimentalMovement.value = false;
+        s.allowParkour.value = false;
+        s.allowParkourAscend.value = false;
+        s.allowParkourPlace.value = false;
+        s.allowNeos.value = false;
+        s.allowMomentumJumps.value = false;
+        s.allowClimbJumps.value = false;
+        s.allowDiagonalAscend.value = false;
+        s.allowDiagonalDescend.value = false;
+        s.kinematicTravel.value = false;
+        s.physicsTravel.value = false;
+        s.allowBreak.value = true;
+        switch (engine) {
+            case BARITONE -> {
+            }
+            case PHYSICS -> s.physicsTravel.value = true;
+            case SOPRANO -> {
+                s.allowParkour.value = true;
+                s.allowParkourAscend.value = true;
+                s.allowNeos.value = true;
+                s.allowMomentumJumps.value = true;
+                s.allowClimbJumps.value = true;
+            }
+            case KINEMATIC -> {
+                s.kinematicTravel.value = true;
+                s.allowParkour.value = true;
+                s.allowParkourAscend.value = true;
+                s.allowNeos.value = true;
+                s.allowMomentumJumps.value = true;
+                s.allowClimbJumps.value = true;
+            }
+        }
+    }
+
     /** Weighted A* exactly as PathingBehavior picks it: weight only on far segments (settings pathingFarSegment*). */
     public static Finder weighted(double w) {
         return (s, g, c) -> {

@@ -49,11 +49,97 @@ public class PathBenchTest {
         }
     }
 
+    /**
+     * Same queries for Baritone, the physics flag, the Soprano-style jump set, and kinematic.
+     * Tungsten's search needs a live player and is not in this process.
+     */
+    @Test
+    public void engines() throws Exception {
+        Assume.assumeTrue("engines".equals(System.getenv("OSTINATO_BENCH")));
+        int reps = Integer.parseInt(System.getenv().getOrDefault("OSTINATO_BENCH_REPS", "2"));
+        List<PathBench.Query> qs = PathBench.queries(Terrain.values());
+        String only = System.getenv("OSTINATO_BENCH_ONLY");
+        if (only != null && !only.isEmpty()) {
+            qs = qs.stream().filter(q -> only.contains(q.length().name())).toList();
+        }
+        var s = baritone.Baritone.settings();
+        boolean experimental = s.experimentalMovement.value;
+        boolean parkour = s.allowParkour.value;
+        boolean parkourAscend = s.allowParkourAscend.value;
+        boolean parkourPlace = s.allowParkourPlace.value;
+        boolean neos = s.allowNeos.value;
+        boolean momentum = s.allowMomentumJumps.value;
+        boolean climb = s.allowClimbJumps.value;
+        boolean diagA = s.allowDiagonalAscend.value;
+        boolean diagD = s.allowDiagonalDescend.value;
+        boolean kinematic = s.kinematicTravel.value;
+        boolean physics = s.physicsTravel.value;
+        boolean allowBreak = s.allowBreak.value;
+        StringBuilder all = new StringBuilder();
+        String onlyEngine = System.getenv("OSTINATO_BENCH_ENGINE");
+        java.nio.file.Path progress = java.nio.file.Path.of(System.getProperty("user.dir"), "build", "pathbench", "engines-progress.txt");
+        try {
+            java.nio.file.Files.createDirectories(progress.getParent());
+            if (java.nio.file.Files.exists(progress)) {
+                java.nio.file.Files.delete(progress);
+            }
+            for (PathBench.Engine engine : PathBench.Engine.values()) {
+                if (onlyEngine != null && !onlyEngine.isEmpty()) {
+                    boolean match = false;
+                    for (String part : onlyEngine.split(",")) {
+                        if (engine.name().equalsIgnoreCase(part.trim())) {
+                            match = true;
+                        }
+                    }
+                    if (!match) {
+                        continue;
+                    }
+                }
+                PathBench.apply(engine);
+                java.nio.file.Files.writeString(progress, "BEGIN " + engine + "\n", java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+                for (PathBench.Query q : qs) {
+                    PathBench.run(q, PathBench.ASTAR);
+                }
+                List<PathBench.Result> rs = new java.util.ArrayList<>();
+                for (int i = 0; i < reps; i++) {
+                    for (PathBench.Query q : qs) {
+                        PathBench.Result r = PathBench.run(q, PathBench.ASTAR);
+                        rs.add(r);
+                        java.nio.file.Files.writeString(progress, engine + " " + r.q().id() + " " + (r.ok() ? "ok" : "fail") + " " + String.format(java.util.Locale.ROOT, "%.0f", r.ms()) + "ms " + r.nodes() + "\n", java.nio.file.StandardOpenOption.APPEND);
+                    }
+                }
+                String rep = PathBench.report(engine.name().toLowerCase(java.util.Locale.ROOT), rs, reps);
+                all.append(rep).append('\n');
+                PathBench.write(engine.name().toLowerCase(java.util.Locale.ROOT) + ".md", rep);
+                java.nio.file.Files.writeString(progress, "END " + engine + "\n", java.nio.file.StandardOpenOption.APPEND);
+            }
+        } finally {
+            s.experimentalMovement.value = experimental;
+            s.allowParkour.value = parkour;
+            s.allowParkourAscend.value = parkourAscend;
+            s.allowParkourPlace.value = parkourPlace;
+            s.allowNeos.value = neos;
+            s.allowMomentumJumps.value = momentum;
+            s.allowClimbJumps.value = climb;
+            s.allowDiagonalAscend.value = diagA;
+            s.allowDiagonalDescend.value = diagD;
+            s.kinematicTravel.value = kinematic;
+            s.physicsTravel.value = physics;
+            s.allowBreak.value = allowBreak;
+        }
+        all.append("Physics sets physicsTravel only. The search is the Baritone one.\n");
+        all.append("Soprano is the hand-cost jump set in this tree (parkour, neo, momentum, climb), not the Soprano repo.\n");
+        all.append("Kinematic is that set plus the 4-block gap.\n");
+        all.append("Tungsten was not run: its search takes a live player and a Tungsten world.\n");
+        PathBench.write("engines.md", all.toString());
+        System.err.println(all);
+    }
+
     /** Ostinato: the full benchmark; only when OSTINATO_BENCH is set (e.g. OSTINATO_BENCH=baseline). Writes build/pathbench/. */
     @Test
     public void benchmark() {
         String label = System.getenv("OSTINATO_BENCH");
-        Assume.assumeTrue(label != null && !label.isEmpty());
+        Assume.assumeTrue(label != null && !label.isEmpty() && !"engines".equals(label));
         int reps = Integer.parseInt(System.getenv().getOrDefault("OSTINATO_BENCH_REPS", "5"));
         List<PathBench.Query> qs = PathBench.queries(Terrain.values());
         String only = System.getenv("OSTINATO_BENCH_ONLY"); // e.g. SHORT,MEDIUM
