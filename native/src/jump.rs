@@ -1,10 +1,11 @@
-//! `JumpSearch.search` / `searchStraight` (a grid of open-loop jump plans flown in [`Sim`]) and `MomentumHop.find` (a
+//! `JumpSearch.search` over the full grid (a grid of open-loop jump plans flown in [`Sim`]) and `MomentumHop.find` (a
 //! depth-first search over which ground ticks to hop on). Ports of `baritone.pathing.kinematic.JumpSearch` and
 //! `MomentumHop`, operation for operation.
 
-use crate::jmath::{floor_i, jabs, jmax, jmin, round_d};
+use crate::jmath::{floor_i, jabs, jmax, jmin, round_d, UNSUPPORTED};
 use crate::sim::{feet_cell, node_height, Box6, Sim, Snap, HALF_WIDTH};
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 pub const O0: [f32; 6] = [-15.0, 0.0, 15.0, 30.0, 45.0, 60.0];
 pub const HOP: [i32; 2] = [0, 1];
@@ -21,6 +22,8 @@ const MAX_AIR: i32 = 40;
 const SETTLE: i32 = 8;
 const HANG: i32 = 3;
 const YAW_STEP: f32 = 32.0;
+/// Fewer plans than this per thread are not worth a thread.
+const MIN_PER_THREAD: usize = 256;
 
 /// A `JumpSearch`'s fields: the frame, the flags, the plan and the jump state, and what a run leaves behind.
 pub struct JumpSearch<'a> {
@@ -220,100 +223,101 @@ impl<'a> JumpSearch<'a> {
         true
     }
 
-    /// `JumpSearch.search`.
-    pub fn search(&mut self, start: &Sim, local: bool) -> bool {
-        let mut best: Option<[i32; DIMS]> = None;
+    /// A search with this one's frame, flags and jump state, for a thread of [`Self::search`].
+    fn worker(&self) -> JumpSearch<'a> {
+        JumpSearch { sim: self.sim, buf: Vec::with_capacity(64), ..*self }
+    }
+
+    /// `JumpSearch.search(start, false)` (the full grid; Java keeps the local one), the plans split over up to `threads` threads. Runs only depend on each other through the
+    /// destination an [`Self::any_dest`] run rewrites, so that search stays on one thread. Each thread keeps its first
+    /// best plan, and the threads' bests are merged in grid order, so the answer is the single-threaded one.
+    pub fn search(&mut self, start: &Sim, threads: usize) -> bool {
         let c = self.plan;
-        let mut best_score = f64::MAX;
         let size = [O0.len() as i32, HOP.len() as i32, if self.ledge { EDGE.len() } else { PLAIN_EDGES } as i32, O1.len() as i32,
             SWITCH.len() as i32, RELEASE.len() as i32, BRAKE.len() as i32];
         let mut lo = [0i32; DIMS];
         let mut hi = [0i32; DIMS];
         for k in 0..DIMS {
             let fixed = self.jumped && k <= 2;
-            lo[k] = if fixed { c[k] } else if local { 0.max(c[k] - 1) } else { 0 };
-            hi[k] = if fixed { c[k] } else if local { (size[k] - 1).min(c[k] + 1) } else { size[k] - 1 };
+            lo[k] = if fixed { c[k] } else { 0 };
+            hi[k] = if fixed { c[k] } else { size[k] - 1 };
+        }
+        // the grid in the Java loops' order, the last index fastest
+        let mut plans: Vec<[i32; DIMS]> = Vec::new();
+        let mut p = lo;
+        'grid: loop {
+            plans.push(p);
+            let mut k = DIMS;
+            loop {
+                if k == 0 {
+                    break 'grid;
+                }
+                k -= 1;
+                if p[k] < hi[k] {
+                    p[k] += 1;
+                    break;
+                }
+                p[k] = lo[k];
+            }
         }
         let (jumped, air) = (self.jumped, self.air_ticks);
-        let mut p = [0i32; DIMS];
-        p[0] = lo[0];
-        while p[0] <= hi[0] {
-            p[1] = lo[1];
-            while p[1] <= hi[1] {
-                p[2] = lo[2];
-                while p[2] <= hi[2] {
-                    p[3] = lo[3];
-                    while p[3] <= hi[3] {
-                        p[4] = lo[4];
-                        while p[4] <= hi[4] {
-                            p[5] = lo[5];
-                            while p[5] <= hi[5] {
-                                p[6] = lo[6];
-                                while p[6] <= hi[6] {
-                                    if self.run(start, &p, jumped, air) {
-                                        let score = if self.carry { -self.land_speed + 0.004 * self.ticks as f64 } else { self.miss + 0.004 * self.ticks as f64 };
-                                        if score < best_score {
-                                            best_score = score;
-                                            best = Some(p);
-                                        }
-                                    }
-                                    p[6] += 1;
-                                }
-                                p[5] += 1;
-                            }
-                            p[4] += 1;
+        let parts = if self.any_dest { 1 } else { threads.max(1).min(plans.len().div_ceil(MIN_PER_THREAD)).max(1) };
+        let best = if parts == 1 {
+            self.best_of(start, &plans, jumped, air)
+        } else {
+            let chunk = plans.len().div_ceil(parts);
+            let unsupported = AtomicBool::new(false);
+            let mut bests: Vec<Option<(f64, [i32; DIMS])>> = vec![None; plans.len().div_ceil(chunk)];
+            std::thread::scope(|sc| {
+                for (part, out) in plans.chunks(chunk).zip(bests.iter_mut()) {
+                    let mut js = self.worker();
+                    let unsup = &unsupported;
+                    sc.spawn(move || {
+                        *out = js.best_of(start, part, jumped, air);
+                        // fdlibm's out-of-range flag lives per thread
+                        if UNSUPPORTED.with(|u| u.get()) {
+                            unsup.store(true, Relaxed);
                         }
-                        p[3] += 1;
-                    }
-                    p[2] += 1;
+                    });
                 }
-                p[1] += 1;
+            });
+            if unsupported.load(Relaxed) {
+                UNSUPPORTED.with(|u| u.set(true));
             }
-            p[0] += 1;
-        }
-        let Some(b) = best else { return false };
+            let mut best: Option<(f64, [i32; DIMS])> = None;
+            for (score, plan) in bests.into_iter().flatten() {
+                if best.is_none_or(|(b, _)| score < b) {
+                    best = Some((score, plan));
+                }
+            }
+            if best.is_none() {
+                // a failed search leaves the sim where the grid's last run left it
+                let last = plans[plans.len() - 1];
+                self.run(start, &last, jumped, air);
+            }
+            best
+        };
+        let Some((_, b)) = best else { return false };
         self.plan = b;
         let plan = self.plan;
         self.run(start, &plan, jumped, air);
         true
     }
 
-    /// `JumpSearch.searchStraight`.
-    pub fn search_straight(&mut self, start: &Sim) -> bool {
+    /// The first plan of `plans` with the lowest score, as `JumpSearch.search`'s loop keeps it.
+    fn best_of(&mut self, start: &Sim, plans: &[[i32; DIMS]], jumped: bool, air: i32) -> Option<(f64, [i32; DIMS])> {
         let mut best: Option<[i32; DIMS]> = None;
         let mut best_score = f64::MAX;
-        let mut p = [0i32; DIMS];
-        p[0] = 1;
-        p[3] = 4;
-        let edges = if self.ledge { EDGE.len() } else { PLAIN_EDGES } as i32;
-        p[1] = 0;
-        while p[1] < HOP.len() as i32 {
-            p[2] = 0;
-            while p[2] < edges {
-                p[5] = 0;
-                while p[5] < RELEASE.len() as i32 {
-                    p[6] = 0;
-                    while p[6] < BRAKE.len() as i32 {
-                        if !(p[5] == 0 && p[6] == 1) && self.run(start, &p, false, 0) {
-                            let score = self.miss + 0.004 * self.ticks as f64;
-                            if score < best_score {
-                                best_score = score;
-                                best = Some(p);
-                            }
-                        }
-                        p[6] += 1;
-                    }
-                    p[5] += 1;
+        for p in plans {
+            if self.run(start, p, jumped, air) {
+                let score = if self.carry { -self.land_speed + 0.004 * self.ticks as f64 } else { self.miss + 0.004 * self.ticks as f64 };
+                if score < best_score {
+                    best_score = score;
+                    best = Some(*p);
                 }
-                p[2] += 1;
             }
-            p[1] += 1;
         }
-        let Some(b) = best else { return false };
-        self.plan = b;
-        let plan = self.plan;
-        self.run(start, &plan, false, 0);
-        true
+        best.map(|b| (best_score, b))
     }
 }
 

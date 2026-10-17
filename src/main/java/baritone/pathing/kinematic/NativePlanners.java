@@ -10,7 +10,7 @@ import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 /**
- * Ostinato: {@code PhysicsPathfinder.plan}, {@link JumpSearch#search} / {@link JumpSearch#searchStraight} and {@link
+ * Ostinato: {@code PhysicsPathfinder.plan}, {@link JumpSearch#search} and {@link
  * MomentumHop#find} in the native library ({@code native/src/physics.rs}, {@code jump.rs}), over a {@link
  * NativeTas.Snapshot} of the cells around the search. Each gives exactly the Java search's answer, or a "don't know"
  * (null, or {@link #UNKNOWN}) when it cannot: no library, a world that cannot list its cells, a search that leaves even
@@ -73,18 +73,16 @@ public final class NativePlanners {
         return null;
     }
 
-    /** {@link #jumpSearch}'s modes. */
-    public static final int FULL = 0, LOCAL = 1, STRAIGHT = 2;
     /** {@link #jumpSearch}: the library could not answer; run the Java search. */
     public static final int UNKNOWN = -1;
 
     /**
-     * {@link JumpSearch#search} ({@link #FULL} or {@link #LOCAL}) or {@link JumpSearch#searchStraight} ({@link
-     * #STRAIGHT}) in Rust, leaving {@code js} as the Java search would: plan, ticks, miss, landSpeed, the destination
+     * {@link JumpSearch#search} over the full grid in Rust, split over {@link NativeTas#threads}
+     * threads, leaving {@code js} as the Java search would: plan, ticks, miss, landSpeed, the destination
      * (which {@link JumpSearch#anyDest} rewrites) and the sim's state. Returns 1 found, 0 not, or {@link #UNKNOWN} with
      * {@code js} untouched.
      */
-    static int jumpSearch(JumpSearch js, PlayerSim start, int mode) {
+    static int jumpSearch(JumpSearch js, PlayerSim start) {
         NativeLib lib = NativeLib.get();
         if (lib == null) {
             return UNKNOWN;
@@ -103,9 +101,9 @@ public final class NativePlanners {
             try (Arena arena = Arena.ofConfined()) {
                 MemorySegment[] s = snap.segments(arena);
                 MemorySegment state = arena.allocateFrom(JAVA_DOUBLE, NativeTas.state(start));
-                MemorySegment params = arena.allocateFrom(JAVA_DOUBLE, mode, js.approachYaw(), js.dirX, js.dirZ, js.edge,
+                MemorySegment params = arena.allocateFrom(JAVA_DOUBLE, js.approachYaw(), js.dirX, js.dirZ, js.edge,
                         js.destX, js.destY, js.destZ, js.side, js.bounceY, b(js.anyDest), b(js.noJump), b(js.grab),
-                        b(js.standJump), b(js.carry), b(js.ledge), b(js.jumped), js.airTicks, b(js.slewYaw), js.faceYaw);
+                        b(js.standJump), b(js.carry), b(js.ledge), b(js.jumped), js.airTicks, b(js.slewYaw), js.faceYaw, NativeTas.threads);
                 MemorySegment plan = arena.allocateFrom(JAVA_INT, js.plan);
                 MemorySegment out = arena.allocate(JAVA_DOUBLE, 6 + NativeTas.STATE);
                 r = (int) lib.jumpSearch.invoke(s[0], s[1], s[2], snap.boxCount, s[3], s[4], state, params, plan, out);
@@ -150,7 +148,7 @@ public final class NativePlanners {
         for (int pad : NativeTas.PADS) {
             int x0 = PlayerSim.floor(Math.min(start.x, destX)) - pad, x1 = PlayerSim.floor(Math.max(start.x, destX + 1)) + pad;
             int z0 = PlayerSim.floor(Math.min(start.z, destZ)) - pad, z1 = PlayerSim.floor(Math.max(start.z, destZ + 1)) + pad;
-            int y0 = PlayerSim.floor(Math.min(start.y, destY)) - 2, y1 = PlayerSim.floor(Math.max(start.y, destY)) + 3 + pad / 2;
+            int y0 = PlayerSim.floor(Math.min(start.y, destY)) - 2 - pad / 2, y1 = PlayerSim.floor(Math.max(start.y, destY)) + 3 + pad / 2;
             NativeTas.Snapshot snap = NativeTas.Snapshot.take(world, x0, y0, z0, x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1);
             if (snap == null) {
                 return null;

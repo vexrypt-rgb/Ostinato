@@ -95,25 +95,31 @@ public class NativePlannerParityTest {
                 JumpSearch full = js(w, 0, dy, gap + 1);
                 full.edge = 1;
                 boolean ok = full.search(standing(w, 0.5, 0, -1.5), false);
-                full.search(standing(w, 0.5, 0, -1.5), true);
-                full.searchStraight(standing(w, 0.5, 0, -1.5));
                 if (ok) {
-                    // mid-flight: re-search from a few ticks into the plan, run-up choices fixed
+                    // mid-flight: re-search the whole grid from two ticks into the jump, run-up choices fixed
                     PlayerSim s = standing(w, 0.5, 0, -1.5);
                     JumpSearch mid = js(w, 0, dy, gap + 1);
                     System.arraycopy(full.plan, 0, mid.plan, 0, JumpSearch.DIMS);
-                    mid.search(s, true);
+                    for (int t = 0; t < 60 && !(s.onGround && s.z * mid.dirZ >= mid.edge + JumpSearch.EDGE[mid.plan[2]]); t++) {
+                        s.tick(mid.yaw(mid.plan, false, 0), true, true, false);
+                    }
+                    s.tick(mid.yaw(mid.plan, false, 0), true, true, true);
+                    s.tick(mid.yaw(mid.plan, true, 0), true, true, false);
+                    mid.jumped = true;
+                    mid.airTicks = 1;
+                    mid.search(s, false);
                 }
             }
         }
-        assertTrue(NativePlanners.checked.get() - before >= 45);
+        assertTrue(NativePlanners.checked.get() - before >= 20);
     }
 
     @Test
     public void jumpSearchRandomWorldsTheSame() {
         Random r = new Random(0x15EA);
-        int before = NativePlanners.checked.get(), found = 0;
-        for (int i = 0; i < 80; i++) {
+        int before = NativePlanners.checked.get(), found = 0, threads = NativeTas.threads;
+        for (int i = 0; i < 100; i++) {
+            NativeTas.threads = 1 + i % 4; // the grid split over 1 to 4 threads gives the same answer
             NativeParityTest.FlagWorld w = randomWorld(r);
             JumpSearch js = js(w, r.nextInt(3) - 1, r.nextInt(3) - 1, 2 + r.nextInt(5));
             js.side = r.nextBoolean() ? 1 : -1;
@@ -136,23 +142,25 @@ public class NativePlannerParityTest {
                 s.sprinting = true;
                 s.vz = 0.1 + 0.25 * r.nextDouble();
             }
-            int mode = r.nextInt(3);
-            boolean ok = mode == 2 ? js.searchStraight(s) : js.search(s, mode == 1);
+            if (r.nextInt(5) == 0) {
+                js.jumped = true; // the run-up choices fixed, as a re-search in the air has them
+                js.airTicks = r.nextInt(4);
+            }
+            boolean ok = js.search(s, false);
             if (ok) {
                 found++;
             }
         }
+        NativeTas.threads = threads;
         int checked = NativePlanners.checked.get() - before;
-        System.out.println("jump search random worlds: " + checked + " of 80 searched natively, " + found + " found a plan");
-        assertTrue("most random searches stay inside the snapshot", checked >= 60);
+        System.out.println("jump search random worlds: " + checked + " of 100 searched natively, " + found + " found a plan");
+        assertTrue("most random searches stay inside the snapshot", checked >= 75);
     }
 
     private static void hop(PlayerSim.World w, PlayerSim s, int dirX, int dirZ, int dx, int dy, int dz, boolean prev, int budget) {
-        float yaw = (float) Math.toDegrees(Math.atan2(-dirX, dirZ));
-        NativePlanners.Trail t = NativePlanners.momentumHop(w, s, yaw, dirX, dirZ, dx, dy, dz, prev, budget);
-        assertTrue("native momentum hop answered", t != null);
-        NativePlanners.checked.incrementAndGet();
-        assertEquals(MomentumHop.find(w, s, dirX, dirZ, dx, dy, dz, prev, budget), t.trail());
+        int before = NativePlanners.checked.get();
+        MomentumHop.find(w, s, dirX, dirZ, dx, dy, dz, prev, budget, true); // checked inside
+        assertEquals("native momentum hop answered", before + 1, NativePlanners.checked.get());
     }
 
     @Test

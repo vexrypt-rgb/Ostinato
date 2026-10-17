@@ -77,6 +77,8 @@ public class CalculationContext {
     public final List<Block> allowBreakAnyway;
     public final boolean allowParkour;
     public final boolean allowParkourPlace;
+    /** Ostinato: jump and momentum-hop costing searches run in the native library ({@code nativeAcceleration}). */
+    public final boolean nativeSearch;
     public final boolean allowJumpAtBuildLimit;
     public final boolean allowParkourAscend;
     public final boolean allowParkourFourGap;
@@ -169,6 +171,7 @@ public class CalculationContext {
         this.allowParkour = ExperimentalMovement.allowParkour()
                 && ClientWorld.plainGravity(baritone.getPlayerContext());
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.nativeSearch = Baritone.settings().nativeAcceleration.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
         // the longer jumps are rolled out at the plain walk, and under Slowness they fall short

@@ -67,23 +67,26 @@ public class HotPathBench {
                 return js.search(standing(g2, 0.5, 0, 0.5), false);
             });
         }
+        int threads = NativeTas.threads;
+        NativeTas.threads = 1;
+        time("jumpsearch full, gap 2 NATIVE 1 thread", () -> {
+            JumpSearch js = js(g2);
+            js.nativeSearch = true;
+            return js.search(standing(g2, 0.5, 0, 0.5), false);
+        });
+        NativeTas.threads = threads;
+        time("jumpsearch straight, gap 2 (Java only)", () -> js(g2).searchStraight(standing(g2, 0.5, 0, 0.5)));
         JumpSearch planned = js(g2);
         planned.search(standing(g2, 0.5, 0, 0.5), false);
         int[] plan = planned.plan.clone();
+        time("jumpsearch local, gap 2 (Java only)", () -> {
+            JumpSearch js = js(g2);
+            System.arraycopy(plan, 0, js.plan, 0, JumpSearch.DIMS);
+            return js.search(standing(g2, 0.5, 0, 0.5), true);
+        });
         BoxWorld g6 = new BoxWorld().fill(0, -1, 0, 0, -1, 2, BoxWorld.FULL).put(0, -1, 9, BoxWorld.FULL);
         for (boolean nat : new boolean[]{false, true}) {
             String tag = nat ? " NATIVE" : "";
-            time("jumpsearch local, gap 2" + tag, () -> {
-                JumpSearch js = js(g2);
-                js.nativeSearch = nat;
-                System.arraycopy(plan, 0, js.plan, 0, JumpSearch.DIMS);
-                return js.search(standing(g2, 0.5, 0, 0.5), true);
-            });
-            time("jumpsearch straight, gap 2" + tag, () -> {
-                JumpSearch js = js(g2);
-                js.nativeSearch = nat;
-                return js.searchStraight(standing(g2, 0.5, 0, 0.5));
-            });
             time("jumpsearch full, unreachable gap 6" + tag, () -> {
                 JumpSearch js = js(g6);
                 js.nativeSearch = nat;
@@ -96,8 +99,8 @@ public class HotPathBench {
         BoxWorld hh = new BoxWorld().fill(0, -1, -8, 0, -1, 0, BoxWorld.FULL).fill(0, 2, -8, 0, 2, 4, BoxWorld.FULL).put(0, -1, 3, BoxWorld.FULL);
         time("momentumhop plan budget 6000", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.PLAN_BUDGET));
         time("momentumhop run budget 40000", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.BUDGET));
-        time("momentumhop plan budget 6000 NATIVE", () -> NativePlanners.momentumHop(hh, standing(hh, 0.5, 0, -7.5), 0f, 0, 1, 0, 0, 3, false, MomentumHop.PLAN_BUDGET));
-        time("momentumhop run budget 40000 NATIVE", () -> NativePlanners.momentumHop(hh, standing(hh, 0.5, 0, -7.5), 0f, 0, 1, 0, 0, 3, false, MomentumHop.BUDGET));
+        time("momentumhop plan budget 6000 NATIVE", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.PLAN_BUDGET, true));
+        time("momentumhop run budget 40000 NATIVE", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.BUDGET, true));
 
         // raw sim speed and the snapshot copy a native call would add
         time("100k sim ticks, flat run", () -> {

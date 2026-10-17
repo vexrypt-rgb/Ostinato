@@ -172,7 +172,8 @@ On `main` (26.3), the brute-force jump search (`TasBrute`, used for parkour fron
 without a template plan) can run in a small Rust library shipped inside the jar for Windows, Linux and macOS on x64
 and arm64. It gives the same plan as the Java search, to the bit, and tests check this on every build. Measured on
 an Intel Core i5-1145G7 laptop, it was 3.1x to 4.9x faster than Java on the test courses (2.3x to 2.9x on one
-thread; it uses up to 4). Pathfinding (A*) and block lookups stay in Java. Details and numbers:
+thread; it uses up to 4). The physics travel planner (1.4x to 1.9x), the full jump-plan search (2.4x to 3.7x) and
+the momentum-hop search (2.4x to 3.0x) run there too. Pathfinding (A*) and block lookups stay in Java. Details and numbers:
 [docs/RUST_NATIVE.md](docs/RUST_NATIVE.md).
 
 The Java search runs instead whenever the library cannot load (another OS or CPU, or `-Dostinato.native=false`) or

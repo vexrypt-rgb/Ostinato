@@ -361,6 +361,7 @@ public class MovementClimbJump extends Movement {
         if (js == null) {
             ClientWorld world = new ClientWorld(ctx);
             js = new JumpSearch(world);
+            js.nativeSearch = Baritone.settings().nativeAcceleration.value;
             real = new PlayerSim(world);
             js.dirX = f[0];
             js.dirZ = f[1];

@@ -292,11 +292,11 @@ pub unsafe extern "C" fn ost_physics_plan(
     })
 }
 
-/// `JumpSearch.search` (mode 0 full, 1 local) or `searchStraight` (mode 2) over a snapshot.
+/// `JumpSearch.search` over the full grid (the local search stays in Java), on a snapshot.
 ///
 /// * `state`: 15 doubles, the start.
-/// * `params`: mode, approachYaw, dirX, dirZ, edge, destX, destY, destZ, side, bounceY, anyDest, noJump, grab,
-///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw.
+/// * `params`: approachYaw, dirX, dirZ, edge, destX, destY, destZ, side, bounceY, anyDest, noJump, grab,
+///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw, threads (1 to 16: the grid is split over them).
 /// * `plan`: the search's 7 plan indices, read and written back.
 /// * `out`: ticks, miss, landSpeed, destX, destY, destZ and the sim's end state (15 doubles), written whatever the
 ///   answer, as the Java fields are.
@@ -333,33 +333,32 @@ pub unsafe extern "C" fn ost_jump_search(
             return ERR_BAD_ARGS;
         }
         let mut js = jump::JumpSearch::new(&w);
-        js.approach_yaw = pr[1] as f32;
-        js.dir_x = pr[2];
-        js.dir_z = pr[3];
-        js.edge = pr[4];
-        js.dest_x = pr[5] as i32;
-        js.dest_y = pr[6] as i32;
-        js.dest_z = pr[7] as i32;
-        js.side = pr[8] as i32;
-        js.bounce_y = pr[9] as i32;
-        js.any_dest = pr[10] != 0.0;
-        js.no_jump = pr[11] != 0.0;
-        js.grab = pr[12] != 0.0;
-        js.stand_jump = pr[13] != 0.0;
-        js.carry = pr[14] != 0.0;
-        js.ledge = pr[15] != 0.0;
-        js.jumped = pr[16] != 0.0;
-        js.air_ticks = pr[17] as i32;
-        js.slew_yaw = pr[18] != 0.0;
-        js.face_yaw = pr[19] as f32;
+        js.approach_yaw = pr[0] as f32;
+        js.dir_x = pr[1];
+        js.dir_z = pr[2];
+        js.edge = pr[3];
+        js.dest_x = pr[4] as i32;
+        js.dest_y = pr[5] as i32;
+        js.dest_z = pr[6] as i32;
+        js.side = pr[7] as i32;
+        js.bounce_y = pr[8] as i32;
+        js.any_dest = pr[9] != 0.0;
+        js.no_jump = pr[10] != 0.0;
+        js.grab = pr[11] != 0.0;
+        js.stand_jump = pr[12] != 0.0;
+        js.carry = pr[13] != 0.0;
+        js.ledge = pr[14] != 0.0;
+        js.jumped = pr[15] != 0.0;
+        js.air_ticks = pr[16] as i32;
+        js.slew_yaw = pr[17] != 0.0;
+        js.face_yaw = pr[18] as f32;
         js.plan.copy_from_slice(plan);
         js.sim = start;
-        let ok = match pr[0] as i32 {
-            0 => js.search(&start, false),
-            1 => js.search(&start, true),
-            2 => js.search_straight(&start),
-            _ => return ERR_BAD_ARGS,
-        };
+        let threads = pr[19] as i32;
+        if !(1..=16).contains(&threads) {
+            return ERR_BAD_ARGS;
+        }
+        let ok = js.search(&start, threads as usize);
         if w.missed() {
             return ERR_OUT_OF_REGION;
         }

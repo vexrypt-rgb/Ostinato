@@ -26,7 +26,26 @@ public final class MomentumHop {
 
     /** As above with a sim-tick budget (the planner uses a smaller one). */
     public static String find(PlayerSim.World w, PlayerSim start, int dirX, int dirZ, int destX, int destY, int destZ, boolean jumpedLastTick, int budget) {
+        return find(w, start, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget, false);
+    }
+
+    /** Ostinato: as above, searched in the native library when {@code nativeSearch} and it is loaded ({@link NativePlanners}); the answer is the same. */
+    public static String find(PlayerSim.World w, PlayerSim start, int dirX, int dirZ, int destX, int destY, int destZ, boolean jumpedLastTick, int budget,
+                              boolean nativeSearch) {
         float yaw = (float) Math.toDegrees(Math.atan2(-dirX, dirZ));
+        if (nativeSearch) {
+            NativePlanners.Trail t = NativePlanners.momentumHop(w, start, yaw, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget);
+            if (t != null) {
+                if (NativePlanners.verify) {
+                    NativePlanners.checked.incrementAndGet();
+                    String ref = find(w, start, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget, false);
+                    if (!java.util.Objects.equals(ref, t.trail())) {
+                        throw new AssertionError("native momentum hop " + t.trail() + " differs from Java " + ref);
+                    }
+                }
+                return t.trail();
+            }
+        }
         Search s = new Search(w, yaw, dirX, dirZ, destX, destY, destZ, Math.min(start.y, destY) - 0.6);
         s.budget = budget;
         StringBuilder trail = new StringBuilder();
