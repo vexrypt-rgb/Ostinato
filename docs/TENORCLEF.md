@@ -12,14 +12,13 @@ Phase 0 architecture audit and roadmap live in the TenorClef repo:
 - https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/DEVELOPMENT.md
 - https://github.com/vexrypt-rgb/TenorClef/blob/main/docs/OSTINATO_WIRING.md
 
-Ostinato owns pathfinding / physics traversal / Baritone + Tungsten backends.
+Ostinato owns pathfinding and physics traversal.
 TenorClef owns goals, planning, tasks, world model, and recovery.
 
 ## MovementEngine (Phase 2)
 
 See [`MOVEMENT_ENGINE.md`](./MOVEMENT_ENGINE.md). Tip `main` exposes
-`IMovementEngine` / `HybridMovementEngine` built on the existing
-`IMovementBackend` precursor. TenorClef migrates travel call sites gradually
+`IMovementEngine` / `HybridMovementEngine` over Baritone custom-goal pathing. TenorClef migrates travel call sites gradually
 via a thin adapter (stock Baritone jars fall back to `CustomGoalProcess`).
 
 ## Build JDKs

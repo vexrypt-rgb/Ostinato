@@ -36,8 +36,6 @@ small and document any new manual port here.
 
 ## Known integration limits
 
-- Tungsten currently handles goto/custom-goal travel only.
-- TenorClef still has a compatibility facade for Tungsten-facing tasks.
 - TenorClef consumes local Ostinato artifacts during development; publication under a
   pinned dependency coordinate remains a release follow-up.
 

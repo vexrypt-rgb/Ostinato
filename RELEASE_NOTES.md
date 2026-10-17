@@ -21,6 +21,11 @@ v1.22.0 and have no changes.
 
 ## Since v1.23.0 (unreleased, 26.3 only)
 
+- **Tungsten support removed.** The optional bridge to the Tungsten mod (`TungstenMovementBackend`) and the
+  `movementBackend` setting are gone; Ostinato's own kinematic and physics travel drive every goto. A
+  `movementBackend` line left in a settings file is skipped with an "Unable to parse line" message. `IMovementBackend` and `MovementBackendSelector` left
+  the API with it, and `MovementBackendKind` is just `BARITONE`. TenorClef's `MovementBackends.engine` /
+  `preference` and `IMovementEngine` entry points are unchanged.
 - **Rust jump search.** `TasBrute`, the brute-force jump search behind parkour frontiers and head-hitter jumps, runs
   in a Rust library carried in the 26.3 jars for Windows, Linux and macOS (x64 and arm64). It returns the same plan
   as the Java search, bit for bit; tests compare the two on every course and on random worlds. On an Intel Core
