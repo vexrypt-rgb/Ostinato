@@ -437,6 +437,9 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static Ternary canWalkOnBlockState(BlockState state) {
         Block block = state.getBlock();
+        if (Baritone.settings().blocksToAvoidStandingOn.value.contains(block)) {
+            return NO;
+        }
         // Extra blocks we may want to walk on.
         if (block instanceof EndPortalFrameBlock) {
             return YES;

@@ -309,6 +309,12 @@ public final class Settings {
     )));
 
     /**
+     * Blocks that Baritone will never stand on, for example a parkour map's kill floor or a block a
+     * command block reacts to. {@link #blocksToAvoid} only keeps it from walking through blocks.
+     */
+    public final Setting<List<Block>> blocksToAvoidStandingOn = new Setting<>(new ArrayList<>());
+
+    /**
      * Blocks that Baritone is not allowed to break
      */
     public final Setting<List<Block>> blocksToDisallowBreaking = new Setting<>(new ArrayList<>(
@@ -487,6 +493,18 @@ public final class Settings {
      * Ride a boat off drops too high to fall safely (place it at the top, get in, drive off the edge)
      */
     public final Setting<Boolean> allowBoatFall = new Setting<>(true);
+
+    /**
+     * Survive a fall by getting on whatever we land beside: a horse, donkey, mule, llama or camel, a saddled pig or
+     * strider, a boat or a minecart. Riding cancels the fall, so the height doesn't matter.
+     */
+    public final Setting<Boolean> allowMountClutch = new Setting<>(true);
+
+    /**
+     * Steer sideways while falling to drop through a hole in a floor below instead of landing on it, the way a dropper
+     * map is played. Only where air control can make it in time.
+     */
+    public final Setting<Boolean> allowSteeredFalls = new Setting<>(true);
 
     /**
      * How far a boat can fall onto land with us in it

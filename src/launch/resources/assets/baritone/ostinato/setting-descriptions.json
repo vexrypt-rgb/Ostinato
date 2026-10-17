@@ -338,5 +338,8 @@
  "pathingHierarchyCoarseFactorShift": "Ostinato: coarse cell size as a shift over 16-block sections: 2 = 64 blocks, 3 = 128, 4 = 256.",
  "pathingHierarchyCandidates": "Ostinato: abstract route candidates to try before falling back to plain A*. 2 = when the first corridor's block search misses, re-plan the abstract route with the first one's sections penalised and search that corridor.",
  "pathingHierarchyCandidatePenalty": "Ostinato: cost multiplier on the first candidate's sections when looking for the second.",
- "pathingHierarchyMinDistance": "Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly."
+ "pathingHierarchyMinDistance": "Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly.",
+ "blocksToAvoidStandingOn": "Blocks that Baritone will never stand on, for example a parkour map's kill floor or a block a command block reacts to. blocksToAvoid only keeps it from walking through blocks.",
+ "allowMountClutch": "Survive a fall by getting on whatever we land beside: a horse, donkey, mule, llama or camel, a saddled pig or strider, a boat or a minecart. Riding cancels the fall, so the height doesn't matter.",
+ "allowSteeredFalls": "Steer sideways while falling to drop through a hole in a floor below instead of landing on it, the way a dropper map is played. Only where air control can make it in time."
 }

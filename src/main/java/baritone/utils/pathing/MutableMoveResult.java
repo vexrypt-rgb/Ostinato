@@ -34,6 +34,10 @@ public final class MutableMoveResult {
     public double damage;
     /** This fall is only survivable by clutching a ladder or vine into the column, see MovementDescend.dynamicFallCost. */
     public boolean clutch;
+    /** This fall ends on something we can ride (horse, saddled pig, boat, minecart): we get on just before landing, see MountUtil. */
+    public boolean mount;
+    /** A fall steered through holes on the way down: {x, z, floorY} for each hole, in order, or null for a straight drop. */
+    public int[] steer;
 
     public MutableMoveResult() {
         reset();
@@ -46,5 +50,7 @@ public final class MutableMoveResult {
         cost = ActionCosts.COST_INF;
         damage = 0;
         clutch = false;
+        mount = false;
+        steer = null;
     }
 }

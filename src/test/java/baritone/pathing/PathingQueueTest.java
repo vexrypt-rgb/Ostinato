@@ -206,6 +206,29 @@ public class PathingQueueTest {
         RouteReuse.clear();
     }
 
+    @Test
+    public void routeReuseForgetsAStepThatFailed() {
+        RouteReuse.clear();
+        JumpFailures.forget();
+        CostCalibration.reset();
+        Goal goal = new GoalBlock(3, 0, 0);
+        List<BetterBlockPos> pos = Arrays.asList(
+                new BetterBlockPos(0, 0, 0),
+                new BetterBlockPos(1, 0, 0),
+                new BetterBlockPos(2, 1, 0),
+                new BetterBlockPos(3, 0, 0));
+        RouteReuse.Blocks blocks = (x, y, z) -> 1;
+        long stamp = RouteReuse.stamp(0);
+        RouteReuse.remember(goal, pos, blocks, stamp, null);
+        // a step that is not in the route leaves it alone, even one between two of its cells the other way round
+        RouteReuse.forget(new BetterBlockPos(2, 1, 0), new BetterBlockPos(1, 0, 0));
+        assertEquals(0, RouteReuse.find(goal, 0, 0, 0, blocks, stamp));
+        RouteReuse.forget(new BetterBlockPos(1, 0, 0), new BetterBlockPos(2, 1, 0));
+        assertEquals(-1, RouteReuse.find(goal, 0, 0, 0, blocks, stamp));
+        assertEquals(-1, RouteReuse.find(goal, 2, 1, 0, blocks, stamp));
+        RouteReuse.clear();
+    }
+
     private static long cell(int x, int y, int z) {
         return ((long) x & 0x3FFFFFFL) << 38 | ((long) (y + 2048) & 0xFFFL) << 26 | ((long) z & 0x3FFFFFFL);
     }
