@@ -51,7 +51,6 @@ public class PathBenchTest {
 
     /**
      * Same queries for Baritone, the physics flag, the Soprano-style jump set, and kinematic.
-     * Tungsten's search needs a live player and is not in this process.
      */
     @Test
     public void engines() throws Exception {
@@ -130,7 +129,6 @@ public class PathBenchTest {
         all.append("Physics sets physicsTravel only. The search is the Baritone one.\n");
         all.append("Soprano is the hand-cost jump set in this tree (parkour, neo, momentum, climb), not the Soprano repo.\n");
         all.append("Kinematic is that set plus the 4-block gap.\n");
-        all.append("Tungsten was not run: its search takes a live player and a Tungsten world.\n");
         PathBench.write("engines.md", all.toString());
         System.err.println(all);
     }

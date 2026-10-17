@@ -8,6 +8,7 @@ import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.interfaces.IGoalRenderPos;
+import baritone.pathing.calc.hierarchy.BidirectionalRoute;
 import baritone.pathing.calc.hierarchy.CoarseGraph;
 import baritone.pathing.calc.hierarchy.CostToGoMap;
 import baritone.pathing.calc.hierarchy.SectionGraph;
@@ -38,6 +39,8 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
     public CostToGoMap costToGo;
     /** Ostinato: the coarse-level map when pathingHierarchyLevels &gt;= 2. */
     public CostToGoMap coarseMap;
+    /** Ostinato: cells the abstract searches settled (both levels), for the benchmark. */
+    public int abstractExpanded;
 
     public HierarchicalPathFinder(BetterBlockPos realStart, int startX, int startY, int startZ, Goal goal, Favoring favoring, CalculationContext context, SectionGraph graph, double weight) {
         super(realStart, startX, startY, startZ, goal, context);
@@ -91,17 +94,35 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
             // only the sections whose coarse cell lies in the coarse corridor.
             int fs = Baritone.settings().pathingHierarchyCoarseFactorShift.value;
             CoarseGraph coarse = graph.coarse(fs);
-            coarseMap = CostToGoMap.build(coarse, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), 1, t0 + failureTimeout / 4, null);
+            LongOpenHashSet cc;
+            if (bidirectional()) {
+                BidirectionalRoute.Result r = BidirectionalRoute.search(coarse, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), 1, t0 + failureTimeout / 4, null, null, 1);
+                cc = r == null ? null : r.corridor(1);
+                if (r != null) abstractExpanded += r.expanded();
+            } else {
+                coarseMap = CostToGoMap.build(coarse, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), 1, t0 + failureTimeout / 4, null);
+                cc = coarseMap.corridor(coarse, ctx, startX, startY, startZ, 1);
+                abstractExpanded += coarseMap.expanded;
+            }
             if (cancelRequested) return Optional.empty();
-            LongOpenHashSet cc = coarseMap.corridor(coarse, ctx, startX, startY, startZ, 1);
             if (cc != null) {
                 allowed = (x, y, z) -> cc.contains(SectionGraph.key(x >> fs, y >> fs, z >> fs));
                 margin = Math.max(margin, (1 << fs) * 2); // the coarse corridor bounds the search now
             }
         }
-        costToGo = CostToGoMap.build(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed);
+        int radius = Baritone.settings().pathingHierarchyCorridorRadius.value;
+        LongOpenHashSet corridor;
+        BidirectionalRoute.Result route = null;
+        if (bidirectional()) {
+            route = BidirectionalRoute.search(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed, null, 1);
+            corridor = route == null ? null : route.corridor(radius);
+            if (route != null) abstractExpanded += route.expanded();
+        } else {
+            costToGo = CostToGoMap.build(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed);
+            corridor = costToGo.corridor(graph, ctx, startX, startY, startZ, radius);
+            abstractExpanded += costToGo.expanded;
+        }
         if (cancelRequested) return Optional.empty();
-        LongOpenHashSet corridor = costToGo.corridor(graph, ctx, startX, startY, startZ, Baritone.settings().pathingHierarchyCorridorRadius.value);
         if (corridor == null) {
             return fallback("no abstract route", primaryTimeout, failureTimeout, t0);
         }
@@ -119,12 +140,22 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
         if (Baritone.settings().pathingHierarchyCandidates.value >= 2 && System.currentTimeMillis() - t0 < primaryTimeout / 2) {
             // Ostinato: second candidate. Re-run the abstract search with the first route's sections penalised, so the
             // descent picks a different way (around the wall the first corridor hit), and try that corridor.
-            LongOpenHashSet route = costToGo.corridor(graph, ctx, startX, startY, startZ, 0);
-            CostToGoMap alt = CostToGoMap.build(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed,
-                    route, Baritone.settings().pathingHierarchyCandidatePenalty.value);
-            LongOpenHashSet c2 = alt.corridor(graph, ctx, startX, startY, startZ, Baritone.settings().pathingHierarchyCorridorRadius.value);
+            double penalty = Baritone.settings().pathingHierarchyCandidatePenalty.value;
+            LongOpenHashSet c2;
+            Goal g2 = goal;
+            if (route != null) {
+                BidirectionalRoute.Result r2 = BidirectionalRoute.search(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed,
+                        route.corridor(0), penalty);
+                c2 = r2 == null ? null : r2.corridor(radius);
+            } else {
+                LongOpenHashSet first = costToGo.corridor(graph, ctx, startX, startY, startZ, 0);
+                CostToGoMap alt = CostToGoMap.build(graph, ctx, startX, startY, startZ, gp.getX(), gp.getY(), gp.getZ(), margin, t0 + failureTimeout / 2, allowed,
+                        first, penalty);
+                c2 = alt.corridor(graph, ctx, startX, startY, startZ, radius);
+                if (factor > 0) g2 = new GuidedGoal(goal, alt, factor);
+            }
             if (c2 != null && !c2.equals(corridor)) {
-                inner = new AStarPathFinder(realStart, startX, startY, startZ, factor > 0 ? new GuidedGoal(goal, alt, factor) : goal, favoring, ctx, weight);
+                inner = new AStarPathFinder(realStart, startX, startY, startZ, g2, favoring, ctx, weight);
                 inner.nodeFilter = (x, y, z) -> c2.contains(SectionGraph.key(x >> 4, y >> 4, z >> 4));
                 used = System.currentTimeMillis() - t0;
                 p = inner.calculate0(Math.max(1, primaryTimeout - used), Math.max(1, failureTimeout - used));
@@ -136,6 +167,11 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
             }
         }
         return fallback("corridor search missed the goal", primaryTimeout, failureTimeout, t0);
+    }
+
+    /** Ostinato: the route-only bidirectional search, unless the cost-to-go heuristic needs the full backward map. */
+    private static boolean bidirectional() {
+        return Baritone.settings().pathingHierarchyBidirectional.value && Baritone.settings().pathingHierarchyHeuristicFactor.value <= 0;
     }
 
     private Optional<IPath> fallback(String why, long primaryTimeout, long failureTimeout, long t0) {
