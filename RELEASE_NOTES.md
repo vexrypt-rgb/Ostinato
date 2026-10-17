@@ -37,6 +37,11 @@ v1.22.0 and have no changes.
   i5-1145G7 laptop it was 3.1x to 4.9x faster on the test courses (median of 5, up to 4 threads). Pathfinding (A*)
   is unchanged and stays in Java. The Java search runs whenever the library cannot load or with
   `#set nativeAcceleration false`. See `docs/RUST_NATIVE.md`.
+- **More of the sim searches in Rust.** The physics travel planner, the full jump-plan grid (behind template, chain
+  and climb jumps and their executors) and the momentum-hop search also run in the library, with the same answers
+  bit for bit. Measured on the same laptop: 1.4x to 1.9x for the physics planner, 2.4x to 3.7x for the jump grid
+  (split over up to 4 threads), 2.4x to 3.0x for momentum hops. The small local and straight jump searches were not
+  faster and stay in Java.
 - **Momentum TAS jumps.** `allowTasJumps` (on with `experimentalMovement`) now does something: after a path search
   that cannot reach its goal, a background search brute-forces jumps from the explored blocks nearest the goal, and
   the next path takes them. A jump that no standstill reaches is searched again from a run-up straight back of 5, 4,

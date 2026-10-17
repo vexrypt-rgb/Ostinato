@@ -9,6 +9,7 @@
 
 package baritone.pathing.physics;
 
+import baritone.pathing.kinematic.NativePlanners;
 import baritone.pathing.kinematic.PlayerSim;
 
 import java.util.ArrayList;
@@ -95,9 +96,31 @@ public final class PhysicsPathfinder {
         return this;
     }
 
+    /** Ostinato: plan in the native library when it is loaded ({@link NativePlanners}) and the search view is off; the answer is the same. */
+    private boolean nativeSearch;
+
+    public PhysicsPathfinder nativeSearch(boolean on) {
+        this.nativeSearch = on;
+        return this;
+    }
+
     /** Plans from {@code start} until standing within {@code radius} of the goal (null if none found), recording the explored edges when the search view is on. */
     public List<Action> plan(PlayerSim start, double gx, double gy, double gz, double radius) {
         boolean rec = viz != null && viz.beginTree();
+        if (nativeSearch && !rec) {
+            NativePlanners.Steps r = NativePlanners.physicsPlan(world, start, gx, gy, gz, radius, maxNodes);
+            if (r != null) {
+                List<Action> out = r.steps() == null ? null : held(r.steps());
+                if (NativePlanners.verify) {
+                    NativePlanners.checked.incrementAndGet();
+                    List<Action> ref = plan0(start, gx, gy, gz, radius, false);
+                    if (!java.util.Objects.equals(out, ref)) {
+                        throw new AssertionError("native physics plan " + out + " differs from Java " + ref);
+                    }
+                }
+                return out;
+            }
+        }
         try {
             return plan0(start, gx, gy, gz, radius, rec);
         } finally {
@@ -168,6 +191,16 @@ public final class PhysicsPathfinder {
     /** Speed in steps of 0.1 as 0..15, which covers the +-0.8 blocks per tick a player on foot stays within. */
     private static long speedBucket(double v) {
         return Math.max(0, Math.min(15, (long) Math.floor(v * 10) + 8));
+    }
+
+    /** The native plan's action indices, each held {@link #HOLD} ticks. */
+    private static List<Action> held(byte[] steps) {
+        List<Action> out = new ArrayList<>(steps.length * HOLD);
+        for (byte b : steps) {
+            Action a = ACTIONS.get(b & 0xFF);
+            for (int t = 0; t < HOLD; t++) out.add(a);
+        }
+        return out;
     }
 
     private static List<Action> unwind(Node n) {

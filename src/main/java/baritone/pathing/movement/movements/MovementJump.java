@@ -435,7 +435,7 @@ public class MovementJump extends Movement {
             hhCacheBorn = now;
         }
         PlayerSim.World world = new BsiWorld(context.bsi);
-        JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz);
+        JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz, context.nativeSearch);
         PlayerSim start = startState(world, x, z, f, t, startY);
         boolean ok = js.search(start, true);
         boolean full = !ok && c.partialFull < MAX_CALC_PARTIAL_FULL;
@@ -449,8 +449,10 @@ public class MovementJump extends Movement {
         return ok;
     }
 
-    private static JumpSearch jumpSearch(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
+    private static JumpSearch jumpSearch(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz,
+                                         boolean nativeSearch) {
         JumpSearch js = new JumpSearch(world);
+        js.nativeSearch = nativeSearch;
         js.dirX = f[0];
         js.dirZ = f[1];
         js.edge = (x + 0.5 + 0.5 * f[0]) * f[0] + (z + 0.5 + 0.5 * f[1]) * f[1];
@@ -492,7 +494,7 @@ public class MovementJump extends Movement {
         Boolean v = HH_CACHE.get(k);
         if (v == null) {
             c.sims++;
-            v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz);
+            v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz, y, context.nativeSearch);
             HH_CACHE.put(k, v);
         }
         return v;
@@ -513,17 +515,21 @@ public class MovementJump extends Movement {
     }
 
     static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
-        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, y);
+        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, y, false);
     }
 
-    /** As above, standing at feet height {@code startY} (below y on soul sand and other low tops). */
-    static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY) {
-        JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz);
+    /**
+     * As above, standing at feet height {@code startY} (below y on soul sand and other low tops), searching in the native
+     * library when {@code nativeSearch}.
+     */
+    static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY,
+                                   boolean nativeSearch) {
+        JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz, nativeSearch);
         PlayerSim start = startState(world, x, z, f, t, startY);
         if (JumpTemplates.MOMENTUM.contains(t)) {
             // Ostinato: multi-hop momentum run under the ceiling, from standing still at the run-up start
             start.vy = -0.0784000015258789;
-            return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false, MomentumHop.PLAN_BUDGET) != null;
+            return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false, MomentumHop.PLAN_BUDGET, nativeSearch) != null;
         }
         return js.search(start, true) || js.search(start, false);
     }
@@ -708,6 +714,7 @@ public class MovementJump extends Movement {
         if (js == null) {
             ClientWorld world = new ClientWorld(ctx);
             js = new JumpSearch(world);
+            js.nativeSearch = Baritone.settings().nativeAcceleration.value;
             real = new PlayerSim(world);
             hopWorld = world;
             js.dirX = f[0];
@@ -907,7 +914,7 @@ public class MovementJump extends Movement {
         }
         boolean jump = false;
         if (real.onGround) {
-            String p = MomentumHop.find(hopWorld, real, f[0], f[1], dest.x, dest.y, dest.z, hopPrev);
+            String p = MomentumHop.find(hopWorld, real, f[0], f[1], dest.x, dest.y, dest.z, hopPrev, MomentumHop.BUDGET, Baritone.settings().nativeAcceleration.value);
             if (p == null) {
                 return fail(state, "momentum hop: no timing reaches dest from here");
             }

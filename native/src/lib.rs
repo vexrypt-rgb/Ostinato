@@ -6,6 +6,8 @@
 //! nothing is global, so calls from several threads at once are safe.
 
 pub mod jmath;
+pub mod jump;
+pub mod physics;
 pub mod sim;
 pub mod tas;
 
@@ -15,7 +17,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
 /// Bumped whenever an export's signature or meaning changes; Java refuses a library with another version.
-pub const ABI_VERSION: i32 = 2;
+pub const ABI_VERSION: i32 = 3;
 
 pub const ERR_NONE: i32 = -1;
 pub const ERR_OUT_OF_REGION: i32 = -2;
@@ -237,5 +239,187 @@ pub unsafe extern "C" fn ost_sincos(x: *const f64, n: i32, out: *mut f64) -> i32
             out[2 * i + 1] = jmath::cos(v);
         }
         n
+    })
+}
+
+/// `PhysicsPathfinder.plan` over a snapshot.
+///
+/// * `state`: 15 doubles, the start. `params`: gx, gy, gz, radius, maxNodes.
+/// * out: one action index per held step (see [`physics::actions`]), up to `out_cap`.
+///
+/// Returns the step count, or [`ERR_NONE`], [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_TOO_SMALL`],
+/// [`ERR_BAD_ARGS`] or [`ERR_PANIC`].
+///
+/// # Safety
+/// All pointers must be valid for the lengths described.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ost_physics_plan(
+    region: *const i32,
+    box_start: *const i32,
+    boxes: *const f64,
+    n_boxes: i32,
+    flags: *const u8,
+    factors: *const f32,
+    state: *const f64,
+    params: *const f64,
+    out_actions: *mut u8,
+    out_cap: i32,
+) -> i32 {
+    guard(|| {
+        let Some(w) = (unsafe { snap(region, box_start, boxes, n_boxes, flags, factors) }) else {
+            return ERR_BAD_ARGS;
+        };
+        if state.is_null() || params.is_null() || out_actions.is_null() || out_cap < 0 {
+            return ERR_BAD_ARGS;
+        }
+        let start = Sim::read(unsafe { slice::from_raw_parts(state, STATE_LEN) });
+        let pr = unsafe { slice::from_raw_parts(params, 5) };
+        let max_nodes = pr[4] as i32;
+        if !(0..=1_000_000).contains(&max_nodes) {
+            return ERR_BAD_ARGS;
+        }
+        match physics::plan(&w, &start, pr[0], pr[1], pr[2], pr[3], max_nodes) {
+            physics::Outcome::Found(steps) => {
+                if steps.len() > out_cap as usize {
+                    return ERR_TOO_SMALL;
+                }
+                unsafe { slice::from_raw_parts_mut(out_actions, steps.len()) }.copy_from_slice(&steps);
+                steps.len() as i32
+            }
+            physics::Outcome::None => ERR_NONE,
+            physics::Outcome::OutOfRegion => ERR_OUT_OF_REGION,
+        }
+    })
+}
+
+/// `JumpSearch.search` over the full grid (the local search stays in Java), on a snapshot.
+///
+/// * `state`: 15 doubles, the start.
+/// * `params`: approachYaw, dirX, dirZ, edge, destX, destY, destZ, side, bounceY, anyDest, noJump, grab,
+///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw, threads (1 to 16: the grid is split over them).
+/// * `plan`: the search's 7 plan indices, read and written back.
+/// * `out`: ticks, miss, landSpeed, destX, destY, destZ and the sim's end state (15 doubles), written whatever the
+///   answer, as the Java fields are.
+///
+/// Returns 1 (found) or [`ERR_NONE`], or [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_BAD_ARGS`], [`ERR_PANIC`].
+///
+/// # Safety
+/// All pointers must be valid for the lengths described.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ost_jump_search(
+    region: *const i32,
+    box_start: *const i32,
+    boxes: *const f64,
+    n_boxes: i32,
+    flags: *const u8,
+    factors: *const f32,
+    state: *const f64,
+    params: *const f64,
+    plan: *mut i32,
+    out: *mut f64,
+) -> i32 {
+    guard(|| {
+        let Some(w) = (unsafe { snap(region, box_start, boxes, n_boxes, flags, factors) }) else {
+            return ERR_BAD_ARGS;
+        };
+        if state.is_null() || params.is_null() || plan.is_null() || out.is_null() {
+            return ERR_BAD_ARGS;
+        }
+        let start = Sim::read(unsafe { slice::from_raw_parts(state, STATE_LEN) });
+        let pr = unsafe { slice::from_raw_parts(params, 20) };
+        let plan = unsafe { slice::from_raw_parts_mut(plan, jump::DIMS) };
+        let size = [jump::O0.len(), jump::HOP.len(), jump::EDGE.len(), jump::O1.len(), jump::SWITCH.len(), jump::RELEASE.len(), jump::BRAKE.len()];
+        if plan.iter().zip(size).any(|(&v, n)| v < 0 || v as usize >= n) {
+            return ERR_BAD_ARGS;
+        }
+        let mut js = jump::JumpSearch::new(&w);
+        js.approach_yaw = pr[0] as f32;
+        js.dir_x = pr[1];
+        js.dir_z = pr[2];
+        js.edge = pr[3];
+        js.dest_x = pr[4] as i32;
+        js.dest_y = pr[5] as i32;
+        js.dest_z = pr[6] as i32;
+        js.side = pr[7] as i32;
+        js.bounce_y = pr[8] as i32;
+        js.any_dest = pr[9] != 0.0;
+        js.no_jump = pr[10] != 0.0;
+        js.grab = pr[11] != 0.0;
+        js.stand_jump = pr[12] != 0.0;
+        js.carry = pr[13] != 0.0;
+        js.ledge = pr[14] != 0.0;
+        js.jumped = pr[15] != 0.0;
+        js.air_ticks = pr[16] as i32;
+        js.slew_yaw = pr[17] != 0.0;
+        js.face_yaw = pr[18] as f32;
+        js.plan.copy_from_slice(plan);
+        js.sim = start;
+        let threads = pr[19] as i32;
+        if !(1..=16).contains(&threads) {
+            return ERR_BAD_ARGS;
+        }
+        let ok = js.search(&start, threads as usize);
+        if w.missed() {
+            return ERR_OUT_OF_REGION;
+        }
+        plan.copy_from_slice(&js.plan);
+        let o = unsafe { slice::from_raw_parts_mut(out, 6 + STATE_LEN) };
+        o[0] = js.ticks as f64;
+        o[1] = js.miss;
+        o[2] = js.land_speed;
+        o[3] = js.dest_x as f64;
+        o[4] = js.dest_y as f64;
+        o[5] = js.dest_z as f64;
+        js.sim.write(&mut o[6..]);
+        if ok { 1 } else { ERR_NONE }
+    })
+}
+
+/// `MomentumHop.find` over a snapshot.
+///
+/// * `state`: 15 doubles, the start. `params`: yaw, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget.
+/// * out: the trail, `'J'` or `'.'` per tick, up to `out_cap`.
+///
+/// Returns the trail's length, or [`ERR_NONE`], [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_TOO_SMALL`],
+/// [`ERR_BAD_ARGS`] or [`ERR_PANIC`].
+///
+/// # Safety
+/// All pointers must be valid for the lengths described.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ost_momentum_hop(
+    region: *const i32,
+    box_start: *const i32,
+    boxes: *const f64,
+    n_boxes: i32,
+    flags: *const u8,
+    factors: *const f32,
+    state: *const f64,
+    params: *const f64,
+    out: *mut u8,
+    out_cap: i32,
+) -> i32 {
+    guard(|| {
+        let Some(w) = (unsafe { snap(region, box_start, boxes, n_boxes, flags, factors) }) else {
+            return ERR_BAD_ARGS;
+        };
+        if state.is_null() || params.is_null() || out.is_null() || out_cap < 0 {
+            return ERR_BAD_ARGS;
+        }
+        let start = Sim::read(unsafe { slice::from_raw_parts(state, STATE_LEN) });
+        let pr = unsafe { slice::from_raw_parts(params, 8) };
+        let found = jump::momentum_hop(&w, &start, pr[0] as f32, pr[1] as i32, pr[2] as i32, pr[3] as i32, pr[4] as i32, pr[5] as i32, pr[6] != 0.0, pr[7] as i32);
+        if w.missed() {
+            return ERR_OUT_OF_REGION;
+        }
+        match found {
+            Some(trail) => {
+                if trail.len() > out_cap as usize {
+                    return ERR_TOO_SMALL;
+                }
+                unsafe { slice::from_raw_parts_mut(out, trail.len()) }.copy_from_slice(&trail);
+                trail.len() as i32
+            }
+            None => ERR_NONE,
+        }
     })
 }

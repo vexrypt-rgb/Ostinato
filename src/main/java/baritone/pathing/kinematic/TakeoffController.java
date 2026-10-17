@@ -186,6 +186,7 @@ public final class TakeoffController {
                 return pathPosition;
             }
             js = new JumpSearch(world);
+            js.nativeSearch = Baritone.settings().nativeAcceleration.value;
             js.dirX = dx;
             js.dirZ = dz;
             js.edge = (src.x + 0.5 + 0.5 * dx) * dx + (src.z + 0.5 + 0.5 * dz) * dz;

@@ -253,6 +253,7 @@ public class MovementChainJump extends Movement {
 
     private JumpSearch search(ClientWorld world, BetterBlockPos from, BetterBlockPos to, int[] plan) {
         JumpSearch s = new JumpSearch(world);
+        s.nativeSearch = Baritone.settings().nativeAcceleration.value;
         s.dirX = f[0];
         s.dirZ = f[1];
         s.edge = (from.x + 0.5 + 0.5 * f[0]) * f[0] + (from.z + 0.5 + 0.5 * f[1]) * f[1];

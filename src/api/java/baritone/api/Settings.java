@@ -2119,8 +2119,8 @@ public final class Settings {
 
     
     /**
-     * Ostinato: run the TAS brute-force jump search in the bundled Rust library when it loads on this platform. The
-     * answer is bit for bit the Java search's (see docs/RUST_NATIVE.md); off, or without the library, the Java search
+     * Ostinato: run the TAS brute-force jump search, the physics travel planner, the full jump-plan search and the
+     * momentum-hop search in the bundled Rust library when it loads on this platform. Each answer is bit for bit the Java search's (see docs/RUST_NATIVE.md); off, or without the library, the Java search
      * runs. {@code -Dostinato.native=false} keeps the library from loading at all.
      */
     public final Setting<Boolean> nativeAcceleration = new Setting<>(true);
