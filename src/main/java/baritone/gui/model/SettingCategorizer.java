@@ -81,8 +81,6 @@ public final class SettingCategorizer {
         rule("Avoidance|avoidance", PATHING);
         rule("Timeout|timeout|cost|Cost|pathing|Path|path|Chunk|chunk|Cache|cache|repack|prune|splice|slowPath|planning|"
                 + "Lookahead|Heuristic|Repropagation|backtrack|blacklist|Goal|goal", ADVANCED);
-        // Ostinato: cost-calibration / risk settings (logMovementTicks, riskRecoveryTicks, calibrationMinSamples)
-        rule("MovementTicks|risk|Risk|calibration|Calibrat", ADVANCED);
     }
 
     private SettingCategorizer() {}

@@ -186,11 +186,13 @@ public class CalculationContext {
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
         this.allowParkour = ExperimentalMovement.allowParkour();
         this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.nativeSearch = Baritone.settings().nativeAcceleration.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
         this.allowParkourFourGap = ExperimentalMovement.kinematicTravel();
         this.allowNeos = ExperimentalMovement.allowNeos();
         this.allowClimbJumps = ExperimentalMovement.allowClimbJumps();
+        this.allowTasJumps = ExperimentalMovement.allowTasJumps();
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
         this.hasClutchItem = false;
         this.clutchIsLadder = false;

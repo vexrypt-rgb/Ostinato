@@ -603,20 +603,13 @@ public final class Settings {
      */
     public final Setting<Double> pathingHierarchyHeuristicFactor = new Setting<>(0.0);
 
-    /** Ostinato: log planned vs actual ticks of every executed movement to baritone/calibration/<version>/samples.csv. */
-    public final Setting<Boolean> logMovementTicks = new Setting<>(false);
+    /**
+     * Ostinato: find the abstract route with a bidirectional search from start and goal at once instead of one backward
+     * search from the goal. Same route cost, fewer sections priced. Ignored while pathingHierarchyHeuristicFactor is
+     * above 0, which needs the full backward cost-to-go map.
+     */
+    public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(false);
 
-    /** Ostinato: scale each move's planned cost by its measured actual/planned ratio from the calibration table. */
-    public final Setting<Boolean> useCalibratedCosts = new Setting<>(false);
-
-    /** Ostinato: add the expected failure cost (measured failure rate x riskRecoveryTicks) to each move. */
-    public final Setting<Boolean> riskAwareCosts = new Setting<>(false);
-
-    /** Ostinato: ticks a failed movement costs to recover from (replan, walk back, retry), for riskAwareCosts. */
-    public final Setting<Double> riskRecoveryTicks = new Setting<>(200.0);
-
-    /** Ostinato: samples a move needs before its calibrated factor or risk term is used. */
-    public final Setting<Integer> calibrationMinSamples = new Setting<>(20);
 
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**

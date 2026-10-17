@@ -57,9 +57,6 @@ public abstract class Movement implements IMovement, MovementHelper {
 
     private Double cost;
 
-    /** Ostinato: the Moves entry this movement was rebuilt from (set by Path), for cost calibration. Null if unknown. */
-    public Moves sourceMove;
-
     public List<BlockPos> toBreakCached = null;
     public List<BlockPos> toPlaceCached = null;
     public List<BlockPos> toWalkIntoCached = null;
