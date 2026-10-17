@@ -51,6 +51,19 @@ v1.22.0 and have no changes.
 - `PlayerSim` now uses `StrictMath` for sine and cosine, and the jump search breaks score ties by state instead of
   by hash-map order, so both searches agree. A plan can rarely differ from v1.23.0's (a last-bit trig difference, or
   a different pick between candidates with equal scores).
+- **Long-horizon planning.** Far path segments use weighted A* (`pathingFarSegmentWeight`, default 2). An optional
+  section hierarchy (`#set pathingHierarchical true`, off by default) plans long trips over 16-block sections first,
+  then searches blocks only along that corridor. On the headless PathBench (60 queries, 3 reps) it removed every
+  failure and cut p95 planning time from about 10 s to 3.6 s, but its routes ran about 4% longer than weighted A*,
+  so it stays off. Its route search now runs from both ends (`pathingHierarchyBidirectional`, on), which found the
+  same route cost and cut the hierarchy's median from 253.7 to 153.3 ms. Results: `docs/pathbench/LONG_HORIZON.md`.
+- **Planning past render distance.** With the hierarchy on, sections the client has never loaded are routed through
+  at a flat cost (`pathingHierarchyFarTerrain`, `pathingHierarchyUnknownCost` 6 ticks per block) instead of
+  falling back to plain A*; the block path stops at the loaded edge and is replanned as chunks arrive.
+- **Seed planning (off by default).** `#set seedPlanning true` predicts unloaded terrain from the world seed so the
+  hierarchy can price far sections from real heights. In singleplayer it uses the world's own generator; on a
+  server set `seedPlanningSeed`. It predicts base noise terrain only (no caves, trees or structures), and loaded or
+  cached chunks always win. A predicted column cost about 1 ms cold and 0.43 ms warm in `SeedTerrainTest`.
 
 ## New in v1.23.0
 

@@ -31,6 +31,20 @@ Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 Experimental moves are not tested as thoroughly as stock Baritone ones; turn them on one at a time.
 Not every setting exists on every branch (for example `physicsTravel` is on older versions); `#set list` is authoritative.
 
+## Long trips
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `pathingFarSegmentWeight` | 2 | Weighted A* on path segments far from the player; 1 = stock A* |
+| `pathingHierarchical` | false | Plan over 16-block sections first, then search blocks along that corridor. Fewer timeouts on long trips over hills or through digging; routes about 4% longer on the bench |
+| `pathingHierarchyBidirectional` | true | Search the section route from both ends (same cost, faster). Only with `pathingHierarchical` |
+| `pathingHierarchyFarTerrain` | true | Route through sections the client has never loaded instead of falling back to plain A* |
+| `pathingHierarchyUnknownCost` | 6.0 | Ticks per block assumed across unknown terrain (sprinting is about 3.6) |
+| `seedPlanning` | false | Predict unloaded terrain from the world seed so far sections are priced from real heights. Base terrain only (no caves, trees or structures); loaded chunks always win |
+| `seedPlanningSeed` | blank | World seed for `seedPlanning`. Blank in singleplayer uses the world's own generator; on a server it must be set |
+| `seedPlanningCacheColumns` | 8192 | Predicted columns kept in memory (about 1.5 KB each) |
+
+Bench numbers: [`docs/pathbench/LONG_HORIZON.md`](../pathbench/LONG_HORIZON.md).
+
 ## Elytra
 `#elytra` flies to the current goal. Read the `elytra*` settings first; flying requires accepting
 `elytraTermsAccepted`, and some features need a native library: `#elytra supported` says whether your PC has one.
