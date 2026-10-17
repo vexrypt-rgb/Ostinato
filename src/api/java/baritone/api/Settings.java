@@ -610,6 +610,33 @@ public final class Settings {
      */
     public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(true);
 
+    /**
+     * Ostinato: let the section hierarchy route through terrain the client has never loaded or cached, instead of
+     * falling back to plain A* whenever the goal lies past render distance. Unknown sections get a flat cost per block
+     * ({@link #pathingHierarchyUnknownCost}), or a coarse terrain estimate when {@link #seedPlanning} predicts them, and
+     * the block-level path stops at the loaded edge and is replanned as chunks arrive.
+     */
+    public final Setting<Boolean> pathingHierarchyFarTerrain = new Setting<>(true);
+
+    /** Ostinato: ticks per block the hierarchy assumes across terrain it has no data for (sprinting is about 3.6). */
+    public final Setting<Double> pathingHierarchyUnknownCost = new Setting<>(6.0);
+
+    /**
+     * Ostinato: predict terrain the client has not loaded or cached from the world seed, so long routes can be planned
+     * past render distance. Base noise terrain only (no surface blocks, carver caves, ores, trees or structures);
+     * loaded and cached chunks always win, and routes through predicted terrain are replanned as it loads. Off by default.
+     */
+    public final Setting<Boolean> seedPlanning = new Setting<>(false);
+
+    /**
+     * Ostinato: the world seed for {@link #seedPlanning}, a number or text as on the create-world screen. Blank in
+     * singleplayer uses the world's own generator; on a server it must be set.
+     */
+    public final Setting<String> seedPlanningSeed = new Setting<>("");
+
+    /** Ostinato: how many predicted columns {@link #seedPlanning} keeps (about 1.5 KB each). */
+    public final Setting<Integer> seedPlanningCacheColumns = new Setting<>(8192);
+
 
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**

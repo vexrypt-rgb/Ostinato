@@ -19,6 +19,7 @@ package baritone.behavior;
 
 import baritone.pathing.calc.HierarchicalPathFinder;
 import baritone.pathing.calc.hierarchy.SectionGraph;
+import baritone.pathing.seed.SeedPlanning;
 import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
@@ -142,6 +143,8 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     @Override
     public void onTick(TickEvent event) {
         dispatchEvents();
+        // Ostinato: install or clear the seed terrain predictor (setting seedPlanning, off by default)
+        SeedPlanning.sync(ctx.minecraft(), event.getType() == TickEvent.Type.OUT ? null : ctx.world());
         if (event.getType() == TickEvent.Type.OUT) {
             secretInternalSegmentCancel();
             baritone.getPathingControlManager().cancelEverything();

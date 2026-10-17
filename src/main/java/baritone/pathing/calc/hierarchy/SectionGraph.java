@@ -3,8 +3,10 @@
  */
 package baritone.pathing.calc.hierarchy;
 
+import baritone.Baritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.api.utils.BetterBlockPos;
+import baritone.pathing.SeedPlan;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.Moves;
@@ -25,6 +27,12 @@ import net.minecraft.world.level.block.state.BlockState;
  * boundary moves read across the face) when the world changes. The cache is keyed by a signature of the context's
  * movement settings and cleared when those change. Intra-section connectivity is assumed (a known simplification:
  * a section split by a wall is treated as one node).
+ * <p>
+ * Ostinato far terrain ({@code pathingHierarchyFarTerrain}): a section in a chunk the client has neither loaded nor
+ * cached is not read block by block (it would read as open air). With the seed predictor installed it gets
+ * level-of-detail edges from four predicted columns; without one, every direction costs
+ * {@code pathingHierarchyUnknownCost} per block. So the abstract route reaches a goal past render distance, and the
+ * section is computed for real when its chunk loads.
  */
 public final class SectionGraph implements LevelGraph {
 
@@ -78,6 +86,10 @@ public final class SectionGraph implements LevelGraph {
     /** Bumped on every invalidation, so a prefetch computed against an older world is discarded. */
     private volatile long epoch;
     public volatile long computedSections;
+    /** Ostinato: sections given level-of-detail edges from predicted terrain, for the benchmark. */
+    public volatile long farSections;
+    private float[] unknownEdges;
+    private double unknownEdgesCost = Double.NaN;
 
     public static long key(int sx, int sy, int sz) {
         return BetterBlockPos.longHash(sx, sy, sz);
@@ -92,6 +104,7 @@ public final class SectionGraph implements LevelGraph {
         s = s * 31 + c.maxFallHeightNoWater;
         s = s * 31 + Double.hashCode(c.breakBlockAdditionalCost);
         s = s * 31 + Double.hashCode(c.jumpPenalty);
+        s = s * 31 + (Baritone.settings().pathingHierarchyFarTerrain.value ? 1 : 0);
         s = s * 31 + System.identityHashCode(c.bsi.worldBorder) * 0L; // border changes come through invalidateAll
         return s;
     }
@@ -113,7 +126,9 @@ public final class SectionGraph implements LevelGraph {
             if (e != null) return e;
             ep = epoch;
         }
-        float[] e = compute(ctx, sx, sy, sz);
+        boolean far = Baritone.settings().pathingHierarchyFarTerrain.value && !ctx.bsi.isKnown((sx << 4) + 8, (sz << 4) + 8);
+        if (far && !SeedPlan.active()) return unknown(); // shared and not cached: nothing to drop when the chunk loads
+        float[] e = compute(ctx, sx, sy, sz, far);
         synchronized (this) {
             if (ep == epoch && sig == signature) edges.put(k, e);
         }
@@ -162,48 +177,93 @@ public final class SectionGraph implements LevelGraph {
         return lx == 0 || lx == SIZE - 1 || ly == 0 || ly == SIZE - 1 || lz == 0 || lz == SIZE - 1;
     }
 
-    private float[] compute(CalculationContext ctx, int sx, int sy, int sz) {
-        computedSections++;
+    /** Ostinato: the edges of a section nothing is known about, {@code pathingHierarchyUnknownCost} ticks per block. */
+    private synchronized float[] unknown() {
+        double c = Baritone.settings().pathingHierarchyUnknownCost.value;
+        if (c != unknownEdgesCost) {
+            float[] e = new float[26];
+            for (int d = 0; d < 26; d++) e[d] = (float) (c * DIST[d]);
+            unknownEdges = e;
+            unknownEdgesCost = c;
+        }
+        return unknownEdges;
+    }
+
+    private float[] compute(CalculationContext ctx, int sx, int sy, int sz, boolean far) {
         float[] rate = new float[26];
         java.util.Arrays.fill(rate, Float.POSITIVE_INFINITY);
-        MutableMoveResult res = new MutableMoveResult();
-        Moves[] moves = Moves.values();
         int bx = sx << 4, by = sy << 4, bz = sz << 4;
         int minY = ctx.worldMinY, maxY = ctx.worldMaxY;
         boolean anyStandable = false;
         boolean allAir = true;
         double mineSum = 0;
         int mineN = 0;
-        for (int lx = 0; lx < SIZE; lx++) for (int lz = 0; lz < SIZE; lz++) for (int ly = 0; ly < SIZE; ly++) {
-            int x = bx + lx, y = by + ly, z = bz + lz;
-            if (y <= minY || y >= maxY) continue;
-            BlockState feet = ctx.get(x, y, z);
-            if (allAir && !feet.isAir()) allAir = false;
-
-            if (!onShell(lx, ly, lz)) continue;
-            boolean wet = MovementHelper.isWater(feet);
-            if (!wet && !(MovementHelper.canWalkThrough(ctx, x, y, z, feet) && MovementHelper.canWalkThrough(ctx, x, y + 1, z) && MovementHelper.canWalkOn(ctx, x, y - 1, z))) continue;
-            anyStandable = true;
-            for (Moves m : moves) {
-                // Ostinato: a fixed-offset move that lands inside this section cannot produce an edge; skip it
-                // before evaluating (same result, most of the cold-build cost).
-                if (!m.dynamicXZ && !m.dynamicY) {
-                    int tx = lx + m.xOffset, ty = ly + m.yOffset, tz = lz + m.zOffset;
-                    if ((tx | ty | tz) >= 0 && tx < SIZE && ty < SIZE && tz < SIZE) continue;
+        if (far) {
+            // Ostinato: level of detail for predicted terrain. The surface height of the four tunnel-sample columns
+            // says whether this section is open sky, surface or underground; the surface rate grows with how uneven
+            // those four heights are, and water on top costs swimming. Open sky only has its falls.
+            farSections++;
+            int hMin = Integer.MAX_VALUE, hMax = Integer.MIN_VALUE, wet = 0;
+            for (int i = 0; i < 4; i++) {
+                int x = bx + ((i & 1) == 0 ? 3 : 11), z = bz + ((i & 2) == 0 ? 3 : 11);
+                int h = minY;
+                for (int y = maxY; y >= minY; y--) {
+                    BlockState b = ctx.get(x, y, z);
+                    if (b.isAir()) continue;
+                    h = y + 1;
+                    if (!b.getFluidState().isEmpty()) wet++;
+                    break;
                 }
-                int ny = y + m.yOffset;
-                if (ny > maxY || ny < minY) continue;
-                if (!m.dynamicXZ && !ctx.worldBorder.entirelyContains(x + m.xOffset, z + m.zOffset)) continue;
-                res.reset();
-                m.apply(ctx, x, y, z, res);
-                double c = res.cost;
-                if (c >= ActionCosts.COST_INF) continue;
-                int dsx = (res.x >> 4) - sx, dsy = (res.y >> 4) - sy, dsz = (res.z >> 4) - sz;
-                if ((dsx | dsy | dsz) == 0 || Math.abs(dsx) > 1 || Math.abs(dsy) > 1 || Math.abs(dsz) > 1) continue;
-                double len = Math.max(1, Math.sqrt(sq(res.x - x) + sq(res.y - y) + sq(res.z - z)));
-                int d = dirIndex(dsx, dsy, dsz);
-                double r = c / len;
-                if (r < rate[d]) rate[d] = (float) r;
+                hMin = Math.min(hMin, h);
+                hMax = Math.max(hMax, h);
+            }
+            allAir = by > hMax;
+            if (hMax >= by && hMin < by + SIZE) {
+                anyStandable = true;
+                double walk = wet >= 2 ? ActionCosts.WALK_ONE_IN_WATER_COST : ctx.canSprint ? ActionCosts.SPRINT_ONE_BLOCK_COST : ActionCosts.WALK_ONE_BLOCK_COST;
+                double r = walk * (1 + (hMax - hMin) / (double) SIZE);
+                for (int d = 0; d < 26; d++) {
+                    int dy = DIRS[d][1];
+                    if (dy == 0 || (dy > 0 && hMax >= by + SIZE - 4) || (dy < 0 && hMin < by + 4)) rate[d] = (float) (dy > 0 ? r * 1.5 : r);
+                }
+            } else if (allAir) {
+                for (int d = 0; d < 26; d++) if (DIRS[d][1] < 0) rate[d] = (float) ActionCosts.WALK_OFF_BLOCK_COST;
+            }
+        } else {
+            computedSections++;
+            MutableMoveResult res = new MutableMoveResult();
+            Moves[] moves = Moves.values();
+            for (int lx = 0; lx < SIZE; lx++) for (int lz = 0; lz < SIZE; lz++) for (int ly = 0; ly < SIZE; ly++) {
+                int x = bx + lx, y = by + ly, z = bz + lz;
+                if (y <= minY || y >= maxY) continue;
+                BlockState feet = ctx.get(x, y, z);
+                if (allAir && !feet.isAir()) allAir = false;
+
+                if (!onShell(lx, ly, lz)) continue;
+                boolean wet = MovementHelper.isWater(feet);
+                if (!wet && !(MovementHelper.canWalkThrough(ctx, x, y, z, feet) && MovementHelper.canWalkThrough(ctx, x, y + 1, z) && MovementHelper.canWalkOn(ctx, x, y - 1, z))) continue;
+                anyStandable = true;
+                for (Moves m : moves) {
+                    // Ostinato: a fixed-offset move that lands inside this section cannot produce an edge; skip it
+                    // before evaluating (same result, most of the cold-build cost).
+                    if (!m.dynamicXZ && !m.dynamicY) {
+                        int tx = lx + m.xOffset, ty = ly + m.yOffset, tz = lz + m.zOffset;
+                        if ((tx | ty | tz) >= 0 && tx < SIZE && ty < SIZE && tz < SIZE) continue;
+                    }
+                    int ny = y + m.yOffset;
+                    if (ny > maxY || ny < minY) continue;
+                    if (!m.dynamicXZ && !ctx.worldBorder.entirelyContains(x + m.xOffset, z + m.zOffset)) continue;
+                    res.reset();
+                    m.apply(ctx, x, y, z, res);
+                    double c = res.cost;
+                    if (c >= ActionCosts.COST_INF) continue;
+                    int dsx = (res.x >> 4) - sx, dsy = (res.y >> 4) - sy, dsz = (res.z >> 4) - sz;
+                    if ((dsx | dsy | dsz) == 0 || Math.abs(dsx) > 1 || Math.abs(dsy) > 1 || Math.abs(dsz) > 1) continue;
+                    double len = Math.max(1, Math.sqrt(sq(res.x - x) + sq(res.y - y) + sq(res.z - z)));
+                    int d = dirIndex(dsx, dsy, dsz);
+                    double r = c / len;
+                    if (r < rate[d]) rate[d] = (float) r;
+                }
             }
         }
         float[] out = new float[26];

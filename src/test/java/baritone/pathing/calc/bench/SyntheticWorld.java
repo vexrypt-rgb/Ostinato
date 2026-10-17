@@ -3,6 +3,7 @@
  */
 package baritone.pathing.calc.bench;
 
+import baritone.pathing.SeedPlan;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.pathing.BetterWorldBorder;
 import net.minecraft.world.level.block.Blocks;
@@ -60,8 +61,20 @@ public final class SyntheticWorld extends BlockStateInterface {
         if (inside(x, y, z)) voxels[idx(x, y, z)] = (byte) id(s);
     }
 
+    /** Ostinato: columns with x at or past this read as never loaded (air, not loaded), to test far-terrain planning. */
+    public int knownMaxX = Integer.MAX_VALUE;
+
     @Override
     public BlockState get0(int x, int y, int z) {
+        if (x >= knownMaxX) { // as BlockStateInterface: unknown terrain reads as the seed prediction, else air
+            BlockState p = SeedPlan.predict(x, y, z);
+            return p != null ? p : AIR;
+        }
+        return real(x, y, z);
+    }
+
+    /** The world's own block, ignoring {@link #knownMaxX}. */
+    public BlockState real(int x, int y, int z) {
         if (!inside(x, y, z)) return AIR;
         return palette.get(voxels[idx(x, y, z)] & 0xFF);
     }
@@ -70,7 +83,12 @@ public final class SyntheticWorld extends BlockStateInterface {
     public boolean isLoaded(int x, int z) {
         // everything counts as loaded; the world border (the box) is what stops the search at the edges, so a narrow
         // test world does not trip pathingMaxChunkBorderFetch
-        return true;
+        return isKnown(x, z) || SeedPlan.covers(x, z);
+    }
+
+    @Override
+    public boolean isKnown(int x, int z) {
+        return x < knownMaxX;
     }
 
     @Override

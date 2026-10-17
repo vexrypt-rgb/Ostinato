@@ -171,6 +171,14 @@ public class BlockStateInterface {
     }
 
     public boolean isLoaded(int x, int z) {
+        return isKnown(x, z) || SeedPlan.covers(x, z);
+    }
+
+    /**
+     * Ostinato: true where the client has real terrain for this column (a loaded chunk or the world cache), as opposed
+     * to {@link #isLoaded}, which also counts columns only the seed predictor ({@link SeedPlan}) covers.
+     */
+    public boolean isKnown(int x, int z) {
         LevelChunk prevChunk = prev;
         if (prevChunk != null && prevChunk.getPos().x() == x >> 4 && prevChunk.getPos().z() == z >> 4) {
             return true;
@@ -182,17 +190,17 @@ public class BlockStateInterface {
         }
         CachedRegion prevRegion = prevCached;
         if (prevRegion != null && prevRegion.getX() == x >> 9 && prevRegion.getZ() == z >> 9) {
-            return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
+            return prevRegion.isCached(x & 511, z & 511);
         }
         if (worldData == null) {
-            return SeedPlan.covers(x, z);
+            return false;
         }
         prevRegion = worldData.cache.getRegion(x >> 9, z >> 9);
         if (prevRegion == null) {
-            return SeedPlan.covers(x, z);
+            return false;
         }
         prevCached = prevRegion;
-        return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
+        return prevRegion.isCached(x & 511, z & 511);
     }
 
     // get the block at x,y,z from this chunk WITHOUT creating a single blockpos object

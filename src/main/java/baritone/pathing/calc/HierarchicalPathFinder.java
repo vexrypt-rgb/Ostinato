@@ -34,7 +34,7 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
     private final SectionGraph graph;
     private final double weight;
     private AStarPathFinder inner;
-    /** What the last calculate0 did: "corridor", "fallback:&lt;reason&gt;". For logs and the benchmark. */
+    /** What the last calculate0 did: "corridor", "corridor-partial", "fallback:&lt;reason&gt;". For logs and the benchmark. */
     public String outcome = "";
     public CostToGoMap costToGo;
     /** Ostinato: the coarse-level map when pathingHierarchyLevels &gt;= 2. */
@@ -135,6 +135,13 @@ public final class HierarchicalPathFinder extends AbstractNodeCostSearch {
         if (cancelRequested) return Optional.empty();
         if (p.isPresent() && goal.isInGoal(p.get().getDest())) {
             outcome = "corridor";
+            return p;
+        }
+        if (p.isPresent() && p.get().length() > 1 && Baritone.settings().pathingHierarchyFarTerrain.value && !ctx.bsi.isKnown(gp.getX(), gp.getZ())) {
+            // Ostinato: the goal lies in terrain the client has no data for, so no search can reach it yet. Take the
+            // corridor path as far as the loaded edge; it is replanned as chunks arrive. Plain A* would only head
+            // straight at the goal from here.
+            outcome = "corridor-partial";
             return p;
         }
         if (Baritone.settings().pathingHierarchyCandidates.value >= 2 && System.currentTimeMillis() - t0 < primaryTimeout / 2) {
