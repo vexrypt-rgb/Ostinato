@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Turn the working tree into the source tree for one Minecraft version.
-#   scripts/use-version.sh 1.21.11
-# The shared tree is the 1.21.4 line. versions/<ver>/ holds what differs:
+#   scripts/use-version.sh 26.3
+# The shared tree is the 26.3 line. versions/<ver>/ holds what differs:
 #   version.properties   gradle.properties overrides; `parent=<ver>` applies that version's overlay first
 #   files/               files that replace (or add to) the shared ones, same relative paths
 #   delete.txt           shared files that do not exist on that version
