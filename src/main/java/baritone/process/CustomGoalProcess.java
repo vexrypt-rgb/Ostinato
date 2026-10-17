@@ -22,8 +22,6 @@ import baritone.api.pathing.goals.Goal;
 import baritone.api.process.ICustomGoalProcess;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
-import baritone.movement.MovementBackends;
-import baritone.movement.TungstenMovementBackend;
 import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -47,17 +45,6 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
     private Goal mostRecentGoal;
 
     /**
-     * When true, travel is owned by Tungsten; Baritone must not also path.
-     * Mining processes never set this — they keep classic Baritone pathing.
-     */
-    private boolean tungstenTravelActive;
-
-    /** Ticks spent waiting for a cancelled Tungsten search to wind down before starting the next one. */
-    private int tungstenStopWait;
-
-    private static final int TUNGSTEN_STOP_PATIENCE = 40;
-
-    /**
      * The current process state.
      *
      * @see State
@@ -70,13 +57,8 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
 
     @Override
     public void setGoal(Goal goal) {
-        // New goal invalidates any in-flight Tungsten travel.
-        if (tungstenTravelActive) {
-            cancelTungsten();
-        }
         this.goal = goal;
         this.mostRecentGoal = goal;
-        this.tungstenStopWait = 0;
         if (baritone.getElytraProcess().isActive()) {
             try {
                 baritone.getElytraProcess().pathTo(goal);
@@ -118,22 +100,11 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
             case GOAL_SET:
                 return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
             case PATH_REQUESTED:
-                if (tryStartTungstenTravel()) {
-                    this.state = State.EXECUTING;
-                    // Hold classic pathing off while Tungsten drives movement inputs.
-                    return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
-                }
-                if (waitingForTungstenStop()) {
-                    return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
-                }
                 // return FORCE_REVALIDATE_GOAL_AND_PATH just once
                 PathingCommand ret = new PathingCommand(this.goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
                 this.state = State.EXECUTING;
                 return ret;
             case EXECUTING:
-                if (tungstenTravelActive) {
-                    return tickTungstenTravel();
-                }
                 if (calcFailed) {
                     onLostControl();
                     return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
@@ -156,79 +127,14 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
         }
     }
 
-    private boolean tryStartTungstenTravel() {
-        if (!MovementBackends.preferTungstenTravel()) {
-            tungstenTravelActive = false;
-            return false;
-        }
-        if (TungstenMovementBackend.goalToBlock(this.goal) == null) {
-            tungstenTravelActive = false;
-            return false;
-        }
-        boolean ok = TungstenMovementBackend.INSTANCE.pathTo(this.goal);
-        tungstenTravelActive = ok;
-        if (ok) {
-            logDirect("CustomGoal: Tungsten travel -> " + this.goal);
-        }
-        return ok;
-    }
-
-    /**
-     * A retarget lands while the search for the old goal is still stopping, and Tungsten will not start another
-     * until it has. Hold for a moment and ask again rather than dropping to classic pathing on every retarget.
-     */
-    private boolean waitingForTungstenStop() {
-        if (!MovementBackends.preferTungstenTravel() || TungstenMovementBackend.goalToBlock(this.goal) == null
-                || !TungstenMovementBackend.INSTANCE.isStopping()) {
-            return false;
-        }
-        return ++tungstenStopWait <= TUNGSTEN_STOP_PATIENCE;
-    }
-
-    private PathingCommand tickTungstenTravel() {
-        if (this.goal == null) {
-            cancelTungsten();
-            onLostControl();
-            return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
-        }
-        if (this.goal.isInGoal(ctx.playerFeet())) {
-            cancelTungsten();
-            onLostControl();
-            if (Baritone.settings().notificationOnPathComplete.value) {
-                logNotification("Pathing complete (Tungsten)", false);
-            }
-            return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
-        }
-        if (TungstenMovementBackend.INSTANCE.isPathing()) {
-            return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
-        }
-        // Tungsten finished/failed without arriving — fall back to classic Baritone once.
-        logDirect("CustomGoal: Tungsten idle before goal; falling back to Baritone");
-        cancelTungsten();
-        return new PathingCommand(this.goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
-    }
-
-    private void cancelTungsten() {
-        // Only cancel Ostinato-owned Tungsten travel. Do not yank a follow/path
-        // that TenorClef (or another client) started outside CustomGoal.
-        if (tungstenTravelActive) {
-            TungstenMovementBackend.INSTANCE.cancel();
-        }
-        tungstenTravelActive = false;
-    }
-
     @Override
     public void onLostControl() {
-        cancelTungsten();
         this.state = State.NONE;
         this.goal = null;
     }
 
     @Override
     public String displayName0() {
-        if (tungstenTravelActive) {
-            return "Custom Goal (Tungsten) " + this.goal;
-        }
         return "Custom Goal " + this.goal;
     }
 

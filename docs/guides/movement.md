@@ -31,10 +31,6 @@ Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 Experimental moves are not tested as thoroughly as stock Baritone ones; turn them on one at a time.
 Not every setting exists on every branch (for example `physicsTravel` is on older versions); `#set list` is authoritative.
 
-## Backends
-`movementBackend` is `baritone`, `tungsten` or `auto` (default). Mining, schematics and inventory always stay
-on Ostinato. A Tungsten jar is optional and separate; see the [README](../../README.md).
-
 ## Elytra
 `#elytra` flies to the current goal. Read the `elytra*` settings first; flying requires accepting
 `elytraTermsAccepted`, and some features need a native library: `#elytra supported` says whether your PC has one.

@@ -89,9 +89,6 @@ public final class OstinatoScreen extends Screen {
                 for (int i = 0; i < consts.length; i++) {
                     opts[i] = ((Enum<?>) consts[i]).name();
                 }
-            } else if (name.equals("movementBackend")) {
-                k = Kind.CYCLE;
-                opts = new String[]{"baritone", "tungsten", "auto"};
             } else if (name.equals("pathHudAnchor")) {
                 k = Kind.CYCLE;
                 opts = new String[]{"RIGHT", "LEFT", "TOP_RIGHT", "TOP_LEFT"};

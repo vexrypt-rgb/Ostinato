@@ -1,23 +1,9 @@
 package baritone.api.movement;
 
 /**
- * Travel movement backend selection for goto-style goals.
- * Mining / digging / builder stay on classic Baritone pathing.
+ * Which backend accepted a travel request. Ostinato's own pathing (block A* with the kinematic and physics travel
+ * drivers) is the only one; the enum stays so {@link PathResult#getBackend()} keeps its type for agent layers.
  */
 public enum MovementBackendKind {
-    BARITONE,
-    TUNGSTEN,
-    AUTO;
-
-    public static MovementBackendKind fromString(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return AUTO;
-        }
-        return switch (raw.trim().toLowerCase()) {
-            case "baritone", "bati", "bt", "classic" -> BARITONE;
-            case "tungsten", "tung", "physics" -> TUNGSTEN;
-            case "auto", "default" -> AUTO;
-            default -> AUTO;
-        };
-    }
+    BARITONE
 }

@@ -2111,18 +2111,6 @@ public final class Settings {
 
     
     /**
-     * Travel movement backend for goto-style goals ({@code #goto}, custom goals).
-     * <ul>
-     *   <li>{@code baritone} — classic Baritone pathing (default mining/digging engine always)</li>
-     *   <li>{@code tungsten} — physics A* via optional Tungsten mod when present; else Baritone</li>
-     *   <li>{@code auto} — Tungsten when the mod is loaded, else Baritone</li>
-     * </ul>
-     * Mining / schematics / inventory stay on Baritone regardless of this setting.
-     * Drop a Tungsten fabric jar on the classpath (see Ostinato README) to enable.
-     */
-    public final Setting<String> movementBackend = new Setting<>("auto");
-
-    /**
      * Ostinato: run the TAS brute-force jump search in the bundled Rust library when it loads on this platform. The
      * answer is bit for bit the Java search's (see docs/RUST_NATIVE.md); off, or without the library, the Java search
      * runs. {@code -Dostinato.native=false} keeps the library from loading at all.
