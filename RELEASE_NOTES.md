@@ -7,18 +7,44 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.22.0 adds the menu, the path view, the parkour work, and the zero-cycle geometry on 26.3 (`main`, Java 25).
-The 1.21.11 jars, and the Conductor module jar, are that line's autotune, bastions, and command guard, which
-had not been tagged before. They do not include the menu, the path view, the parkour work, or the zero-cycle
-geometry. The 1.21.4 and 1.16.1 jars are the same lines as v1.20.0.
+v1.23.0 adds the freecam rework, the freecam flat canvas and edit mode, and the Studio's full block list,
+real textures, and edit tools on 26.3 (`main`, Java 25). The other lines are rebuilt from the same branches as
+v1.22.0 and have no changes.
 
 | Minecraft | Branch | Java | This tag |
 | --- | --- | --- | --- |
-| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.22.0.jar` |
-| 1.21.11 | `1.21.11` | 21 | Autotune, bastions, and the command guard. `*-fabric-1.21.0.jar` |
-| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | The 1.21.11 work, built as a Conductor module |
+| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.23.0.jar` |
+| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.22.0. `*-fabric-1.21.0.jar` |
+| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | Unchanged since v1.22.0 |
 | 1.21.4 | `1.21.4` | 21 | Unchanged since v1.20.0 |
 | 1.16.1 | `1.16.1` | 8 | Unchanged since v1.20.0 |
+
+## New in v1.23.0
+
+Everything in this section is 26.3 only. Pictures are in the README under Freecam and Studio; they are real
+frames from the 26.3 dev client.
+
+- **Freecam body.** The camera walks, swims, and slime-jumps with the game's own movement. Double-tap jump flies;
+  flight phases the camera, and the bot on a singleplayer world, through blocks, and landing puts collision back
+  for both. The hotbar, hearts, and first-person arm stay on screen, F5 shows the bot's body, and the bot's hotbar
+  (and an open container's slots) is drawn above its head. A container the bot opens no longer covers the view;
+  the survival and creative inventories still draw with the doll. `freecamGhostOpacity` is kept and ignored on
+  this line: the body is drawn solid.
+- **Spar.** `#freecam spar` adds a client-only ghost that fights with the bot's melee timing. Its hits only change
+  a local health count. It has no picture yet.
+- **Studio.** Every block in the game is in the block list, with item icons and a filter box, and the orbit view
+  draws real block textures. Tools: brush, select, fill, replace, line, sphere, hollow, wall, copy, paste,
+  rotate, flip, with undo. `.ostinato` saves store block names with any non-default state; v1.22.0 saves load.
+- **Flat canvas.** `#freecam flat` puts a 32×16×32 client-only superflat pad under the camera. You build there
+  with the Studio tools while the bot keeps its task. `#freecam apply` or `done` hands only the added blocks to
+  the builder at that spot.
+- **Edit mode.** `#freecam edit` copies the selection, or 16×12×16 around the build you look at. Edits show as
+  textured ghosts and red outlines and reach the world only through `#freecam apply` / `done` (later, the
+  default) or `#freecam live` (the builder follows each edit and takes over building). Apply also breaks removed
+  blocks. The edit tools are covered by unit tests; the edit ghost and an apply carried out by the builder were
+  not photographed.
+- Limits: on a server, flight does not phase the bot (it is pulled back). Landing inside a block can leave the
+  camera stuck.
 
 ## New in v1.22.0
 

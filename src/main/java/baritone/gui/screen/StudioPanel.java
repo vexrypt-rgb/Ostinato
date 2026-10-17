@@ -22,6 +22,9 @@ import baritone.api.BaritoneAPI;
 import baritone.gui.model.TextInput;
 import baritone.gui.render.GuiDraw;
 import baritone.gui.studio.BlockPalette;
+import baritone.gui.studio.BlockTextures;
+import baritone.gui.studio.EditOps;
+import baritone.gui.studio.EditSession;
 import baritone.gui.studio.OstinatoSchematic;
 import baritone.gui.studio.StudioCamera;
 import baritone.gui.studio.StudioPick;
@@ -29,6 +32,7 @@ import baritone.gui.studio.StudioVolume;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.world.item.ItemStack;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -39,22 +43,15 @@ import java.util.List;
 
 /**
  * Schematic studio. Drag to orbit, scroll to zoom, middle-drag or shift-drag to pan.
- * A left click places the palette block; a right click removes one.
+ * The palette is every block. Keys 1-9 pick a tool. Type to filter the palette.
  */
 final class StudioPanel {
-
-    private final int[] undoX = new int[240];
-    private final int[] undoY = new int[240];
-    private final int[] undoZ = new int[240];
-    private final int[] undoWas = new int[240];
 
     private final OstinatoScreen screen;
     private final StudioCamera camera = new StudioCamera();
     private final TextInput name = new TextInput(24);
+    private final EditSession session = new EditSession();
     private StudioVolume volume = new StudioVolume(24, 12, 24);
-    private int brush = 1;
-    private int undoCount;
-    private int undoHead;
     private float vx0, vy0, vx1, vy1, col0, col1;
     private float pressX, pressY, dragX, dragY;
     private int dragButton = -1;
@@ -62,16 +59,21 @@ final class StudioPanel {
     private boolean nameFocused;
     private int paletteScroll;
     private long clearUntil;
+    private String filter = "";
+    private String viewKey;
+    private int[] view = new int[0];
 
     StudioPanel(OstinatoScreen screen) {
         this.screen = screen;
         name.set("studio");
+        session.bind(volume);
+        session.brush = BlockPalette.cell("stone");
         camera.lookAt(volume.sizeX() / 2.0, volume.sizeY() / 3.0, volume.sizeZ() / 2.0);
     }
 
     void layout(float x0, float x1, float top, float bottom) {
         col1 = x1;
-        col0 = x1 - 92;
+        col0 = x1 - 108;
         vx0 = x0;
         vx1 = col0 - 8;
         vy0 = top;
@@ -91,8 +93,9 @@ final class StudioPanel {
     }
 
     void draw(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
-        // Frame first. roundBorder paints its whole rect, and a transparent fill does not
-        // punch that paint back out, so a border drawn after the raster hides every block.
+        if (session.brush == 0) {
+            session.brush = BlockPalette.cell("stone");
+        }
         GuiDraw.roundBorder(ms, vx0, vy0, vx1, vy1, 4, 0xFF2A3344, 0xFF10141C);
         GuiDraw.scissor(vx0 + 1, vy0 + 1, vx1 - 1, vy1 - 1);
         drawStage(ms);
@@ -102,27 +105,52 @@ final class StudioPanel {
             String hint = "Left click the floor to place a block";
             GuiDraw.text(ms, hint, (vx0 + vx1) / 2 - GuiDraw.width(hint) / 2f, (vy0 + vy1) / 2 - 4, Theme.MUTED, false);
         }
-        String help = "Drag orbits   Shift-drag pans   Scroll zooms";
+        String help = "1-9 tools   type to filter   drag orbits   scroll zooms";
         GuiDraw.text(ms, help, vx0 + 8, vy1 - 12, 0.5f, Theme.DIM, false, false);
 
-        GuiDraw.text(ms, "Block", col0, vy0, 0.5f, Theme.DIM, false, false);
-        float row = 13;
-        int fit = Math.max(1, (int) ((vy1 - vy0 - 78) / row));
-        paletteScroll = Math.max(0, Math.min(paletteScroll, BlockPalette.ALL.length - fit));
-        GuiDraw.scissor(col0, vy0 + 8, col1, vy0 + 8 + fit * row);
+        float toolY = vy0;
+        boolean toolHot = OstinatoScreen.in(mx, my, col0, toolY, col1, toolY + 14);
+        GuiDraw.roundBorder(ms, col0, toolY, col1, toolY + 14, 3, toolHot ? accent : Theme.FIELD_BORDER, Theme.FIELD);
+        String tool = session.tool.wire;
+        if (session.tool == EditOps.Tool.SPHERE || session.tool == EditOps.Tool.HOLLOW) {
+            tool = tool + " " + session.radius;
+        }
+        GuiDraw.text(ms, tool, col0 + 4, toolY + 3, Theme.TEXT, false);
+
+        float listTop = vy0 + 18;
+        String caption = filter.isEmpty() ? "Block" : filter;
+        GuiDraw.text(ms, caption, col0, listTop, 0.5f, filter.isEmpty() ? Theme.DIM : accent, false, false);
+        int[] blocks = view();
+        float row = 16;
+        int fit = Math.max(1, (int) ((vy1 - listTop - 78) / row));
+        paletteScroll = Math.max(0, Math.min(paletteScroll, Math.max(0, blocks.length - fit)));
+        GuiDraw.scissor(col0, listTop + 8, col1, listTop + 8 + fit * row);
+        if (blocks.length == 0) {
+            GuiDraw.text(ms, "No match", col0 + 2, listTop + 10, Theme.MUTED, false);
+        }
         for (int i = 0; i < fit; i++) {
             int idx = i + paletteScroll;
-            if (idx >= BlockPalette.ALL.length) {
+            if (idx >= blocks.length) {
                 break;
             }
-            float y = vy0 + 8 + i * row;
-            boolean on = brush == idx + 1;
+            int id = blocks[idx];
+            float y = listTop + 8 + i * row;
+            boolean on = session.brush == id;
             boolean h = OstinatoScreen.in(mx, my, col0, y, col1, y + row - 1);
             if (on || h) {
                 GuiDraw.round(ms, col0, y, col1, y + row - 2, 2, on ? GuiDraw.alphaOf(accent, 0x33) : 0x14FFFFFF);
             }
-            GuiDraw.round(ms, col0 + 2, y + 2, col0 + 10, y + 10, 1.5f, BlockPalette.ALL[idx].argb);
-            GuiDraw.text(ms, BlockPalette.ALL[idx].label, col0 + 14, y + 2, on ? Theme.TEXT : Theme.MUTED, false);
+            ItemStack icon = BlockPalette.icon(id);
+            if (icon.isEmpty()) {
+                GuiDraw.round(ms, col0 + 2, y + 2, col0 + 12, y + 12, 1.5f, BlockPalette.argb(id));
+            } else {
+                GuiDraw.item(icon, col0 + 1, y + 1, 12);
+            }
+            String label = BlockPalette.label(id);
+            if (label.length() > 12) {
+                label = label.substring(0, 11) + "…";
+            }
+            GuiDraw.text(ms, label, col0 + 16, y + 3, on ? Theme.TEXT : Theme.MUTED, false);
         }
         GuiDraw.endScissor();
 
@@ -143,6 +171,13 @@ final class StudioPanel {
     }
 
     boolean mouseClicked(double mx, double my, int button) {
+        if (OstinatoScreen.in(mx, my, col0, vy0, col1, vy0 + 14)) {
+            session.cycle();
+            if (session.note != null) {
+                screen.flash(session.note, Theme.MUTED);
+            }
+            return true;
+        }
         if (OstinatoScreen.in(mx, my, col0, vy1 - 62, col1, vy1 - 48)) {
             nameFocused = true;
             return true;
@@ -167,12 +202,14 @@ final class StudioPanel {
             clear();
             return true;
         }
-        float row = 13;
-        int fit = Math.max(1, (int) ((vy1 - vy0 - 78) / row));
-        if (OstinatoScreen.in(mx, my, col0, vy0 + 8, col1, vy0 + 8 + fit * row)) {
-            int idx = (int) ((my - (vy0 + 8)) / row) + paletteScroll;
-            if (idx >= 0 && idx < BlockPalette.ALL.length) {
-                brush = idx + 1;
+        float listTop = vy0 + 18;
+        float row = 16;
+        int fit = Math.max(1, (int) ((vy1 - listTop - 78) / row));
+        int[] blocks = view();
+        if (OstinatoScreen.in(mx, my, col0, listTop + 8, col1, listTop + 8 + fit * row)) {
+            int idx = (int) ((my - (listTop + 8)) / row) + paletteScroll;
+            if (idx >= 0 && idx < blocks.length) {
+                session.brush = blocks[idx];
             }
             return true;
         }
@@ -212,18 +249,17 @@ final class StudioPanel {
         if (!click || !OstinatoScreen.in(mx, my, vx0, vy0, vx1, vy1)) {
             return;
         }
-        StudioPick hit = pick((float) mx, (float) my);
-        if (button == 0 && hit.canPlace) {
-            edit(hit.placeX, hit.placeY, hit.placeZ, brush);
-        } else if (button == 1 && hit.solid) {
-            edit(hit.x, hit.y, hit.z, 0);
+        session.click(pick((float) mx, (float) my), button);
+        if (session.note != null) {
+            screen.flash(session.note, Theme.MUTED);
         }
     }
 
     boolean mouseScrolled(double mx, double my, double delta) {
-        float row = 13;
-        int fit = Math.max(1, (int) ((vy1 - vy0 - 78) / row));
-        if (OstinatoScreen.in(mx, my, col0, vy0, col1, vy0 + 8 + fit * row)) {
+        float listTop = vy0 + 18;
+        float row = 16;
+        int fit = Math.max(1, (int) ((vy1 - listTop - 78) / row));
+        if (OstinatoScreen.in(mx, my, col0, listTop, col1, listTop + 8 + fit * row)) {
             paletteScroll += delta > 0 ? -1 : 1;
             return true;
         }
@@ -243,19 +279,46 @@ final class StudioPanel {
             return screen.editKey(name, key);
         }
         if (key == InputConstants.KEY_Z && Keys.ctrl()) {
-            undo();
+            session.undo();
+            if (session.note != null) {
+                screen.flash(session.note, Theme.MUTED);
+            }
             return true;
         }
         if (key == InputConstants.KEY_S && Keys.ctrl()) {
             save();
             return true;
         }
-        if (key == InputConstants.KEY_LBRACKET) {
-            brush = brush <= 1 ? BlockPalette.ALL.length : brush - 1;
+        if (key == InputConstants.KEY_BACKSPACE && !filter.isEmpty()) {
+            filter = filter.substring(0, filter.length() - 1);
+            paletteScroll = 0;
+            viewKey = null;
             return true;
         }
-        if (key == InputConstants.KEY_RBRACKET) {
-            brush = brush >= BlockPalette.ALL.length ? 1 : brush + 1;
+        if (key >= InputConstants.KEY_1 && key <= InputConstants.KEY_9) {
+            session.hotkey(key - InputConstants.KEY_1);
+            if (session.note != null) {
+                screen.flash(session.note, Theme.MUTED);
+            }
+            return true;
+        }
+        if (key == InputConstants.KEY_MINUS) {
+            session.bumpRadius(-1);
+            screen.flash(session.note, Theme.MUTED);
+            return true;
+        }
+        if (key == InputConstants.KEY_EQUALS) {
+            session.bumpRadius(1);
+            screen.flash(session.note, Theme.MUTED);
+            return true;
+        }
+        int[] blocks = view();
+        if (key == InputConstants.KEY_LBRACKET && blocks.length > 0) {
+            session.brush = neighbor(blocks, -1);
+            return true;
+        }
+        if (key == InputConstants.KEY_RBRACKET && blocks.length > 0) {
+            session.brush = neighbor(blocks, 1);
             return true;
         }
         double step = 0.08;
@@ -269,36 +332,58 @@ final class StudioPanel {
     }
 
     boolean charTyped(char c) {
-        if (!nameFocused) {
-            return false;
+        if (nameFocused) {
+            name.insert(String.valueOf(c));
+            return true;
         }
-        name.insert(String.valueOf(c));
-        return true;
+        if (Character.isLetterOrDigit(c) || c == '_' || c == ':') {
+            if (filter.length() < 24) {
+                filter = filter + Character.toLowerCase(c);
+                paletteScroll = 0;
+                viewKey = null;
+            }
+            return true;
+        }
+        return false;
     }
 
-    private void edit(int x, int y, int z, int cell) {
-        int was = volume.set(x, y, z, cell);
-        if (was < 0 || was == cell) {
-            return;
+    private int neighbor(int[] blocks, int dir) {
+        int at = 0;
+        for (int i = 0; i < blocks.length; i++) {
+            if (blocks[i] == session.brush) {
+                at = i;
+                break;
+            }
         }
-        int i = undoHead;
-        undoX[i] = x;
-        undoY[i] = y;
-        undoZ[i] = z;
-        undoWas[i] = was;
-        undoHead = (undoHead + 1) % undoX.length;
-        if (undoCount < undoX.length) {
-            undoCount++;
+        int next = at + dir;
+        if (next < 0) {
+            next = blocks.length - 1;
         }
+        if (next >= blocks.length) {
+            next = 0;
+        }
+        return blocks[next];
     }
 
-    private void undo() {
-        if (undoCount <= 0) {
-            return;
+    private int[] view() {
+        if (filter.equals(viewKey)) {
+            return view;
         }
-        undoHead = (undoHead - 1 + undoX.length) % undoX.length;
-        undoCount--;
-        volume.set(undoX[undoHead], undoY[undoHead], undoZ[undoHead], undoWas[undoHead]);
+        int[] all = BlockPalette.placeable();
+        if (filter.isEmpty()) {
+            view = all;
+        } else {
+            int n = 0;
+            int[] tmp = new int[all.length];
+            for (int id : all) {
+                if (BlockPalette.name(id).contains(filter)) {
+                    tmp[n++] = id;
+                }
+            }
+            view = java.util.Arrays.copyOf(tmp, n);
+        }
+        viewKey = filter;
+        return view;
     }
 
     private void clear() {
@@ -307,9 +392,7 @@ final class StudioPanel {
             clearUntil = now + 2500;
             return;
         }
-        volume.clear();
-        undoCount = 0;
-        undoHead = 0;
+        session.clearVolume();
         clearUntil = 0;
         screen.flash("Cleared the studio", Theme.MUTED);
     }
@@ -339,14 +422,36 @@ final class StudioPanel {
         for (int i = 4; i < sz; i += 4) {
             line(ms, 0, 0, i, sx, 0, i, 0x183A4458);
         }
+        EditOps.Box box = session.selection();
+        if (box != null) {
+            boxLines(ms, box.x0, box.y0, box.z0, box.x1 + 1, box.y1 + 1, box.z1 + 1, 0xCCFFC440);
+        }
+        if (session.hasLine) {
+            boxLines(ms, session.lx, session.ly, session.lz, session.lx + 1, session.ly + 1, session.lz + 1, 0xCC78BEFF);
+        }
+    }
+
+    private void boxLines(GuiGraphicsExtractor ms, int x0, int y0, int z0, int x1, int y1, int z1, int argb) {
+        line(ms, x0, y0, z0, x1, y0, z0, argb);
+        line(ms, x0, y0, z1, x1, y0, z1, argb);
+        line(ms, x0, y0, z0, x0, y0, z1, argb);
+        line(ms, x1, y0, z0, x1, y0, z1, argb);
+        line(ms, x0, y1, z0, x1, y1, z0, argb);
+        line(ms, x0, y1, z1, x1, y1, z1, argb);
+        line(ms, x0, y1, z0, x0, y1, z1, argb);
+        line(ms, x1, y1, z0, x1, y1, z1, argb);
+        line(ms, x0, y0, z0, x0, y1, z0, argb);
+        line(ms, x1, y0, z0, x1, y1, z0, argb);
+        line(ms, x0, y0, z1, x0, y1, z1, argb);
+        line(ms, x1, y0, z1, x1, y1, z1, argb);
     }
 
     private void drawBlocks(GuiGraphicsExtractor ms, int mx, int my) {
         List<Face> faces = new ArrayList<>();
         collect(faces, -1, -1, -1, 0);
         StudioPick hit = OstinatoScreen.in(mx, my, vx0, vy0, vx1, vy1) ? pick((float) mx, (float) my) : StudioPick.miss();
-        if (hit.canPlace) {
-            collect(faces, hit.placeX, hit.placeY, hit.placeZ, brush);
+        if (session.tool == EditOps.Tool.BRUSH && hit.canPlace) {
+            collect(faces, hit.placeX, hit.placeY, hit.placeZ, session.brush);
         }
         faces.sort(Comparator.comparingDouble(f -> -f.depth));
         for (Face f : faces) {
@@ -370,31 +475,21 @@ final class StudioPanel {
                     if (cell == 0) {
                         continue;
                     }
-                    int rgb = BlockPalette.argb(cell);
-                    boolean ghostCell = ghost != 0 && x == onlyX;
-                    if (ghostCell) {
-                        rgb = (rgb & 0x00FFFFFF) | 0x66000000;
-                    }
-                    face(faces, eye, x, y, z, cell, rgb, 1, 0, 0, 1.0f, ghostCell);
-                    face(faces, eye, x, y, z, cell, rgb, -1, 0, 0, 0.62f, ghostCell);
-                    face(faces, eye, x, y, z, cell, rgb, 0, 1, 0, 1.12f, ghostCell);
-                    face(faces, eye, x, y, z, cell, rgb, 0, -1, 0, 0.48f, ghostCell);
-                    face(faces, eye, x, y, z, cell, rgb, 0, 0, 1, 0.82f, ghostCell);
-                    face(faces, eye, x, y, z, cell, rgb, 0, 0, -1, 0.7f, ghostCell);
+                    boolean ghostCell = ghost != 0 && x == onlyX && y == onlyY && z == onlyZ;
+                    emitFace(faces, eye, x, y, z, cell, 1, 0, 0, 0, 1.0f, ghostCell);
+                    emitFace(faces, eye, x, y, z, cell, -1, 0, 0, 1, 0.62f, ghostCell);
+                    emitFace(faces, eye, x, y, z, cell, 0, 1, 0, 2, 1.12f, ghostCell);
+                    emitFace(faces, eye, x, y, z, cell, 0, -1, 0, 3, 0.48f, ghostCell);
+                    emitFace(faces, eye, x, y, z, cell, 0, 0, 1, 4, 0.82f, ghostCell);
+                    emitFace(faces, eye, x, y, z, cell, 0, 0, -1, 5, 0.7f, ghostCell);
                 }
             }
         }
     }
 
-    private void face(List<Face> faces, double[] eye, int x, int y, int z, int cell, int rgb,
-                      int nx, int ny, int nz, float shade, boolean ghost) {
-        int ox = x + Math.max(nx, 0);
-        int oy = y + Math.max(ny, 0);
-        int oz = z + Math.max(nz, 0);
-        int nxCell = x + nx;
-        int nyCell = y + ny;
-        int nzCell = z + nz;
-        if (!ghost && volume.get(nxCell, nyCell, nzCell) != 0) {
+    private void emitFace(List<Face> faces, double[] eye, int x, int y, int z, int cell,
+                          int nx, int ny, int nz, int face, float shade, boolean ghost) {
+        if (!ghost && volume.get(x + nx, y + ny, z + nz) != 0) {
             return;
         }
         double cx = x + 0.5 + nx * 0.5;
@@ -403,24 +498,32 @@ final class StudioPanel {
         if (nx * (eye[0] - cx) + ny * (eye[1] - cy) + nz * (eye[2] - cz) <= 0) {
             return;
         }
+        BlockTextures.FacePaint paint = BlockTextures.paint(cell, face);
+        int[] pixels = paint == null ? null : paint.pixels;
+        int flat = paint == null ? BlockPalette.argb(cell) : paint.flat;
         double[] xs = new double[4];
         double[] ys = new double[4];
+        double[] us = new double[4];
+        double[] vs = new double[4];
         double depth = 0;
         int n = 0;
         for (int du = 0; du <= 1; du++) {
             for (int dv = 0; dv <= 1; dv++) {
-                double wx = ox;
-                double wy = oy;
-                double wz = oz;
+                double wx;
+                double wy;
+                double wz;
                 if (nx != 0) {
+                    wx = x + Math.max(nx, 0);
                     wy = y + du;
                     wz = z + dv;
                 } else if (ny != 0) {
                     wx = x + du;
+                    wy = y + Math.max(ny, 0);
                     wz = z + dv;
                 } else {
                     wx = x + du;
                     wy = y + dv;
+                    wz = z + Math.max(nz, 0);
                 }
                 double[] p = new double[3];
                 camera.project(wx, wy, wz, vx0, vy0, vx1 - vx0, vy1 - vy0, p);
@@ -429,18 +532,31 @@ final class StudioPanel {
                 }
                 xs[n] = p[0];
                 ys[n] = p[1];
+                if (nx != 0) {
+                    us[n] = dv;
+                    vs[n] = 1 - du;
+                } else if (ny != 0) {
+                    us[n] = du;
+                    vs[n] = dv;
+                } else {
+                    us[n] = du;
+                    vs[n] = 1 - dv;
+                }
                 depth += p[2];
                 n++;
             }
         }
-        // du/dv loop order is (0,0) (0,1) (1,0) (1,1), which is not around the quad. Swap 2 and 3.
-        double tx = xs[2];
-        double ty = ys[2];
-        xs[2] = xs[3];
-        ys[2] = ys[3];
-        xs[3] = tx;
-        ys[3] = ty;
-        faces.add(new Face(xs, ys, depth / 4, BlockPalette.shade(rgb, shade)));
+        swap(xs, 2, 3);
+        swap(ys, 2, 3);
+        swap(us, 2, 3);
+        swap(vs, 2, 3);
+        faces.add(new Face(xs, ys, us, vs, depth / 4, pixels, flat, shade, ghost));
+    }
+
+    private static void swap(double[] a, int i, int j) {
+        double t = a[i];
+        a[i] = a[j];
+        a[j] = t;
     }
 
     private void fill(GuiGraphicsExtractor ms, Face f) {
@@ -452,12 +568,17 @@ final class StudioPanel {
         }
         int y0 = (int) Math.ceil(minY);
         int y1 = (int) Math.floor(maxY);
-        if (y1 - y0 > 80) {
-            y1 = y0 + 80;
+        if (y1 - y0 > 96) {
+            y1 = y0 + 96;
+        }
+        int flat = BlockPalette.shade(f.flat, f.shade);
+        if (f.ghost) {
+            flat = (flat & 0x00FFFFFF) | 0x66000000;
         }
         for (int y = y0; y <= y1; y++) {
             double left = 1e9;
             double right = -1e9;
+            double lu = 0, lv = 0, ru = 0, rv = 0;
             for (int i = 0; i < 4; i++) {
                 int j = (i + 1) % 4;
                 double yA = f.y[i];
@@ -465,14 +586,70 @@ final class StudioPanel {
                 if ((yA <= y && yB > y) || (yB <= y && yA > y)) {
                     double t = (y - yA) / (yB - yA);
                     double x = f.x[i] + (f.x[j] - f.x[i]) * t;
-                    left = Math.min(left, x);
-                    right = Math.max(right, x);
+                    double u = f.u[i] + (f.u[j] - f.u[i]) * t;
+                    double v = f.v[i] + (f.v[j] - f.v[i]) * t;
+                    if (x < left) {
+                        left = x;
+                        lu = u;
+                        lv = v;
+                    }
+                    if (x > right) {
+                        right = x;
+                        ru = u;
+                        rv = v;
+                    }
                 }
             }
-            if (right > left) {
-                GuiDraw.rect(ms, (float) left, y, (float) right, y + 1, f.argb);
+            if (right <= left) {
+                continue;
+            }
+            if (f.pixels == null) {
+                GuiDraw.rect(ms, (float) left, y, (float) right, y + 1, flat);
+                continue;
+            }
+            int x0 = (int) Math.ceil(left);
+            int x1 = (int) Math.floor(right);
+            if (x1 - x0 > 160) {
+                x1 = x0 + 160;
+            }
+            int runX = x0;
+            int runColor = 0;
+            boolean run = false;
+            for (int x = x0; x <= x1; x++) {
+                double t = (x - left) / (right - left);
+                int color = sample(f, lu + (ru - lu) * t, lv + (rv - lv) * t);
+                if (!run) {
+                    runColor = color;
+                    runX = x;
+                    run = true;
+                } else if (color != runColor) {
+                    if (runColor != 0) {
+                        GuiDraw.rect(ms, runX, y, x, y + 1, runColor);
+                    }
+                    runColor = color;
+                    runX = x;
+                }
+            }
+            if (run && runColor != 0) {
+                GuiDraw.rect(ms, runX, y, x1 + 1, y + 1, runColor);
             }
         }
+    }
+
+    private static int sample(Face f, double u, double v) {
+        u = u - Math.floor(u);
+        v = v - Math.floor(v);
+        int ix = Math.min(15, (int) (u * 16));
+        int iy = Math.min(15, (int) (v * 16));
+        int color = BlockPalette.shade(f.pixels[iy * 16 + ix], f.shade);
+        if (((color >>> 24) & 0xFF) == 0) {
+            return 0;
+        }
+        if (f.ghost) {
+            int a = ((color >>> 24) & 0xFF) * 0x66 / 255;
+            color = (color & 0x00FFFFFF) | (a << 24);
+        }
+        return color;
     }
 
     private void line(GuiGraphicsExtractor ms, double x1, double y1, double z1, double x2, double y2, double z2, int argb) {
@@ -531,8 +708,10 @@ final class StudioPanel {
         }
         try {
             volume = StudioVolume.read(Files.readString(file.toPath()));
-            undoCount = 0;
-            undoHead = 0;
+            session.bind(volume);
+            if (session.brush == 0) {
+                session.brush = BlockPalette.cell("stone");
+            }
             camera.lookAt(volume.sizeX() / 2.0, volume.sizeY() / 3.0, volume.sizeZ() / 2.0);
             screen.flash("Loaded " + file.getName(), Theme.GREEN);
         } catch (RuntimeException | IOException e) {
@@ -562,14 +741,24 @@ final class StudioPanel {
     private static final class Face {
         final double[] x;
         final double[] y;
+        final double[] u;
+        final double[] v;
         final double depth;
-        final int argb;
+        final int[] pixels;
+        final int flat;
+        final float shade;
+        final boolean ghost;
 
-        Face(double[] x, double[] y, double depth, int argb) {
+        Face(double[] x, double[] y, double[] u, double[] v, double depth, int[] pixels, int flat, float shade, boolean ghost) {
             this.x = x;
             this.y = y;
+            this.u = u;
+            this.v = v;
             this.depth = depth;
-            this.argb = argb;
+            this.pixels = pixels;
+            this.flat = flat;
+            this.shade = shade;
+            this.ghost = ghost;
         }
     }
 }

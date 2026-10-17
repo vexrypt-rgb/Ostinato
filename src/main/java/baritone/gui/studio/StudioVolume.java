@@ -18,8 +18,8 @@
 package baritone.gui.studio;
 
 /**
- * A small block grid. Cell 0 is air. The text form is the {@code .ostinato} schematic:
- * a header, then one {@code x y z block_id} line per placed block.
+ * A small block grid. Cell 0 is air. Any other cell is a block-state registry id.
+ * The text form is the {@code .ostinato} schematic: a header, then one {@code x y z block_id} line per placed block.
  */
 public final class StudioVolume {
 
@@ -28,7 +28,7 @@ public final class StudioVolume {
     private final int sx;
     private final int sy;
     private final int sz;
-    private final byte[] cells;
+    private final int[] cells;
 
     public StudioVolume(int sx, int sy, int sz) {
         if (sx < 1 || sy < 1 || sz < 1 || sx > MAX || sy > MAX || sz > MAX) {
@@ -37,7 +37,7 @@ public final class StudioVolume {
         this.sx = sx;
         this.sy = sy;
         this.sz = sz;
-        this.cells = new byte[sx * sy * sz];
+        this.cells = new int[sx * sy * sz];
     }
 
     public int sizeX() {
@@ -56,7 +56,7 @@ public final class StudioVolume {
         if (!inside(x, y, z)) {
             return 0;
         }
-        return cells[index(x, y, z)] & 0xFF;
+        return cells[index(x, y, z)];
     }
 
     /** Writes a cell and returns what was there, or -1 when the coordinate is outside. */
@@ -65,14 +65,14 @@ public final class StudioVolume {
             return -1;
         }
         int i = index(x, y, z);
-        int was = cells[i] & 0xFF;
-        cells[i] = (byte) cell;
+        int was = cells[i];
+        cells[i] = Math.max(0, cell);
         return was;
     }
 
     public int count() {
         int n = 0;
-        for (byte c : cells) {
+        for (int c : cells) {
             if (c != 0) {
                 n++;
             }
@@ -83,6 +83,22 @@ public final class StudioVolume {
     public void clear() {
         for (int i = 0; i < cells.length; i++) {
             cells[i] = 0;
+        }
+    }
+
+    public StudioVolume copy() {
+        StudioVolume copy = new StudioVolume(sx, sy, sz);
+        System.arraycopy(cells, 0, copy.cells, 0, cells.length);
+        return copy;
+    }
+
+    public int[] snapshot() {
+        return cells.clone();
+    }
+
+    public void restore(int[] data) {
+        if (data != null && data.length == cells.length) {
+            System.arraycopy(data, 0, cells, 0, cells.length);
         }
     }
 

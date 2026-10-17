@@ -19,8 +19,10 @@ package baritone.behavior;
 
 import baritone.api.BaritoneAPI;
 import baritone.Baritone;
+import baritone.api.event.events.RenderEvent;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.WorldEvent;
+import baritone.api.selection.ISelection;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalGetToBlock;
 import baritone.api.utils.BetterBlockPos;
@@ -30,15 +32,19 @@ import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
@@ -49,8 +55,10 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 
 /**
- * Detached camera for picking a destination. Walks with player physics (fluids, ladders, ice, slime) or, after a double-tapped jump, flies like creative flight; collides with blocks; and is clamped to the bot's render distance.
- * Left click: follow the entity under the crosshair, else travel to the block under it.
+ * Detached camera for picking a destination. On the ground it calls the same travel path a living entity does
+ * (swim, lava, slime bounce, ladders, ice, honey). Double-tap jump flies, and while it is flying the camera
+ * and the bot both phase through blocks. Parkour (not flying) keeps collision on both.
+ * Left click: follow the entity under the crosshair, else travel to the block under it. In a spar, left click hits.
  * Right click: travel to the camera's own position.
  */
 public final class FreecamBehavior extends Behavior implements Helper {
@@ -58,10 +66,23 @@ public final class FreecamBehavior extends Behavior implements Helper {
     /** Active camera of the primary bot, read by MixinMouseHandler to steer the camera instead of the player. */
     private static Camera active;
 
+    /** One line for the freecam HUD while a spar is on. */
+    private static String sparLine;
+
+    /** One line for the flat canvas or edit mode. */
+    private static String canvasLine;
+
     private Camera camera;
+    private final FreecamSpar spar = new FreecamSpar();
+    private final FreecamCanvas canvas = new FreecamCanvas();
     private boolean flying;
     private boolean jumpHeld;
     private int jumpTapTicks;
+    /** Bot noclip is on. The saved ability flags are what to put back when flight ends. */
+    private boolean phaseOn;
+    private boolean savedMayfly;
+    private boolean savedFlying;
+    private boolean savedNoPhysics;
 
     public FreecamBehavior(Baritone baritone) {
         super(baritone);
@@ -96,8 +117,23 @@ public final class FreecamBehavior extends Behavior implements Helper {
         return active;
     }
 
+    /** Spar score line, or null when no spar is running. */
+    public static String sparHud() {
+        return sparLine;
+    }
+
+    /** Flat or edit status, or null when that canvas is off. */
+    public static String canvasHud() {
+        return canvasLine;
+    }
+
     public boolean isActive() {
         return camera != null;
+    }
+
+    /** Flight phases the camera and the bot. Ground movement, including parkour beside the bot, does not. */
+    public boolean isFlying() {
+        return camera != null && flying;
     }
 
     public void toggle() {
@@ -125,13 +161,130 @@ public final class FreecamBehavior extends Behavior implements Helper {
         active = camera;
         mc.setCameraEntity(camera);
         p.input = new ClientInput();
-        logDirect("Freecam on. Left click: go to block / follow entity. Right click: go to camera. #freecam to exit.");
+        logDirect("Freecam on. Left click: go to block / follow entity. Right click: go to camera. #freecam spar, #freecam flat, #freecam edit.");
+    }
+
+    public void toggleFlat() {
+        if (canvas.mode() == FreecamCanvas.Mode.FLAT) {
+            canvas.discard();
+            canvasLine = null;
+            logDirect("Flat canvas off. Nothing was added to the world.");
+            return;
+        }
+        if (camera == null) {
+            enable();
+        }
+        if (camera == null) {
+            return;
+        }
+        logDirect(canvas.startFlat(camera, ctx.player()));
+        canvasLine = canvas.hud();
+    }
+
+    public void toggleEdit() {
+        if (canvas.mode() == FreecamCanvas.Mode.EDIT) {
+            canvas.discard();
+            canvasLine = null;
+            logDirect("Edit off. The world was not changed.");
+            return;
+        }
+        if (camera == null) {
+            enable();
+        }
+        if (camera == null || ctx.world() == null) {
+            return;
+        }
+        ISelection selection = null;
+        ISelection[] selections = baritone.getSelectionManager().getSelections();
+        if (selections.length > 0) {
+            selection = selections[0];
+        }
+        logDirect(canvas.startEdit(camera, ctx.world(), selection));
+        canvasLine = canvas.hud();
+    }
+
+    public void applyCanvas() {
+        int n = canvas.apply((Baritone) baritone);
+        logDirect(canvas.status());
+        if (n == 0) {
+            canvasLine = canvas.hud();
+        }
+    }
+
+    public void toggleCanvasLive() {
+        canvas.toggleLive();
+        logDirect(canvas.status());
+        canvasLine = canvas.hud();
+    }
+
+    public void finishCanvas() {
+        int n = canvas.apply((Baritone) baritone);
+        String built = canvas.status();
+        canvas.discard();
+        canvasLine = null;
+        logDirect(n > 0 ? built + " Canvas closed." : "Canvas closed. " + built);
+    }
+
+    public void clearCanvas() {
+        canvas.discard();
+        canvasLine = null;
+        logDirect("Canvas discarded. The world was not changed.");
+    }
+
+    public void undoCanvas() {
+        canvas.undo();
+        logDirect(canvas.status());
+        canvasLine = canvas.hud();
+    }
+
+    public void canvasTool(String name) {
+        canvas.tool(name);
+        logDirect(canvas.status());
+        canvasLine = canvas.hud();
+    }
+
+    public void canvasBrush(String name) {
+        canvas.brush(name);
+        logDirect(canvas.status());
+        canvasLine = canvas.hud();
+    }
+
+    public void canvasRadius(int radius) {
+        canvas.radius(radius);
+        logDirect(canvas.status());
+        canvasLine = canvas.hud();
+    }
+
+    /** Starts a mock fight, turning freecam on if it was off. */
+    public void toggleSpar() {
+        if (camera == null) {
+            enable();
+        }
+        if (camera == null) {
+            return;
+        }
+        if (spar.active()) {
+            spar.stop();
+            sparLine = null;
+            logDirect("Spar off");
+        } else {
+            LocalPlayer p = ctx.player();
+            if (p == null) {
+                return;
+            }
+            spar.start(p, camera);
+            logDirect("Spar on. Left click hits the ghost. It strafes, jumps, and crits the way the bot does. #freecam spar to stop.");
+        }
     }
 
     public void disable() {
         if (camera == null) {
             return;
         }
+        spar.stop();
+        sparLine = null;
+        canvasLine = null;
+        restorePhase();
         camera = null;
         active = null;
         owner = null;
@@ -147,8 +300,17 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     @Override
     public void onWorldEvent(WorldEvent event) {
+        canvas.discard();
+        canvasLine = null;
         if (camera != null) {
             disable();
+        }
+    }
+
+    @Override
+    public void onRenderPass(RenderEvent event) {
+        if (camera != null && baritone == BaritoneAPI.getProvider().getPrimaryBaritone()) {
+            canvas.render(event, camera.getEyePosition());
         }
     }
 
@@ -184,11 +346,22 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         markAttackers(p);
         move(mc.options);
+        syncBotPhase(p);
+        spar.tick(camera, p);
+        sparLine = spar.hudLine();
+        if (canvas.tickLive(p)) {
+            int n = canvas.apply((Baritone) baritone);
+            if (n > 0) {
+                logDirect(canvas.status());
+            }
+        }
+        canvasLine = canvas.hud();
         clamp(p);
         if (mc.gui.screen() == null) {
             handleClicks(mc.options);
         }
     }
+
 
     private boolean toggleKeyHeld;
 
@@ -221,9 +394,8 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     /**
-     * Walks like a survival player with block collision and step-up; double-tap jump toggles creative flight.
-     * Follows vanilla LivingEntity#travel: ice and slime slipperiness, soul sand and honey slowdown (speed and jump
-     * factors), slime bounce, cobwebs, ladders and vines, and swimming in water and lava with their currents.
+     * Ground movement goes through {@link LivingEntity#travel}, which is the swim, lava, slime, ladder, and
+     * friction path. Flight is creative-style and phases, so a landing never ends it; double-tap jump does.
      */
     private void move(Options gs) {
         camera.syncPrev();
@@ -245,97 +417,49 @@ public final class FreecamBehavior extends Behavior implements Helper {
             strafe /= len;
         }
         boolean sprint = held(gs.keySprint) && fwd > 0;
-        double speed = Baritone.settings().freecamSpeed.value;
-        // currents push the camera like a player (and tell us whether it is in the fluid)
-        if (!flying) {
-            camera.refreshFluids(); // also pushes the camera along currents
-        }
-        boolean water = !flying && camera.isInWater();
-        boolean lava = !flying && !water && camera.isInLava();
-        boolean climbing = !flying && !water && !lava && camera.level().getBlockState(camera.blockPosition()).is(BlockTags.CLIMBABLE);
-        camera.stepUp = flying ? 0 : 0.6F;
-        camera.setShiftKeyDown(sneak && !flying); // sneaking stops slime bounce and slime slowdown, as for a player
-        boolean onGround = camera.onGround();
-        float slip = onGround ? camera.level().getBlockState(BlockPos.containing(camera.getX(), camera.getY() - 0.5000001, camera.getZ())).getBlock().getFriction() : 1;
-        double accel;
+        camera.step(fwd, strafe, jump, sneak, sprint, flying, Baritone.settings().freecamSpeed.value);
+    }
+
+    /** While freecam flight is on, the bot mayflies and noclip. Parkour (flight off) puts the saved flags back. */
+    private void syncBotPhase(LocalPlayer p) {
         if (flying) {
-            accel = 0.05 * (sprint ? 2 : 1);
-        } else if (water || lava) {
-            accel = 0.02 * (sprint && water ? 2 : 1);
-        } else if (onGround) {
-            accel = 0.1 * (sprint ? 1.3 : 1) * (sneak ? 0.3 : 1) * 0.21600002 / (slip * slip * slip);
-        } else {
-            accel = sprint ? 0.026 : 0.02;
-        }
-        accel *= speed;
-        float yaw = camera.getYRot() * ((float) Math.PI / 180F);
-        double sin = Mth.sin(yaw);
-        double cos = Mth.cos(yaw);
-        Vec3 m = camera.getDeltaMovement();
-        double mx = m.x + (strafe * cos - fwd * sin) * accel;
-        double mz = m.z + (fwd * cos + strafe * sin) * accel;
-        double my = m.y;
-        if (flying) {
-            my += ((jump ? 1 : 0) - (sneak ? 1 : 0)) * 0.15 * speed;
-        } else if (water || lava) {
-            my += (jump ? 0.04 : 0) - (sneak ? 0.04 : 0);
-        } else if (jump && onGround) {
-            my = 0.42 * camera.jumpFactor();
-            if (sprint) {
-                mx -= sin * 0.2;
-                mz += cos * 0.2;
+            if (!phaseOn) {
+                savedMayfly = p.getAbilities().mayfly;
+                savedFlying = p.getAbilities().flying;
+                savedNoPhysics = p.noPhysics;
+                phaseOn = true;
             }
-        }
-        if (climbing) {
-            mx = Mth.clamp(mx, -0.15, 0.15);
-            mz = Mth.clamp(mz, -0.15, 0.15);
-            my = Math.max(my, sneak ? 0 : -0.15);
-        }
-        // Entity#move does collision, step-up, the soul sand/honey speed factor, cobweb slowdown and slime bounce
-        camera.setDeltaMovement(mx, my, mz);
-        double y0 = camera.getY();
-        stuckInBlocks();
-        camera.move(MoverType.SELF, camera.getDeltaMovement());
-        // Entity#move also applies slime bounces (unless sneaking) and the ceiling/floor stop
-        m = camera.getDeltaMovement();
-        mx = m.x;
-        my = m.y;
-        mz = m.z;
-        if (climbing && (camera.horizontalCollision || jump)) {
-            my = 0.2;
-        }
-        if (flying) {
-            if (camera.onGround() && !jump) {
-                flying = false; // landing ends flight, as in creative
-            }
-            camera.setDeltaMovement(mx * 0.91, my * 0.6, mz * 0.91);
-        } else if (water || lava) {
-            double drag = water ? 0.8 : 0.5;
-            mx *= drag;
-            mz *= drag;
-            my = my * drag - (water ? 0.005 : 0.02);
-            // swimming into a bank with room above hops out, as vanilla does
-            if (camera.horizontalCollision && camera.freeAt(mx, my + 0.6 - camera.getY() + y0, mz)) {
-                my = 0.3;
-            }
-            camera.setDeltaMovement(mx, my, mz);
-        } else {
-            double friction = camera.onGround() ? slip * 0.91 : 0.91;
-            camera.setDeltaMovement(mx * friction, (my - 0.08) * 0.98, mz * friction);
+            applyPhase(p, true);
+        } else if (phaseOn) {
+            applyPhase(p, false);
+            phaseOn = false;
         }
     }
 
-    /** Cobwebs and sweet berry bushes slow the camera down, as Block#entityInside does for a ticked entity. */
-    private void stuckInBlocks() {
-        AABB box = camera.getBoundingBox().deflate(1.0E-7);
-        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
-            net.minecraft.world.level.block.state.BlockState st = camera.level().getBlockState(pos);
-            if (st.is(net.minecraft.world.level.block.Blocks.COBWEB)) {
-                camera.makeStuckInBlock(st, new Vec3(0.25, 0.05, 0.25));
-            } else if (st.is(net.minecraft.world.level.block.Blocks.SWEET_BERRY_BUSH)) {
-                camera.makeStuckInBlock(st, new Vec3(0.8, 0.75, 0.8));
-            }
+    private void restorePhase() {
+        LocalPlayer p = ctx.player();
+        if (phaseOn && p != null) {
+            applyPhase(p, false);
         }
+        phaseOn = false;
+    }
+
+    private void applyPhase(LocalPlayer p, boolean phase) {
+        // phase on: fly and noclip. phase off: the flags from before flight.
+        p.noPhysics = phase ? true : savedNoPhysics;
+        p.getAbilities().mayfly = phase ? true : savedMayfly;
+        p.getAbilities().flying = phase ? true : savedFlying;
+        if (mc.getSingleplayerServer() == null) {
+            return;
+        }
+        ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(p.getUUID());
+        if (sp == null) {
+            return;
+        }
+        sp.noPhysics = p.noPhysics;
+        sp.getAbilities().mayfly = p.getAbilities().mayfly;
+        sp.getAbilities().flying = p.getAbilities().flying;
+        sp.onUpdateAbilities();
     }
 
     /**
@@ -393,10 +517,27 @@ public final class FreecamBehavior extends Behavior implements Helper {
         gs.keyAttack.setDown(false);
         gs.keyUse.setDown(false);
         gs.keyPickItem.setDown(false);
+        if (canvas.active()) {
+            String note = null;
+            if (middle) {
+                note = canvas.click(camera, ctx.world(), 2);
+            } else if (left) {
+                note = canvas.click(camera, ctx.world(), 0);
+            } else if (right) {
+                note = canvas.click(camera, ctx.world(), 1);
+            }
+            if (note != null && !note.isEmpty()) {
+                logDirect(note);
+            }
+            canvasLine = canvas.hud();
+            return;
+        }
         if (middle) {
             markEnemy();
         } else if (left) {
-            select();
+            if (!spar.attack(camera)) {
+                select();
+            }
         } else if (right) {
             BetterBlockPos pos = new BetterBlockPos(camera.getX(), camera.getY(), camera.getZ());
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
@@ -487,31 +628,70 @@ public final class FreecamBehavior extends Behavior implements Helper {
         return dx * dx + dz * dz;
     }
 
-    private static final class Camera extends Entity {
+    /**
+     * A living body that is not added to the world. {@link #step} calls {@link #travel} so swim, slime bounce,
+     * ladders, and block friction are the game's, not a copy of them. Flight sets {@link #noPhysics}.
+     */
+    private static final class Camera extends LivingEntity {
+
+        private int jumpCooldown;
 
         Camera(Level world) {
-            super(EntityTypes.PLAYER, world);
+            super(EntityTypes.ZOMBIE, world);
+            setAttribute(Attributes.MOVEMENT_SPEED, 0.1);
+            setAttribute(Attributes.JUMP_STRENGTH, 0.42);
+            setAttribute(Attributes.GRAVITY, 0.08);
+            setAttribute(Attributes.SAFE_FALL_DISTANCE, 3);
+            setAttribute(Attributes.STEP_HEIGHT, 0.6);
+            setAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY, 0);
+            refreshDimensions();
         }
 
-        float stepUp;
+        private void setAttribute(net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attribute, double value) {
+            var inst = getAttribute(attribute);
+            if (inst != null) {
+                inst.setBaseValue(value);
+            }
+        }
 
         @Override
-        public float maxUpStep() {
-            return stepUp;
+        public HumanoidArm getMainArm() {
+            return HumanoidArm.RIGHT;
         }
 
-        void refreshFluids() {
-            updateFluidInteraction();
+        /**
+         * A normal living entity on the client is not allowed to simulate movement, so landing never
+         * restitutes and a slime block cannot bounce. This body exists only on the client.
+         */
+        @Override
+        public net.minecraft.world.entity.MoveSimulationType getMoveSimulationType() {
+            return net.minecraft.world.entity.MoveSimulationType.SERVER_AND_CLIENT;
         }
 
-        float jumpFactor() {
-            return getBlockJumpFactor();
+        @Override
+        public EntityDimensions getDefaultDimensions(Pose pose) {
+            if (pose == Pose.SWIMMING || pose == Pose.FALL_FLYING) {
+                return EntityDimensions.fixed(0.6f, 0.6f).withEyeHeight(0.4f);
+            }
+            if (pose == Pose.CROUCHING) {
+                return EntityDimensions.fixed(0.6f, 1.5f).withEyeHeight(1.27f);
+            }
+            return EntityDimensions.fixed(0.6f, 1.8f).withEyeHeight(1.62f);
         }
 
-        /** Whether the camera's box, shifted by (dx, dy, dz), is clear of blocks and fluid. */
-        boolean freeAt(double dx, double dy, double dz) {
-            net.minecraft.world.phys.AABB box = getBoundingBox().move(dx, dy, dz);
-            return level().noCollision(this, box) && !level().containsAnyLiquid(box);
+        @Override
+        public boolean causeFallDamage(double fallDistance, float damageMultiplier, DamageSource source) {
+            return false;
+        }
+
+        @Override
+        public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
+            return false;
+        }
+
+        @Override
+        public boolean isSuppressingBounce() {
+            return isShiftKeyDown() || noPhysics;
         }
 
         void syncPrev() {
@@ -522,21 +702,112 @@ public final class FreecamBehavior extends Behavior implements Helper {
             xRotO = getXRot();
         }
 
-        @Override
-        protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        /**
+         * One tick of movement. {@code fwd} is positive for W and {@code strafe} is positive for A, matching
+         * {@link LivingEntity#travel}. Sneak scales the input by 0.3, as the player does before travel.
+         */
+        void step(double fwd, double strafe, boolean jump, boolean sneak, boolean sprint, boolean fly, double speedScale) {
+            noPhysics = fly;
+            setShiftKeyDown(sneak && !fly);
+            setSprinting(sprint && !fly && fwd > 0);
+            if (fly) {
+                setSwimming(false);
+                pose(Pose.STANDING);
+                fly(fwd, strafe, jump, sneak, sprint, speedScale);
+                return;
+            }
+            updateFluidInteraction();
+            if (sneak) {
+                fwd *= 0.3;
+                strafe *= 0.3;
+            }
+            fwd *= speedScale;
+            strafe *= speedScale;
+            setAttribute(Attributes.MOVEMENT_SPEED, sprint ? 0.13000001 : 0.1);
+            stepJump(jump);
+            boolean swim = sprint && !sneak && eyeInWater();
+            setSwimming(swim);
+            pose(swim ? Pose.SWIMMING : sneak ? Pose.CROUCHING : Pose.STANDING);
+            if (swim) {
+                swimBoost(jump);
+            }
+            stuckInBlocks();
+            travel(new Vec3(strafe, 0, fwd));
         }
 
-        @Override
-        protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput nbt) {
+        private void pose(Pose want) {
+            if (getPose() != want) {
+                setPose(want);
+                refreshDimensions();
+            }
         }
 
-        @Override
-        protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput nbt) {
+        private void fly(double fwd, double strafe, boolean jump, boolean sneak, boolean sprint, double speedScale) {
+            double accel = 0.05 * (sprint ? 2 : 1) * speedScale;
+            float yaw = getYRot() * ((float) Math.PI / 180F);
+            double sin = Mth.sin(yaw);
+            double cos = Mth.cos(yaw);
+            Vec3 m = getDeltaMovement();
+            double mx = m.x + (strafe * cos - fwd * sin) * accel;
+            double mz = m.z + (fwd * cos + strafe * sin) * accel;
+            double my = m.y + ((jump ? 1 : 0) - (sneak ? 1 : 0)) * 0.15 * speedScale;
+            setDeltaMovement(mx, my, mz);
+            move(MoverType.SELF, getDeltaMovement());
+            m = getDeltaMovement();
+            setDeltaMovement(m.x * 0.91, m.y * 0.6, m.z * 0.91);
         }
 
-        @Override
-        public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
-            return false;
+        /** The jump block of LivingEntity#aiStep: liquid hops every tick, a ground jump, then a 10 tick gap. */
+        private void stepJump(boolean jump) {
+            if (jumpCooldown > 0) {
+                jumpCooldown--;
+            }
+            if (!jump) {
+                jumpCooldown = 0;
+                return;
+            }
+            double water = getFluidHeight(FluidTags.WATER);
+            boolean deepWater = isInWater() && water > 0 && (!onGround() || water > getFluidJumpThreshold());
+            if (deepWater) {
+                jumpInLiquid(FluidTags.WATER);
+                return;
+            }
+            if (isInLava() && !(onGround() && getFluidHeight(FluidTags.LAVA) > 0 && getFluidHeight(FluidTags.LAVA) <= getFluidJumpThreshold())) {
+                jumpInLiquid(FluidTags.LAVA);
+                return;
+            }
+            if (onGround() && jumpCooldown == 0 && !isInWater() && !isInLava()) {
+                jumpFromGround();
+                jumpCooldown = 10;
+            }
+        }
+
+        /** Player#travel's swim lift: look up to rise, look down to dive, unless that would leave the surface. */
+        private void swimBoost(boolean jumping) {
+            double lookY = getLookAngle().y;
+            double boost = lookY < -0.2 ? 0.085 : 0.06;
+            if (lookY > 0 && !jumping && level().getFluidState(BlockPos.containing(getX(), getY() + 0.9, getZ())).isEmpty()) {
+                return;
+            }
+            Vec3 m = getDeltaMovement();
+            setDeltaMovement(m.add(0, (lookY - m.y) * boost, 0));
+        }
+
+        private boolean eyeInWater() {
+            return level().getFluidState(BlockPos.containing(getX(), getEyeY(), getZ())).is(FluidTags.WATER);
+        }
+
+        /** Cobwebs and sweet berry bushes slow the body, as Block#entityInside does for a ticked entity. */
+        private void stuckInBlocks() {
+            AABB box = getBoundingBox().deflate(1.0E-7);
+            for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+                net.minecraft.world.level.block.state.BlockState st = level().getBlockState(pos);
+                if (st.is(net.minecraft.world.level.block.Blocks.COBWEB)) {
+                    makeStuckInBlock(st, new Vec3(0.25, 0.05, 0.25));
+                } else if (st.is(net.minecraft.world.level.block.Blocks.SWEET_BERRY_BUSH)) {
+                    makeStuckInBlock(st, new Vec3(0.8, 0.75, 0.8));
+                }
+            }
         }
     }
 }

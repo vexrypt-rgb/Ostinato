@@ -1397,7 +1397,8 @@ public final class Settings {
     public final Setting<String> freecamKey = new Setting<>("key.keyboard.f8");
 
     /**
-     * Opacity of the bot's ghost body while freecam is on (0 = invisible, 1 = solid)
+     * Opacity of the bot's ghost body while freecam is on (0 = invisible, 1 = solid).
+     * Minecraft 26.3 draws the body solid; this value is kept and ignored on that line.
      */
     public final Setting<Float> freecamGhostOpacity = new Setting<>(0.35f);
 

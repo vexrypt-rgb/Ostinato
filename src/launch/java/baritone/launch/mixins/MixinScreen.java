@@ -20,9 +20,14 @@ package baritone.launch.mixins;
 import baritone.api.BaritoneAPI;
 import baritone.api.IBaritone;
 import baritone.api.event.events.ChatEvent;
+import baritone.behavior.FreecamBehavior;
 import baritone.utils.accessor.IGuiScreen;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.ClickEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -49,5 +54,21 @@ public abstract class MixinScreen implements IGuiScreen {
             baritone.getGameEventHandler().onSendChatMessage(new ChatEvent(command));
         }
         ci.cancel();
+    }
+
+    /**
+     * A chest's background is drawn before its slots. Cancelling only the slot pass still leaves the panel
+     * over the world. While freecam is on, skip the whole container screen. The menu stays open.
+     */
+    @Inject(method = "extractRenderStateWithTooltipAndSubtitles", at = @At("HEAD"), cancellable = true)
+    private void freecamSkipsContainerScreen(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
+        if (FreecamBehavior.activeCamera() == null) {
+            return;
+        }
+        if ((Object) this instanceof AbstractContainerScreen
+                && !((Object) this instanceof InventoryScreen)
+                && !((Object) this instanceof CreativeModeInventoryScreen)) {
+            ci.cancel();
+        }
     }
 }

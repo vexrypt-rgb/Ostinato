@@ -58,9 +58,9 @@ Movement, pathing, and the rest of the settings. A change is written to `setting
 
 ### Studio
 
-![Studio orbit view of a small house](docs/images/gui-studio.png)
+![Studio orbit view of a small house with the block list on the right](docs/images/gui-studio.png)
 
-Studio is a schematic editor in the menu. Drag orbits the camera, shift-drag or middle-drag pans, and the scroll wheel zooms. Left click places the selected block, right click erases, `[` and `]` change the block, the arrow keys nudge the camera, Ctrl+Z undoes, and Ctrl+S saves. The volume starts at 24×12×24 and will not grow past 32 on a side. A save is `schematics/<name>.ostinato`. Build hands that schematic to the builder at your feet and leaves the menu open. The house in the picture is oak and stone brick; the glass and the door are on the far side of this view.
+Studio is a schematic editor in the menu. The block list on the right holds every block in the game, drawn with its real item icon, and the filter box above it narrows the list. The orbit view draws each block with its real textures. Drag orbits the camera, shift-drag or middle-drag pans, and the scroll wheel zooms. Left click uses the current tool, right click erases, `[` and `]` step through the filtered list, the arrow keys nudge the camera, Ctrl+Z undoes, and Ctrl+S saves. The tool row has brush, select, fill, replace, line, sphere, hollow, wall, copy, paste, rotate, and flip; keys 1 to 9 pick the first nine, and `-` / `=` change the sphere radius. The volume starts at 24×12×24 and will not grow past 32 on a side. A save is `schematics/<name>.ostinato`; it stores block names (with any non-default block state), and saves from v1.22.0 still load. Build hands that schematic to the builder at your feet and leaves the menu open.
 
 ### Arcade
 
@@ -77,6 +77,38 @@ Mines is a 9×9 field with 10 mines. Left click opens a cell, right click plants
 ![Motif](docs/images/gui-arcade-motif.png)
 
 Motif plays a short pattern on four pads. Watch, then press 1 to 4 or click the pads.
+
+## Freecam
+
+`#freecam` (or `freecamKey`, F8) detaches the camera into a body that walks, swims, and slime-jumps with the game's own movement. Double-tap jump to fly; flying phases the camera, and the bot on a singleplayer world, through blocks. Double-tap again to land: collision comes back for both, so parkour next to the bot stays solid. These pictures are from the 26.3 dev client.
+
+![Freecam in third person: the bot with its nametag and hotbar drawn above its head](docs/images/freecam-body.png)
+
+The hotbar, hearts, hunger, and the first-person arm stay on screen. F5 shows the bot's body, and the bot's hotbar is drawn above its head (with the slots of any open container). A chest the bot opens stays open for the bot without covering your view; the survival and creative inventories still draw, doll included.
+
+![The survival inventory open during freecam, with the player doll](docs/images/freecam-inventory.png)
+
+Left click follows the entity under the crosshair or sends the bot to the block; right click sends it to the camera. `#freecam spar` adds a client-only sparring ghost that fights with the bot's melee timing (strafe, sprint, jump crits); its hits only change a local health count.
+
+### Flat canvas and edit mode
+
+![A house on the freecam flat canvas, in real block textures](docs/images/freecam-flat.png)
+
+`#freecam flat` puts a 32×16×32 client-only superflat pad under the camera. You build on it with the Studio tools while the bot keeps doing its task; nothing is in the world yet. `#freecam edit` copies the current selection, or 16×12×16 around the build you look at, and lets you restyle that copy like creative: added blocks show as textured ghosts and removed blocks as red outlines.
+
+| Command | Effect |
+| --- | --- |
+| `#freecam apply` | Hand the difference to the builder now and keep editing (the default is to build later) |
+| `#freecam live` | Toggle building each edit as you make it; this takes over the builder |
+| `#freecam done` | Build the difference and close the canvas |
+| `#freecam tool <name>` | brush, select, fill, replace, line, sphere, hollow, wall, copy, paste, rotate, flip |
+| `#freecam brush <block>` / `brush hand` | Lock the brush to a block, or follow the held block again (middle click picks a block) |
+| `#freecam radius <1-8>` | Sphere size |
+| `#freecam undo` / `clear` | Undo the last edit, or drop the canvas |
+
+On a flat canvas, apply places only the blocks you added. In edit mode, apply also breaks the blocks you removed. Clicks on a canvas never send the bot anywhere.
+
+Limits: these features are on 26.3 (`main`) only. Flight phases the bot only on a singleplayer world; on a server the bot is pulled back. Landing while inside a block can leave the camera stuck. `freecamGhostOpacity` is ignored on 26.3, where the body is drawn solid. The pictures show the HUD, the body, the overhead hotbar, the inventory doll, the Studio palette, and the flat canvas; spar, the edit ghost, and the builder carrying out an apply have no picture yet.
 
 ## Path view
 
