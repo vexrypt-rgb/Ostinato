@@ -608,7 +608,7 @@ public final class Settings {
      * search from the goal. Same route cost, fewer sections priced. Ignored while pathingHierarchyHeuristicFactor is
      * above 0, which needs the full backward cost-to-go map.
      */
-    public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(false);
+    public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(true);
 
 
     // a bunch of obscure internal A* settings that you probably don't want to change
