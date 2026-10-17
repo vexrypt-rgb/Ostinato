@@ -1,0 +1,396 @@
+//! `JumpSearch.search` / `searchStraight` (a grid of open-loop jump plans flown in [`Sim`]) and `MomentumHop.find` (a
+//! depth-first search over which ground ticks to hop on). Ports of `baritone.pathing.kinematic.JumpSearch` and
+//! `MomentumHop`, operation for operation.
+
+use crate::jmath::{floor_i, jabs, jmax, jmin, round_d};
+use crate::sim::{feet_cell, node_height, Box6, Sim, Snap, HALF_WIDTH};
+use std::collections::HashSet;
+
+pub const O0: [f32; 6] = [-15.0, 0.0, 15.0, 30.0, 45.0, 60.0];
+pub const HOP: [i32; 2] = [0, 1];
+pub const EDGE: [f64; 6] = [-0.5, -0.3, -0.1, 0.1, 0.25, 0.4];
+pub const PLAIN_EDGES: usize = 5;
+pub const O1: [f32; 9] = [-70.0, -45.0, -25.0, -10.0, 0.0, 10.0, 25.0, 45.0, 70.0];
+pub const SWITCH: [i32; 2] = [0, 4];
+pub const NEVER: i32 = 999;
+pub const RELEASE: [i32; 4] = [NEVER, 4, 7, 10];
+pub const BRAKE: [i32; 2] = [0, 1];
+pub const DIMS: usize = 7;
+const MAX_GROUND: i32 = 40;
+const MAX_AIR: i32 = 40;
+const SETTLE: i32 = 8;
+const HANG: i32 = 3;
+const YAW_STEP: f32 = 32.0;
+
+/// A `JumpSearch`'s fields: the frame, the flags, the plan and the jump state, and what a run leaves behind.
+pub struct JumpSearch<'a> {
+    pub w: &'a Snap<'a>,
+    /// `approachYaw()`, computed by the caller (`Math.atan2` is not pinned to one result in Java).
+    pub approach_yaw: f32,
+    pub dir_x: f64,
+    pub dir_z: f64,
+    pub edge: f64,
+    pub dest_x: i32,
+    pub dest_y: i32,
+    pub dest_z: i32,
+    pub side: i32,
+    pub bounce_y: i32,
+    pub any_dest: bool,
+    pub no_jump: bool,
+    pub grab: bool,
+    pub stand_jump: bool,
+    pub carry: bool,
+    pub ledge: bool,
+    pub plan: [i32; DIMS],
+    pub jumped: bool,
+    pub air_ticks: i32,
+    pub slew_yaw: bool,
+    pub face_yaw: f32,
+    pub ticks: i32,
+    pub miss: f64,
+    pub land_speed: f64,
+    pub sim: Sim,
+    buf: Vec<Box6>,
+}
+
+impl<'a> JumpSearch<'a> {
+    pub fn new(w: &'a Snap<'a>) -> Self {
+        JumpSearch {
+            w,
+            approach_yaw: 0.0,
+            dir_x: 0.0,
+            dir_z: 0.0,
+            edge: 0.0,
+            dest_x: 0,
+            dest_y: 0,
+            dest_z: 0,
+            side: 1,
+            bounce_y: i32::MAX,
+            any_dest: false,
+            no_jump: false,
+            grab: false,
+            stand_jump: false,
+            carry: false,
+            ledge: false,
+            plan: [0; DIMS],
+            jumped: false,
+            air_ticks: 0,
+            slew_yaw: false,
+            face_yaw: 0.0,
+            ticks: 0,
+            miss: 0.0,
+            land_speed: 0.0,
+            sim: Sim::default(),
+            buf: Vec::with_capacity(64),
+        }
+    }
+
+    fn yaw(&self, p: &[i32; DIMS], jumped: bool, air: i32) -> f32 {
+        let o = if jumped && air >= SWITCH[p[4] as usize] { O1[p[3] as usize] } else { O0[p[0] as usize] };
+        self.approach_yaw + self.side as f32 * o
+    }
+
+    fn input(&self, p: &[i32; DIMS], jumped: bool, air: i32) -> i32 {
+        if !jumped || air < RELEASE[p[5] as usize] { 1 } else { -BRAKE[p[6] as usize] }
+    }
+
+    fn jump(&self, p: &[i32; DIMS], jumped: bool) -> bool {
+        let s = &self.sim;
+        if jumped || !s.on_ground || self.no_jump {
+            return false;
+        }
+        if self.stand_jump {
+            return true;
+        }
+        let along = s.x * self.dir_x + s.z * self.dir_z;
+        along >= self.edge + EDGE[p[2] as usize] || (HOP[p[1] as usize] == 1 && along < self.edge + EDGE[p[2] as usize] - 1.2)
+    }
+
+    /// `JumpSearch.stepYaw`.
+    pub fn step_yaw(from: f32, to: f32) -> f32 {
+        let mut d = to - from;
+        d %= 360.0f32;
+        if d >= 180.0f32 {
+            d -= 360.0f32;
+        }
+        if d < -180.0f32 {
+            d += 360.0f32;
+        }
+        if d > YAW_STEP {
+            d = YAW_STEP;
+        } else if d < -YAW_STEP {
+            d = -YAW_STEP;
+        }
+        from + d
+    }
+
+    /// `JumpSearch.run` without a sweep.
+    pub fn run(&mut self, start: &Sim, p: &[i32; DIMS], jumped0: bool, air0: i32) -> bool {
+        self.sim = *start;
+        let mut jumped = jumped0;
+        let mut air = air0;
+        let mut settle = -1;
+        let mut bounced = false;
+        let mut facing = self.face_yaw;
+        let floor = floor_i(start.y + 0.01).min(self.dest_y).min(self.bounce_y) as f64 - 0.6;
+        for t in 0..(MAX_GROUND + MAX_AIR + SETTLE) {
+            if !jumped && t >= MAX_GROUND {
+                return false;
+            }
+            let j = self.jump(p, jumped);
+            let takeoff = j && (self.stand_jump || self.sim.x * self.dir_x + self.sim.z * self.dir_z >= self.edge + EDGE[p[2] as usize]);
+            let inp = if settle < 0 { self.input(p, jumped, air) } else { 0 };
+            let mut cmd = self.yaw(p, jumped, air);
+            if self.slew_yaw {
+                facing = Self::step_yaw(facing, cmd);
+                cmd = facing;
+            }
+            self.sim.tick(self.w, &mut self.buf, cmd, inp, 0, inp > 0, j);
+            if takeoff
+                || (!jumped && !self.sim.on_ground && self.bounce_y != i32::MAX && self.sim.x * self.dir_x + self.sim.z * self.dir_z > self.edge)
+            {
+                jumped = true;
+                air = 0;
+            } else if jumped {
+                air += 1;
+            }
+            let s = self.sim;
+            if s.y < floor {
+                return false;
+            }
+            if self.grab && jumped && air >= 1 && floor_i(s.x) == self.dest_x && floor_i(s.y) == self.dest_y && floor_i(s.z) == self.dest_z
+                && s.climbable(self.w)
+            {
+                return self.holds(t + 1);
+            }
+            if s.on_ground && s.vy > 0.1 {
+                bounced = true;
+            }
+            if jumped && air > 1 && s.on_ground && settle < 0 && s.vy <= 0.1 {
+                if self.any_dest {
+                    if !bounced {
+                        return false;
+                    }
+                    self.dest_x = floor_i(s.x);
+                    self.dest_y = feet_cell(s.y);
+                    self.dest_z = floor_i(s.z);
+                }
+                if !node_height(s.y, self.dest_y) {
+                    return false;
+                }
+                if self.carry {
+                    if floor_i(s.x) != self.dest_x || floor_i(s.z) != self.dest_z {
+                        return false;
+                    }
+                    self.ticks = t + 1;
+                    self.miss = jmax(jabs(s.x - (self.dest_x as f64 + 0.5)), jabs(s.z - (self.dest_z as f64 + 0.5)));
+                    self.land_speed = s.vx * self.dir_x + s.vz * self.dir_z;
+                    return true;
+                }
+                settle = 0;
+            }
+            if settle >= 0 {
+                let old = settle;
+                settle += 1;
+                if old >= SETTLE {
+                    let cx = s.x - (self.dest_x as f64 + 0.5);
+                    let cz = s.z - (self.dest_z as f64 + 0.5);
+                    let reach = 0.5 + HALF_WIDTH - 1e-4;
+                    if jabs(cx) > reach || jabs(cz) > reach || !s.on_ground {
+                        return false;
+                    }
+                    self.ticks = t + 1;
+                    self.miss = jmax(jabs(cx), jabs(cz));
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn holds(&mut self, tick: i32) -> bool {
+        for _ in 0..HANG {
+            self.sim.tick(self.w, &mut self.buf, 0.0, 0, 0, false, false);
+            if !self.sim.climbable(self.w) {
+                return false;
+            }
+        }
+        self.ticks = tick;
+        self.miss = 0.0;
+        true
+    }
+
+    /// `JumpSearch.search`.
+    pub fn search(&mut self, start: &Sim, local: bool) -> bool {
+        let mut best: Option<[i32; DIMS]> = None;
+        let c = self.plan;
+        let mut best_score = f64::MAX;
+        let size = [O0.len() as i32, HOP.len() as i32, if self.ledge { EDGE.len() } else { PLAIN_EDGES } as i32, O1.len() as i32,
+            SWITCH.len() as i32, RELEASE.len() as i32, BRAKE.len() as i32];
+        let mut lo = [0i32; DIMS];
+        let mut hi = [0i32; DIMS];
+        for k in 0..DIMS {
+            let fixed = self.jumped && k <= 2;
+            lo[k] = if fixed { c[k] } else if local { 0.max(c[k] - 1) } else { 0 };
+            hi[k] = if fixed { c[k] } else if local { (size[k] - 1).min(c[k] + 1) } else { size[k] - 1 };
+        }
+        let (jumped, air) = (self.jumped, self.air_ticks);
+        let mut p = [0i32; DIMS];
+        p[0] = lo[0];
+        while p[0] <= hi[0] {
+            p[1] = lo[1];
+            while p[1] <= hi[1] {
+                p[2] = lo[2];
+                while p[2] <= hi[2] {
+                    p[3] = lo[3];
+                    while p[3] <= hi[3] {
+                        p[4] = lo[4];
+                        while p[4] <= hi[4] {
+                            p[5] = lo[5];
+                            while p[5] <= hi[5] {
+                                p[6] = lo[6];
+                                while p[6] <= hi[6] {
+                                    if self.run(start, &p, jumped, air) {
+                                        let score = if self.carry { -self.land_speed + 0.004 * self.ticks as f64 } else { self.miss + 0.004 * self.ticks as f64 };
+                                        if score < best_score {
+                                            best_score = score;
+                                            best = Some(p);
+                                        }
+                                    }
+                                    p[6] += 1;
+                                }
+                                p[5] += 1;
+                            }
+                            p[4] += 1;
+                        }
+                        p[3] += 1;
+                    }
+                    p[2] += 1;
+                }
+                p[1] += 1;
+            }
+            p[0] += 1;
+        }
+        let Some(b) = best else { return false };
+        self.plan = b;
+        let plan = self.plan;
+        self.run(start, &plan, jumped, air);
+        true
+    }
+
+    /// `JumpSearch.searchStraight`.
+    pub fn search_straight(&mut self, start: &Sim) -> bool {
+        let mut best: Option<[i32; DIMS]> = None;
+        let mut best_score = f64::MAX;
+        let mut p = [0i32; DIMS];
+        p[0] = 1;
+        p[3] = 4;
+        let edges = if self.ledge { EDGE.len() } else { PLAIN_EDGES } as i32;
+        p[1] = 0;
+        while p[1] < HOP.len() as i32 {
+            p[2] = 0;
+            while p[2] < edges {
+                p[5] = 0;
+                while p[5] < RELEASE.len() as i32 {
+                    p[6] = 0;
+                    while p[6] < BRAKE.len() as i32 {
+                        if !(p[5] == 0 && p[6] == 1) && self.run(start, &p, false, 0) {
+                            let score = self.miss + 0.004 * self.ticks as f64;
+                            if score < best_score {
+                                best_score = score;
+                                best = Some(p);
+                            }
+                        }
+                        p[6] += 1;
+                    }
+                    p[5] += 1;
+                }
+                p[2] += 1;
+            }
+            p[1] += 1;
+        }
+        let Some(b) = best else { return false };
+        self.plan = b;
+        let plan = self.plan;
+        self.run(start, &plan, false, 0);
+        true
+    }
+}
+
+pub const HOP_MAX_TICKS: i32 = 60;
+
+/// `MomentumHop.find`: the jump pattern ('J' or '.' per tick) that ends standing on dest, or None.
+#[allow(clippy::too_many_arguments)]
+pub fn momentum_hop(w: &Snap, start: &Sim, yaw: f32, dir_x: i32, dir_z: i32, dest_x: i32, dest_y: i32, dest_z: i32, jumped_last: bool, budget: i32) -> Option<Vec<u8>> {
+    let mut s = Hop {
+        w,
+        yaw,
+        dir_x: dir_x as f64,
+        dir_z: dir_z as f64,
+        dest_x,
+        dest_y,
+        dest_z,
+        floor_y: jmin(start.y, dest_y as f64) - 0.6,
+        beyond: (dest_x as f64 + 0.5 + 0.5 * dir_x as f64) * dir_x as f64 + (dest_z as f64 + 0.5 + 0.5 * dir_z as f64) * dir_z as f64 + 1.0,
+        seen: HashSet::new(),
+        spent: 0,
+        budget,
+        buf: Vec::with_capacity(64),
+    };
+    let mut trail = Vec::new();
+    if s.dfs(start, 0, jumped_last, &mut trail) { Some(trail) } else { None }
+}
+
+struct Hop<'a> {
+    w: &'a Snap<'a>,
+    yaw: f32,
+    dir_x: f64,
+    dir_z: f64,
+    dest_x: i32,
+    dest_y: i32,
+    dest_z: i32,
+    floor_y: f64,
+    beyond: f64,
+    seen: HashSet<i64>,
+    spent: i32,
+    budget: i32,
+    buf: Vec<Box6>,
+}
+
+impl Hop<'_> {
+    fn on(&self, p: &Sim) -> bool {
+        p.on_ground && floor_i(p.x) == self.dest_x && floor_i(p.z) == self.dest_z && feet_cell(p.y) == self.dest_y
+    }
+
+    fn dfs(&mut self, p: &Sim, t: i32, prev: bool, trail: &mut Vec<u8>) -> bool {
+        if self.on(p) {
+            return true;
+        }
+        if p.y < self.floor_y || t >= HOP_MAX_TICKS || self.spent > self.budget {
+            return false;
+        }
+        if p.x * self.dir_x + p.z * self.dir_z > self.beyond {
+            return false;
+        }
+        let key = ((round_d((p.x * self.dir_x + p.z * self.dir_z) * 200.0) & 0xFFFFF) << 40)
+            ^ ((round_d(p.y * 200.0) & 0xFFFF) << 24)
+            ^ ((round_d((p.vx * self.dir_x + p.vz * self.dir_z) * 2000.0) & 0xFFF) << 12)
+            ^ ((round_d(p.vy * 1000.0) & 0x7FF) << 1)
+            ^ if prev { 1 } else { 0 };
+        if !self.seen.insert(key) {
+            return false;
+        }
+        let opts: &[bool] = if p.on_ground && !prev { &[true, false] } else { &[false] };
+        for &j in opts {
+            let mut c = *p;
+            c.tick(self.w, &mut self.buf, self.yaw, 1, 0, true, j);
+            self.spent += 1;
+            trail.push(if j { b'J' } else { b'.' });
+            if self.dfs(&c, t + 1, j, trail) {
+                return true;
+            }
+            trail.pop();
+        }
+        false
+    }
+}

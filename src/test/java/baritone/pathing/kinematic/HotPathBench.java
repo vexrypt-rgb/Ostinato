@@ -49,35 +49,55 @@ public class HotPathBench {
         BoxWorld step = new BoxWorld().fill(-1, -1, -2, 1, -1, 3, BoxWorld.FULL).fill(-1, 0, 4, 1, 0, 8, BoxWorld.FULL);
         BoxWorld wall = new BoxWorld().fill(-3, -1, -2, 3, -1, 8, BoxWorld.FULL).fill(-3, 0, 4, 3, 2, 4, BoxWorld.FULL);
         time("physics flat 10", () -> size(new PhysicsPathfinder(flat, 1500).plan(standing(flat, 0.5, 0, 0.5), 0.5, 0, 10.5, 0.35)));
+        time("physics flat 10 NATIVE", () -> size(new PhysicsPathfinder(flat, 1500).nativeSearch(true).plan(standing(flat, 0.5, 0, 0.5), 0.5, 0, 10.5, 0.35)));
         time("physics gap 3", () -> size(new PhysicsPathfinder(gap, 1500).plan(standing(gap, 0.5, 0, 0.5), 0.5, 0, 8.5, 0.35)));
+        time("physics gap 3 NATIVE", () -> size(new PhysicsPathfinder(gap, 1500).nativeSearch(true).plan(standing(gap, 0.5, 0, 0.5), 0.5, 0, 8.5, 0.35)));
         time("physics step up", () -> size(new PhysicsPathfinder(step, 1500).plan(standing(step, 0.5, 0, 0.5), 0.5, 1, 6.5, 0.35)));
+        time("physics step up NATIVE", () -> size(new PhysicsPathfinder(step, 1500).nativeSearch(true).plan(standing(step, 0.5, 0, 0.5), 0.5, 1, 6.5, 0.35)));
         time("physics walled off (whole budget)", () -> size(new PhysicsPathfinder(wall, 1500).plan(standing(wall, 0.5, 0, 0.5), 0.5, 0, 6.5, 0.35)));
+        time("physics walled off (whole budget) NATIVE", () -> size(new PhysicsPathfinder(wall, 1500).nativeSearch(true).plan(standing(wall, 0.5, 0, 0.5), 0.5, 0, 6.5, 0.35)));
 
         // JumpSearch: the full grid and a local search round a plan, a 2 gap
         BoxWorld g2 = new BoxWorld().fill(0, -1, 0, 0, -1, 2, BoxWorld.FULL).put(0, -1, 5, BoxWorld.FULL);
-        time("jumpsearch full, gap 2", () -> {
-            JumpSearch js = js(g2);
-            return js.search(standing(g2, 0.5, 0, 0.5), false);
-        });
+        for (boolean nat : new boolean[]{false, true}) {
+            String tag = nat ? " NATIVE" : "";
+            time("jumpsearch full, gap 2" + tag, () -> {
+                JumpSearch js = js(g2);
+                js.nativeSearch = nat;
+                return js.search(standing(g2, 0.5, 0, 0.5), false);
+            });
+        }
         JumpSearch planned = js(g2);
         planned.search(standing(g2, 0.5, 0, 0.5), false);
         int[] plan = planned.plan.clone();
-        time("jumpsearch local, gap 2", () -> {
-            JumpSearch js = js(g2);
-            System.arraycopy(plan, 0, js.plan, 0, JumpSearch.DIMS);
-            return js.search(standing(g2, 0.5, 0, 0.5), true);
-        });
-        time("jumpsearch full, unreachable gap 6", () -> {
-            BoxWorld g6 = new BoxWorld().fill(0, -1, 0, 0, -1, 2, BoxWorld.FULL).put(0, -1, 9, BoxWorld.FULL);
-            JumpSearch js = js(g6);
-            js.destZ = 9;
-            return js.search(standing(g6, 0.5, 0, 0.5), false);
-        });
+        BoxWorld g6 = new BoxWorld().fill(0, -1, 0, 0, -1, 2, BoxWorld.FULL).put(0, -1, 9, BoxWorld.FULL);
+        for (boolean nat : new boolean[]{false, true}) {
+            String tag = nat ? " NATIVE" : "";
+            time("jumpsearch local, gap 2" + tag, () -> {
+                JumpSearch js = js(g2);
+                js.nativeSearch = nat;
+                System.arraycopy(plan, 0, js.plan, 0, JumpSearch.DIMS);
+                return js.search(standing(g2, 0.5, 0, 0.5), true);
+            });
+            time("jumpsearch straight, gap 2" + tag, () -> {
+                JumpSearch js = js(g2);
+                js.nativeSearch = nat;
+                return js.searchStraight(standing(g2, 0.5, 0, 0.5));
+            });
+            time("jumpsearch full, unreachable gap 6" + tag, () -> {
+                JumpSearch js = js(g6);
+                js.nativeSearch = nat;
+                js.destZ = 9;
+                return js.search(standing(g6, 0.5, 0, 0.5), false);
+            });
+        }
 
         // MomentumHop under a 2 high ceiling: planner budget and executor budget
         BoxWorld hh = new BoxWorld().fill(0, -1, -8, 0, -1, 0, BoxWorld.FULL).fill(0, 2, -8, 0, 2, 4, BoxWorld.FULL).put(0, -1, 3, BoxWorld.FULL);
         time("momentumhop plan budget 6000", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.PLAN_BUDGET));
         time("momentumhop run budget 40000", () -> MomentumHop.find(hh, standing(hh, 0.5, 0, -7.5), 0, 1, 0, 0, 3, false, MomentumHop.BUDGET));
+        time("momentumhop plan budget 6000 NATIVE", () -> NativePlanners.momentumHop(hh, standing(hh, 0.5, 0, -7.5), 0f, 0, 1, 0, 0, 3, false, MomentumHop.PLAN_BUDGET));
+        time("momentumhop run budget 40000 NATIVE", () -> NativePlanners.momentumHop(hh, standing(hh, 0.5, 0, -7.5), 0f, 0, 1, 0, 0, 3, false, MomentumHop.BUDGET));
 
         // raw sim speed and the snapshot copy a native call would add
         time("100k sim ticks, flat run", () -> {

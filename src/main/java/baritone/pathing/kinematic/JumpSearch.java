@@ -74,6 +74,9 @@ public final class JumpSearch {
     /** Filled by {@link #run} in {@link #carry} mode: speed along the approach direction at the landing tick. */
     public double landSpeed;
 
+    /** Ostinato: run {@link #search} and {@link #searchStraight} in the native library when it is loaded ({@link NativePlanners}); the answer is the same. */
+    public boolean nativeSearch;
+
     private final PlayerSim sim;
 
     public JumpSearch(PlayerSim.World world) {
@@ -231,6 +234,10 @@ public final class JumpSearch {
      * {@link #plan}. Prefers landing near the centre, then fewer ticks.
      */
     public boolean search(PlayerSim start, boolean local) {
+        return nativeSearch ? searchNative(start, local ? NativePlanners.LOCAL : NativePlanners.FULL) : searchJava(start, local);
+    }
+
+    private boolean searchJava(PlayerSim start, boolean local) {
         int[] best = null, p = new int[DIMS], c = plan.clone();
         double bestScore = Double.MAX_VALUE;
         int[] size = {O0.length, HOP.length, ledge ? EDGE.length : PLAIN_EDGES, O1.length, SWITCH.length, RELEASE.length, BRAKE.length};
@@ -264,6 +271,60 @@ public final class JumpSearch {
 
     /** Straight-line plans only (no turning): the cheap search the planner runs for slime bounces. */
     public boolean searchStraight(PlayerSim start) {
+        return nativeSearch ? searchNative(start, NativePlanners.STRAIGHT) : searchStraightJava(start);
+    }
+
+    private boolean searchNative(PlayerSim start, int mode) {
+        JumpSearch ref = NativePlanners.verify ? copy() : null;
+        int r = NativePlanners.jumpSearch(this, start, mode);
+        if (r == NativePlanners.UNKNOWN) {
+            return mode == NativePlanners.STRAIGHT ? searchStraightJava(start) : searchJava(start, mode == NativePlanners.LOCAL);
+        }
+        if (ref != null) {
+            boolean refOk = mode == NativePlanners.STRAIGHT ? ref.searchStraightJava(start) : ref.searchJava(start, mode == NativePlanners.LOCAL);
+            NativePlanners.checked.incrementAndGet();
+            if (refOk != (r == 1) || !java.util.Arrays.equals(plan, ref.plan) || ticks != ref.ticks || Double.compare(miss, ref.miss) != 0
+                    || Double.compare(landSpeed, ref.landSpeed) != 0 || destX != ref.destX || destY != ref.destY || destZ != ref.destZ
+                    || !java.util.Arrays.equals(NativeTas.state(sim), NativeTas.state(ref.sim))) {
+                throw new AssertionError("native jump search (mode " + mode + ") " + (r == 1) + " " + java.util.Arrays.toString(plan)
+                        + " t" + ticks + " m" + miss + " s" + landSpeed + " d" + destX + "," + destY + "," + destZ + " " + java.util.Arrays.toString(NativeTas.state(sim))
+                        + " differs from Java " + refOk + " " + java.util.Arrays.toString(ref.plan) + " t" + ref.ticks + " m" + ref.miss + " s" + ref.landSpeed
+                        + " d" + ref.destX + "," + ref.destY + "," + ref.destZ + " " + java.util.Arrays.toString(NativeTas.state(ref.sim)));
+            }
+        }
+        return r == 1;
+    }
+
+    /** A search with this one's frame, flags and state, for checking the native answer. */
+    private JumpSearch copy() {
+        JumpSearch c = new JumpSearch(sim.world());
+        c.dirX = dirX;
+        c.dirZ = dirZ;
+        c.edge = edge;
+        c.destX = destX;
+        c.destY = destY;
+        c.destZ = destZ;
+        c.side = side;
+        c.bounceY = bounceY;
+        c.anyDest = anyDest;
+        c.noJump = noJump;
+        c.grab = grab;
+        c.standJump = standJump;
+        c.carry = carry;
+        c.ledge = ledge;
+        System.arraycopy(plan, 0, c.plan, 0, DIMS);
+        c.jumped = jumped;
+        c.airTicks = airTicks;
+        c.slewYaw = slewYaw;
+        c.faceYaw = faceYaw;
+        c.ticks = ticks;
+        c.miss = miss;
+        c.landSpeed = landSpeed;
+        c.sim.copyFrom(sim);
+        return c;
+    }
+
+    private boolean searchStraightJava(PlayerSim start) {
         int[] best = null, p = new int[DIMS];
         double bestScore = Double.MAX_VALUE;
         p[0] = 1; // O0 = 0
