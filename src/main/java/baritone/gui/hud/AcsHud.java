@@ -23,6 +23,7 @@ import baritone.api.IBaritone;
 import baritone.gui.anim.Anim;
 import baritone.gui.model.HudFormat;
 import baritone.gui.render.GuiDraw;
+import baritone.gui.render.Skin;
 import baritone.gui.render.Icons;
 import baritone.gui.screen.OstinatoScreen;
 import baritone.gui.screen.Theme;
@@ -142,24 +143,22 @@ public final class AcsHud {
         float x1 = x0 + W, y1 = y0 + height(st), bx0 = x0 + 7, bx1 = x1 - 7;
         // glass: a faint light rim under a dark fill, the two together as solid as the setting asks
         float o = Math.max(0f, Math.min(1f, opacity)), rim = Math.min(0.2f, o * 0.5f), fill = 1 - (1 - o) / (1 - rim);
-        GuiDraw.roundBorder(ms, x0, y0, x1, y1, 4, GuiDraw.alphaOf(0x8FA3C8, Math.round(rim * 255)),
-                GuiDraw.alphaOf(0x141925, Math.round(fill * 255)), GuiDraw.alphaOf(0x0B0E14, Math.round(fill * 255)));
-        GuiDraw.gradH(ms, x0 + 4, y0 + 0.5f, x1 - 4, y0 + 1, GuiDraw.alphaOf(accent, 0xAA), GuiDraw.alphaOf(Theme.BLUE, 0x10));
+        Skin.card(ms, x0, y0, x1, y1, accent, GuiDraw.alphaOf(0x8FA3C8, Math.round(rim * 255)),
+                GuiDraw.alphaOf(0x141925, Math.round(fill * 255)), GuiDraw.alphaOf(0x0B0E14, Math.round(fill * 255)), false);
         // header
-        GuiDraw.icon(ms, Icons.NOTE, x0 + 7, y0 + 6, accent, 0.8f);
-        GuiDraw.textColors(ms, "Autotune", x0 + 17, y0 + 6, 1f, true, Theme.logoColors(accent, 8), true);
+        Skin.title(ms, "Autotune", x0 + 7, y0 + 6, accent, now);
         String state = st.phase.name();
-        int stateCol = trial ? Theme.AMBER : on ? Theme.GREEN : Theme.MUTED;
+        int stateCol = trial ? Theme.AMBER : on ? Theme.GREEN : Skin.muted();
         float pw = GuiDraw.width(state, fine, false) + 12;
-        GuiDraw.round(ms, x1 - 7 - pw, y0 + 5.5f, x1 - 7, y0 + 14.5f, 2.5f, GuiDraw.alphaOf(stateCol, 0x3A));
+        Skin.pill(ms, x1 - 7 - pw, y0 + 5.5f, x1 - 7, y0 + 14.5f, stateCol, 0x3A);
         GuiDraw.icon(ms, Icons.DOT, x1 - 7 - pw + 3.5f, y0 + 8.5f, stateCol, 0.75f);
         GuiDraw.text(ms, state, x1 - 7 - pw + 8.5f, y0 + 8, fine, stateCol, true, false);
-        GuiDraw.rect(ms, x0 + 6, y0 + 19, x1 - 6, y0 + 19.5f, 0x20FFFFFF);
+        Skin.divider(ms, x0 + 6, x1 - 6, y0 + 19, 0x20FFFFFF);
         // what is tuned, and for which kit against which kind of foe
         float y = y0 + 22.5f;
         float nw = GuiDraw.text(ms, st.title(), bx0, y, fine, Theme.lighter(accent), true, false);
         String kit = GuiDraw.trim(st.kit(), bx1 - bx0 - nw - 6, fine);
-        GuiDraw.text(ms, kit, bx1 - GuiDraw.width(kit, fine, false), y, fine, LABEL, true, false);
+        GuiDraw.text(ms, kit, bx1 - GuiDraw.width(kit, fine, false), y, fine, Skin.label(LABEL), true, false);
         y += 8;
         if (on) {
             if (st.knob >= 0) track(ms, st, bx0 + 4, bx1 - 4, y + 5.5f, accent, now);
@@ -171,30 +170,26 @@ public final class AcsHud {
             tile(ms, bx0, y, tw, o, "DEALT", HudFormat.signedPct(st.dealtPct), tone(st.zDealt, true), st.fought < 2 ? "" : z(st.zDealt));
             tile(ms, bx0 + tw + 4, y, tw, o, "TAKEN", HudFormat.signedPct(st.takenPct), tone(st.zTaken, false), st.fought < 2 ? "" : z(st.zTaken));
         } else {
-            tile(ms, bx0, y, tw, o, "DEALT /S", st.windows > 0 ? HudFormat.perSecond(st.dealtRate) : "--", Theme.TEXT, "");
-            tile(ms, bx0 + tw + 4, y, tw, o, "TAKEN /S", st.windows > 0 ? HudFormat.perSecond(st.takenRate) : "--", Theme.TEXT, "");
+            tile(ms, bx0, y, tw, o, "DEALT /S", st.windows > 0 ? HudFormat.perSecond(st.dealtRate) : "--", Skin.text(), "");
+            tile(ms, bx0 + tw + 4, y, tw, o, "TAKEN /S", st.windows > 0 ? HudFormat.perSecond(st.takenRate) : "--", Skin.text(), "");
         }
         y += 23.5f;
         if (on) {
             float p = st.progress();
-            GuiDraw.round(ms, bx0, y, bx1, y + 2.5f, 1.25f, 0x38FFFFFF);
-            if (p > 0) {
-                int c = trial ? Theme.AMBER : accent;
-                GuiDraw.round(ms, bx0, y, bx0 + Math.max(2.5f, (bx1 - bx0) * p), y + 2.5f, 1.25f, Theme.lighter(c), Theme.darker(c));
-            }
+            Skin.bar(ms, bx0, y, bx1, y + 2.5f, p, trial ? Theme.AMBER : accent, 0x38FFFFFF);
             y += 5.5f;
         }
-        GuiDraw.text(ms, GuiDraw.trim(st.caption(), bx1 - bx0, fine), bx0, y, fine, Theme.TEXT, true, false);
+        GuiDraw.text(ms, GuiDraw.trim(st.caption(), bx1 - bx0, fine), bx0, y, fine, Skin.text(), true, false);
         if (on) {
             y += 7.5f;
-            float sw = GuiDraw.text(ms, st.score(), bx0, y, fine, LABEL, true, false);
+            float sw = GuiDraw.text(ms, st.score(), bx0, y, fine, Skin.label(LABEL), true, false);
             int against = st.last.indexOf(" against");
             String lastLine = GuiDraw.trim(st.last.isEmpty() ? "" : "last: " + (against < 0 ? st.last : st.last.substring(0, against)), bx1 - bx0 - sw - 6, fine);
-            GuiDraw.text(ms, lastLine, bx1 - GuiDraw.width(lastLine, fine, false), y, fine, Theme.MUTED, true, false);
+            GuiDraw.text(ms, lastLine, bx1 - GuiDraw.width(lastLine, fine, false), y, fine, Skin.muted(), true, false);
             String whole = st.whole();
             if (!whole.isEmpty()) { // the numbers judged by whole fights
                 y += 7.5f;
-                GuiDraw.text(ms, GuiDraw.trim(whole, bx1 - bx0, fine), bx0, y, fine, st.wholeTrial ? Theme.AMBER : LABEL, true, false);
+                GuiDraw.text(ms, GuiDraw.trim(whole, bx1 - bx0, fine), bx0, y, fine, st.wholeTrial ? Theme.AMBER : Skin.label(LABEL), true, false);
             }
         }
         // the window being fought right now, as a hairline along the bottom edge
@@ -222,7 +217,7 @@ public final class AcsHud {
         float pulse = 0.5f + 0.5f * (float) Math.sin(now % 1200L / 1200.0 * 2 * Math.PI);
         for (int i = 0; i < n; i++) {
             float x = n == 1 ? (tx0 + tx1) / 2 : tx0 + (tx1 - tx0) * i / (n - 1);
-            int v = stops[i], col = LABEL;
+            int v = stops[i], col = Skin.label(LABEL);
             if (v == st.base) {
                 GuiDraw.rect(ms, x - 0.25f, cy - 3.5f, x + 0.25f, cy + 3.5f, 0x80FFFFFF);
             }
@@ -234,10 +229,10 @@ public final class AcsHud {
                 GuiDraw.round(ms, x - 4.5f, cy - 4.5f, x + 4.5f, cy + 4.5f, 4.5f, GuiDraw.alphaOf(Theme.AMBER, 0x18 + Math.round(0x48 * pulse)));
                 GuiDraw.round(ms, x - 2.5f, cy - 2.5f, x + 2.5f, cy + 2.5f, 2.5f, Theme.AMBER);
             } else {
-                GuiDraw.round(ms, x - 1.5f, cy - 1.5f, x + 1.5f, cy + 1.5f, 1.5f, LABEL);
+                GuiDraw.round(ms, x - 1.5f, cy - 1.5f, x + 1.5f, cy + 1.5f, 1.5f, Skin.label(LABEL));
             }
             if (v == st.value) { // in force this tick
-                GuiDraw.icon(ms, Icons.CHEVRON, x - 2.5f, cy - 8.5f, Theme.TEXT, 1f);
+                GuiDraw.icon(ms, Icons.CHEVRON, x - 2.5f, cy - 8.5f, Skin.text(), 1f);
             }
             if (n <= 7 || i == 0 || i == n - 1 || v == st.base || v == st.trusted || v == st.candidate) {
                 String label = st.show(v);
@@ -247,16 +242,16 @@ public final class AcsHud {
     }
 
     private static void tile(GuiGraphicsExtractor ms, float x, float y, float w, float opacity, String label, String big, int bigCol, String small) {
-        GuiDraw.round(ms, x, y, x + w, y + 21, 2.5f, (0x14 + Math.round(0x34 * opacity)) << 24);
-        GuiDraw.text(ms, label, x + 4, y + 3, fine, LABEL, true, false);
-        GuiDraw.text(ms, small, x + w - 4 - GuiDraw.width(small, fine, false), y + 3, fine, Theme.MUTED, true, false);
+        Skin.tile(ms, x, y, x + w, y + 21, (0x14 + Math.round(0x34 * opacity)) << 24);
+        GuiDraw.text(ms, label, x + 4, y + 3, fine, Skin.label(LABEL), true, false);
+        GuiDraw.text(ms, small, x + w - 4 - GuiDraw.width(small, fine, false), y + 3, fine, Skin.muted(), true, false);
         GuiDraw.text(ms, big, x + 4, y + 10, bigCol, true);
     }
 
     /** Green for a difference that is good for us and red for one that is not, once it is a standard error wide. */
     private static int tone(double z, boolean moreIsGood) {
         if (Math.abs(z) < 1) {
-            return Theme.TEXT;
+            return Skin.text();
         }
         return z > 0 == moreIsGood ? Theme.GREEN : Theme.DANGER;
     }

@@ -23,6 +23,7 @@ import baritone.api.BaritoneAPI;
 import baritone.gui.anim.Anim;
 import baritone.gui.model.HudFormat;
 import baritone.gui.render.GuiDraw;
+import baritone.gui.render.Skin;
 import baritone.gui.render.Icons;
 import baritone.gui.screen.OstinatoScreen;
 import baritone.gui.screen.Theme;
@@ -108,37 +109,31 @@ public final class PathStatusHud {
 
     static void draw(GuiGraphicsExtractor ms, PathStatus st, float x0, float y0, int accent, String task) {
         float x1 = x0 + W, y1 = y0 + H + (task != null ? TASK_H : 0);
-        GuiDraw.shadow(ms, x0, y0, x1, y1, 4, 6, 0x60);
-        GuiDraw.roundBorder(ms, x0, y0, x1, y1, 4, 0xB0303A4E, 0xD0141925, 0xC80B0E14);
-        GuiDraw.gradH(ms, x0 + 4, y0 + 0.5f, x1 - 4, y0 + 1, GuiDraw.alphaOf(accent, 0xAA), GuiDraw.alphaOf(Theme.BLUE, 0x10));
+        Skin.card(ms, x0, y0, x1, y1, accent, 0xB0303A4E, 0xD0141925, 0xC80B0E14, true);
         // header
-        GuiDraw.icon(ms, Icons.NOTE, x0 + 7, y0 + 6, accent, 0.8f);
-        GuiDraw.textColors(ms, "Ostinato", x0 + 17, y0 + 6, 1f, true, Theme.logoColors(accent, 8), true);
+        Skin.title(ms, "Ostinato", x0 + 7, y0 + 6, accent, System.currentTimeMillis());
         String state = st.state == PathStatus.State.IDLE ? "IDLE" : st.state.name();
-        int stateCol = st.state == PathStatus.State.PATHING ? Theme.GREEN : st.state == PathStatus.State.CALCULATING ? Theme.AMBER : Theme.MUTED;
+        int stateCol = st.state == PathStatus.State.PATHING ? Theme.GREEN : st.state == PathStatus.State.CALCULATING ? Theme.AMBER : Skin.muted();
         float pw = GuiDraw.width(state, 0.5f, false) + 12;
-        GuiDraw.round(ms, x1 - 7 - pw, y0 + 5.5f, x1 - 7, y0 + 14.5f, 2.5f, GuiDraw.alphaOf(stateCol, 0x2A));
+        Skin.pill(ms, x1 - 7 - pw, y0 + 5.5f, x1 - 7, y0 + 14.5f, stateCol, 0x2A);
         GuiDraw.icon(ms, Icons.DOT, x1 - 7 - pw + 3.5f, y0 + 8.5f, stateCol, 0.75f);
         GuiDraw.text(ms, state, x1 - 7 - pw + 8.5f, y0 + 8, 0.5f, stateCol, false, false);
-        GuiDraw.rect(ms, x0 + 6, y0 + 19, x1 - 6, y0 + 19.5f, 0x16FFFFFF);
+        Skin.divider(ms, x0 + 6, x1 - 6, y0 + 19, 0x16FFFFFF);
         // goal
         float y = y0 + 24;
-        GuiDraw.text(ms, "GOAL", x0 + 7, y + 1, 0.5f, Theme.DIM, false, false);
+        GuiDraw.text(ms, "GOAL", x0 + 7, y + 1, 0.5f, Skin.dim(), false, false);
         String dist = HudFormat.distance(st.distance);
         float dw = GuiDraw.width(dist, 0.5f, false);
-        GuiDraw.text(ms, GuiDraw.trim(st.goal.isEmpty() ? "none" : st.goal, W - 34 - dw - 10, 1f), x0 + 27, y - 1, Theme.TEXT, true);
-        GuiDraw.text(ms, dist, x1 - 7 - dw, y + 1, 0.5f, Theme.MUTED, false, false);
+        GuiDraw.text(ms, GuiDraw.trim(st.goal.isEmpty() ? "none" : st.goal, W - 34 - dw - 10, 1f), x0 + 27, y - 1, Skin.text(), true);
+        GuiDraw.text(ms, dist, x1 - 7 - dw, y + 1, 0.5f, Skin.muted(), false, false);
         // progress through the current segment
         y += 12;
         float bx0 = x0 + 7, bx1 = x1 - 7;
         float p = st.length > 0 ? st.position / (float) st.length : 0f;
-        GuiDraw.round(ms, bx0, y, bx1, y + 3, 1.5f, 0xFF1B212D);
-        if (p > 0) {
-            GuiDraw.round(ms, bx0, y, bx0 + Math.max(3, (bx1 - bx0) * p), y + 3, 1.5f, Theme.lighter(accent), Theme.darker(accent));
-        }
+        Skin.bar(ms, bx0, y, bx1, y + 3, p, accent, 0xFF1B212D);
         y += 6;
         GuiDraw.text(ms, st.length > 0 ? "movement " + st.position + "/" + st.length : (st.state == PathStatus.State.CALCULATING ? "calculating..." : ""),
-                bx0, y, 0.5f, Theme.MUTED, false, false);
+                bx0, y, 0.5f, Skin.muted(), false, false);
         String nx = st.nextPlanned ? "next segment planned" : "";
         GuiDraw.text(ms, nx, bx1 - GuiDraw.width(nx, 0.5f, false), y, 0.5f, 0xFF9DB4F0, false, false);
         // stat tiles
@@ -150,35 +145,35 @@ public final class PathStatusHud {
         y += 25;
         if (!st.mover.isEmpty()) {
             float mw = GuiDraw.width(st.mover, 0.5f, false) + 8;
-            GuiDraw.round(ms, bx0, y, bx0 + mw, y + 8, 2, GuiDraw.alphaOf(accent, 0x2A));
+            Skin.pill(ms, bx0, y, bx0 + mw, y + 8, accent, 0x2A);
             GuiDraw.text(ms, st.mover, bx0 + 4, y + 2, 0.5f, accent, false, false);
-            GuiDraw.text(ms, GuiDraw.trim(st.movement, bx1 - bx0 - mw - 5, 1f), bx0 + mw + 5, y, Theme.TEXT, false);
+            GuiDraw.text(ms, GuiDraw.trim(st.movement, bx1 - bx0 - mw - 5, 1f), bx0 + mw + 5, y, Skin.text(), false);
         }
         y += 10;
-        GuiDraw.text(ms, GuiDraw.trim(st.process, 70, 0.5f), bx0, y, 0.5f, Theme.DIM, false, false);
+        GuiDraw.text(ms, GuiDraw.trim(st.process, 70, 0.5f), bx0, y, 0.5f, Skin.dim(), false, false);
         if (!st.nextMovement.isEmpty()) {
             String nm = "next: " + st.nextMovement;
-            GuiDraw.text(ms, nm, bx1 - GuiDraw.width(nm, 0.5f, false), y, 0.5f, Theme.MUTED, false, false);
+            GuiDraw.text(ms, nm, bx1 - GuiDraw.width(nm, 0.5f, false), y, 0.5f, Skin.muted(), false, false);
         }
         if (task != null) {
             // "Task 2/5: Mine iron_ore 12/16" -> TASK 2/5 | Mine iron_ore | 12/16
             y += 10;
-            GuiDraw.rect(ms, x0 + 6, y, x1 - 6, y + 0.5f, 0x16FFFFFF);
+            Skin.divider(ms, x0 + 6, x1 - 6, y, 0x16FFFFFF);
             y += 3.5f;
-            GuiDraw.text(ms, "TASK", bx0, y + 1.5f, 0.5f, Theme.DIM, false, false);
+            GuiDraw.text(ms, "TASK", bx0, y + 1.5f, 0.5f, Skin.dim(), false, false);
             String body = task.startsWith("Task ") ? task.substring(5) : task;
             int colon = body.indexOf(": ");
             String idx = colon > 0 ? body.substring(0, colon) : "";
             String rest = colon > 0 ? body.substring(colon + 2) : body;
             float iw = GuiDraw.text(ms, idx, bx0 + 14, y, accent, false);
-            GuiDraw.text(ms, GuiDraw.trim(rest, bx1 - bx0 - 18 - iw, 1f), bx0 + 18 + iw, y, Theme.TEXT, false);
+            GuiDraw.text(ms, GuiDraw.trim(rest, bx1 - bx0 - 18 - iw, 1f), bx0 + 18 + iw, y, Skin.text(), false);
         }
     }
 
     private static void tile(GuiGraphicsExtractor ms, float x, float y, float w, String label, String big, String small) {
-        GuiDraw.round(ms, x, y, x + w, y + 21, 2.5f, 0x0FFFFFFF);
-        GuiDraw.text(ms, label, x + 5, y + 3.5f, 0.5f, Theme.DIM, false, false);
-        float bw = GuiDraw.text(ms, big, x + 5, y + 10, Theme.TEXT, true);
-        GuiDraw.text(ms, small, x + 7 + bw, y + 13, 0.5f, Theme.MUTED, false, false);
+        Skin.tile(ms, x, y, x + w, y + 21, 0x0FFFFFFF);
+        GuiDraw.text(ms, label, x + 5, y + 3.5f, 0.5f, Skin.dim(), false, false);
+        float bw = GuiDraw.text(ms, big, x + 5, y + 10, Skin.text(), true);
+        GuiDraw.text(ms, small, x + 7 + bw, y + 13, 0.5f, Skin.muted(), false, false);
     }
 }
