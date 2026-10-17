@@ -126,10 +126,11 @@ public final class PathBench {
             String[] p = spec.split(":");
             double factor = p.length > 1 ? Double.parseDouble(p[1]) : 0;
             int radius = p.length > 2 ? Integer.parseInt(p[2]) : 1;
-            // Ostinato: hpa:factor:radius:levels:coarseShift:candidates (multi-level and second-candidate options)
+            // Ostinato: hpa:factor:radius:levels:coarseShift:candidates[:bi] (multi-level, second-candidate, bidirectional)
             int levels = p.length > 3 ? Integer.parseInt(p[3]) : 1;
             int fshift = p.length > 4 ? Integer.parseInt(p[4]) : 2;
             int cands = p.length > 5 ? Integer.parseInt(p[5]) : 1;
+            boolean bi = p.length > 6 && p[6].equals("bi"); // Ostinato: ...:bi = bidirectional abstract route search
             boolean warm = System.getenv("OSTINATO_BENCH_WARM") != null;
             return (s, g, c) -> {
                 Baritone.settings().pathingHierarchyHeuristicFactor.value = factor;
@@ -137,6 +138,7 @@ public final class PathBench {
                 Baritone.settings().pathingHierarchyLevels.value = levels;
                 Baritone.settings().pathingHierarchyCoarseFactorShift.value = fshift;
                 Baritone.settings().pathingHierarchyCandidates.value = cands;
+                Baritone.settings().pathingHierarchyBidirectional.value = bi;
                 baritone.pathing.calc.hierarchy.SectionGraph graph = warm ? WARM.computeIfAbsent(c.bsi, k -> new baritone.pathing.calc.hierarchy.SectionGraph()) : new baritone.pathing.calc.hierarchy.SectionGraph();
                 return new HierarchicalPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, graph, 1);
             };
