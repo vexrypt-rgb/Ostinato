@@ -17,71 +17,235 @@
 
 package baritone.gui.studio;
 
-/** Blocks the studio can place. Index 0 is air; a cell stores {@code index + 1}. */
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Every placeable block, stored as a block-state registry id. Cell 0 is air.
+ * {@code .ostinato} files still write names ({@code stone} or {@code minecraft:stone},
+ * and {@code oak_stairs[facing=east,...]} when the state is not the default).
+ */
 public final class BlockPalette {
 
-    public static final class Entry {
-        public final String id;
-        public final String label;
-        public final int argb;
+    private static final Map<String, Integer> FALLBACK = new HashMap<>();
+    private static final Map<Integer, Integer> COLOR = new HashMap<>();
+    private static boolean registryBroken;
+    private static int[] placeable = new int[0];
+    private static boolean listed;
 
-        Entry(String id, String label, int argb) {
-            this.id = id;
-            this.label = label;
-            this.argb = argb;
+    static {
+        String[] names = {
+                "stone", "cobblestone", "oak_planks", "spruce_planks", "oak_log", "bricks", "stone_bricks",
+                "deepslate", "sandstone", "quartz_block", "glass", "white_concrete", "orange_concrete",
+                "yellow_concrete", "lime_concrete", "light_blue_concrete", "blue_concrete", "purple_concrete",
+                "pink_concrete", "red_concrete", "black_concrete", "iron_block", "gold_block", "obsidian"
+        };
+        for (int i = 0; i < names.length; i++) {
+            FALLBACK.put(names[i], i + 1);
         }
     }
-
-    public static final Entry[] ALL = {
-            new Entry("stone", "Stone", 0xFF8E8E8E),
-            new Entry("cobblestone", "Cobble", 0xFF6B6B6B),
-            new Entry("oak_planks", "Oak", 0xFFC4A36A),
-            new Entry("spruce_planks", "Spruce", 0xFF6E5433),
-            new Entry("oak_log", "Log", 0xFF6B542E),
-            new Entry("bricks", "Bricks", 0xFFA35040),
-            new Entry("stone_bricks", "Brick stone", 0xFF7C7C7A),
-            new Entry("deepslate", "Deepslate", 0xFF3A3A42),
-            new Entry("sandstone", "Sandstone", 0xFFE4D7A4),
-            new Entry("quartz_block", "Quartz", 0xFFEDEAE4),
-            new Entry("glass", "Glass", 0x99D0EEF4),
-            new Entry("white_concrete", "White", 0xFFD0D0D0),
-            new Entry("orange_concrete", "Orange", 0xFFE07B2C),
-            new Entry("yellow_concrete", "Yellow", 0xFFF1C233),
-            new Entry("lime_concrete", "Lime", 0xFF70C244),
-            new Entry("light_blue_concrete", "Sky", 0xFF4AA3D8),
-            new Entry("blue_concrete", "Blue", 0xFF2F4E9C),
-            new Entry("purple_concrete", "Purple", 0xFF7B419E),
-            new Entry("pink_concrete", "Pink", 0xFFE58CB2),
-            new Entry("red_concrete", "Red", 0xFFB23333),
-            new Entry("black_concrete", "Black", 0xFF1C1C1C),
-            new Entry("iron_block", "Iron", 0xFFD9D9D9),
-            new Entry("gold_block", "Gold", 0xFFF6D454),
-            new Entry("obsidian", "Obsidian", 0xFF241433)
-    };
 
     private BlockPalette() {}
 
-    public static String name(int cell) {
-        if (cell <= 0 || cell > ALL.length) {
-            return "air";
-        }
-        return ALL[cell - 1].id;
-    }
-
-    public static int cell(String name) {
-        for (int i = 0; i < ALL.length; i++) {
-            if (ALL[i].id.equals(name)) {
-                return i + 1;
-            }
-        }
-        return 0;
-    }
-
-    public static int argb(int cell) {
-        if (cell <= 0 || cell > ALL.length) {
+    /** Registry id of this state, or 0 for air and for anything the registry cannot name. */
+    public static int idOf(BlockState state) {
+        if (state == null || state.isAir() || !registryOk()) {
             return 0;
         }
-        return ALL[cell - 1].argb;
+        try {
+            int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+            return id <= 0 ? 0 : id;
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    /** The state for a cell, or null when it is air or the registry is down. */
+    public static BlockState stateOf(int cell) {
+        if (cell <= 0 || !registryOk()) {
+            return null;
+        }
+        try {
+            BlockState state = Block.BLOCK_STATE_REGISTRY.byId(cell);
+            if (state == null || state.isAir()) {
+                return null;
+            }
+            return state;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Accepts {@code stone}, {@code minecraft:stone}, and {@code name[prop=value,...]}. Unknown names are 0. */
+    public static int cell(String token) {
+        if (token == null || token.isBlank()) {
+            return 0;
+        }
+        String raw = token.trim();
+        int bracket = raw.indexOf('[');
+        String body = bracket >= 0 ? raw.substring(0, bracket) : raw;
+        String props = bracket >= 0 && raw.endsWith("]") ? raw.substring(bracket + 1, raw.length() - 1) : "";
+        if (!body.contains(":")) {
+            body = "minecraft:" + body;
+        }
+        if (!registryOk()) {
+            return fallback(raw);
+        }
+        try {
+            Optional<? extends net.minecraft.core.Holder.Reference<Block>> found = BuiltInRegistries.BLOCK.get(Identifier.parse(body));
+            if (found.isEmpty()) {
+                return 0;
+            }
+            Block block = found.get().value();
+            BlockState state = block.defaultBlockState();
+            if (!props.isEmpty()) {
+                for (String part : props.split(",")) {
+                    String[] kv = part.split("=", 2);
+                    if (kv.length != 2) {
+                        continue;
+                    }
+                    Property<?> property = block.getStateDefinition().getProperty(kv[0]);
+                    if (property != null) {
+                        state = set(state, property, kv[1]);
+                    }
+                }
+            }
+            return idOf(state);
+        } catch (Throwable ignored) {
+            return fallback(raw);
+        }
+    }
+
+    /** File name for a cell. Minecraft blocks omit the namespace. Air is {@code air}. */
+    public static String name(int cell) {
+        if (cell <= 0) {
+            return "air";
+        }
+        BlockState state = stateOf(cell);
+        if (state == null) {
+            for (Map.Entry<String, Integer> e : FALLBACK.entrySet()) {
+                if (e.getValue() == cell) {
+                    return e.getKey();
+                }
+            }
+            return "air";
+        }
+        try {
+            Identifier key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+            String base = "minecraft".equals(key.getNamespace()) ? key.getPath() : key.toString();
+            if (state.equals(state.getBlock().defaultBlockState())) {
+                return base;
+            }
+            StringBuilder sb = new StringBuilder(base).append('[');
+            boolean first = true;
+            for (Property<?> property : state.getProperties()) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append(property.getName()).append('=').append(valueName(state, property));
+            }
+            return sb.append(']').toString();
+        } catch (Throwable ignored) {
+            return "air";
+        }
+    }
+
+    /** Palette label, without block-state properties. */
+    public static String label(int cell) {
+        String n = name(cell);
+        int bracket = n.indexOf('[');
+        if (bracket >= 0) {
+            n = n.substring(0, bracket);
+        }
+        int colon = n.indexOf(':');
+        if (colon >= 0) {
+            n = n.substring(colon + 1);
+        }
+        return n.replace('_', ' ');
+    }
+
+    /** Default state of every non-air block, sorted by name. Cached. */
+    public static int[] placeable() {
+        if (listed) {
+            return placeable;
+        }
+        listed = true;
+        if (!registryOk()) {
+            placeable = FALLBACK.values().stream().mapToInt(Integer::intValue).sorted().toArray();
+            return placeable;
+        }
+        try {
+            List<Integer> ids = new ArrayList<>();
+            for (Block block : BuiltInRegistries.BLOCK) {
+                int id = idOf(block.defaultBlockState());
+                if (id > 0) {
+                    ids.add(id);
+                }
+            }
+            ids.sort(Comparator.comparing(BlockPalette::name));
+            placeable = ids.stream().mapToInt(Integer::intValue).toArray();
+        } catch (Throwable ignored) {
+            placeable = FALLBACK.values().stream().mapToInt(Integer::intValue).sorted().toArray();
+        }
+        return placeable;
+    }
+
+    public static ItemStack icon(int cell) {
+        BlockState state = stateOf(cell);
+        if (state == null) {
+            return ItemStack.EMPTY;
+        }
+        try {
+            Item item = state.getBlock().asItem();
+            if (item == null || item == Items.AIR) {
+                return ItemStack.EMPTY;
+            }
+            return new ItemStack(item);
+        } catch (Throwable ignored) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    /** Map colour, or a stable grey when the block cannot answer without a world. */
+    public static int argb(int cell) {
+        if (cell <= 0) {
+            return 0;
+        }
+        Integer cached = COLOR.get(cell);
+        if (cached != null) {
+            return cached;
+        }
+        int color = 0xFF8E8E8E;
+        BlockState state = stateOf(cell);
+        if (state != null) {
+            try {
+                int col = state.getMapColor(null, BlockPos.ZERO).col;
+                if (col != 0) {
+                    color = 0xFF000000 | (col & 0xFFFFFF);
+                }
+            } catch (Throwable ignored) {
+                int h = name(cell).hashCode();
+                color = 0xFF000000 | (h & 0x00FFFFFF);
+            }
+        }
+        COLOR.put(cell, color);
+        return color;
     }
 
     /** Darken or lighten an opaque-or-translucent colour. {@code mul} is about 1 for the lit face. */
@@ -91,6 +255,43 @@ public final class BlockPalette {
         int g = clamp(((argb >>> 8) & 0xFF) * mul);
         int b = clamp((argb & 0xFF) * mul);
         return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int fallback(String token) {
+        String n = token.trim().toLowerCase(Locale.ROOT);
+        int bracket = n.indexOf('[');
+        if (bracket >= 0) {
+            n = n.substring(0, bracket);
+        }
+        if (n.startsWith("minecraft:")) {
+            n = n.substring("minecraft:".length());
+        }
+        Integer id = FALLBACK.get(n);
+        return id == null ? 0 : id;
+    }
+
+    private static boolean registryOk() {
+        if (registryBroken) {
+            return false;
+        }
+        try {
+            return BuiltInRegistries.BLOCK.size() > 0;
+        } catch (Throwable ignored) {
+            registryBroken = true;
+            return false;
+        }
+    }
+
+    private static <T extends Comparable<T>> BlockState set(BlockState state, Property<T> property, String value) {
+        Optional<T> parsed = property.getValue(value);
+        if (parsed.isEmpty()) {
+            return state;
+        }
+        return state.setValue(property, parsed.get());
+    }
+
+    private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> property) {
+        return property.getName(state.getValue(property));
     }
 
     private static int clamp(float c) {

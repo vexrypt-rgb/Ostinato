@@ -18,9 +18,6 @@
 package baritone.gui.studio;
 
 import baritone.utils.schematic.StaticSchematic;
-import net.minecraft.core.Holder;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -67,12 +64,7 @@ public final class OstinatoSchematic extends StaticSchematic {
     }
 
     private static BlockState state(int cell, BlockState air) {
-        if (cell <= 0) {
-            return air;
-        }
-        return BuiltInRegistries.BLOCK.get(Identifier.parse("minecraft:" + BlockPalette.name(cell)))
-                .map(Holder.Reference::value)
-                .orElse(Blocks.AIR)
-                .defaultBlockState();
+        BlockState state = BlockPalette.stateOf(cell);
+        return state == null ? air : state;
     }
 }

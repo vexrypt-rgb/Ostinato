@@ -32,8 +32,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(AvatarRenderer.class)
 public class MixinPlayerRenderer {
 
-    // While freecam is on, draw the bot as a translucent ghost of its skin (vanilla's invisible-but-seen path)
-    // with a tag saying what it is doing.
+    // While freecam is on, keep the bot's body visible (F5 and the inventory doll both come through here)
+    // and tag it with what it is doing. Marking it invisible hides it from a camera that is not the player.
     @Inject(
             method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
             at = @At("TAIL")
@@ -43,7 +43,7 @@ public class MixinPlayerRenderer {
             return;
         }
         FreecamBehavior.ghostState = state;
-        state.isInvisible = true;
+        state.isInvisible = false;
         state.isInvisibleToPlayer = false;
         state.nameTag = Component.literal(FreecamBehavior.botStatus());
         state.nameTagAttachment = new Vec3(0, player.getBbHeight() + 0.5, 0);

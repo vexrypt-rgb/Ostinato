@@ -1648,6 +1648,9 @@ public final class OstinatoScreen extends Screen {
         if (showStudio() && studio.nameFocused()) {
             return studio.charTyped(c);
         }
+        if (showStudio() && !searchFocused && studio.charTyped(c)) {
+            return true;
+        }
         if (!searchFocused && (showTasks() || showStudio() || showArcade())) {
             return false; // typing in Studio, Arcade, or Tasks does not jump to settings search
         }

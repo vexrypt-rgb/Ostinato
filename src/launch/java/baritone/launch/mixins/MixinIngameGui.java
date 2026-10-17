@@ -17,15 +17,20 @@
 
 package baritone.launch.mixins;
 
+import baritone.behavior.FreecamBehavior;
 import baritone.gui.hud.AcsHud;
+import baritone.gui.hud.FreecamInventoryHud;
 import baritone.gui.hud.PathStatusHud;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Draws the Ostinato path status and autotune cards after the vanilla HUD.
@@ -40,5 +45,15 @@ public class MixinIngameGui {
     private void onRenderIngameGui(GuiGraphicsExtractor graphics, DeltaTracker delta, CallbackInfo ci) {
         PathStatusHud.render(graphics, delta.getGameTimeDeltaPartialTick(false));
         AcsHud.render(graphics);
+        FreecamInventoryHud.render(graphics, delta.getGameTimeDeltaPartialTick(false));
+    }
+
+    // Hotbar, health, food and air all ask the camera entity for a Player. The freecam body is not one,
+    // so those bars would otherwise vanish. Keep drawing the real player's HUD.
+    @Inject(method = "getCameraPlayer", at = @At("HEAD"), cancellable = true)
+    private void freecamHudPlayer(CallbackInfoReturnable<Player> cir) {
+        if (FreecamBehavior.activeCamera() != null && Minecraft.getInstance().player != null) {
+            cir.setReturnValue(Minecraft.getInstance().player);
+        }
     }
 }

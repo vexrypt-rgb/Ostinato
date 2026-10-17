@@ -24,12 +24,23 @@ import baritone.gui.studio.BlockPalette;
 import baritone.gui.studio.StudioCamera;
 import baritone.gui.studio.StudioPick;
 import baritone.gui.studio.StudioVolume;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-/** Studio camera, picking, and the arcade rules. None of this boots a client. */
+/** Studio camera, picking, the block palette, and the arcade rules. Boots the registries, not a client. */
 public class StudioLogicTest {
+
+    @BeforeClass
+    public static void boot() {
+        // Load the block registry first; a test that touches it before Bootstrap leaves it broken for the whole JVM.
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
 
     @Test
     public void cameraLooksDownPlusZAndProjectsTheTargetToCenter() {
@@ -103,9 +114,19 @@ public class StudioLogicTest {
 
     @Test
     public void volumeRoundTripsAndRejectsUnknownBlocks() {
-        assertEquals("stone", BlockPalette.name(1));
-        assertEquals(1, BlockPalette.cell("stone"));
+        int stone = BlockPalette.cell("stone");
+        assertTrue(stone > 0);
+        assertEquals(stone, BlockPalette.cell("minecraft:stone"));
+        assertEquals("stone", BlockPalette.name(stone));
         assertEquals(0, BlockPalette.cell("not_a_block"));
+        boolean listed = false;
+        for (int id : BlockPalette.placeable()) {
+            if (id == stone) {
+                listed = true;
+                break;
+            }
+        }
+        assertTrue(listed);
         assertEquals(0x99, (BlockPalette.shade(0x99D0EEF4, 0.5f) >>> 24) & 0xFF);
 
         StudioVolume vol = new StudioVolume(4, 3, 4);
