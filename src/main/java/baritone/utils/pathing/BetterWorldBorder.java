@@ -37,6 +37,14 @@ public class BetterWorldBorder {
         this.maxZ = border.getMaxZ();
     }
 
+    // Ostinato: plain bounds, for the headless pathfinding benchmark (no Minecraft WorldBorder needed). New, replaces nothing.
+    public BetterWorldBorder(double minX, double maxX, double minZ, double maxZ) {
+        this.minX = minX;
+        this.maxX = maxX;
+        this.minZ = minZ;
+        this.maxZ = maxZ;
+    }
+
     public boolean entirelyContains(int x, int z) {
         return x + 1 > minX && x < maxX && z + 1 > minZ && z < maxZ;
     }

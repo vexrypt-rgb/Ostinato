@@ -194,6 +194,11 @@ class Path extends PathBase {
         return Collections.unmodifiableList(path);
     }
 
+    /** Ostinato: total A* cost (ticks) of the end node, for benchmarks and cost-equality tests. New, replaces nothing. */
+    public double totalCost() {
+        return nodes.get(nodes.size() - 1).cost;
+    }
+
     @Override
     public int getNumNodesConsidered() {
         return numNodes;

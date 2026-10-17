@@ -548,6 +548,69 @@ public final class Settings {
      */
     public final Setting<Double> costHeuristic = new Setting<>(3.563);
 
+    /**
+     * Ostinato: explicit weighted A* for far segments. When the segment's start is at least
+     * {@link #pathingFarSegmentDistance} blocks (by the goal heuristic) from the goal, A* orders its open set by
+     * g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly,
+     * Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).
+     * Ostinato: default 2 (user-approved; benchmark: ~5.8x faster on far queries, +2.4% mean path cost, no failures).
+     */
+    public final Setting<Double> pathingFarSegmentWeight = new Setting<>(2.0);
+
+    /**
+     * Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for
+     * {@link #pathingFarSegmentWeight} to apply.
+     */
+    public final Setting<Integer> pathingFarSegmentDistance = new Setting<>(128);
+
+    /**
+     * Ostinato: plan through the section-level (16x16x16) abstract graph first and keep block-level A* inside the
+     * resulting corridor (HierarchicalPathFinder). Falls back to plain A* when there is no abstract route. Off until proven.
+     */
+    public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
+
+    /** Ostinato: how many sections beyond the start/goal box the abstract search may detour through. */
+    public final Setting<Integer> pathingHierarchyMargin = new Setting<>(3);
+
+    /** Ostinato: corridor half-width in sections around the abstract route. */
+    public final Setting<Integer> pathingHierarchyCorridorRadius = new Setting<>(1);
+
+    /**
+     * Ostinato: levels of the multi-level (Distant Horizons-style) hierarchy used by {@link #pathingHierarchical}.
+     * 1 = 16^3 sections only; 2 = plan on a coarse level first (cells of 16 &lt;&lt; pathingHierarchyCoarseFactorShift
+     * blocks), then refine on sections inside the coarse corridor, then blocks inside the section corridor.
+     */
+    public final Setting<Integer> pathingHierarchyLevels = new Setting<>(1);
+
+    /** Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly. */
+    public final Setting<Integer> pathingHierarchyMinDistance = new Setting<>(64);
+
+    /** Ostinato: coarse cell size as a shift over 16-block sections: 2 = 64 blocks, 3 = 128, 4 = 256. */
+    public final Setting<Integer> pathingHierarchyCoarseFactorShift = new Setting<>(2);
+
+    /**
+     * Ostinato: abstract route candidates to try before falling back to plain A*. 2 = when the first corridor's block
+     * search misses, re-plan the abstract route with the first one's sections penalised and search that corridor.
+     */
+    public final Setting<Integer> pathingHierarchyCandidates = new Setting<>(1);
+
+    /** Ostinato: cost multiplier on the first candidate's sections when looking for the second. */
+    public final Setting<Double> pathingHierarchyCandidatePenalty = new Setting<>(3.0);
+
+    /**
+     * Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic
+     * (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.
+     */
+    public final Setting<Double> pathingHierarchyHeuristicFactor = new Setting<>(0.0);
+
+    /**
+     * Ostinato: find the abstract route with a bidirectional search from start and goal at once instead of one backward
+     * search from the goal. Same route cost, fewer sections priced. Ignored while pathingHierarchyHeuristicFactor is
+     * above 0, which needs the full backward cost-to-go map.
+     */
+    public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(true);
+
+
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**
      * The maximum number of times it will fetch outside loaded or cached chunks before assuming that

@@ -112,6 +112,10 @@ allprojects {
             it.options.release = targetVersion
         }
     }
+
+    tasks.named('test') {
+        maxHeapSize = '3g'
+    }
 }
 
 unimined.minecraft {
