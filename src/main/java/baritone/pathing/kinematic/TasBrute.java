@@ -103,6 +103,8 @@ public final class TasBrute {
         final boolean jump;
         final int depth;
         double score;
+        /** The merge key; also breaks ties in score, so the beam's order never depends on hash-table layout. */
+        long key;
         boolean flew;
 
         Node(PlayerSim s, float yaw, Node parent, int input, boolean jump, int depth) {
@@ -123,6 +125,8 @@ public final class TasBrute {
     public float[] turns = {-1, -0.5f, -0.2f, 0, 0.2f, 0.5f, 1};
     public boolean allowBack = false;
     public boolean debug = false;
+    /** Ostinato: run the search in the native library when it is loaded ({@link NativeTas}); the answer is the same. */
+    public boolean nativeSearch = true;
     /** Lowest feet y before a branch is dropped (fell past the landing). */
     public double floorY = Double.NEGATIVE_INFINITY;
 
@@ -134,6 +138,20 @@ public final class TasBrute {
 
     /** Searches from {@code start} (a standing or moving state, camera at {@code yaw0}) to the landing. */
     public Result search(PlayerSim start, float yaw0, Landing goal) {
+        if (nativeSearch && !debug) {
+            NativeTas.Answer a = NativeTas.search(this, world, start, yaw0, goal);
+            if (a != null) {
+                if (NativeTas.verify) {
+                    NativeTas.check(a.plan(), searchJava(start, yaw0, goal));
+                }
+                return a.plan();
+            }
+        }
+        return searchJava(start, yaw0, goal);
+    }
+
+    /** The reference search, and the fallback whenever the native one does not answer. */
+    Result searchJava(PlayerSim start, float yaw0, Landing goal) {
         field = new Field(world, start, goal);
         double floor = Math.max(floorY, Math.min(start.y, goal.y - 1) - 1.0);
         List<Node> layer = new ArrayList<>();
@@ -158,10 +176,10 @@ public final class TasBrute {
                                 continue; // falling below the landing's top: it can only come down lower now
                             }
                             m.score = score(c, goal.y);
-                            long key = key(c, yaw);
-                            Node old = next.get(key);
+                            m.key = key(c, yaw);
+                            Node old = next.get(m.key);
                             if (old == null || m.score < old.score) {
-                                next.put(key, m);
+                                next.put(m.key, m);
                             }
                         }
                     }
@@ -172,12 +190,12 @@ public final class TasBrute {
             for (Node n : next.values()) {
                 (n.s.onGround ? ground : air).add(n);
             }
-            ground.sort(Comparator.comparingDouble(n -> n.score));
-            air.sort(Comparator.comparingDouble(n -> n.score));
+            ground.sort(BEAM_ORDER);
+            air.sort(BEAM_ORDER);
             int g = Math.min(ground.size(), Math.max(beam / 2, beam - air.size()));
             layer = new ArrayList<>(ground.subList(0, g));
             layer.addAll(air.subList(0, Math.min(air.size(), beam - g)));
-            layer.sort(Comparator.comparingDouble(n -> n.score));
+            layer.sort(BEAM_ORDER);
             if (debug && !layer.isEmpty()) {
                 PlayerSim b = layer.get(0).s;
                 System.out.printf("TASDBG t=%d n=%d best=%.3f pos=%.3f,%.3f,%.3f og=%b%n", t, layer.size(), layer.get(0).score, b.x, b.y, b.z, b.onGround);
@@ -188,6 +206,8 @@ public final class TasBrute {
         }
         return null;
     }
+
+    private static final Comparator<Node> BEAM_ORDER = Comparator.<Node>comparingDouble(n -> n.score).thenComparingLong(n -> n.key);
 
     /** The landing has to last: three ticks with no input and the player still stands on the block. */
     private boolean holds(PlayerSim landed, float yaw, Landing goal) {
@@ -381,10 +401,17 @@ public final class TasBrute {
             for (int x = PlayerSim.floor(minX); x <= PlayerSim.floor(maxX); x++)
                 for (int y = PlayerSim.floor(minY) - 1; y <= PlayerSim.floor(maxY); y++)
                     for (int z = PlayerSim.floor(minZ); z <= PlayerSim.floor(maxZ); z++) {
-                        double[][] b = cells.get(k(x, y, z));
-                        if (b == null) continue;
-                        for (double[] q : b) out.add(new double[]{x + q[0], y + q[1], z + q[2], x + q[3], y + q[4], z + q[5]});
+                        cellBoxes(x, y, z, out);
                     }
+        }
+
+        @Override
+        public boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+            double[][] b = cells.get(k(x, y, z));
+            if (b != null) {
+                for (double[] q : b) out.add(new double[]{x + q[0], y + q[1], z + q[2], x + q[3], y + q[4], z + q[5]});
+            }
+            return true;
         }
 
         @Override

@@ -30,7 +30,8 @@ jobs:
       - name: Build
         run: ./gradlew build -Pmod_version="$(git describe --always --tags --first-parent | cut -c2-)"
       - name: Test
-        run: ./gradlew test
+        # -Postinato_native_require: the parity tests must run against the Rust library (cargo is preinstalled), not skip
+        run: ./gradlew test -Postinato_native_require
       - uses: actions/upload-artifact@v7
         with:
           name: Artifacts-${{ matrix.version }}

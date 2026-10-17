@@ -47,6 +47,14 @@ public final class PlayerSim {
         default boolean sticky(int x, int y, int z) {
             return false;
         }
+
+        /**
+         * Ostinato: adds the boxes of one cell, in world coordinates and in the order {@link #collect} lists them, and
+         * returns true; false if this world cannot list a single cell, which keeps searches over it out of native code.
+         */
+        default boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
@@ -108,7 +116,8 @@ public final class PlayerSim {
         // Vanilla: the key starts a sprint; only losing forward input or a wall stops it.
         sprinting = forward && !collidedH && (sprint || sprinting);
         double yaw = Math.toRadians(yawDeg);
-        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        // Ostinato: StrictMath, whose bits the spec pins (fdlibm), so the native search gives the same answer
+        double sin = StrictMath.sin(yaw), cos = StrictMath.cos(yaw);
         if (jumpTicks > 0) jumpTicks--;
         if (!jump) jumpTicks = 0;
         if (jump && onGround && jumpTicks == 0) {

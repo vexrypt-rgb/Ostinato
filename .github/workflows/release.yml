@@ -15,8 +15,65 @@ permissions:
   contents: write
 
 jobs:
+  # The Rust library (native/, docs/RUST_NATIVE.md) for the six platforms the 26.3 jar carries. Linux links against
+  # glibc 2.17 (cargo-zigbuild) so old distros load it; Windows links the C runtime statically (native/.cargo).
+  natives:
+    name: Native ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: windows-x86_64, os: windows-latest, target: x86_64-pc-windows-msvc, lib: ostinato_native.dll, test: true }
+          - { platform: windows-aarch64, os: windows-latest, target: aarch64-pc-windows-msvc, lib: ostinato_native.dll }
+          - { platform: linux-x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu, glibc: '.2.17', lib: libostinato_native.so, test: true }
+          - { platform: linux-aarch64, os: ubuntu-latest, target: aarch64-unknown-linux-gnu, glibc: '.2.17', lib: libostinato_native.so }
+          - { platform: macos-aarch64, os: macos-latest, target: aarch64-apple-darwin, lib: libostinato_native.dylib, test: true }
+          - { platform: macos-x86_64, os: macos-latest, target: x86_64-apple-darwin, lib: libostinato_native.dylib }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --target ${{ matrix.target }}
+          rustup default stable
+      - if: matrix.glibc
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+      - if: matrix.glibc
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Unit tests
+        if: matrix.test
+        shell: bash
+        working-directory: native
+        run: cargo test --release --target ${{ matrix.target }}
+      - name: Build
+        shell: bash
+        working-directory: native
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+        run: |
+          if [ -n "${{ matrix.glibc }}" ]; then
+            cargo zigbuild --release --target ${{ matrix.target }}${{ matrix.glibc }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+          mkdir -p ../natives/${{ matrix.platform }}
+          cp -v target/${{ matrix.target }}/release/${{ matrix.lib }} ../natives/${{ matrix.platform }}/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: natives-${{ matrix.platform }}
+          path: natives/
+          if-no-files-found: error
+
   build:
     name: Build MC ${{ matrix.mc }}
+    needs: natives
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -28,7 +85,9 @@ jobs:
           # Conductor module edition: Ostinato plus its Conductor module, unoptimized only (Conductor needs the
           # class names the obfuscated builds rename)
           - { mc: '1.21.11-module', ref: 'conductor-module', java: '21', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric', only: 'unoptimized' }
-          - { mc: '26.3', ref: 'main', java: '25', cmd: './gradlew :fabric:build -Pavailable_loaders=fabric' }
+          # carries the Rust library for all six platforms; -Postinato_native_require makes the parity tests run
+          # against the Linux x64 one instead of skipping
+          - { mc: '26.3', ref: 'main', java: '25', natives: true, cmd: './gradlew :fabric:build -Pavailable_loaders=fabric -Postinato_natives_dir=natives-in -Postinato_native_require' }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +96,12 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
+      - if: matrix.natives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: natives-*
+          path: natives-in
+          merge-multiple: true
       - name: Build (tests included)
         run: |
           chmod +x gradlew
@@ -52,6 +117,14 @@ jobs:
             cp -v "$f" "out/ostinato-mc${{ matrix.mc }}-${base#baritone-}.jar"
           done
           ls out/*.jar
+      - name: Check native libraries
+        if: matrix.natives
+        run: |
+          for f in out/*.jar; do
+            n=$(unzip -l "$f" | grep -c 'natives/ostinato/.*/.*ostinato_native\.' || true)
+            echo "$f: $n native libraries"
+            [ "$n" -eq 6 ] || { echo "expected 6"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: jars-${{ matrix.mc }}
@@ -65,6 +138,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
+          pattern: jars-*
           path: jars
           merge-multiple: true
       - name: Publish release
