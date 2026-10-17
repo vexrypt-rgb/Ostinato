@@ -10,11 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # main is the 26.3 tree; 1.21.11 and 1.21.4 build on their own branches.
         include:
-          - version: "1.21.4"
-            java: "21"
-          - version: "1.21.11"
-            java: "21"
           - version: "26.3"
             java: "25"
     name: Minecraft ${{ matrix.version }}
