@@ -464,7 +464,7 @@ public enum Moves {
         }
     },
 
-    DESCEND_EAST(+1, -1, 0, false, true) {
+    DESCEND_EAST(+1, -1, 0, true, true) { // dynamic xz: a steered fall lands a few columns over
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
             MutableMoveResult res = new MutableMoveResult();
@@ -472,7 +472,7 @@ public enum Moves {
             if (res.y == src.y - 1) {
                 return new MovementDescend(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
             } else {
-                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
+                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z), src.x + xOffset, src.z + zOffset, res.steer);
             }
         }
 
@@ -482,7 +482,7 @@ public enum Moves {
         }
     },
 
-    DESCEND_WEST(-1, -1, 0, false, true) {
+    DESCEND_WEST(-1, -1, 0, true, true) { // dynamic xz: a steered fall lands a few columns over
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
             MutableMoveResult res = new MutableMoveResult();
@@ -490,7 +490,7 @@ public enum Moves {
             if (res.y == src.y - 1) {
                 return new MovementDescend(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
             } else {
-                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
+                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z), src.x + xOffset, src.z + zOffset, res.steer);
             }
         }
 
@@ -500,7 +500,7 @@ public enum Moves {
         }
     },
 
-    DESCEND_NORTH(0, -1, -1, false, true) {
+    DESCEND_NORTH(0, -1, -1, true, true) { // dynamic xz: a steered fall lands a few columns over
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
             MutableMoveResult res = new MutableMoveResult();
@@ -508,7 +508,7 @@ public enum Moves {
             if (res.y == src.y - 1) {
                 return new MovementDescend(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
             } else {
-                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
+                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z), src.x + xOffset, src.z + zOffset, res.steer);
             }
         }
 
@@ -518,7 +518,7 @@ public enum Moves {
         }
     },
 
-    DESCEND_SOUTH(0, -1, +1, false, true) {
+    DESCEND_SOUTH(0, -1, +1, true, true) { // dynamic xz: a steered fall lands a few columns over
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
             MutableMoveResult res = new MutableMoveResult();
@@ -526,7 +526,7 @@ public enum Moves {
             if (res.y == src.y - 1) {
                 return new MovementDescend(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
             } else {
-                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z));
+                return new MovementFall(context.getBaritone(), src, new BetterBlockPos(res.x, res.y, res.z), src.x + xOffset, src.z + zOffset, res.steer);
             }
         }
 

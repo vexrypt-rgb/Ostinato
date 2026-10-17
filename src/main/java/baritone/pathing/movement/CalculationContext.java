@@ -27,6 +27,7 @@ import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.BoatUtil;
+import baritone.utils.MountUtil;
 import baritone.utils.ToolSet;
 import baritone.utils.pathing.BetterWorldBorder;
 import baritone.utils.pathing.SearchCache;
@@ -72,6 +73,10 @@ public class CalculationContext {
     public final boolean hasBoat;
     /** Free boats already out in the world (block longs); boarding one skips placing our own. */
     public final java.util.Set<Long> freeBoats;
+    /** Feet-level cells of things we can ride, for {@link #mountAt}. */
+    public final java.util.Set<Long> freeMounts;
+    /** Fall through offset holes by steering in the air, see MovementDescend.steerThrough. */
+    public final boolean allowSteeredFalls;
     public final int maxFallHeightBoat;
     public final boolean aquaAffinity;
     public final boolean hasThrowaway;
@@ -176,6 +181,8 @@ public class CalculationContext {
         this.hasWaterBucket = false;
         this.hasBoat = false;
         this.freeBoats = java.util.Collections.emptySet();
+        this.freeMounts = java.util.Collections.emptySet();
+        this.allowSteeredFalls = Baritone.settings().allowSteeredFalls.value;
         this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
         this.canSprint = Baritone.settings().allowSprint.value;
         this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
@@ -242,6 +249,9 @@ public class CalculationContext {
                 && BoatUtil.hasBoat(player.getInventory().getNonEquipmentItems());
         this.freeBoats = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
                 ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
+        this.allowSteeredFalls = Baritone.settings().allowSteeredFalls.value;
+        this.freeMounts = Baritone.settings().allowMountClutch.value && !AltoClefSettings.getInstance().isInteractionPaused()
+                ? MountUtil.freeMounts(world, player, 128) : java.util.Collections.emptySet();
         this.maxFallHeightBoat = Baritone.settings().maxFallHeightBoat.value;
         this.canSprint = Baritone.settings().allowSprint.value && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = ExperimentalMovement.blockPlacementPenalty();
@@ -443,6 +453,22 @@ public class CalculationContext {
             if (freeBoats.contains(BlockPos.asLong(x + d[0], y, z + d[1]))) return true;
         }
         return false;
+    }
+
+    /** Something to ride standing on this landing cell or one of the eight around it (MountUtil.mountAt looks there too). */
+    public boolean mountAt(int x, int y, int z) {
+        if (freeMounts.isEmpty()) return false;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (freeMounts.contains(BlockPos.asLong(x + dx, y, z + dz))) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Get on, then off again. Mobs wander, so it is priced above a bucket we carry. */
+    public double mountClutchCost() {
+        return 40;
     }
 
     /** Board a boat that's already there and drive off: no placing, and we still pick it up after. */

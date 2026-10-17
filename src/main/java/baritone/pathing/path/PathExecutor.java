@@ -431,6 +431,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (movementStatus == UNREACHABLE || movementStatus == FAILED) {
             logDebug("Movement returns status " + movementStatus);
             Baritone.settings().movementFault.value.accept("M04", movement.getClass().getSimpleName() + " " + movementStatus + " at " + ctx.playerFeet());
+            baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
             cancel();
             return true;
         }
