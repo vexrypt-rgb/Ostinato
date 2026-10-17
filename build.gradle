@@ -165,3 +165,84 @@ javadoc {
     source = sourceSets.api.allJava
     classpath += sourceSets.api.compileClasspath
 }
+
+// Ostinato: the Rust library (native/, see docs/RUST_NATIVE.md). Packaged as resources at natives/ostinato/<os>-<arch>/:
+// prebuilt libraries from -Postinato_natives_dir=<dir> (laid out <dir>/<os>-<arch>/<lib>, how CI ships all six), else
+// the host's own, built with cargo when cargo is installed. Without either the jar has no natives and runs the Java code.
+def nativesOut = layout.buildDirectory.dir("generated/natives").get().asFile
+
+static String ostinatoPlatform() {
+    def os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT)
+    def arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT)
+    def o = os.startsWith("windows") ? "windows" : (os.contains("mac") || os.contains("darwin")) ? "macos" : os.contains("linux") ? "linux" : null
+    def a = (arch == "amd64" || arch == "x86_64") ? "x86_64" : (arch == "aarch64" || arch == "arm64") ? "aarch64" : null
+    return o == null || a == null ? null : o + "-" + a
+}
+
+static String ostinatoLibName(String platform) {
+    return platform.startsWith("windows") ? "ostinato_native.dll" : platform.startsWith("macos") ? "libostinato_native.dylib" : "libostinato_native.so"
+}
+
+tasks.register("nativeHost") {
+    description = "Puts the ostinato-native libraries under build/generated/natives (prebuilt, or built with cargo)."
+    outputs.dir(nativesOut)
+    outputs.upToDateWhen { false } // cargo decides what is stale
+    def prebuilt = project.findProperty("ostinato_natives_dir")
+    def crate = file("native")
+    doLast {
+        def dest = new File(nativesOut, "natives/ostinato")
+        project.delete(nativesOut)
+        dest.mkdirs()
+        if (prebuilt) {
+            def dir = file(prebuilt)
+            def found = []
+            dir.eachDir { d ->
+                def lib = new File(d, ostinatoLibName(d.name))
+                if (lib.isFile()) {
+                    project.copy { from lib; into new File(dest, d.name) }
+                    found << d.name
+                }
+            }
+            if (found.isEmpty()) {
+                throw new GradleException("ostinato_natives_dir=" + dir + " holds no <os>-<arch>/<lib> folders")
+            }
+            println "ostinato-native: packaging prebuilt " + found.sort().join(", ")
+            return
+        }
+        def platform = ostinatoPlatform()
+        if (platform == null) {
+            println "ostinato-native: no native build for this platform; the jar runs the Java code"
+            return
+        }
+        def home = System.getProperty("user.home")
+        def exe = System.getProperty("os.name").toLowerCase(Locale.ROOT).startsWith("windows") ? "cargo.exe" : "cargo"
+        def cargo = [System.getenv("CARGO"), home + "/.cargo/bin/" + exe].find { it != null && new File(it).isFile() } ?: "cargo"
+        def out
+        try {
+            def proc = new ProcessBuilder(cargo, "build", "--release", "--manifest-path", new File(crate, "Cargo.toml").absolutePath)
+                    .redirectErrorStream(true).start()
+            out = proc.inputStream.text
+            if (proc.waitFor() != 0) {
+                println out
+                println "ostinato-native: cargo build failed; the jar runs the Java code"
+                return
+            }
+        } catch (IOException e) {
+            println "ostinato-native: cargo not found; the jar runs the Java code"
+            return
+        }
+        project.copy { from new File(crate, "target/release/" + ostinatoLibName(platform)); into new File(dest, platform) }
+        println "ostinato-native: built " + platform
+    }
+}
+
+sourceSets.main.resources.srcDir(nativesOut)
+tasks.named("processResources") { dependsOn "nativeHost" }
+
+test {
+    // -Postinato_native_require: fail the parity tests instead of skipping them when the library does not load
+    systemProperty "ostinato.native.require", project.hasProperty("ostinato_native_require")
+    systemProperty "ostinato.bench", project.hasProperty("ostinato_bench")
+    jvmArgs "--enable-native-access=ALL-UNNAMED" // the game prints the one-line FFM warning; tests need not
+    testLogging { showStandardStreams = project.hasProperty("ostinato_bench") }
+}

@@ -808,6 +808,7 @@ public class MovementJump extends Movement {
                             brute.maxTurn = JumpSearch.YAW_STEP;
                             brute.beam = 2500;
                             brute.maxTicks = 22;
+                            brute.nativeSearch = Baritone.settings().nativeAcceleration.value;
                             tasPlan = brute.search(real, ctx.player().getYRot(), new TasBrute.Landing(dest.x, dest.y, dest.z));
                             tasTick = 0;
                             if (tasPlan == null) {

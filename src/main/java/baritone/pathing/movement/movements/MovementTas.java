@@ -246,6 +246,7 @@ public class MovementTas extends Movement {
         b.maxTurn = 30;
         b.maxTicks = 45;
         b.floorY = minY - 1.5;
+        b.nativeSearch = Baritone.settings().nativeAcceleration.value;
         return b;
     }
 

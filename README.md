@@ -166,6 +166,22 @@ Keep the trees as siblings. Build Ostinato first, then TenorClef.
 
 TenorClef's 26.3 module needs a JDK 25 toolchain; Gradle itself runs on JDK 21 there.
 
+## Native acceleration
+
+On `main` (26.3), the brute-force jump search (`TasBrute`, used for parkour frontiers and for head-hitter jumps
+without a template plan) can run in a small Rust library shipped inside the jar for Windows, Linux and macOS on x64
+and arm64. It gives the same plan as the Java search, to the bit, and tests check this on every build. Measured on
+an Intel Core i5-1145G7 laptop, it was 3.1x to 4.9x faster than Java on the test courses (2.3x to 2.9x on one
+thread; it uses up to 4). Pathfinding (A*) and block lookups stay in Java. Details and numbers:
+[docs/RUST_NATIVE.md](docs/RUST_NATIVE.md).
+
+The Java search runs instead whenever the library cannot load (another OS or CPU, or `-Dostinato.native=false`) or
+`#set nativeAcceleration false` is set. Java prints one "restricted method" warning when the library loads; start
+the game with `--enable-native-access=ALL-UNNAMED` to silence it.
+
+Building with Rust installed (`cargo`) puts the library for your machine in the jar; without it the jar has no
+library and runs the Java search. Release jars carry all six.
+
 ## Movement backends
 
 Default pathing is Baritone-compatible. On the modern target, an optional
@@ -254,6 +270,7 @@ wire are SIGIL S2 (including S2S when a sender must be proven).
 - [Porting and upstream notes](docs/PORTING.md)
 - [TenorClef pairing](docs/TENORCLEF.md)
 - [Movement engine](docs/MOVEMENT_ENGINE.md)
+- [Rust acceleration](docs/RUST_NATIVE.md)
 - [Upstream Baritone documentation](README.baritone.md)
 - [Features](FEATURES.md)
 - [Setup](SETUP.md)

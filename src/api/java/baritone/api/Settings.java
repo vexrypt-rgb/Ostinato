@@ -2121,6 +2121,13 @@ public final class Settings {
      */
     public final Setting<String> movementBackend = new Setting<>("auto");
 
+    /**
+     * Ostinato: run the TAS brute-force jump search in the bundled Rust library when it loads on this platform. The
+     * answer is bit for bit the Java search's (see docs/RUST_NATIVE.md); off, or without the library, the Java search
+     * runs. {@code -Dostinato.native=false} keeps the library from loading at all.
+     */
+    public final Setting<Boolean> nativeAcceleration = new Setting<>(true);
+
     // here be dragons
 
     Settings() {

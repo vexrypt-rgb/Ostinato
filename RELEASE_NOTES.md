@@ -19,6 +19,18 @@ v1.22.0 and have no changes.
 | 1.21.4 | `1.21.4` | 21 | Unchanged since v1.20.0 |
 | 1.16.1 | `1.16.1` | 8 | Unchanged since v1.20.0 |
 
+## Since v1.23.0 (unreleased, 26.3 only)
+
+- **Rust jump search.** `TasBrute`, the brute-force jump search behind parkour frontiers and head-hitter jumps, runs
+  in a Rust library carried in the 26.3 jars for Windows, Linux and macOS (x64 and arm64). It returns the same plan
+  as the Java search, bit for bit; tests compare the two on every course and on random worlds. On an Intel Core
+  i5-1145G7 laptop it was 3.1x to 4.9x faster on the test courses (median of 5, up to 4 threads). Pathfinding (A*)
+  is unchanged and stays in Java. The Java search runs whenever the library cannot load or with
+  `#set nativeAcceleration false`. See `docs/RUST_NATIVE.md`.
+- `PlayerSim` now uses `StrictMath` for sine and cosine, and the jump search breaks score ties by state instead of
+  by hash-map order, so both searches agree. A plan can rarely differ from v1.23.0's (a last-bit trig difference, or
+  a different pick between candidates with equal scores).
+
 ## New in v1.23.0
 
 Everything in this section is 26.3 only. Pictures are in the README under Freecam and Studio; they are real
