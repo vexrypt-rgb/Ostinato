@@ -1195,6 +1195,42 @@ public enum Moves {
         public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
             MovementChainJump.cost(context, x, y, z, 3, result);
         }
+    },
+
+    TAS_0(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementTas.cost(context, src, 0);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementTas.cost(context, x, y, z, 0, result);
+        }
+    },
+
+    TAS_1(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementTas.cost(context, src, 1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementTas.cost(context, x, y, z, 1, result);
+        }
+    },
+
+    TAS_2(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementTas.cost(context, src, 2);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementTas.cost(context, x, y, z, 2, result);
+        }
     };
 
     public final boolean dynamicXZ;

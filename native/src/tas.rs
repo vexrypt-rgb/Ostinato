@@ -1,7 +1,7 @@
 //! `TasBrute.search`: beam search over per-tick inputs in [`Sim`]. A port of
 //! `baritone.pathing.kinematic.TasBrute`; the beam is ordered by (score, state key), as the Java code orders it.
 
-use crate::jmath::{dcompare, floor_i, jmax, jmin, round_d, round_f, UNSUPPORTED};
+use crate::jmath::{cos, dcompare, floor_i, jmax, jmin, round_d, round_f, sin, to_radians, UNSUPPORTED};
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use crate::sim::{node_height, Box6, Sim, Snap, HALF_WIDTH, HEIGHT};
 use std::cmp::Ordering;
@@ -15,6 +15,7 @@ pub struct Params<'a> {
     pub max_ticks: i32,
     pub max_turn: f32,
     pub allow_back: bool,
+    pub allow_strafe: bool,
     pub floor_y: f64,
     pub gx: i32,
     pub gy: i32,
@@ -28,6 +29,7 @@ pub struct Params<'a> {
 pub struct Plan {
     pub yaw: Vec<f32>,
     pub input: Vec<i32>,
+    pub strafe: Vec<i32>,
     pub jump: Vec<bool>,
     pub end: Sim,
 }
@@ -45,6 +47,7 @@ struct Node {
     yaw: f32,
     parent: u32,
     input: i8,
+    strafe: i8,
     jump: bool,
     flew: bool,
     depth: u16,
@@ -255,19 +258,51 @@ fn best(v: &mut Vec<Node>, k: usize) {
 fn holds(w: &Snap, buf: &mut Vec<Box6>, landed: &Sim, yaw: f32, g: &Goal) -> bool {
     let mut c = *landed;
     for _ in 0..3 {
-        c.tick(w, buf, yaw, 0, 0, false, false);
+        if g.grab {
+            c.tick(w, buf, yaw, 0, 0, false, false);
+        } else {
+            let (inp, st) = step_keys(yaw, g.x as f64 + 0.5 - c.x, g.z as f64 + 0.5 - c.z);
+            c.tick(w, buf, yaw, inp, st, false, false);
+        }
     }
     if g.grab { c.climbable(w) } else { g.on(&c, w, buf) }
 }
 
+/// `TasBrute.stepKeys`: the (forward, strafe) keys that push most toward (dx, dz) from the look `yaw_deg`.
+pub fn step_keys(yaw_deg: f32, dx: f64, dz: f64) -> (i32, i32) {
+    if dx * dx + dz * dz < 1e-4 {
+        return (0, 0);
+    }
+    let yaw = to_radians(yaw_deg as f64);
+    let (sn, cs) = (sin(yaw), cos(yaw));
+    let (mut best_in, mut best_st, mut best) = (0, 0, 0.0f64);
+    for inp in -1..=1 {
+        for st in -1..=1 {
+            if inp == 0 && st == 0 {
+                continue;
+            }
+            let len = if inp != 0 && st != 0 { 2.0f64.sqrt() } else { 1.0 };
+            let (fx, fz) = (st as f64 / len, inp as f64 / len);
+            let dot = (fx * cs - fz * sn) * dx + (fz * cs + fx * sn) * dz;
+            if dot > best {
+                best = dot;
+                best_in = inp;
+                best_st = st;
+            }
+        }
+    }
+    (best_in, best_st)
+}
+
 fn trace(arena: &[Node], end: &Node) -> Plan {
     let n = end.depth as usize;
-    let mut plan = Plan { yaw: vec![0.0; n], input: vec![0; n], jump: vec![false; n], end: end.s };
+    let mut plan = Plan { yaw: vec![0.0; n], input: vec![0; n], strafe: vec![0; n], jump: vec![false; n], end: end.s };
     let mut k = *end;
     while k.parent != NO_PARENT {
         let d = k.depth as usize - 1;
         plan.yaw[d] = k.yaw;
         plan.input[d] = k.input as i32;
+        plan.strafe[d] = k.strafe as i32;
         plan.jump[d] = k.jump;
         k = arena[k.parent as usize];
     }
@@ -280,7 +315,8 @@ struct Ctx<'a, 'w> {
     field: &'a Field,
     g: &'a Goal,
     p: &'a Params<'a>,
-    inputs: &'a [i32],
+    /// (forward, strafe) pairs, in `TasBrute.inputs` order.
+    inputs: &'a [(i32, i32)],
     floor: f64,
     fall_line: f64,
 }
@@ -300,13 +336,13 @@ fn expand(c: &Ctx, arena: &[Node], nodes: &[u32], t: i32, out: &mut Vec<Child>, 
         let n = arena[ni as usize];
         for &tf in c.p.turns {
             let yaw = n.yaw + tf * c.p.max_turn;
-            for &inp in c.inputs {
+            for &(inp, st) in c.inputs {
                 for j in 0..(if n.s.on_ground { 2 } else { 1 }) {
                     let jump = j == 1;
                     let mut s = n.s;
-                    s.tick(c.w, buf, yaw, inp, 0, inp > 0, jump);
+                    s.tick(c.w, buf, yaw, inp, st, inp > 0, jump);
                     let flew = n.flew || !s.on_ground;
-                    let mut m = Node { s, yaw, parent: ni, input: inp as i8, jump, flew, depth: (t + 1) as u16, score: 0.0, key: 0 };
+                    let mut m = Node { s, yaw, parent: ni, input: inp as i8, strafe: st as i8, jump, flew, depth: (t + 1) as u16, score: 0.0, key: 0 };
                     if (flew || c.g.grab) && c.g.reached(&s, c.w, buf) && holds(c.w, buf, &s, yaw, c.g) {
                         out.push(Child { n: m, found: true });
                         return;
@@ -337,7 +373,12 @@ pub fn search(w: &Snap, start: &Sim, p: &Params) -> Outcome {
     if w.missed() {
         return Outcome::OutOfRegion;
     }
-    let inputs: &[i32] = if p.allow_back { &[1, 0, -1] } else { &[1, 0] };
+    let inputs: &[(i32, i32)] = match (p.allow_back, p.allow_strafe) {
+        (false, false) => &[(1, 0), (0, 0)],
+        (true, false) => &[(1, 0), (0, 0), (-1, 0)],
+        (false, true) => &[(1, 0), (1, 1), (1, -1), (0, 0)],
+        (true, true) => &[(1, 0), (1, 1), (1, -1), (0, 0), (-1, 0)],
+    };
     let ctx = Ctx {
         w,
         field: &field,
@@ -350,7 +391,7 @@ pub fn search(w: &Snap, start: &Sim, p: &Params) -> Outcome {
     let beam = p.beam.max(0) as usize;
     let threads = p.threads.max(1);
     let mut arena: Vec<Node> = Vec::with_capacity(beam.min(1 << 16) * 4);
-    arena.push(Node { s: *start, yaw: p.yaw0, parent: NO_PARENT, input: 0, jump: false, flew: false, depth: 0, score: 0.0, key: 0 });
+    arena.push(Node { s: *start, yaw: p.yaw0, parent: NO_PARENT, input: 0, strafe: 0, jump: false, flew: false, depth: 0, score: 0.0, key: 0 });
     let mut layer: Vec<u32> = vec![0];
     let mut outs: Vec<Vec<Child>> = (0..threads).map(|_| Vec::new()).collect();
     let mut bufs: Vec<Vec<Box6>> = (0..threads).map(|_| Vec::with_capacity(64)).collect();

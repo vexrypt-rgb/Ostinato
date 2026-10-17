@@ -100,6 +100,75 @@ public class TasBruteTest {
     }
 
     /**
+     * The aligned triple neo is a momentum jump: the take-off tick runs its z move before its x move, so the box must
+     * leave from z 0.1 or less and land past z 4.3, about 4.2 blocks where a sprint jump off a run carries 3.63. Hops
+     * along the runway carry 4.15 and more. From 5 blocks back (MovementTas's first run-up) the search chains them and
+     * lands, and the plan stays on its feet with the step-in keys the executor presses after it.
+     */
+    @Test
+    public void alignedNeo3FromARunUp() {
+        int run = 5;
+        BoxWorld w = new BoxWorld().fill(0, -1, -run, 0, -1, 0, BoxWorld.FULL).fill(0, 0, 1, 0, 1, 3, BoxWorld.FULL).put(0, -1, 4, BoxWorld.FULL);
+        for (boolean nat : new boolean[]{true, false}) {
+            TasBrute b = new TasBrute(w);
+            b.maxTurn = 30;
+            b.maxTicks = 30 + 4 * run;
+            b.nativeSearch = nat;
+            long t0 = System.nanoTime();
+            TasBrute.Result r = b.search(standing(w, 0.5, 0, 0.5 - run), 0, new TasBrute.Landing(0, 0, 4));
+            System.out.printf("TAS neo3-runup native=%b %s (%d ms)%n", nat, r == null ? "NONE" : r.ticks() + "t " + r, (System.nanoTime() - t0) / 1_000_000);
+            assertNotNull("aligned triple neo from a " + run + " block run-up", r);
+            int hops = 0;
+            for (boolean j : r.jump) {
+                hops += j ? 1 : 0;
+            }
+            assertTrue("chained hops before the neo, " + hops + " jumps", hops >= 2);
+            PlayerSim p = standing(w, 0.5, 0, 0.5 - run);
+            for (int t = 0; t < r.ticks(); t++) {
+                p.tick(r.yaw[t], r.input[t], r.strafe[t], r.input[t] > 0, r.jump[t]);
+            }
+            float yaw = r.yaw[r.ticks() - 1];
+            for (int t = 0; t < 20 && !boxOn(p, 0, 4); t++) {
+                int[] k = TasBrute.stepKeys(yaw, 0.5 - p.x, 4.5 - p.z);
+                p.tick(yaw, k[0], k[1], false, false);
+                assertTrue("step-in t=" + t + " x=" + p.x + " z=" + p.z, p.onGround && p.y > -0.1);
+            }
+            assertTrue("stepped onto the landing, x=" + p.x + " z=" + p.z, boxOn(p, 0, 4));
+        }
+    }
+
+    /**
+     * W+A and W+D: vanilla scales the diagonal to length 1 where W alone is 0.98, so a strafe run is faster, and it
+     * runs 45 degrees off the camera. The sim and the search agree with the native port with strafe on (the parity
+     * test checks that); here a plain gap still lands with it.
+     */
+    @Test
+    public void strafeSearchStillLands() {
+        BoxWorld w = new BoxWorld().fill(0, -1, -3, 0, -1, 0, BoxWorld.FULL).put(1, -1, 4, BoxWorld.FULL);
+        TasBrute b = new TasBrute(w);
+        b.allowStrafe = true;
+        b.maxTurn = 30;
+        TasBrute.Result r = b.search(standing(w, 0.5, 0, -2.5), 0, new TasBrute.Landing(1, 0, 4));
+        System.out.printf("TAS strafe-gap %s%n", r == null ? "NONE" : r.ticks() + "t " + r);
+        assertNotNull(r);
+        PlayerSim p = standing(w, 0.5, 0, -2.5);
+        for (int t = 0; t < r.ticks(); t++) {
+            p.tick(r.yaw[t], r.input[t], r.strafe[t], r.input[t] > 0, r.jump[t]);
+        }
+        assertTrue("replayed with its strafe keys, the plan ends where it said", p.x == r.end.x && p.z == r.end.z);
+    }
+
+    /** A box past the side of a block with only a sliver over it still stands there; the landing counts it. */
+    @Test
+    public void sliverOfTheBoxCountsAsStanding() {
+        BoxWorld w = new BoxWorld().put(0, -1, 0, BoxWorld.FULL);
+        PlayerSim s = standing(w, 1 + PlayerSim.HALF_WIDTH - 0.002, 0, 0.5);
+        s.tick(0, 0, false, false);
+        assertTrue("0.002 of the box over the block holds it up", s.onGround && s.y > -0.01);
+        assertTrue(new TasBrute.Landing(0, 0, 0).on(s, w));
+    }
+
+    /**
      * drill_hh neo_3wall. The runway is three wide and the wall runs three back to the west, so the east edge is the
      * way around. The 1-wide aligned probe above cannot step sideways before the wall; this one can.
      */

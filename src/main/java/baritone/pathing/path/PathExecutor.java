@@ -935,7 +935,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             viz.handback(p.x, p.y, p.z, "to " + lastDriver + " at " + movement.getClass().getSimpleName());
         }
         vizTravel = travel;
-        if (movement instanceof MovementJump || movement instanceof MovementChainJump || movement instanceof MovementClimbJump) {
+        if (movement instanceof MovementJump || movement instanceof MovementChainJump || movement instanceof MovementClimbJump || movement instanceof MovementTas) {
             vizAir = false;
             return;
         }

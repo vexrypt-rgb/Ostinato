@@ -32,7 +32,7 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 public final class NativeLib {
 
     /** Must match {@code ABI_VERSION} in {@code native/src/lib.rs}. */
-    public static final int ABI_VERSION = 1;
+    public static final int ABI_VERSION = 2;
 
     /** Return codes shared by the exports. */
     public static final int NONE = -1, OUT_OF_REGION = -2, BAD_ARGS = -3, UNSUPPORTED = -4, PANIC = -5, TOO_SMALL = -6;
