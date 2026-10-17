@@ -17,8 +17,8 @@ version of `main`.
 
 | Minecraft | Branch | Java | Status |
 | --- | --- | --- | --- |
-| 26.3 | `main` | 25 | Primary line. Not a TenorClef pairing. |
-| 1.21.11 | `1.21.11` | 21 | Previous main line. TenorClef's 1.21.11 module is not a release target. |
+| 26.3 | `main` | 25 | Primary line. Pairs with TenorClef `:26.3`, its primary target. |
+| 1.21.11 | `1.21.11` | 21 | Previous main line. Pairs with TenorClef `:1.21.11`. |
 | 1.21.11 (Conductor module edition) | `conductor-module` | 21 | Ostinato plus its Conductor module. |
 | 1.21.4 | `1.21.4` | 21 | Pairs with TenorClef `:1.21.4`. |
 | 1.16.1 | `1.16.1` | 8 | Legacy. Pairs with TenorClef `:1.16.1`. Gradle 4.9; do not build with JDK 21. |
@@ -159,13 +159,12 @@ Keep the trees as siblings. Build Ostinato first, then TenorClef.
 
 | TenorClef module | Ostinato branch | Typical staged jar |
 | --- | --- | --- |
+| `:26.3` (primary) | `main` | release jar `ostinato-mc26.3-unoptimized-fabric-<version>.jar` → TenorClef `libs/baritone-unoptimized-fabric-ostinato-26.3.jar` |
+| `:1.21.11` | `1.21.11` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-ostinato-1.21.11.jar` |
 | `:1.21.4` | `1.21.4` | `dist/baritone-unoptimized-fabric-*.jar` → TenorClef `libs/baritone-unoptimized-fabric-1.21.4.jar` |
 | `:1.16.1` | `1.16.1` | `libs/baritone-unoptimized-fabric-1.16.1.jar` |
-| `:1.21.11` | `1.21.11` | experimental; TenorClef does not yet compile this module |
 
-Before shipping a 1.21.11 paired release, finish TenorClef's source port, tag
-and publish the matching Fabric artifact under a pinned version coordinate,
-then make TenorClef consume that coordinate.
+TenorClef's 26.3 module needs a JDK 25 toolchain; Gradle itself runs on JDK 21 there.
 
 ## Movement backends
 
