@@ -182,23 +182,6 @@ the game with `--enable-native-access=ALL-UNNAMED` to silence it.
 Building with Rust installed (`cargo`) puts the library for your machine in the jar; without it the jar has no
 library and runs the Java search. Release jars carry all six.
 
-## Movement backends
-
-Default pathing is Baritone-compatible. On the modern target, an optional
-Tungsten physics A* backend can handle goto / custom-goal travel. Mining,
-digging, schematics, and inventory stay on classic Ostinato processes.
-
-| Setting | Values | Behavior |
-| --- | --- | --- |
-| `movementBackend` | `baritone` | Always use classic travel |
-| `movementBackend` | `tungsten` | Prefer Tungsten; use Baritone if unavailable |
-| `movementBackend` | `auto` | Use Tungsten when present, otherwise Baritone |
-
-Install a compatible Tungsten Fabric jar beside Ostinato, then
-`#set movementBackend tungsten`. If Tungsten is absent, the fallback is
-Baritone. Backend selection should be visible in logs; treat an unexpected
-fallback as a configuration issue.
-
 ## Acknowledgements
 
 Ostinato ports code from [Soprano](https://github.com/AverWasTaken/soprano) by AverWasTaken

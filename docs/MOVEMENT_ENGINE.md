@@ -11,27 +11,17 @@ Stable travel boundary for TenorClef and other agents. **Mining / digging / buil
 | `MovementStatus` | `IDLE` / `REQUESTED` / `PATHING` / `ARRIVED` / `FAILED` / `CANCELLED` |
 | `PathResult` | Accepted/failed outcome with backend + `MovementFailureReason` |
 | `MovementFailureReason` | `NONE`, `BACKEND_UNAVAILABLE`, `DECLINED`, `PATH_CALC_FAILED`, `INTERRUPTED`, `UNSUPPORTED_GOAL`, `EXCEPTION` |
-| `IMovementBackend` | Low-level executor (precursor SPI; still used internally) |
-| `MovementBackendKind` | `BARITONE` / `TUNGSTEN` / `AUTO` (setting `movementBackend`) |
-| `MovementBackendSelector` | Pure selection + failure mapping (unit-tested) |
+| `MovementBackendKind` | `BARITONE`, the backend that accepted a request (Ostinato's own pathing is the only one) |
 
 ## Implementations (`baritone.movement`)
 
 | Class | Role |
 |-------|------|
-| `HybridMovementEngine` | Prefer Tungsten when available/appropriate; else Baritone; **never crash** if Tungsten absent |
-| `TungstenMovementBackend` | Reflection bridge to Tungsten; soft-fail when jar missing |
-| `BaritoneMovementBackend` | Marker for selection; real Baritone starts go through `ICustomGoalProcess` via the hybrid engine |
-| `MovementBackends` | Setting-based resolve + `engine(IBaritone)` factory |
+| `HybridMovementEngine` | Starts Baritone custom-goal pathing (flown by the kinematic and physics travel drivers); follow goals become a `GoalNear` round the entity |
+| `MovementBackends` | `engine(IBaritone)` factory and `preference()`, both reached by TenorClef through reflection |
 
-## Selection rules
-
-1. Read `Settings.movementBackend` → `MovementBackendKind`.
-2. `BARITONE` → classic custom-goal pathing only.
-3. `TUNGSTEN` / `AUTO` → if Tungsten `isAvailable()`, try Tungsten first; on decline/exception fall back to Baritone.
-4. Follow goals: Tungsten `follow(entity, dist)` when selected; else `GoalNear` via Baritone.
-
-`CustomGoalProcess` retains its own Tungsten intercept for chat `#goto`-style control so existing behavior is preserved.
+There is no alternate backend. Ostinato used to bridge to the Tungsten mod for goto travel; its own kinematic and
+physics travel replaced that, and the bridge and the `movementBackend` setting were removed.
 
 ## TenorClef usage
 
@@ -41,14 +31,14 @@ PathResult r = engine.goTo(MovementGoal.getToBlock(pos));
 // or engine.follow(entity, 2.0);
 ```
 
-When the running jar is stock Baritone (no MovementEngine classes), TenorClef’s adapter falls back to `getCustomGoalProcess()` / local Tungsten facade.
+When the running jar is stock Baritone (no MovementEngine classes), TenorClef’s adapter falls back to `getCustomGoalProcess()`.
 
 ## Version notes
 
-| Line | Tungsten | Hybrid behavior |
-|------|----------|-----------------|
-| Ostinato tip (`main`, modern MC) | Optional | Full hybrid |
-| Ostinato `1.16.1` | Not supported | Baritone-only (no MovementEngine types yet — see docs note) |
+| Line | MovementEngine |
+|------|----------------|
+| Ostinato tip (`main`, modern MC) | Yes |
+| Ostinato `1.16.1` | No MovementEngine types yet |
 
 ## Out of scope (later phases)
 

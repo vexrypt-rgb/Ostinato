@@ -231,7 +231,7 @@ public final class PkTest implements AbstractGameEventListener {
         s.allowWaterBucketFall.value = false; s.allowSprint.value = true; s.experimentalMovement.value = false;
         s.allowParkour.value = true; s.allowParkourAscend.value = true; s.allowNeos.value = true;
         s.allowClimbJumps.value = true; s.allowTasJumps.value = true; s.allowMomentumJumps.value = true; s.allowDiagonalAscend.value = true; s.allowDiagonalDescend.value = true;
-        s.movementBackend.value = "baritone"; s.slowKinematic.value = false;
+        s.slowKinematic.value = false;
         boolean phys = MODE.equals("physics");
         s.physicsTravel.value = phys; s.kinematicTravel.value = !phys;
         s.kinematicTrace.value = true; // SIMTRACE: sim vs real per jump tick (MovementJump flights)

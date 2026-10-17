@@ -6,7 +6,7 @@ import net.minecraft.world.entity.Entity;
 
 /**
  * Stable travel boundary for agent layers (TenorClef).
- * Prefer this over calling Baritone processes or Tungsten APIs directly.
+ * Prefer this over calling Baritone processes directly.
  * Mining / digging / builder stay on classic Baritone processes — not this engine.
  */
 public interface IMovementEngine {
@@ -24,7 +24,7 @@ public interface IMovementEngine {
         return goTo(MovementGoal.custom(goal));
     }
 
-    /** Follow / chase an entity (Tungsten when available; else Baritone near-goal). */
+    /** Follow / chase an entity (a near goal round it). */
     default PathResult follow(Entity entity, double maintainDistance) {
         return goTo(MovementGoal.follow(entity, maintainDistance));
     }

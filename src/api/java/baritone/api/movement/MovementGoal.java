@@ -11,7 +11,7 @@ import net.minecraft.world.entity.Entity;
 
 /**
  * Travel intent for {@link IMovementEngine}. Converts to a Baritone {@link Goal} when needed.
- * Follow goals keep an entity reference for Tungsten follow; Baritone falls back to {@link GoalNear}.
+ * Follow goals keep an entity reference and path to a {@link GoalNear} round it.
  */
 public final class MovementGoal {
 
