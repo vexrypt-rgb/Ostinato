@@ -9,6 +9,7 @@ import baritone.pathing.kinematic.ClimbTemplates;
 import baritone.pathing.kinematic.JumpTemplates;
 import baritone.pathing.kinematic.SimTrace;
 import baritone.pathing.movement.movements.MovementChainJump;
+import baritone.pathing.movement.movements.MovementTas;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.pathing.movement.movements.MovementClimbJump;
 import baritone.pathing.movement.movements.MovementJump;
@@ -330,6 +331,7 @@ public final class SimBench implements AbstractGameEventListener {
                 MovementJump.forgetFailures();
                 MovementClimbJump.forgetFailures();
                 MovementChainJump.forgetFailures();
+                MovementTas.forgetFailures();
                 MovementParkour.disabled = c.kind.equals("chain"); // plain parkour would pre-empt the chain on short gaps
                 Baritone.settings().experimentalMovement.value = c.experimental;
                 Baritone.settings().allowPlace.value = c.clutch;
@@ -351,6 +353,7 @@ public final class SimBench implements AbstractGameEventListener {
                 MovementJump.forgetFailures();
                 MovementClimbJump.forgetFailures();
                 MovementChainJump.forgetFailures();
+                MovementTas.forgetFailures();
                 baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(c.gx, c.gy, c.gz));
                 ticks = 0;
                 hold = 0;

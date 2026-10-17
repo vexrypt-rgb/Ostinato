@@ -51,7 +51,7 @@ final class NativeTas {
                 MemorySegment[] s = snap.segments(arena);
                 MemorySegment state = arena.allocateFrom(JAVA_DOUBLE, state(start));
                 MemorySegment params = arena.allocateFrom(JAVA_DOUBLE, yaw0, b.beam, b.maxTicks, b.maxTurn, b.allowBack ? 1 : 0, b.floorY,
-                        goal.x, goal.y, goal.z, goal.grab ? 1 : 0, threads);
+                        goal.x, goal.y, goal.z, goal.grab ? 1 : 0, threads, b.allowStrafe ? 1 : 0);
                 MemorySegment turns = arena.allocateFrom(JAVA_FLOAT, b.turns);
                 int cap = Math.max(1, b.maxTicks);
                 MemorySegment oy = arena.allocate(JAVA_FLOAT, cap), oi = arena.allocate(JAVA_INT, cap), oj = arena.allocate(JAVA_BYTE, cap);
@@ -59,15 +59,18 @@ final class NativeTas {
                 r = (int) lib.tasSearch.invoke(s[0], s[1], s[2], snap.boxCount, s[3], s[4], state, params, turns, b.turns.length, oy, oi, oj, cap, os);
                 if (r >= 0) {
                     float[] yaw = oy.asSlice(0, 4L * r).toArray(JAVA_FLOAT);
-                    int[] input = oi.asSlice(0, 4L * r).toArray(JAVA_INT);
+                    // each tick's keys come packed as forward + 10 * strafe
+                    int[] input = oi.asSlice(0, 4L * r).toArray(JAVA_INT), strafe = new int[r];
                     byte[] j = oj.asSlice(0, r).toArray(JAVA_BYTE);
                     boolean[] jump = new boolean[r];
                     for (int t = 0; t < r; t++) {
                         jump[t] = j[t] != 0;
+                        strafe[t] = Math.round(input[t] / 10f);
+                        input[t] -= 10 * strafe[t];
                     }
                     PlayerSim end = new PlayerSim(world);
                     load(end, os.toArray(JAVA_DOUBLE));
-                    return new Answer(new TasBrute.Result(yaw, input, jump, end));
+                    return new Answer(new TasBrute.Result(yaw, input, strafe, jump, end));
                 }
             } catch (Throwable t) {
                 NativeLib.disable("TasBrute search threw " + t);
@@ -105,7 +108,7 @@ final class NativeTas {
             }
             return;
         }
-        if (!Arrays.equals(rust.yaw, ref.yaw) || !Arrays.equals(rust.input, ref.input)
+        if (!Arrays.equals(rust.yaw, ref.yaw) || !Arrays.equals(rust.input, ref.input) || !Arrays.equals(rust.strafe, ref.strafe)
                 || !Arrays.equals(rust.jump, ref.jump) || !Arrays.equals(state(rust.end), state(ref.end))) {
             throw new AssertionError("native plan " + rust + " differs from Java " + ref);
         }

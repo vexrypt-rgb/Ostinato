@@ -236,8 +236,9 @@ public final class Settings {
 
     /**
      * When a path can't reach its goal, search per-tick inputs (a TAS style brute force in the movement sim) for a jump
-     * from the explored blocks nearest the goal to ones the planner never reached, and fly what it finds. Seconds of
-     * background work per failed path; needs allowParkour. Part of experimentalMovement.
+     * from the explored blocks nearest the goal to ones the planner never reached, and fly what it finds. A jump no
+     * standstill reaches (the aligned triple neo) is searched again from a run-up of chained hops. Seconds of
+     * background work per failed path, off the pathing thread; needs allowParkour. Part of experimentalMovement.
      */
     public final Setting<Boolean> allowTasJumps = new Setting<>(false);
 

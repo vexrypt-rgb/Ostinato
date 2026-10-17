@@ -170,6 +170,7 @@ public class NativeParityTest extends TasBruteTest {
                 b.maxTicks = 20 + r.nextInt(16);
                 b.maxTurn = r.nextBoolean() ? 30 : 32;
                 b.allowBack = r.nextBoolean();
+                b.allowStrafe = i % 3 == 0; // not from r: the worlds stay the ones the earlier runs searched
                 if (r.nextBoolean()) {
                     b.floorY = -3.5;
                 }

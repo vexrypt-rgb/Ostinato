@@ -27,6 +27,17 @@ v1.22.0 and have no changes.
   i5-1145G7 laptop it was 3.1x to 4.9x faster on the test courses (median of 5, up to 4 threads). Pathfinding (A*)
   is unchanged and stays in Java. The Java search runs whenever the library cannot load or with
   `#set nativeAcceleration false`. See `docs/RUST_NATIVE.md`.
+- **Momentum TAS jumps.** `allowTasJumps` (on with `experimentalMovement`) now does something: after a path search
+  that cannot reach its goal, a background search brute-forces jumps from the explored blocks nearest the goal, and
+  the next path takes them. A jump that no standstill reaches is searched again from a run-up straight back of 5, 4,
+  9 or 3 blocks, where chained hops build the speed: the aligned triple neo (one-wide runway round a three-long wall)
+  needs about 4.2 blocks of reach, and a sprint jump off a plain run carries 3.63. The bot walks back to the run-up
+  start first. The sim, both searches and the executors handle W+A / W+D (strafe; vanilla scales it to full speed
+  where W alone is 0.98). The movers use it to step in after landing; it is off in the searches for now, since it
+  thins the beam.
+- **Standing on a sliver.** Any part of the hitbox over a block holds the player up, and the jump planners now count
+  that as a landing (the movers then step to the block's centre), so edge landings on blocks and slabs are no longer
+  thrown away.
 - `PlayerSim` now uses `StrictMath` for sine and cosine, and the jump search breaks score ties by state instead of
   by hash-map order, so both searches agree. A plan can rarely differ from v1.23.0's (a last-bit trig difference, or
   a different pick between candidates with equal scores).

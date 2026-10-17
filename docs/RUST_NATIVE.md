@@ -14,7 +14,7 @@ Measured or read from the code on main (26.3):
 
 | Code | When it runs | Cost today (Java) | Native? |
 |---|---|---|---|
-| `TasBrute.search` (beam search over `PlayerSim`) | after a failed path search (`MovementTas.frontier`, up to 12 searches, 8 s budget); **on the client thread** when a head-hitter jump has no template plan (`MovementJump`, beam 2500 x 22 ticks) | 150 ms to 5.5 s per search in `TasBruteTest`; 345 ms for the executor's head-hitter lip case | **yes, first** |
+| `TasBrute.search` (beam search over `PlayerSim`) | after a failed path search with `allowTasJumps` (`MovementTas.frontier` on a background thread, up to 12 searches, 8 s budget, then again from run-ups of 5, 4, 9 and 3 blocks for long jumps); **on the client thread** when a head-hitter jump has no template plan (`MovementJump`, beam 2500 x 22 ticks) | 150 ms to 5.5 s per search in `TasBruteTest`; 345 ms for the executor's head-hitter lip case | **yes, first** |
 | `PlayerSim.tick` | inside every search above, and in small per-node rollouts during A* (`MovementJump.partialLands`, `headHitterLands`, `MovementSlime`) | millions of ticks per brute force; tens of ticks per A* rollout | inside batched searches only |
 | `JumpSearch` (two-yaw template plans) | A* costing of chain/slime jumps and the jump executor | 23 ms full, 1.9 ms local in `JumpSearchTest` | candidate, later |
 | A* loop (`AStarPathFinder.calculate0`), open set, node map | every path search | dominated by `Moves.apply` cost functions | **no** (see 1.1) |
@@ -74,7 +74,9 @@ but it holds off garbage collection for the whole call, and a search can take te
 * A search may expand each beam layer on several threads of its own (`NativeTas.threads`, half the cores, at most 4).
   Each thread expands a contiguous slice of the layer and the children are merged back in the single-threaded order,
   so the answer does not depend on the thread count; `NativeParityTest` runs with 1 to 4.
-* `ost_abi_version()` must match the Java side's expected version, or the library is not used.
+* `ost_abi_version()` must match the Java side's expected version, or the library is not used. Version 2 added
+  a twelfth search parameter (W+A / W+D allowed) and packs each tick's strafe into the input it returns
+  (`input + 10 * strafe`).
 
 ## 3. Shipping and loading
 
@@ -143,7 +145,7 @@ side, none of which changes what the bot does in practice:
    `BinaryHeap` stands in for `java.util.PriorityQueue`.)
 
 `NativeParityTest` runs every `TasBruteTest` course and a set of randomized worlds both ways and requires the same
-plan (every tick's yaw, input and jump), the same end state to the bit, or the same "no plan".
+plan (every tick's yaw, input, strafe and jump), the same end state to the bit, or the same "no plan".
 
 ## 6. Java fallback
 

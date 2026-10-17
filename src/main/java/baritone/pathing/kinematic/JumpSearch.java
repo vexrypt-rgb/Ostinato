@@ -197,7 +197,9 @@ public final class JumpSearch {
             }
             if (settle >= 0 && settle++ >= SETTLE) {
                 double cx = sim.x - (destX + 0.5), cz = sim.z - (destZ + 0.5);
-                if (Math.abs(cx) > 0.75 || Math.abs(cz) > 0.75 || !sim.onGround) { // still on the block; the mover steps to its centre after
+                // still on the block, by as little as a sliver of the box; the mover steps to its centre after
+                double reach = 0.5 + PlayerSim.HALF_WIDTH - 1e-4;
+                if (Math.abs(cx) > reach || Math.abs(cz) > reach || !sim.onGround) {
                     return false;
                 }
                 ticks = t + 1;

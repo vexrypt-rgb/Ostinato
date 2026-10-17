@@ -26,6 +26,7 @@ import baritone.api.utils.SettingsUtil;
 import baritone.pathing.calc.openset.BinaryHeapOpenSet;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Moves;
+import baritone.pathing.movement.movements.MovementTas;
 import baritone.pathing.CostCalibration;
 import baritone.utils.pathing.BetterWorldBorder;
 import baritone.utils.pathing.Favoring;
@@ -212,6 +213,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         System.out.println("PathNode map size: " + mapSize());
         System.out.println((int) (numNodes * 1.0 / ((System.currentTimeMillis() - startTime) / 1000F)) + " nodes per second");
         Optional<IPath> result = bestSoFar(true, numNodes);
+        MovementTas.frontierLater(calcContext, nodes(), goal);
         if (result.isPresent()) {
             logDebug(profileLine(numNodes, numMovementsConsidered, numRejected, numEmptyChunk, numFavored));
             logDebug("Took " + (System.currentTimeMillis() - startTime) + "ms, " + numMovementsConsidered + " movements considered");

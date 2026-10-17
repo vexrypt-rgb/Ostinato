@@ -65,12 +65,15 @@ public final class TasBrute {
     public static final class Result {
         public final float[] yaw;
         public final int[] input;
+        /** The strafe key every tick: +1 A (left), -1 D (right), 0 neither. */
+        public final int[] strafe;
         public final boolean[] jump;
         public final PlayerSim end;
 
-        Result(float[] yaw, int[] input, boolean[] jump, PlayerSim end) {
+        Result(float[] yaw, int[] input, int[] strafe, boolean[] jump, PlayerSim end) {
             this.yaw = yaw;
             this.input = input;
+            this.strafe = strafe;
             this.jump = jump;
             this.end = end;
         }
@@ -79,13 +82,16 @@ public final class TasBrute {
             return yaw.length;
         }
 
-        /** One character per tick: J jump, W forward, . coast, B back; the yaw every tick it changed. */
+        /** One character per tick: J jump, W forward, . coast, B back, then a or d for a strafe; the yaw every tick it changed. */
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             float last = Float.NaN;
             for (int t = 0; t < yaw.length; t++) {
                 sb.append(jump[t] ? 'J' : input[t] > 0 ? 'W' : input[t] < 0 ? 'B' : '.');
+                if (strafe[t] != 0) {
+                    sb.append(strafe[t] > 0 ? 'a' : 'd');
+                }
                 if (yaw[t] != last) {
                     sb.append('(').append(Math.round(yaw[t])).append(')');
                     last = yaw[t];
@@ -100,6 +106,7 @@ public final class TasBrute {
         final float yaw;
         final Node parent;
         final int input;
+        final int strafe;
         final boolean jump;
         final int depth;
         double score;
@@ -107,11 +114,12 @@ public final class TasBrute {
         long key;
         boolean flew;
 
-        Node(PlayerSim s, float yaw, Node parent, int input, boolean jump, int depth) {
+        Node(PlayerSim s, float yaw, Node parent, int input, int strafe, boolean jump, int depth) {
             this.s = s;
             this.yaw = yaw;
             this.parent = parent;
             this.input = input;
+            this.strafe = strafe;
             this.jump = jump;
             this.depth = depth;
         }
@@ -124,6 +132,11 @@ public final class TasBrute {
     /** Turn steps tried per tick, as fractions of {@link #maxTurn}. */
     public float[] turns = {-1, -0.5f, -0.2f, 0, 0.2f, 0.5f, 1};
     public boolean allowBack = false;
+    /**
+     * Also try W with A or with D. Vanilla scales a diagonal to length 1 where W alone is 0.98, and the run goes 45
+     * degrees off the camera, so a strafe both runs faster and curves round a wall sooner than the camera can turn.
+     */
+    public boolean allowStrafe = false;
     public boolean debug = false;
     /** Ostinato: run the search in the native library when it is loaded ({@link NativeTas}); the answer is the same. */
     public boolean nativeSearch = true;
@@ -155,19 +168,20 @@ public final class TasBrute {
         field = new Field(world, start, goal);
         double floor = Math.max(floorY, Math.min(start.y, goal.y - 1) - 1.0);
         List<Node> layer = new ArrayList<>();
-        layer.add(new Node(new PlayerSim(world).copyFrom(start), yaw0, null, 0, false, 0));
-        int[] inputs = allowBack ? new int[]{1, 0, -1} : new int[]{1, 0};
+        layer.add(new Node(new PlayerSim(world).copyFrom(start), yaw0, null, 0, 0, false, 0));
+        int[][] inputs = inputs(allowBack, allowStrafe);
         for (int t = 0; t < maxTicks; t++) {
             Map<Long, Node> next = new HashMap<>();
             for (Node n : layer) {
                 for (float tf : turns) {
                     float yaw = n.yaw + tf * maxTurn;
-                    for (int in : inputs) {
+                    for (int[] key : inputs) {
+                        int in = key[0], st = key[1];
                         for (int j = 0; j < (n.s.onGround ? 2 : 1); j++) {
                             boolean jump = j == 1;
                             PlayerSim c = new PlayerSim(world).copyFrom(n.s);
-                            c.tick(yaw, in, in > 0, jump);
-                            Node m = new Node(c, yaw, n, in, jump, t + 1);
+                            c.tick(yaw, in, st, in > 0, jump);
+                            Node m = new Node(c, yaw, n, in, st, jump, t + 1);
                             m.flew = n.flew || !c.onGround;
                             if ((m.flew || goal.grab) && goal.reached(c, world) && holds(c, yaw, goal)) {
                                 return trace(m);
@@ -207,15 +221,70 @@ public final class TasBrute {
         return null;
     }
 
+    /** The keys tried every tick as (forward, strafe), in the order the native search tries them too. */
+    static int[][] inputs(boolean back, boolean strafe) {
+        List<int[]> l = new ArrayList<>();
+        l.add(new int[]{1, 0});
+        if (strafe) {
+            l.add(new int[]{1, 1});
+            l.add(new int[]{1, -1});
+        }
+        l.add(new int[]{0, 0});
+        if (back) {
+            l.add(new int[]{-1, 0});
+        }
+        return l.toArray(new int[0][]);
+    }
+
     private static final Comparator<Node> BEAM_ORDER = Comparator.<Node>comparingDouble(n -> n.score).thenComparingLong(n -> n.key);
 
-    /** The landing has to last: three ticks with no input and the player still stands on the block. */
+    /**
+     * The landing has to last: three ticks later the player still stands on the block (or hangs on the ladder). On a
+     * block the keys step back in toward its middle ({@link #stepKeys}), as the executors do, so a landing on the
+     * smallest sliver of the box with speed still outward counts when those keys keep it there.
+     */
     private boolean holds(PlayerSim landed, float yaw, Landing goal) {
         PlayerSim c = new PlayerSim(world).copyFrom(landed);
         for (int k = 0; k < 3; k++) {
-            c.tick(yaw, 0, false, false);
+            if (goal.grab) {
+                c.tick(yaw, 0, false, false);
+            } else {
+                int[] keys = stepKeys(yaw, goal.x + 0.5 - c.x, goal.z + 0.5 - c.z);
+                c.tick(yaw, keys[0], keys[1], false, false);
+            }
         }
         return goal.grab ? c.climbable() : goal.on(c, world);
+    }
+
+    /**
+     * The keys that push most toward (dx, dz) from the look {@code yawDeg}: {forward, strafe}, strafe +1 to the left.
+     * Both 0 within a hundredth of the point. {@link baritone.pathing.movement.StepIn} with StrictMath, so the native
+     * search picks the same keys.
+     */
+    public static int[] stepKeys(float yawDeg, double dx, double dz) {
+        if (dx * dx + dz * dz < 1e-4) {
+            return new int[]{0, 0};
+        }
+        double yaw = Math.toRadians(yawDeg);
+        double sin = StrictMath.sin(yaw), cos = StrictMath.cos(yaw);
+        int bestIn = 0, bestSt = 0;
+        double best = 0;
+        for (int in = -1; in <= 1; in++) {
+            for (int st = -1; st <= 1; st++) {
+                if (in == 0 && st == 0) {
+                    continue;
+                }
+                double len = in != 0 && st != 0 ? Math.sqrt(2) : 1;
+                double fx = st / len, fz = in / len;
+                double dot = (fx * cos - fz * sin) * dx + (fz * cos + fx * sin) * dz;
+                if (dot > best) {
+                    best = dot;
+                    bestIn = in;
+                    bestSt = st;
+                }
+            }
+        }
+        return new int[]{bestIn, bestSt};
     }
 
     private Field field;
@@ -316,14 +385,15 @@ public final class TasBrute {
     private static Result trace(Node end) {
         int n = end.depth;
         float[] yaw = new float[n];
-        int[] in = new int[n];
+        int[] in = new int[n], st = new int[n];
         boolean[] jump = new boolean[n];
         for (Node k = end; k.parent != null; k = k.parent) {
             yaw[k.depth - 1] = k.yaw;
             in[k.depth - 1] = k.input;
+            st[k.depth - 1] = k.strafe;
             jump[k.depth - 1] = k.jump;
         }
-        return new Result(yaw, in, jump, end.s);
+        return new Result(yaw, in, st, jump, end.s);
     }
 
     /** A block world for offline searches: cells hold collision boxes in cell-local coordinates. */

@@ -15,7 +15,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
 /// Bumped whenever an export's signature or meaning changes; Java refuses a library with another version.
-pub const ABI_VERSION: i32 = 1;
+pub const ABI_VERSION: i32 = 2;
 
 pub const ERR_NONE: i32 = -1;
 pub const ERR_OUT_OF_REGION: i32 = -2;
@@ -116,7 +116,7 @@ pub unsafe extern "C" fn ost_tas_search(
             return ERR_BAD_ARGS;
         }
         let start = Sim::read(unsafe { slice::from_raw_parts(state, STATE_LEN) });
-        let pr = unsafe { slice::from_raw_parts(params, 11) };
+        let pr = unsafe { slice::from_raw_parts(params, 12) };
         let max_ticks = pr[2] as i32;
         if !(0..=10_000).contains(&max_ticks) {
             return ERR_BAD_ARGS;
@@ -133,6 +133,7 @@ pub unsafe extern "C" fn ost_tas_search(
             gz: pr[8] as i32,
             grab: pr[9] != 0.0,
             threads: (pr[10] as i32).clamp(1, 64) as usize,
+            allow_strafe: pr[11] != 0.0,
             turns: unsafe { slice::from_raw_parts(turns, n_turns as usize) },
         };
         match tas::search(&w, &start, &p) {
@@ -150,7 +151,10 @@ pub unsafe extern "C" fn ost_tas_search(
                     )
                 };
                 oy.copy_from_slice(&plan.yaw);
-                oi.copy_from_slice(&plan.input);
+                // forward + 10 * strafe: one int per tick keeps the signature
+                for ((o, &f), &st) in oi.iter_mut().zip(&plan.input).zip(&plan.strafe) {
+                    *o = f + 10 * st;
+                }
                 for (o, &j) in oj.iter_mut().zip(&plan.jump) {
                     *o = j as u8;
                 }

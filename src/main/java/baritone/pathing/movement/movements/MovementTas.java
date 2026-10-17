@@ -53,6 +53,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * blocks the search never reached, nearer the goal. What it finds is kept as an edge of that node, which the next
  * search takes like any other movement. The jump starts standing still on the node; the executor walks there, faces the
  * search's first yaw, and plays the inputs back, searching again from the real state if it drifts off the sim.
+ * <p>
+ * A jump no standstill reaches (a neo round a three long wall needs the speed of a few chained hops) is searched again
+ * from a run-up straight back from the node ({@link #RUN_UPS}); the executor walks back there first.
  */
 public class MovementTas extends Movement {
 
@@ -68,21 +71,37 @@ public class MovementTas extends Movement {
     private static final int REACH = 5, DOWN = 4, UP = 1;
     /** A pair is searched again only after this long (the blocks may have changed). */
     private static final long RETRY_MS = 5 * 60_000;
+    /**
+     * Run-ups (blocks back from the node) tried in turn when no standstill jump lands. Hops have to line up with the
+     * take-off edge, so the lengths that work are not contiguous: the aligned triple neo lands from 4, 5 and 9 back
+     * but not from 6 to 8 ({@code TasBruteTest.alignedNeo3FromARunUp}).
+     */
+    static final int[] RUN_UPS = {5, 4, 9, 3};
+    private static final int RUN_UPS_MAX = 9;
+    /** Run-ups are only tried for landings at least this far (blocks, centre to centre) from the node. */
+    private static final double RUN_UP_REACH = 3;
+    /** Per block walked back to a run-up start (the run back over it is in the plan's ticks). */
+    private static final double WALK_BACK_COST = 4.633;
 
-    /** A jump the brute force found from standing still at (sx, sy, sz) on {@code src}, camera at {@code yaw0}. */
+    /**
+     * A jump the brute force found from standing still at (sx, sy, sz), camera at {@code yaw0}: on {@code src}, or
+     * {@code runUp} blocks back from it.
+     */
     static final class Edge {
         final BetterBlockPos src, dest;
         final boolean grab;
+        final int runUp;
         final double sx, sy, sz;
         final float yaw0;
         final TasBrute.Result r;
         final double cost;
         final Set<BetterBlockPos> cells;
 
-        Edge(BetterBlockPos src, BetterBlockPos dest, boolean grab, PlayerSim start, float yaw0, TasBrute.Result r, double cost, Set<BetterBlockPos> cells) {
+        Edge(BetterBlockPos src, BetterBlockPos dest, boolean grab, int runUp, PlayerSim start, float yaw0, TasBrute.Result r, double cost, Set<BetterBlockPos> cells) {
             this.src = src;
             this.dest = dest;
             this.grab = grab;
+            this.runUp = runUp;
             this.sx = start.x;
             this.sy = start.y;
             this.sz = start.z;
@@ -148,9 +167,38 @@ public class MovementTas extends Movement {
         return slot < o.size() ? new MovementTas(context.getBaritone(), o.get(slot)) : null;
     }
 
+    private static final java.util.concurrent.atomic.AtomicBoolean FRONTIER_RUNNING = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * {@link #frontier} on a background thread, so the partial path the failed search found is walked meanwhile; the
+     * replan after it takes the edges. Skipped while one is still running, or when the search reached its goal.
+     */
+    public static void frontierLater(CalculationContext context, Iterable<PathNode> nodes, Goal goal) {
+        if (!context.allowParkour || !context.allowTasJumps || !FRONTIER_RUNNING.compareAndSet(false, true)) {
+            return;
+        }
+        for (PathNode n : nodes) {
+            if (goal.isInGoal(n.x, n.y, n.z)) {
+                FRONTIER_RUNNING.set(false);
+                return;
+            }
+        }
+        Thread t = new Thread(() -> {
+            try {
+                frontier(context, nodes, goal);
+            } catch (Throwable e) {
+                log("frontier failed: " + e);
+            } finally {
+                FRONTIER_RUNNING.set(false);
+            }
+        }, "Ostinato TAS frontier");
+        t.setDaemon(true);
+        t.start();
+    }
+
     /**
      * After a search that did not reach its goal: brute force jumps from the explored nodes nearest the goal to standable
-     * blocks (or ladders) nearby it never reached and that are nearer the goal. Runs on the calculating thread.
+     * blocks (or ladders) nearby it never reached and that are nearer the goal. Blocks its caller ({@link #frontierLater} runs it in the background).
      */
     public static void frontier(CalculationContext context, Iterable<PathNode> nodes, Goal goal) {
         if (!context.allowParkour || !context.allowTasJumps) {
@@ -241,10 +289,10 @@ public class MovementTas extends Movement {
         return s;
     }
 
-    private static TasBrute brute(PlayerSim.World world, double minY) {
+    private static TasBrute brute(PlayerSim.World world, double minY, int runUp) {
         TasBrute b = new TasBrute(world);
         b.maxTurn = 30;
-        b.maxTicks = 45;
+        b.maxTicks = runUp == 0 ? 45 : 30 + 4 * runUp;
         b.floorY = minY - 1.5;
         b.nativeSearch = Baritone.settings().nativeAcceleration.value;
         return b;
@@ -255,7 +303,30 @@ public class MovementTas extends Movement {
         float yaw0 = (float) Math.toDegrees(Math.atan2(-(dest.x + 0.5 - start.x), dest.z + 0.5 - start.z));
         TasBrute.Landing goal = new TasBrute.Landing(dest.x, dest.y, dest.z);
         if (grab) goal.grab();
-        TasBrute.Result r = brute(world, Math.min(src.y, dest.y)).search(start, yaw0, goal);
+        TasBrute.Result r = brute(world, Math.min(src.y, dest.y), 0).search(start, yaw0, goal);
+        int runUp = 0;
+        int ax = dest.x - src.x, az = dest.z - src.z;
+        if (r == null && !grab && Math.hypot(ax, az) >= RUN_UP_REACH) {
+            // momentum: run up straight back along the jump's main axis, on blocks the planner could stand on
+            int dx = Math.abs(ax) >= Math.abs(az) ? Integer.signum(ax) : 0, dz = dx == 0 ? Integer.signum(az) : 0;
+            int room = 0;
+            while (room < RUN_UPS_MAX && standable(context, src.x - (room + 1) * dx, src.y, src.z - (room + 1) * dz)) {
+                room++;
+            }
+            float runYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+            for (int ru : RUN_UPS) {
+                if (ru > room) continue;
+                PlayerSim s0 = standingStart(world, context, src.x - ru * dx, src.y, src.z - ru * dz);
+                TasBrute.Result rr = brute(world, Math.min(src.y, dest.y), ru).search(s0, runYaw, goal);
+                if (rr != null) {
+                    r = rr;
+                    start = s0;
+                    yaw0 = runYaw;
+                    runUp = ru;
+                    break;
+                }
+            }
+        }
         if (r == null) {
             return false;
         }
@@ -263,13 +334,15 @@ public class MovementTas extends Movement {
         Set<BetterBlockPos> cells = new HashSet<>();
         cells.add(src);
         cells.add(dest);
+        cells.add(new BetterBlockPos(PlayerSim.floor(start.x), src.y, PlayerSim.floor(start.z)));
         PlayerSim s = new PlayerSim(world).copyFrom(start);
         for (int t = 0; t < r.ticks(); t++) {
-            s.tick(r.yaw[t], r.input[t], r.input[t] > 0, r.jump[t]);
+            s.tick(r.yaw[t], r.input[t], r.strafe[t], r.input[t] > 0, r.jump[t]);
             cells.add(new BetterBlockPos(PlayerSim.floor(s.x), PlayerSim.floor(s.y + 0.01), PlayerSim.floor(s.z)));
         }
-        double cost = r.ticks() * 1.2 + context.jumpPenalty + 10;
-        Edge e = new Edge(src, dest, grab, start, yaw0, r, cost, cells);
+        // the walk back to a run-up start is paid for too
+        double cost = r.ticks() * 1.2 + runUp * WALK_BACK_COST + context.jumpPenalty + 10;
+        Edge e = new Edge(src, dest, grab, runUp, start, yaw0, r, cost, cells);
         EDGES.compute(BetterBlockPos.longHash(src.x, src.y, src.z), (k, old) -> {
             List<Edge> l = old == null ? new ArrayList<>() : new ArrayList<>(old);
             l.removeIf(o -> o.dest.equals(dest));
@@ -277,7 +350,7 @@ public class MovementTas extends Movement {
             l.sort((a, b) -> Double.compare(a.cost, b.cost));
             return l.size() > SLOTS ? new ArrayList<>(l.subList(0, SLOTS)) : l;
         });
-        log("found " + src + " -> " + dest + (grab ? " grab" : "") + " " + r);
+        log("found " + src + " -> " + dest + (grab ? " grab" : "") + (runUp > 0 ? " runUp=" + runUp : "") + " " + r);
         return true;
     }
 
@@ -351,12 +424,13 @@ public class MovementTas extends Movement {
         ClientWorld.readPlayer(ctx, real);
         Vec3 m = ctx.player().getDeltaMovement();
         if (phase == 0) {
-            // walk to the start, sneaking so a narrow floor (a ladder's top, a candle) can't be walked off
+            // walk to the start, sneaking so a narrow floor (a ladder's top, a candle) can't be walked off; a run-up's
+            // start is blocks back, walked upright until the last half block
             double dx = e.sx - p.x, dz = e.sz - p.z;
             if (dx * dx + dz * dz > 0.06 * 0.06) {
-                if (++waited > 200) return fail(state, "never reached the start");
+                if (++waited > 200 + 40 * e.runUp) return fail(state, "never reached the start");
                 MovementHelper.walkToSpot(ctx, state, dx, dz);
-                return state.setInput(Input.SNEAK, true);
+                return state.setInput(Input.SNEAK, e.runUp == 0 || dx * dx + dz * dz < 0.25);
             }
             if (Math.abs(m.x) + Math.abs(m.z) > 0.005 || !real.onGround) {
                 return state.setInput(Input.SNEAK, true);
@@ -373,8 +447,11 @@ public class MovementTas extends Movement {
             double off = Math.abs(p.x - e.sx) + Math.abs(p.z - e.sz) + Math.abs(p.y - e.sy);
             plan = e.r;
             if (off > 0.02) {
-                plan = brute(real.world(), Math.min(src.y, dest.y)).search(real, ctx.player().getYRot(), landing());
-                if (plan == null) return fail(state, "no jump from where we stand");
+                plan = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.player().getYRot(), landing());
+                if (plan == null && e.runUp == 0) return fail(state, "no jump from where we stand");
+                if (plan == null) {
+                    plan = e.r; // a run-up's hops are timed to the edge: fly the stored plan, the drift check searches again
+                }
             }
             phase = 2;
             tick = 0;
@@ -386,7 +463,7 @@ public class MovementTas extends Movement {
                 double dev = Math.abs(real.x - predicted.x) + Math.abs(real.y - predicted.y) + Math.abs(real.z - predicted.z);
                 if (dev > 0.05 && replans < 2 && tick < plan.ticks() - 2) {
                     replans++;
-                    TasBrute.Result again = brute(real.world(), Math.min(src.y, dest.y)).search(real, ctx.player().getYRot(), landing());
+                    TasBrute.Result again = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.player().getYRot(), landing());
                     log("drift " + String.format("%.3f", dev) + " at tick " + tick + ", search again: " + (again != null));
                     if (again != null) {
                         plan = again;
@@ -395,14 +472,16 @@ public class MovementTas extends Movement {
                 }
             }
             if (tick < plan.ticks()) {
-                int in = plan.input[tick];
+                int in = plan.input[tick], st = plan.strafe[tick];
                 state.setTarget(new MovementState.MovementTarget(new Rotation(plan.yaw[tick], ctx.playerRotations().getPitch()), true));
                 state.setInput(Input.MOVE_FORWARD, in > 0);
                 state.setInput(Input.MOVE_BACK, in < 0);
+                state.setInput(Input.MOVE_LEFT, st > 0);
+                state.setInput(Input.MOVE_RIGHT, st < 0);
                 state.setInput(Input.SPRINT, in > 0);
                 state.setInput(Input.JUMP, plan.jump[tick]);
                 predicted.copyFrom(real);
-                predicted.tick(plan.yaw[tick], in, in > 0, plan.jump[tick]);
+                predicted.tick(plan.yaw[tick], in, st, in > 0, plan.jump[tick]);
                 tick++;
                 return state;
             }
@@ -414,6 +493,19 @@ public class MovementTas extends Movement {
             if (++settle > 2) return state.setStatus(MovementStatus.SUCCESS);
         } else if (++waited > 30) {
             return fail(state, "missed the landing");
+        }
+        if (!e.grab && real.onGround) {
+            // A landing counts with any sliver of the box on the block, so the centre (the feet cell) can be in the next
+            // column. Step in on the keys the plan's check assumed (TasBrute.stepKeys), sneaking so the edge holds.
+            int[] k = TasBrute.stepKeys(ctx.player().getYRot(), dest.x + 0.5 - p.x, dest.z + 0.5 - p.z);
+            if (Math.abs(p.x - dest.x - 0.5) < 0.5 - PlayerSim.HALF_WIDTH && Math.abs(p.z - dest.z - 0.5) < 0.5 - PlayerSim.HALF_WIDTH) {
+                k = new int[]{0, 0}; // the whole box is over the block
+            }
+            state.setInput(Input.MOVE_FORWARD, k[0] > 0);
+            state.setInput(Input.MOVE_BACK, k[0] < 0);
+            state.setInput(Input.MOVE_LEFT, k[1] > 0);
+            state.setInput(Input.MOVE_RIGHT, k[1] < 0);
+            state.setInput(Input.SNEAK, k[0] != 0 || k[1] != 0);
         }
         return state;
     }

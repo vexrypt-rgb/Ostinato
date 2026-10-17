@@ -44,7 +44,7 @@ public final class PkTest implements AbstractGameEventListener {
     private static final int GOAL_TICKS = 20 * Integer.getInteger("ostinato.pktest.goalSeconds", 240);
     private static final int MAX_FAILS = Integer.getInteger("ostinato.pktest.maxFails", 3);
     private static final int SCAN = Integer.getInteger("ostinato.pktest.scan", 160);
-    private static final Set<String> JUMPS = Set.of("MovementParkour", "MovementJump", "MovementChainJump", "MovementClimbJump",
+    private static final Set<String> JUMPS = Set.of("MovementParkour", "MovementJump", "MovementChainJump", "MovementClimbJump", "MovementTas",
             "MovementSlime", "LadderClutch", "MovementAscend", "MovementPillar", "MovementDiagonal");
 
     public static void install(Baritone b) {
@@ -370,6 +370,7 @@ public final class PkTest implements AbstractGameEventListener {
     private static void forget() {
         baritone.pathing.movement.movements.MovementJump.forgetFailures();
         baritone.pathing.movement.movements.MovementChainJump.forgetFailures();
+        baritone.pathing.movement.movements.MovementTas.forgetFailures();
     }
 
     private Goal goal() {

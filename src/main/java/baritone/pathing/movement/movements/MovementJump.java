@@ -619,10 +619,12 @@ public class MovementJump extends Movement {
     /** Fly the one beam plan tick for tick. It already lands; this does not search again. */
     private MovementState playTas(MovementState state) {
         if (tasTick < tasPlan.ticks()) {
-            int in = tasPlan.input[tasTick];
+            int in = tasPlan.input[tasTick], st = tasPlan.strafe[tasTick];
             state.setTarget(new MovementState.MovementTarget(new Rotation(tasPlan.yaw[tasTick], ctx.playerRotations().getPitch()), true));
             state.setInput(Input.MOVE_FORWARD, in > 0);
             state.setInput(Input.MOVE_BACK, in < 0);
+            state.setInput(Input.MOVE_LEFT, st > 0);
+            state.setInput(Input.MOVE_RIGHT, st < 0);
             state.setInput(Input.SPRINT, in > 0);
             state.setInput(Input.JUMP, tasPlan.jump[tasTick]);
             tasTick++;
