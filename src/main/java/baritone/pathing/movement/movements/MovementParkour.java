@@ -111,7 +111,7 @@ public class MovementParkour extends Movement {
         int[] f = MovementJump.FRAMES[frame];
         for (JumpTemplates.Template t : JumpTemplates.HEAD_HITTERS) {
             if (t.a == i && t.dy == 0 && t.runUp == r
-                    && MovementJump.headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, x + xDiff * i, y, z + zDiff * i, standingY(context, x, y, z))) {
+                    && MovementJump.headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, x + xDiff * i, y, z + zDiff * i, standingY(context, x, y, z), context.nativeSearch)) {
                 return true;
             }
         }

@@ -32,7 +32,7 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 public final class NativeLib {
 
     /** Must match {@code ABI_VERSION} in {@code native/src/lib.rs}. */
-    public static final int ABI_VERSION = 2;
+    public static final int ABI_VERSION = 3;
 
     /** Return codes shared by the exports. */
     public static final int NONE = -1, OUT_OF_REGION = -2, BAD_ARGS = -3, UNSUPPORTED = -4, PANIC = -5, TOO_SMALL = -6;
@@ -43,13 +43,19 @@ public final class NativeLib {
     public final MethodHandle simRun;
     /** {@code ost_sincos}: {@code StrictMath.sin} and {@code cos}, for the parity tests. */
     public final MethodHandle sincos;
+    /** {@code ost_physics_plan}, {@code ost_jump_search}, {@code ost_momentum_hop}: see {@code native/src/lib.rs}. */
+    public final MethodHandle physicsPlan, jumpSearch, momentumHop;
     public final Path path;
 
-    private NativeLib(Path path, MethodHandle tasSearch, MethodHandle simRun, MethodHandle sincos) {
+    private NativeLib(Path path, MethodHandle tasSearch, MethodHandle simRun, MethodHandle sincos, MethodHandle physicsPlan,
+                      MethodHandle jumpSearch, MethodHandle momentumHop) {
         this.path = path;
         this.tasSearch = tasSearch;
         this.simRun = simRun;
         this.sincos = sincos;
+        this.physicsPlan = physicsPlan;
+        this.jumpSearch = jumpSearch;
+        this.momentumHop = momentumHop;
     }
 
     private static volatile boolean loaded;
@@ -147,9 +153,15 @@ public final class NativeLib {
                     ADDRESS, ADDRESS, ADDRESS, JAVA_INT, ADDRESS, ADDRESS,
                     ADDRESS, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
             MethodHandle sc = linker.downcallHandle(symbols.find("ost_sincos").orElseThrow(), FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS));
+            MethodHandle physics = linker.downcallHandle(symbols.find("ost_physics_plan").orElseThrow(), FunctionDescriptor.of(JAVA_INT,
+                    ADDRESS, ADDRESS, ADDRESS, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, JAVA_INT));
+            MethodHandle jump = linker.downcallHandle(symbols.find("ost_jump_search").orElseThrow(), FunctionDescriptor.of(JAVA_INT,
+                    ADDRESS, ADDRESS, ADDRESS, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+            MethodHandle hop = linker.downcallHandle(symbols.find("ost_momentum_hop").orElseThrow(), FunctionDescriptor.of(JAVA_INT,
+                    ADDRESS, ADDRESS, ADDRESS, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, JAVA_INT));
             status = "loaded from " + path;
             log(status);
-            return new NativeLib(path, tas, sim, sc);
+            return new NativeLib(path, tas, sim, sc, physics, jump, hop);
         } catch (Throwable t) {
             status = "failed to load: " + t;
             log(status);

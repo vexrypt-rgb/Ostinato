@@ -97,7 +97,7 @@ public final class PhysicsTravel {
             String why = plan == null ? null : drifted ? "drift" : end != target ? "new target" : "plan done";
             target = end;
             step = 0;
-            plan = finder.plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
+            plan = finder.nativeSearch(Baritone.settings().nativeAcceleration.value).plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
             if (plan == null || plan.isEmpty()) {
                 cooldown = 20;
                 return drop();

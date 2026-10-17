@@ -74,6 +74,13 @@ public final class JumpSearch {
     /** Filled by {@link #run} in {@link #carry} mode: speed along the approach direction at the landing tick. */
     public double landSpeed;
 
+    /**
+     * Ostinato: run the full {@link #search} in the native library when it is loaded ({@link NativePlanners}), the grid
+     * split over a few threads; the answer is the same. The local search and {@link #searchStraight} stay in Java: a few
+     * hundred runs cost about what the call does.
+     */
+    public boolean nativeSearch;
+
     private final PlayerSim sim;
 
     public JumpSearch(PlayerSim.World world) {
@@ -231,6 +238,10 @@ public final class JumpSearch {
      * {@link #plan}. Prefers landing near the centre, then fewer ticks.
      */
     public boolean search(PlayerSim start, boolean local) {
+        return nativeSearch && !local ? searchNative(start) : searchJava(start, local);
+    }
+
+    private boolean searchJava(PlayerSim start, boolean local) {
         int[] best = null, p = new int[DIMS], c = plan.clone();
         double bestScore = Double.MAX_VALUE;
         int[] size = {O0.length, HOP.length, ledge ? EDGE.length : PLAIN_EDGES, O1.length, SWITCH.length, RELEASE.length, BRAKE.length};
@@ -260,6 +271,56 @@ public final class JumpSearch {
         System.arraycopy(best, 0, plan, 0, DIMS);
         run(start, plan, jumped, airTicks, null); // leave ticks/miss describing the chosen plan
         return true;
+    }
+
+    private boolean searchNative(PlayerSim start) {
+        JumpSearch ref = NativePlanners.verify ? copy() : null;
+        int r = NativePlanners.jumpSearch(this, start);
+        if (r == NativePlanners.UNKNOWN) {
+            return searchJava(start, false);
+        }
+        if (ref != null) {
+            boolean refOk = ref.searchJava(start, false);
+            NativePlanners.checked.incrementAndGet();
+            if (refOk != (r == 1) || !java.util.Arrays.equals(plan, ref.plan) || ticks != ref.ticks || Double.compare(miss, ref.miss) != 0
+                    || Double.compare(landSpeed, ref.landSpeed) != 0 || destX != ref.destX || destY != ref.destY || destZ != ref.destZ
+                    || !java.util.Arrays.equals(NativeTas.state(sim), NativeTas.state(ref.sim))) {
+                throw new AssertionError("native jump search " + (r == 1) + " " + java.util.Arrays.toString(plan)
+                        + " t" + ticks + " m" + miss + " s" + landSpeed + " d" + destX + "," + destY + "," + destZ + " " + java.util.Arrays.toString(NativeTas.state(sim))
+                        + " differs from Java " + refOk + " " + java.util.Arrays.toString(ref.plan) + " t" + ref.ticks + " m" + ref.miss + " s" + ref.landSpeed
+                        + " d" + ref.destX + "," + ref.destY + "," + ref.destZ + " " + java.util.Arrays.toString(NativeTas.state(ref.sim)));
+            }
+        }
+        return r == 1;
+    }
+
+    /** A search with this one's frame, flags and state, for checking the native answer. */
+    private JumpSearch copy() {
+        JumpSearch c = new JumpSearch(sim.world());
+        c.dirX = dirX;
+        c.dirZ = dirZ;
+        c.edge = edge;
+        c.destX = destX;
+        c.destY = destY;
+        c.destZ = destZ;
+        c.side = side;
+        c.bounceY = bounceY;
+        c.anyDest = anyDest;
+        c.noJump = noJump;
+        c.grab = grab;
+        c.standJump = standJump;
+        c.carry = carry;
+        c.ledge = ledge;
+        System.arraycopy(plan, 0, c.plan, 0, DIMS);
+        c.jumped = jumped;
+        c.airTicks = airTicks;
+        c.slewYaw = slewYaw;
+        c.faceYaw = faceYaw;
+        c.ticks = ticks;
+        c.miss = miss;
+        c.landSpeed = landSpeed;
+        c.sim.copyFrom(sim);
+        return c;
     }
 
     /** Straight-line plans only (no turning): the cheap search the planner runs for slime bounces. */
