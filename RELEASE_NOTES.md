@@ -21,6 +21,13 @@ v1.22.0 and have no changes.
 
 ## Since v1.23.0 (unreleased, 26.3 only)
 
+- **Singularity theme.** A new `guiTheme` setting (Interface page): `classic` (default, unchanged) or
+  `singularity`. In singularity mode the menu's pages orbit a black hole, with lensing on hover, a spiral on open
+  and close, and the classic header, rows and footer in a darker panel. Every Ostinato HUD card (path, Autotune,
+  freecam inventory) follows the setting through a shared `Skin`, so new cards follow it too. The path and
+  Autotune cards become orbit gauges: a black hole whose photon ring fills with progress, and for Autotune the
+  values it can stand on laid out as stops on an orbit. The black hole is
+  computed once off the render thread, then drawn from a texture.
 - **Tungsten support removed.** The optional bridge to the Tungsten mod (`TungstenMovementBackend`) and the
   `movementBackend` setting are gone; Ostinato's own kinematic and physics travel drive every goto. A
   `movementBackend` line left in a settings file is skipped with an "Unable to parse line" message. `IMovementBackend` and `MovementBackendSelector` left

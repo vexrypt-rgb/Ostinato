@@ -75,7 +75,7 @@ public class SettingCatalogTest {
 
     @Test
     public void newGuiSettingsAreInInterface() {
-        for (String n : new String[]{"guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale"}) {
+        for (String n : new String[]{"guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale"}) {
             assertEquals(n, SettingCategory.INTERFACE, SettingCategorizer.categorize(n));
         }
     }

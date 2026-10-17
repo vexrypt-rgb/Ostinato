@@ -19,6 +19,7 @@ package baritone.gui.hud;
 
 import baritone.behavior.FreecamBehavior;
 import baritone.gui.render.GuiDraw;
+import baritone.gui.render.Skin;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -73,7 +74,7 @@ public final class FreecamInventoryHud {
         int sh = mc.getWindow().getGuiScaledHeight();
         x = Math.max(2, Math.min(x, sw - panelW - 2));
         y = Math.max(2, Math.min(y, sh - panelH - 2));
-        g.fill((int) x, (int) y, (int) x + panelW, (int) y + panelH, 0xC010141C);
+        Skin.panel(g, x, y, panelW, panelH, 0xC010141C);
         float cy = y + 2;
         if (spar != null) {
             GuiDraw.text(g, spar, x + 3, cy, 0xFFFFD27A, false);
@@ -102,7 +103,7 @@ public final class FreecamInventoryHud {
     private static void draw(GuiGraphicsExtractor g, ItemStack stack, float x, float y, boolean selected) {
         int ix = (int) x;
         int iy = (int) y;
-        g.fill(ix, iy, ix + CELL, iy + CELL, selected ? 0xE03A4A28 : 0xA0182028);
+        g.fill(ix, iy, ix + CELL, iy + CELL, Skin.cell(selected, 0xE03A4A28, 0xA0182028));
         if (stack != null && !stack.isEmpty()) {
             g.item(stack, ix, iy);
         }

@@ -56,6 +56,14 @@ Right Control opens the menu in a world (`guiKeybind`). Settings are still the f
 
 Movement, pathing, and the rest of the settings. A change is written to `settings.txt`.
 
+### Singularity theme
+
+![The singularity menu: the pages orbit a black hole on the left, the settings panel on the right](docs/images/gui-singularity.png)
+
+`guiTheme singularity` puts the menu's pages on an orbit around a black hole. Click a body to open its page. Hovering magnifies the bodies near the cursor, and the menu spirals out of the core when it opens and back in when it closes. The path card and the Autotune card become orbit gauges: a black hole whose photon ring fills as the path or the trial runs, with the Autotune values laid out as stops on an orbit. The freecam inventory gets the same void-glass look. `classic` is the default. See [the GUI guide](docs/guides/gui-freecam-tasks.md#themes-guitheme).
+
+![Path and Autotune HUD cards in the singularity theme](docs/images/hud-singularity.png)
+
 ### Studio
 
 ![Studio orbit view of a small house with the block list on the right](docs/images/gui-studio.png)

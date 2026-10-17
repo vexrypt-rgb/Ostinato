@@ -29,6 +29,8 @@ import baritone.gui.anim.Anim;
 import baritone.gui.hud.PathStatus;
 import baritone.gui.model.*;
 import baritone.gui.render.GuiDraw;
+import baritone.gui.render.SingularityArt;
+import baritone.gui.render.Skin;
 import baritone.gui.render.Icons;
 import baritone.gui.tasks.game.TaskService;
 import net.minecraft.SharedConstants;
@@ -92,6 +94,9 @@ public final class OstinatoScreen extends Screen {
             } else if (name.equals("pathHudAnchor")) {
                 k = Kind.CYCLE;
                 opts = new String[]{"RIGHT", "LEFT", "TOP_RIGHT", "TOP_LEFT"};
+            } else if (name.equals("guiTheme")) {
+                k = Kind.CYCLE;
+                opts = new String[]{"classic", "singularity"};
             } else if (name.equals("acsHudAnchor")) {
                 k = Kind.CYCLE;
                 opts = new String[]{"TOP_LEFT", "LEFT", "TOP_RIGHT", "RIGHT"};
@@ -169,6 +174,12 @@ public final class OstinatoScreen extends Screen {
 
     // layout (GUI units)
     private float x0, y0, x1, y1, hb, fy, sbx1, px0, px1, ry0, listBottom;
+
+    // singularity theme: the orbit nav replaces the sidebar, and closing pulls everything back into the core
+    private final Orbit orbit = new Orbit();
+    private List<Orbit.Body> bodies = new ArrayList<>();
+    private boolean sing, closing;
+    private long flungAt;
 
     public OstinatoScreen() {
         super(Component.literal("Ostinato"));
@@ -472,6 +483,96 @@ public final class OstinatoScreen extends Screen {
         layoutSidebar();
         ry0 = hb + 26;
         listBottom = fy - 6;
+        sing = Skin.singularity();
+        if (sing) {
+            layoutOrbit(roomy);
+        }
+    }
+
+    /** Singularity: the orbit at the left edge and the panel beside it, with no sidebar. */
+    private void layoutOrbit(boolean roomy) {
+        bodies = navBodies();
+        orbit.layout(bodies, width, height);
+        float left = orbit.panelX0();
+        float w = Math.max(240, Math.min(roomy ? 720 : 560, width - 10 - left));
+        x0 = (float) Math.floor(Math.min(left, width - 4 - w));
+        x1 = x0 + w;
+        sbx1 = x0;
+        px0 = x0 + 12;
+        px1 = x1 - 12;
+        maxSideScroll = 0;
+        sideScroll = 0;
+    }
+
+    /** The nav in sidebar order: Studio, Arcade, Tasks, Modified, then each category with settings. */
+    private List<Orbit.Body> navBodies() {
+        List<Orbit.Body> out = new ArrayList<>();
+        out.add(new Orbit.Body("Studio", studio.blockCount(), STUDIO_ICON, false, false, false));
+        out.add(new Orbit.Body("Arcade", 3, ARCADE_ICON, false, false, false));
+        out.add(new Orbit.Body("Tasks", TaskService.INSTANCE.list().size(), TASKS_ICON, false, TaskService.INSTANCE.runner.active(), false));
+        out.add(new Orbit.Body("Modified", countModified(), null, true, false, true));
+        boolean first = true;
+        for (SettingCategory c : navCategories()) {
+            out.add(new Orbit.Body(c.displayName, byCat.get(c).size(), icon(c), false, false, first));
+            first = false;
+        }
+        return out;
+    }
+
+    private List<SettingCategory> navCategories() {
+        List<SettingCategory> out = new ArrayList<>();
+        for (SettingCategory c : SettingCategory.values()) {
+            List<Entry> l = byCat.get(c);
+            if (l != null && !l.isEmpty()) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    /** Index of the body for what is on show, or -1 while searching. */
+    private int navSelected() {
+        if (!search.get().trim().isEmpty()) {
+            return -1;
+        }
+        switch (desk) {
+            case STUDIO:
+                return 0;
+            case ARCADE:
+                return 1;
+            case TASKS:
+                return 2;
+            default:
+                return modifiedView ? 3 : 4 + navCategories().indexOf(selected);
+        }
+    }
+
+    /** Does what clicking the sidebar entry at the same index does. */
+    private void selectNav(int i) {
+        search.set("");
+        searchFocused = false;
+        modifiedView = i == 3;
+        if (i < 3) {
+            desk = i == 0 ? Desk.STUDIO : i == 1 ? Desk.ARCADE : Desk.TASKS;
+        } else {
+            desk = Desk.SETTINGS;
+            filter = Filter.ALL;
+            if (i > 3) {
+                selected = navCategories().get(i - 4);
+            }
+        }
+        flungAt = System.currentTimeMillis();
+        rebuild();
+    }
+
+    /** Close; the singularity theme first pulls the menu back into the core. */
+    private void dismiss() {
+        if (!Skin.singularity()) {
+            onClose();
+            return;
+        }
+        closing = true;
+        open.target(0f);
     }
 
     private float maxScroll() {
@@ -487,9 +588,18 @@ public final class OstinatoScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor ms, int mouseX, int mouseY, float partialTicks) {
         layout();
-        float a = open.target(1f).get();
+        float a = open.target(closing ? 0f : 1f).get();
+        if (closing && a < 0.03f) {
+            closing = false;
+            onClose();
+            return;
+        }
         GuiDraw.alpha = a;
         try {
+            if (sing) {
+                drawSingularity(ms, mouseX, mouseY, a);
+                return;
+            }
             draw(ms, mouseX, mouseY);
         } finally {
             GuiDraw.alpha = 1f;
@@ -520,8 +630,49 @@ public final class OstinatoScreen extends Screen {
         }
     }
 
+    /** The singularity layout: space, the orbit, and the classic header, rows and footer in a void-glass panel. */
+    private void drawSingularity(GuiGraphicsExtractor ms, int mx, int my, float a) {
+        int accent = Theme.accent();
+        long now = System.currentTimeMillis();
+        GuiDraw.alpha = 1f;
+        SingularityArt.space(ms, width, height, mx, my, a, now);
+        orbit.draw(ms, bodies, navSelected(), mx, my, a, closing, accent, now);
+        // the panel slides out of the horizon
+        float pa = Orbit.ease((a - 0.15f) / 0.85f), off = (1 - pa) * -60;
+        if (pa < 0.01f) {
+            return;
+        }
+        GuiDraw.alpha = pa;
+        ms.pose().pushMatrix();
+        ms.pose().translate(off, 0);
+        try {
+            GuiDraw.shadow(ms, x0, y0, x1, y1, 4, 10, 0x90);
+            GuiDraw.roundBorder(ms, x0, y0, x1, y1, 4, 0xFF2A2433, 0xF00A0910, 0xF2060509);
+            GuiDraw.gradH(ms, x0 + 0.5f, y0 + 4, x0 + 60, y1 - 4, 0x38FF963C, 0x00FF963C);
+            GuiDraw.rect(ms, x0, y0 + 20, x0 + 0.5f, y1 - 20, GuiDraw.alphaOf(Skin.HAWKING, 0x99));
+            Skin.photonLine(ms, x0 + 4, x1 - 4, y0 + 0.5f, accent);
+            drawHeader(ms, mx, my, accent, now);
+            Entry hov = drawContent(ms, mx, my, accent, now);
+            drawFooter(ms, mx, my, accent, now);
+            drawDropdown(ms, mx, my, accent);
+            if (hov != hovered) {
+                hovered = hov;
+                hoverSince = now;
+            }
+            if (hovered != null && editing == null && capturing == null && dragging == null && now - hoverSince > 350) {
+                drawTooltip(ms, hovered, mx, my, accent);
+            }
+        } finally {
+            ms.pose().popMatrix();
+        }
+    }
+
     private void drawHeader(GuiGraphicsExtractor ms, int mx, int my, int accent, long now) {
-        GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
+        if (sing) {
+            SingularityArt.glyph(ms, x0 + 16.5f, y0 + 13.5f, 6.5f, now);
+        } else {
+            GuiDraw.icon(ms, Icons.NOTE, x0 + 12, y0 + 9, accent, 1.1f);
+        }
         float lw = GuiDraw.textColors(ms, "Ostinato", x0 + 28, y0 + 9, 1.5f, true, Theme.logoColors(accent, 8), true);
         String chip = "Baritone " + SharedConstants.getCurrentVersion().name();
         float cx = x0 + 28 + lw + 8, cw = GuiDraw.width(chip) + 10;
@@ -815,6 +966,19 @@ public final class OstinatoScreen extends Screen {
             if (h) {
                 hov = e;
             }
+            if (sing && now - flungAt < 600) { // a category switch flings its rows in from the side of the core
+                float t = Orbit.ease((now - flungAt) / 320f - i * 0.04f), base = GuiDraw.alpha;
+                ms.pose().pushMatrix();
+                ms.pose().translate(-(1 - t) * 24, 0);
+                GuiDraw.alpha = base * t;
+                try {
+                    drawRow(ms, e, ry, h, mx, my, accent, now, searching);
+                } finally {
+                    GuiDraw.alpha = base;
+                    ms.pose().popMatrix();
+                }
+                continue;
+            }
             drawRow(ms, e, ry, h, mx, my, accent, now, searching);
         }
         if (rows.isEmpty()) {
@@ -831,7 +995,8 @@ public final class OstinatoScreen extends Screen {
             boolean th2 = draggingThumb || in(mx, my, px1 - 5, ty, px1 + 1, ty + th);
             GuiDraw.round(ms, px1 - 3, ty, px1 - 1, ty + th, 1, th2 ? 0x90FFFFFF : 0x60FFFFFF);
             if (scroll < max - 1) {
-                GuiDraw.gradV(ms, px0, listBottom - 10, px1 - 6, listBottom, 0x000E1118, 0x900E1118);
+                int fade = sing ? 0x08070C : 0x0E1118;
+                GuiDraw.gradV(ms, px0, listBottom - 10, px1 - 6, listBottom, GuiDraw.alphaOf(fade, 0), GuiDraw.alphaOf(fade, 0x90));
             }
         }
         return hov;
@@ -1153,6 +1318,9 @@ public final class OstinatoScreen extends Screen {
 
     private boolean mouseClicked(double mx, double my, int button) {
         layout();
+        if (closing) {
+            return true;
+        }
         if (capturing != null) {
             capturing = null;
             return true;
@@ -1176,7 +1344,7 @@ public final class OstinatoScreen extends Screen {
         }
         // header
         if (in(mx, my, x1 - 23, y0 + 8, x1 - 8, y0 + 23)) {
-            onClose();
+            dismiss();
             return true;
         }
         if (in(mx, my, searchX0(), y0 + 8, x1 - 30, y0 + 23)) {
@@ -1188,9 +1356,16 @@ public final class OstinatoScreen extends Screen {
             return true;
         }
         searchFocused = false;
+        if (sing) {
+            int slot = orbit.slotAt(mx, my);
+            if (slot >= 0 && slot < bodies.size()) {
+                selectNav(slot);
+                return true;
+            }
+        }
         // sidebar — same order as drawSidebar: Studio, Arcade, Tasks, divider, Modified, divider, categories
         float iy = hb + 8 - sideScroll;
-        boolean inSide = in(mx, my, x0, hb + 1, sbx1, fy);
+        boolean inSide = !sing && in(mx, my, x0, hb + 1, sbx1, fy);
         if (inSide && in(mx, my, x0 + 6, iy, sbx1 - 6, iy + sideH)) {
             desk = Desk.STUDIO;
             modifiedView = false;
@@ -1261,7 +1436,7 @@ public final class OstinatoScreen extends Screen {
         }
         if (showStudio() || showArcade() || showTasks()) {
             if (in(mx, my, x1 - 10 - doneW0, fy + 5, x1 - 10, fy + 19)) {
-                onClose();
+                dismiss();
                 return true;
             }
         }
@@ -1294,7 +1469,7 @@ public final class OstinatoScreen extends Screen {
         // footer buttons
         float doneW = GuiDraw.width("Done") + 16;
         if (in(mx, my, x1 - 10 - doneW, fy + 5, x1 - 10, fy + 19)) {
-            onClose();
+            dismiss();
             return true;
         }
         long now = System.currentTimeMillis();
@@ -1499,6 +1674,9 @@ public final class OstinatoScreen extends Screen {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent ev) {
         int key = ev.key();
         curKey = ev;
+        if (closing) {
+            return true;
+        }
         if (dropdown != null && key == InputConstants.KEY_ESCAPE) {
             dropdown = null;
             return true;
@@ -1561,7 +1739,7 @@ public final class OstinatoScreen extends Screen {
         }
         // a letter bound to the screen must still be typable in the search box
         if (key == InputConstants.KEY_ESCAPE || (!searchFocused && key == KeyNames.parse(settings.guiKeybind.value))) {
-            onClose();
+            dismiss();
             return true;
         }
         if (showStudio() && studio.keyPressed(key)) {
