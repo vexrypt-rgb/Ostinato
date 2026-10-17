@@ -341,5 +341,7 @@
  "pathingHierarchyMinDistance": "Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly.",
  "blocksToAvoidStandingOn": "Blocks that Baritone will never stand on, for example a parkour map's kill floor or a block a command block reacts to. blocksToAvoid only keeps it from walking through blocks.",
  "allowMountClutch": "Survive a fall by getting on whatever we land beside: a horse, donkey, mule, llama or camel, a saddled pig or strider, a boat or a minecart. Riding cancels the fall, so the height doesn't matter.",
- "allowSteeredFalls": "Steer sideways while falling to drop through a hole in a floor below instead of landing on it, the way a dropper map is played. Only where air control can make it in time."
+ "allowSteeredFalls": "Steer sideways while falling to drop through a hole in a floor below instead of landing on it, the way a dropper map is played. Only where air control can make it in time.",
+ "analogMovement": "Steer like a controller stick instead of WASD keys where a movement asks for it: any fraction of walking speed, in any direction, each tick. Vanilla physics, it just isn't limited to full key presses. A standing jump from near a block's side uses it to stop on its take-off spot to the millimetre; a key tap moves ~0.22 blocks.",
+ "parkourTurnCap": "Degrees of yaw a jump may turn in one tick while it is flying a parkour plan, in place of the usual 32\u00b0 look cap. Jump plans assume the look keeps up; a standing up-one neo swings 53\u00b0 between two air ticks and at 32\u00b0 drifts off its landing. 32 restores the old cap. Not used with humanLookEverywhere."
 }

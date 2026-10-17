@@ -114,7 +114,7 @@ public class MovementJump extends Movement {
         int x, y, z;
         /** Ostinato: head-hitter sims spent this calculation (each ~30 ms; they dominated A* under floating courses). */
         Object simContext;
-        int sims;
+        int sims, simsFull;
         /** Ostinato: partial-block sims spent this calculation, and how many of those ran the whole plan grid. */
         int partialSims, partialFull;
         final List<Option> options = new ArrayList<>();
@@ -150,7 +150,7 @@ public class MovementJump extends Movement {
     private boolean running, landed;
     private int settle;
     private int replans, replanCooldown;
-    private int turnWait;
+    private int turnWait, stopWait;
     /** A carried landing was already given one full search; don't pay for another every tick while it slows down. */
     private boolean carrySearched;
     /** The moving take-off was already given one capped-yaw search. */
@@ -402,9 +402,9 @@ public class MovementJump extends Movement {
         return cell[3] == 0 && cell[1] >= 2 && context.get(cx, cy, cz).getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(context.get(cx, cy, cz));
     }
 
-    static final int MAX_NODE_SIMS = 3, MAX_CALC_SIMS = 150;
+    static final int MAX_NODE_SIMS = 8, MAX_CALC_SIMS = 1500, MAX_CALC_SIMS_FULL = 20;
     /** Ostinato: partial-block sims: a cheap local search each (~3 ms), the whole plan grid only while the calculation has budget. */
-    static final int MAX_NODE_PARTIAL = 16, MAX_CALC_PARTIAL = 800, MAX_CALC_PARTIAL_FULL = 40;
+    static final int MAX_NODE_PARTIAL = 32, MAX_CALC_PARTIAL = 4000, MAX_CALC_PARTIAL_FULL = 40;
 
     /** A collision shape short of a full cube that still holds a player (candle, chain, bed, slab, soul sand). */
     static boolean partial(BlockState state) {
@@ -440,12 +440,19 @@ public class MovementJump extends Movement {
         }
         PlayerSim.World world = new BsiWorld(context.bsi);
         JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz, context.nativeSearch);
+        js.anyLanding = true; // a cost check: whether it lands, not how best
         PlayerSim start = startState(world, x, z, f, t, startY);
+        long t0 = System.nanoTime();
         boolean ok = js.search(start, true);
+        long t1 = System.nanoTime();
+        PlanStats.partNs.addAndGet(t1 - t0);
+        PlanStats.partSims.incrementAndGet();
         boolean full = !ok && c.partialFull < MAX_CALC_PARTIAL_FULL;
         if (full) {
             c.partialFull++;
             ok = js.search(start, false);
+            PlanStats.fullNs.addAndGet(System.nanoTime() - t1);
+            PlanStats.fullSims.incrementAndGet();
         }
         if (ok || full) {
             HH_CACHE.put(k, ok); // a local miss without the full search may still land later: not remembered
@@ -498,8 +505,18 @@ public class MovementJump extends Movement {
         Boolean v = HH_CACHE.get(k);
         if (v == null) {
             c.sims++;
-            v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz, y, context.nativeSearch);
-            HH_CACHE.put(k, v);
+            long t0 = System.nanoTime();
+            boolean full = c.simsFull < MAX_CALC_SIMS_FULL;
+            v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz, y, context.nativeSearch, full);
+            long dt = System.nanoTime() - t0;
+            PlanStats.ceilNs.addAndGet(dt);
+            PlanStats.ceilSims.incrementAndGet();
+            if (!v && full && !JumpTemplates.MOMENTUM.contains(t)) {
+                c.simsFull++;
+            }
+            if (v || full) {
+                HH_CACHE.put(k, v); // a local miss without the full search may still land later: not remembered
+            }
         }
         return v;
     }
@@ -519,7 +536,7 @@ public class MovementJump extends Movement {
     }
 
     static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz) {
-        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, y, false);
+        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, y, false, true);
     }
 
     /**
@@ -528,14 +545,21 @@ public class MovementJump extends Movement {
      */
     static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY,
                                    boolean nativeSearch) {
+        return headHitterLands(world, x, y, z, f, t, dx, dy, dz, startY, nativeSearch, true);
+    }
+
+    /** As above; the whole plan grid (~30 ms, and rarely the one that lands) only when {@code full}, else around the template's plan. */
+    static boolean headHitterLands(PlayerSim.World world, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY,
+                                   boolean nativeSearch, boolean full) {
         JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz, nativeSearch);
+        js.anyLanding = true; // a yes/no answer: the flight searches its own plan
         PlayerSim start = startState(world, x, z, f, t, startY);
         if (JumpTemplates.MOMENTUM.contains(t)) {
             // Ostinato: multi-hop momentum run under the ceiling, from standing still at the run-up start
             start.vy = -0.0784000015258789;
             return MomentumHop.find(world, start, f[0], f[1], dx, dy, dz, false, MomentumHop.PLAN_BUDGET, nativeSearch) != null;
         }
-        return js.search(start, true) || js.search(start, false);
+        return js.search(start, true) || full && js.search(start, false);
     }
 
     public static void cost(CalculationContext context, int x, int y, int z, int slot, MutableMoveResult res) {
@@ -609,6 +633,33 @@ public class MovementJump extends Movement {
     }
 
     /** Sneak toward the middle without waiting for the look to turn. */
+    /**
+     * Ostinato: one tick of a controller stick toward the spot {@code (dx, dz)} away. With no input the ground coast
+     * goes {@code v / (1 - slip * 0.91)} further, so pick this tick's push to make that stop point the spot: a
+     * deadbeat on the stop point, fixed up every tick. Faces the take-off yaw meanwhile, so no turn is left after.
+     */
+    private void analogWalk(MovementState state, double dx, double dz, Vec3 m) {
+        float slip = real.world().slipperiness(PlayerSim.floor(real.x), PlayerSim.floor(real.y - 0.5000001), PlayerSim.floor(real.z));
+        double keep = slip * 0.91, coast = 1 / (1 - keep);
+        double amax = 0.1 * real.speedScale * (0.21600002 / (slip * slip * slip)) * 0.98;
+        double ax = dx / coast - m.x, az = dz / coast - m.z;
+        float yaw = ctx.player().getYRot();
+        state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, false, 0), ctx.playerRotations().getPitch()), true));
+        double sin = Math.sin(Math.toRadians(yaw)), cos = Math.cos(Math.toRadians(yaw));
+        // world push = left * (cos, sin) + forward * (-sin, cos), as PlayerSim.tick
+        double left = (ax * cos + az * sin) / amax, fwd = (-ax * sin + az * cos) / amax;
+        double big = Math.max(Math.abs(left), Math.abs(fwd));
+        if (big < 1e-6) {
+            return;
+        }
+        double len = Math.hypot(left, fwd), mag = Math.min(1, len);
+        // the client maps the stick's square onto a circle: a stick at (u * s) pushes |u| * s / max(|ux|, |uy|)
+        double s = mag * (big / len);
+        float l = (float) (left / len * s), f = (float) (fwd / len * s);
+        state.setInput(f >= 0 ? Input.MOVE_FORWARD : Input.MOVE_BACK, true); // keeps our input installed; the stick replaces its push
+        state.setAnalog(l, f);
+    }
+
     private void stepIn(MovementState state) {
         double dx = dest.x + 0.5 - ctx.player().getX();
         double dz = dest.z + 0.5 - ctx.player().getZ();
@@ -674,7 +725,7 @@ public class MovementJump extends Movement {
         real = null;
         running = landed = carrySearched = slewTried = false;
         tasPlan = null;
-        tasTick = settle = replans = replanCooldown = 0;
+        tasTick = settle = replans = replanCooldown = turnWait = stopWait = 0;
         if (trace != null) {
             trace.finish(false);
             trace = null;
@@ -684,6 +735,10 @@ public class MovementJump extends Movement {
     @Override
     public MovementState updateState(MovementState state) {
         MovementState s = update0(state);
+        if (running && s.getStatus() == MovementStatus.RUNNING) {
+            // the plan's yaw assumes the look keeps up with it
+            ((Baritone) baritone).getLookBehavior().turnCap(Baritone.settings().parkourTurnCap.value);
+        }
         if (trace != null && s.getStatus() != MovementStatus.RUNNING) {
             trace.finish(s.getStatus() == MovementStatus.SUCCESS);
             trace = null;
@@ -781,6 +836,12 @@ public class MovementJump extends Movement {
                 double lat = Math.min(t.lateral, 0.75);
                 double tx = wx(t.startA(), 0.5 + lat), tz = wz(t.startA(), 0.5 + lat);
                 double dx = tx - p.x, dz = tz - p.z;
+                boolean edge = t.runUp == 0 && t.lateral >= 0.5 && !JumpTemplates.MOMENTUM.contains(t);
+                if (edge && Baritone.settings().analogMovement.value && (dx * dx + dz * dz > 0.004 * 0.004 || Math.abs(m.x) + Math.abs(m.z) > 0.003) && stopWait++ < 80) {
+                    // a standing jump near the side has almost no slack: stop on the spot itself, facing the take-off
+                    analogWalk(state, dx, dz, m);
+                    return state;
+                }
                 if (dx * dx + dz * dz > 0.15 * 0.15) {
                     MovementHelper.walkToSpot(ctx, state, dx, dz);
                     return state;
@@ -793,6 +854,12 @@ public class MovementJump extends Movement {
                     PositionSync.sync(ctx.player());
                 } else {
                     boolean still = Math.abs(m.x) + Math.abs(m.z) <= 0.02;
+                    if (edge && Math.abs(m.x) + Math.abs(m.z) > 0.003 && stopWait++ < 12) {
+                        // Ostinato: a standing take-off near the block's side. Arriving there still moving slides the box
+                        // off the side before the jump (Neo Practice, 2 of 3 fell), and 'still' cuts the coast ~2cm short
+                        // of the spot, where no jump was found: no keys until it really stops.
+                        return state;
+                    }
                     if (!still) {
                         // Local search only, once a tick, and it does not stop to turn: waiting out the yaw dropped
                         // the 2-wall neo (drill_hh 20:53, 0/8). One capped search first when the take-off yaw is

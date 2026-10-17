@@ -31,4 +31,10 @@ public interface IInputOverrideHandler extends IBehavior {
     void setInputForceState(Input input, boolean forced);
 
     void clearAllKeys();
+
+    /**
+     * Ostinato: a stick position for the next movement tick, like a controller's: +left/-right and +forward/-back,
+     * each in [-1, 1]. Used only while {@link baritone.api.Settings#analogMovement} is on; cleared by {@link #clearAllKeys}.
+     */
+    default void setAnalog(float left, float forward) {}
 }

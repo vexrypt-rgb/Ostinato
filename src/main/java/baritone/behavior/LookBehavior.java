@@ -137,6 +137,17 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         p.xRotO = net.minecraft.util.Mth.clamp(p.xRotO + mp, -90f, 90f);
     }
 
+    private float turnCap;
+
+    /**
+     * Ostinato: for this tick only, the look may turn up to {@code deg} degrees instead of the usual 32. A parkour
+     * plan can swing the yaw 50° between two air ticks; at 32 the box drifts a few centimetres off it, enough to
+     * clip a landing block's side.
+     */
+    public void turnCap(float deg) {
+        this.turnCap = deg;
+    }
+
     private float velYaw, velPitch;
     private final java.util.Random handNoise = new java.util.Random();
 
@@ -204,7 +215,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 }
 
                 this.prevRotation = new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
+                this.processor.capOverride = this.turnCap;
                 final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
+                this.processor.capOverride = 0;
                 ctx.player().setYRot(actual.getYaw());
                 ctx.player().setXRot(actual.getPitch());
                 break;
@@ -242,6 +255,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 if (!this.human) { velYaw = 0; velPitch = 0; }
                 this.human = false;
                 this.ownMove = false;
+                this.turnCap = 0;
                 break;
             }
             default:
@@ -310,6 +324,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         private final ForkableRandom rand;
         private double randomYawOffset;
         private double randomPitchOffset;
+        /** Above zero, this tick's turn cap in place of the 32° one ({@link LookBehavior#turnCap}). */
+        float capOverride;
 
         public AbstractAimProcessor(IPlayerContext ctx) {
             this.ctx = ctx;
@@ -412,6 +428,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             try {
                 cap = Float.parseFloat(System.getProperty("ostinato.aim.deg", "32"));
             } catch (NumberFormatException ignored) {}
+            if (capOverride > 0) cap = capOverride;
             if (cap < 1f) cap = 1f;
             delta = net.minecraft.util.Mth.clamp(delta, -cap, cap);
             final double deltaPx = angleToMouse(delta); // yes, even the mouse movements use double

@@ -81,6 +81,22 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
     @Override
     public final void clearAllKeys() {
         this.inputForceStateMap.clear();
+        this.analog = null;
+    }
+
+    /** Ostinato: the stick position for the next movement tick, or null. */
+    private float[] analog;
+
+    @Override
+    public void setAnalog(float left, float forward) {
+        this.analog = new float[]{Math.max(-1, Math.min(1, left)), Math.max(-1, Math.min(1, forward))};
+    }
+
+    /** The stick position, once: a movement sets it again every tick it wants it. Null when unset or off. */
+    float[] takeAnalog() {
+        float[] a = this.analog;
+        this.analog = null;
+        return Baritone.settings().analogMovement.value ? a : null;
     }
 
     /** Standing on magma: sneaking is the only thing that stops it burning us, whatever else is steering. */
@@ -121,6 +137,9 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
     }
 
     private boolean inControl() {
+        if (analog != null && Baritone.settings().analogMovement.value) {
+            return true;
+        }
         for (Input input : new Input[]{Input.MOVE_FORWARD, Input.MOVE_BACK, Input.MOVE_LEFT, Input.MOVE_RIGHT, Input.SNEAK, Input.JUMP}) {
             if (isInputForcedDown(input)) {
                 return true;

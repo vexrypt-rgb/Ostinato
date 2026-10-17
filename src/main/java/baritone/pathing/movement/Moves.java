@@ -1077,6 +1077,30 @@ public enum Moves {
         }
     },
 
+    BUBBLE_LIFT_0(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementBubbleLift.cost(context, src, 0);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementBubbleLift.cost(context, x, y, z, 0, result);
+        }
+    },
+
+    BUBBLE_LIFT_1(0, 0, 0, true, true) {
+        @Override
+        public Movement apply0(CalculationContext context, BetterBlockPos src) {
+            return MovementBubbleLift.cost(context, src, 1);
+        }
+
+        @Override
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementBubbleLift.cost(context, x, y, z, 1, result);
+        }
+    },
+
     CLIMB_JUMP_0(0, 0, 0, true, true) {
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {

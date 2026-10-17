@@ -133,6 +133,8 @@ public final class JumpTemplates {
     private static final int[] RUN_UPS = {0, 1, 2, 3};
     /** Ostinato: start offsets behind the run-up block's centre, in tenths; tried for neos only, after the centre. */
     private static final int[] NEO_BACKS = {0, 2};
+    /** Ostinato: a neo up one off a single block needs the take-off from near its back edge. */
+    private static final int[] NEO_UP_BACKS = {0, 2, 4, 6};
     private static final int[] LATERAL = {0, 3, 6, 7, 8, 1}; // tenths of a block; 1 last: a 1-wall neo only works from about there
 
     /** Plain full blocks, slipperiness 0.6. */
@@ -162,7 +164,7 @@ public final class JumpTemplates {
     }
 
     public static void main(String[] args) throws Exception {
-        List<int[]> dests = new ArrayList<>(); // a, dy, b, wall
+        List<int[]> dests = new ArrayList<>(); // a, dy, b, wall[, wallEndOffset[, wallStart]]
         for (int a = 2; a <= 7; a++) for (int b = 0; b <= 4; b++) for (int dy = 1; dy >= -3; dy--) {
             if (b == 0 && dy >= 0 && a < (dy == 0 ? 5 : 4)) continue; // MovementParkour's straight gaps
             dests.add(new int[]{a, dy, b, 0});
@@ -171,15 +173,20 @@ public final class JumpTemplates {
         for (int wall = 1; wall <= 3; wall++) for (int b = 0; b >= -1; b--) for (int dy = 0; dy >= -1; dy--) dests.add(new int[]{wall + 1, dy, b, wall});
         // Ostinato: the wall ending one column to the side (-b) of the take-off: fly past its end and drift back in behind it
         for (int wall = 1; wall <= 3; wall++) for (int dy = 0; dy >= -1; dy--) dests.add(new int[]{wall + 1, dy, -1, wall, 1});
+        // Ostinato: a neo up one, landing on the block right behind the wall
+        for (int wall = 1; wall <= 2; wall++) for (int b = 0; b >= -1; b--) dests.add(new int[]{wall + 1, 1, b, wall});
+        // Ostinato: a gap before the wall (wall from a=2), and a gap after it too
+        for (int post = 0; post <= 1; post++) for (int b = 0; b >= -1; b--) for (int dy = 1 - post; dy >= -1; dy--) dests.add(new int[]{3 + post, dy, b, 1, 0, 2});
         List<String> out = new ArrayList<>();
         for (int[] d : dests) {
             search:
-            for (int r : RUN_UPS) for (int lat : LATERAL) for (int back : d[3] > 0 ? NEO_BACKS : new int[]{0}) {
+            for (int r : RUN_UPS) for (int lat : LATERAL) for (int back : d[3] > 0 ? (d[1] > 0 ? NEO_UP_BACKS : NEO_BACKS) : new int[]{0}) {
                 BoxWorld w = new BoxWorld();
                 for (int a = -r; a <= 0; a++) w.add(a, -1, 0);
                 w.add(d[0], d[1] - 1, d[2]);
                 int wallEnd = d.length > 4 ? -d[4] : 0;
-                for (int a = 1; a <= d[3]; a++) for (int b = -4; b <= wallEnd; b++) for (int y = 0; y <= 2; y++) w.add(a, y, b);
+                int wallStart = d.length > 5 ? d[5] : 1;
+                for (int a = wallStart; a < wallStart + d[3]; a++) for (int b = -4; b <= wallEnd; b++) for (int y = 0; y <= 2; y++) w.add(a, y, b);
                 JumpSearch js = new JumpSearch(w);
                 js.dirX = 1;
                 js.dirZ = 0;

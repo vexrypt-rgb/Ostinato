@@ -137,6 +137,8 @@ public class NativePlannerParityTest {
             for (int k = 0; k < JumpSearch.DIMS; k++) {
                 js.plan[k] = r.nextInt(2);
             }
+            boolean local = r.nextInt(3) == 0; // around the plan only
+            js.anyLanding = r.nextInt(3) == 0; // the first plan that lands, threads stopping early
             PlayerSim s = standing(w, 0.3 + 0.4 * r.nextDouble(), 0, -1.5 + 1.8 * r.nextDouble());
             if (r.nextBoolean()) {
                 s.sprinting = true;
@@ -146,7 +148,7 @@ public class NativePlannerParityTest {
                 js.jumped = true; // the run-up choices fixed, as a re-search in the air has them
                 js.airTicks = r.nextInt(4);
             }
-            boolean ok = js.search(s, false);
+            boolean ok = js.search(s, local);
             if (ok) {
                 found++;
             }
