@@ -15,8 +15,12 @@ freecam inventory). Change it on the Interface page or with `#set guiTheme singu
   nothing moves away from the cursor. Opening the menu flings the bodies out of the core along a spiral. Esc, Done
   or the close button pulls them back in before the menu closes. Switching category slides the new rows in. The
   header, search box, rows, tooltips and footer buttons are the same as in classic, in a darker panel.
-  The HUD cards turn to void glass with a photon-ring edge, a small black hole in the header and accretion-coloured
-  bars.
+  The HUD cards become orbit gauges. The path card is a small black hole at the screen edge whose photon ring fills
+  as the trip goes on, with the ETA, the mover and the current movement in a capsule beside it. The Autotune card is
+  a dome: the values the tuner can stand on are stops on an orbit around a black hole whose ring fills as the trial
+  runs. The trusted value is a solid stop, the candidate a pulsing amber one, the value in force has a photon ring
+  round it, and the stretch being tried is drawn between them. The numbers sit in rows below. The freecam inventory
+  keeps a void-glass panel, since an item grid does not fit a gauge.
 
 While `guiAccentColor` is at its default teal, singularity uses Hawking amber; any other accent colour is kept.
 On a narrow window the orbit hides its labels (the hovered and selected bodies keep theirs) and slides partly off

@@ -28,6 +28,11 @@ import java.util.Locale;
  * The {@code guiTheme} switch for everything Ostinato draws over the game: the menu and every HUD card. A HUD card
  * draws its frame, header, tiles, bars and text colours through here, so a new card follows the theme without
  * code of its own. The classic branch of each method draws exactly what the cards drew before themes existed.
+ * <p>
+ * Under the singularity theme a card that reports progress takes the orbit-gauge shape instead of a box: a
+ * {@link #dial} (a black hole whose photon ring fills with progress) joined to a {@link #capsule} of text, or a
+ * {@link #dome} with the dial at its centre. Cards that are grids, such as the freecam inventory, keep the
+ * {@link #panel}.
  */
 public final class Skin {
 
@@ -184,5 +189,102 @@ public final class Skin {
             return selected ? classicSelected : classicNormal;
         }
         return selected ? 0xE05A3416 : 0xA0141019;
+    }
+
+    // ---------------------------------------------------------------- orbit gauge (singularity HUD shapes)
+    //
+    // A singularity HUD card is a gauge rather than a slab: a dial (the black hole with its accretion ring as the
+    // progress meter) and a capsule of text beside it, or a dome whose top edge is an orbit. New cards draw through
+    // these so they take the same shape.
+
+    /**
+     * A thick arc along the ellipse (rx, ry) about (cx, cy), from angle a0 to a1 in radians, screen convention (0 is
+     * +x, positive turns clockwise on screen), shaded c0 to c1 along its length. Drawn as short rotated segments.
+     */
+    public static void arc(GuiGraphicsExtractor ms, float cx, float cy, float rx, float ry, double a0, double a1, float thick, int c0, int c1) {
+        double span = a1 - a0;
+        int n = Math.max(2, (int) Math.ceil(Math.abs(span) * Math.max(rx, ry) / 1.6));
+        float px = cx + rx * (float) Math.cos(a0), py = cy + ry * (float) Math.sin(a0);
+        for (int i = 1; i <= n; i++) {
+            double a = a0 + span * i / n;
+            float qx = cx + rx * (float) Math.cos(a), qy = cy + ry * (float) Math.sin(a);
+            float dx = qx - px, dy = qy - py, len = (float) Math.sqrt(dx * dx + dy * dy);
+            int c = GuiDraw.lerp(c0, c1, (i - 0.5f) / n);
+            float ov = (c >>> 24) == 0xFF ? 0.3f : 0f; // opaque segments overlap so no seam shows; see-through ones would bead
+            ms.pose().pushMatrix();
+            ms.pose().translate(px, py);
+            ms.pose().rotate((float) Math.atan2(dy, dx));
+            GuiDraw.rect(ms, -ov, -thick / 2, len + ov, thick / 2, c);
+            ms.pose().popMatrix();
+            px = qx;
+            py = qy;
+        }
+    }
+
+    /** A photon-ring arc: amber at a0, white-hot in the middle, ember and nothing at a1. */
+    public static void photonArc(GuiGraphicsExtractor ms, float cx, float cy, float rx, float ry, double a0, double a1, float thick, int accent, int alpha) {
+        double m = (a0 + a1) / 2;
+        arc(ms, cx, cy, rx, ry, a0, m, thick, GuiDraw.alphaOf(accent, 0), GuiDraw.alphaOf(PHOTON, alpha));
+        arc(ms, cx, cy, rx, ry, m, a1, thick, GuiDraw.alphaOf(PHOTON, alpha), GuiDraw.alphaOf(EMBER, 0));
+    }
+
+    /**
+     * The gauge dial: a dark disc of radius r, an accretion ring that fills clockwise from the top with p, and the black
+     * hole in the middle. busy (and nothing to show yet) turns a short bright arc round the ring instead.
+     */
+    public static void dial(GuiGraphicsExtractor ms, float cx, float cy, float r, float p, boolean busy, int accent, int fillAlpha, long now) {
+        GuiDraw.round(ms, cx - r, cy - r, cx + r, cy + r, r, GuiDraw.alphaOf(S_BORDER, Math.min(0xFF, fillAlpha + 0x20)));
+        GuiDraw.round(ms, cx - r + 0.5f, cy - r + 0.5f, cx + r - 0.5f, cy + r - 0.5f, r - 0.5f, GuiDraw.alphaOf(0x07060B, Math.min(0xF0, fillAlpha + 0x10)));
+        float rr = r - 3.5f, th = 2.5f;
+        double top = -Math.PI / 2;
+        arc(ms, cx, cy, rr, rr, 0, Math.PI * 2, th, 0x16FFE2B0, 0x16FFE2B0);
+        float q = Math.max(0, Math.min(1, p));
+        if (q > 0.002f) {
+            double end = top + Math.PI * 2 * q;
+            arc(ms, cx, cy, rr, rr, top, end, th, GuiDraw.lerp(EMBER, accent, 0.25f), GuiDraw.lerp(accent, PHOTON, 0.6f));
+            float hx = cx + rr * (float) Math.cos(end), hy = cy + rr * (float) Math.sin(end);
+            GuiDraw.round(ms, hx - 1.75f, hy - 1.75f, hx + 1.75f, hy + 1.75f, 1.75f, PHOTON);
+        } else if (busy) {
+            double head = top + (now % 1600L) / 1600.0 * Math.PI * 2;
+            arc(ms, cx, cy, rr, rr, head - 1.1, head, th, GuiDraw.alphaOf(accent, 0), GuiDraw.alphaOf(PHOTON, 0xE0));
+        }
+        SingularityArt.glyph(ms, cx, cy, rr - 3.5f, now);
+    }
+
+    /** The text capsule beside a dial: void glass, fully round ends, a photon line along the top. */
+    public static void capsule(GuiGraphicsExtractor ms, float x0, float y0, float x1, float y1, int accent, int fillAlpha) {
+        float r = Math.min(20, (y1 - y0) / 2);
+        GuiDraw.roundBorder(ms, x0, y0, x1, y1, r, GuiDraw.alphaOf(S_BORDER, Math.min(0xFF, fillAlpha)),
+                GuiDraw.alphaOf(0x0A0910, fillAlpha), GuiDraw.alphaOf(0x040307, fillAlpha));
+        photonLine(ms, x0 + r, x1 - r, y0 + 0.5f, accent);
+    }
+
+    /**
+     * A dome card: the part above split is the top half of an ellipse spanning the full width, the rest a box with
+     * round bottom corners. One quad per screen-pixel row, so the edge stays crisp; the dome's rim is a photon arc.
+     */
+    public static void dome(GuiGraphicsExtractor ms, float x0, float y0, float x1, float split, float y1, int accent, int fillAlpha, int rimAlpha) {
+        double scale = GuiDraw.guiScale();
+        float px = (float) (1.0 / scale), rx = (x1 - x0) / 2, ry = split - y0, cx = (x0 + x1) / 2, rc = 4;
+        int rows = (int) Math.ceil((y1 - y0) * scale);
+        for (int i = 0; i < rows; i++) {
+            float ya = y0 + i * px, yb = Math.min(y1, ya + px), ym = (ya + yb) / 2;
+            float half;
+            if (ym < split) {
+                double t = (split - ym) / ry;
+                half = (float) (rx * Math.sqrt(Math.max(0, 1 - t * t)));
+            } else if (ym > y1 - rc) {
+                double d = ym - (y1 - rc);
+                half = rx - rc + (float) Math.sqrt(Math.max(0, rc * rc - d * d));
+            } else {
+                half = rx;
+            }
+            if (half <= 0.05f) {
+                continue;
+            }
+            float t = (ym - y0) / (y1 - y0);
+            GuiDraw.rect(ms, cx - half, ya, cx + half, yb, GuiDraw.lerp(GuiDraw.alphaOf(0x0A0910, fillAlpha), GuiDraw.alphaOf(0x040307, fillAlpha), t));
+        }
+        photonArc(ms, cx, split, rx - 0.25f, ry - 0.25f, Math.PI, Math.PI * 2, 0.6f, accent, Math.max(0x60, rimAlpha));
     }
 }
