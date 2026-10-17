@@ -66,6 +66,12 @@ public final class JumpSearch {
      */
     public boolean slewYaw;
     public float faceYaw;
+    /**
+     * Ostinato: only whether some plan lands, not the best one (the planner's cost check throws the plan away): the
+     * starting plan is flown first and the grid stops at the first landing. The answer is the same; {@link #plan} is
+     * then a landing plan, not the best. Saves most of the grid (thousands of runs) when the jump is good.
+     */
+    public boolean anyLanding;
     /** Degrees per tick, matching {@code LookBehavior}'s aim cap at the default mouse sensitivity. */
     public static final float YAW_STEP = 32f;
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
@@ -238,7 +244,10 @@ public final class JumpSearch {
      * {@link #plan}. Prefers landing near the centre, then fewer ticks.
      */
     public boolean search(PlayerSim start, boolean local) {
-        return nativeSearch && !local ? searchNative(start) : searchJava(start, local);
+        if (anyLanding && run(start, plan, jumped, airTicks, null)) {
+            return true;
+        }
+        return nativeSearch ? searchNative(start, local) : searchJava(start, local);
     }
 
     private boolean searchJava(PlayerSim start, boolean local) {
@@ -258,6 +267,10 @@ public final class JumpSearch {
                     if (!run(start, p, jumped, airTicks, null)) {
                         continue;
                     }
+                    if (anyLanding) {
+                        System.arraycopy(p, 0, plan, 0, DIMS);
+                        return true;
+                    }
                     // a chain's first jump must land with speed left for the second one, whatever it costs in centring
                     double score = carry ? -landSpeed + 0.004 * ticks : miss + 0.004 * ticks;
                     if (score < bestScore) {
@@ -273,14 +286,14 @@ public final class JumpSearch {
         return true;
     }
 
-    private boolean searchNative(PlayerSim start) {
+    private boolean searchNative(PlayerSim start, boolean local) {
         JumpSearch ref = NativePlanners.verify ? copy() : null;
-        int r = NativePlanners.jumpSearch(this, start);
+        int r = NativePlanners.jumpSearch(this, start, local);
         if (r == NativePlanners.UNKNOWN) {
-            return searchJava(start, false);
+            return searchJava(start, local);
         }
         if (ref != null) {
-            boolean refOk = ref.searchJava(start, false);
+            boolean refOk = ref.searchJava(start, local);
             NativePlanners.checked.incrementAndGet();
             if (refOk != (r == 1) || !java.util.Arrays.equals(plan, ref.plan) || ticks != ref.ticks || Double.compare(miss, ref.miss) != 0
                     || Double.compare(landSpeed, ref.landSpeed) != 0 || destX != ref.destX || destY != ref.destY || destZ != ref.destZ
@@ -316,6 +329,7 @@ public final class JumpSearch {
         c.airTicks = airTicks;
         c.slewYaw = slewYaw;
         c.faceYaw = faceYaw;
+        c.anyLanding = anyLanding;
         c.ticks = ticks;
         c.miss = miss;
         c.landSpeed = landSpeed;

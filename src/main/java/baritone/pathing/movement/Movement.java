@@ -155,6 +155,10 @@ public abstract class Movement implements IMovement, MovementHelper {
             baritone.getInputOverrideHandler().setInputForceState(input, forced);
         });
         currentState.getInputStates().clear();
+        float[] analog = currentState.takeAnalog();
+        if (analog != null) {
+            baritone.getInputOverrideHandler().setAnalog(analog[0], analog[1]);
+        }
 
         // If the current status indicates a completed movement
         if (currentState.getStatus().isComplete()) {

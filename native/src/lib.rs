@@ -296,7 +296,8 @@ pub unsafe extern "C" fn ost_physics_plan(
 ///
 /// * `state`: 15 doubles, the start.
 /// * `params`: approachYaw, dirX, dirZ, edge, destX, destY, destZ, side, bounceY, anyDest, noJump, grab,
-///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw, threads (1 to 16: the grid is split over them).
+///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw, threads (1 to 16: the grid is split over them),
+///   local (only around the plan), anyLanding (the first plan that lands rather than the best).
 /// * `plan`: the search's 7 plan indices, read and written back.
 /// * `out`: ticks, miss, landSpeed, destX, destY, destZ and the sim's end state (15 doubles), written whatever the
 ///   answer, as the Java fields are.
@@ -326,7 +327,7 @@ pub unsafe extern "C" fn ost_jump_search(
             return ERR_BAD_ARGS;
         }
         let start = Sim::read(unsafe { slice::from_raw_parts(state, STATE_LEN) });
-        let pr = unsafe { slice::from_raw_parts(params, 20) };
+        let pr = unsafe { slice::from_raw_parts(params, 22) };
         let plan = unsafe { slice::from_raw_parts_mut(plan, jump::DIMS) };
         let size = [jump::O0.len(), jump::HOP.len(), jump::EDGE.len(), jump::O1.len(), jump::SWITCH.len(), jump::RELEASE.len(), jump::BRAKE.len()];
         if plan.iter().zip(size).any(|(&v, n)| v < 0 || v as usize >= n) {
@@ -352,6 +353,8 @@ pub unsafe extern "C" fn ost_jump_search(
         js.air_ticks = pr[16] as i32;
         js.slew_yaw = pr[17] != 0.0;
         js.face_yaw = pr[18] as f32;
+        js.local = pr[20] != 0.0;
+        js.any_landing = pr[21] != 0.0;
         js.plan.copy_from_slice(plan);
         js.sim = start;
         let threads = pr[19] as i32;

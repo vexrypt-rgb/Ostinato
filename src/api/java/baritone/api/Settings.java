@@ -243,6 +243,20 @@ public final class Settings {
     public final Setting<Boolean> allowTasJumps = new Setting<>(false);
 
     /**
+     * Steer like a controller stick instead of WASD keys where a movement asks for it: any fraction of walking speed,
+     * in any direction, each tick. Vanilla physics, it just isn't limited to full key presses. A standing jump from
+     * near a block's side uses it to stop on its take-off spot to the millimetre; a key tap moves ~0.22 blocks.
+     */
+    public final Setting<Boolean> analogMovement = new Setting<>(false);
+
+    /**
+     * Ostinato: degrees of yaw a jump may turn in one tick while it is flying a parkour plan, in place of the usual
+     * 32° look cap. Jump plans assume the look keeps up; a standing up-one neo swings 53° between two air ticks and
+     * at 32° drifts off its landing. 32 restores the old cap. Not used with {@link #humanLookEverywhere}.
+     */
+    public final Setting<Float> parkourTurnCap = new Setting<>(180f);
+
+    /**
      * Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it, like a water bucket clutch.
      * Needs a ladder or vine on the hotbar.
      */
