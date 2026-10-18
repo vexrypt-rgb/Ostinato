@@ -233,7 +233,7 @@ public final class KitBench implements AbstractGameEventListener {
             for (int y = lv.getMinY(); y < baseY; y++) {
                 net.minecraft.world.level.block.state.BlockState b = lv.getBlockState(new net.minecraft.core.BlockPos(0, y, 0));
                 if (b.isAir()) break;
-                floor.add(net.minecraft.world.level.block.state.BlockStateParser.serialize(b));
+                floor.add(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b.getBlock()).toString());
                 floorTop = y;
             }
             log("floor " + floor + " up to y " + floorTop);
