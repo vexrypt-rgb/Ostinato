@@ -19,6 +19,8 @@ pub const BRAKE: [i32; 2] = [0, 1];
 pub const DIMS: usize = 7;
 const MAX_GROUND: i32 = 40;
 const MAX_AIR: i32 = 40;
+/// Air ticks for a flight over a slime pad (`JumpSearch.MAX_BOUNCE_AIR`): it may bounce on pad after pad.
+const MAX_BOUNCE_AIR: i32 = 160;
 const SETTLE: i32 = 8;
 const HANG: i32 = 3;
 const YAW_STEP: f32 = 32.0;
@@ -141,7 +143,8 @@ impl<'a> JumpSearch<'a> {
         let mut bounced = false;
         let mut facing = self.face_yaw;
         let floor = floor_i(start.y + 0.01).min(self.dest_y).min(self.bounce_y) as f64 - 0.6;
-        for t in 0..(MAX_GROUND + MAX_AIR + SETTLE) {
+        let max_air = if self.bounce_y != i32::MAX { MAX_BOUNCE_AIR } else { MAX_AIR };
+        for t in 0..(MAX_GROUND + max_air + SETTLE) {
             if !jumped && t >= MAX_GROUND {
                 return false;
             }

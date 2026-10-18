@@ -28,6 +28,11 @@ public final class JumpSearch {
     public static final int DIMS = 7;
 
     private static final int MAX_GROUND = 40, MAX_AIR = 40, SETTLE = 8, HANG = 3;
+    /**
+     * Ostinato: air ticks for a flight over a slime pad. A tall drop bounces nearly as high again, and the flight may
+     * come down on a second pad and a third (each bounce is in the same plan), so it lasts far longer than a jump.
+     */
+    private static final int MAX_BOUNCE_AIR = 160;
 
     /** Frame of one jump: approach unit vector (dx, dz), front edge coordinate along it, and the landing block. */
     public double dirX, dirZ, edge;
@@ -159,7 +164,8 @@ public final class JumpSearch {
         boolean bounced = false;
         float facing = faceYaw;
         double floor = Math.min(Math.min(PlayerSim.floor(start.y + 0.01), destY), bounceY) - 0.6;
-        for (int t = 0; t < MAX_GROUND + MAX_AIR + SETTLE; t++) {
+        int maxAir = bounceY != Integer.MAX_VALUE ? MAX_BOUNCE_AIR : MAX_AIR;
+        for (int t = 0; t < MAX_GROUND + maxAir + SETTLE; t++) {
             if (!jumped && t >= MAX_GROUND) {
                 return false;
             }
