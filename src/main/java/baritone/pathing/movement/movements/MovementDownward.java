@@ -24,6 +24,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.utils.pathing.MutableMoveResult;
 import com.google.common.collect.ImmutableSet;
 import java.util.Set;
 import net.minecraft.world.level.block.Block;
@@ -46,12 +47,49 @@ public class MovementDownward extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
-        return cost(context, src.x, src.y, src.z);
+        MutableMoveResult res = new MutableMoveResult();
+        cost(context, src.x, src.y, src.z, res);
+        return res.y == dest.y ? res.cost : COST_INF;
     }
 
     @Override
     protected Set<BetterBlockPos> calculateValidPositions() {
-        return ImmutableSet.of(src, dest);
+        if (dest.y >= src.y - 1) {
+            return ImmutableSet.of(src, dest);
+        }
+        ImmutableSet.Builder<BetterBlockPos> column = ImmutableSet.builder();
+        for (int y = src.y; y >= dest.y; y--) {
+            column.add(new BetterBlockPos(src.x, y, src.z)); // a fall passes every cell of the column
+        }
+        return column.build();
+    }
+
+    /**
+     * Ostinato: one block down, or let go of a ladder or vine and fall straight down the column. A ladder that ends above
+     * a drop (nothing to stand on two below the bottom rung) has no other way off it, and a straight drop can't steer.
+     */
+    public static void cost(CalculationContext context, int x, int y, int z, MutableMoveResult res) {
+        res.x = x;
+        res.y = y - 1;
+        res.z = z;
+        res.cost = cost(context, x, y, z);
+        if (res.cost < COST_INF || !context.allowDownward) {
+            return;
+        }
+        if (!MovementHelper.isClimbable(context.get(x, y, z).getBlock()) && !MovementHelper.isClimbable(context.get(x, y - 1, z).getBlock())) {
+            return;
+        }
+        for (int ly = y - 1; y - ly <= context.maxFallHeightNoWater; ly--) {
+            BlockState here = context.get(x, ly, z);
+            if (!MovementHelper.isClimbable(here.getBlock()) && !MovementHelper.canWalkThrough(context, x, ly, z, here)) {
+                return;
+            }
+            if (ly < y - 1 && MovementHelper.canWalkOn(context, x, ly - 1, z)) {
+                res.y = ly;
+                res.cost = LADDER_DOWN_ONE_COST + FALL_N_BLOCKS_COST[y - ly];
+                return;
+            }
+        }
     }
 
     public static double cost(CalculationContext context, int x, int y, int z) {
@@ -78,7 +116,8 @@ public class MovementDownward extends Movement {
             return state;
         }
 
-        if (ctx.playerFeet().equals(dest)) {
+        boolean fall = dest.y < src.y - 1;
+        if (ctx.playerFeet().equals(dest) && (!fall || ctx.player().onGround())) {
             return state.setStatus(MovementStatus.SUCCESS);
         } else if (!playerInValidPosition()) {
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -87,8 +126,8 @@ public class MovementDownward extends Movement {
         double diffZ = ctx.player().position().z - (dest.getZ() + 0.5);
         double ab = Math.sqrt(diffX * diffX + diffZ * diffZ);
 
-        if (numTicks++ < 10 && ab < 0.2) {
-            return state;
+        if ((numTicks++ < 10 || fall) && ab < 0.2) {
+            return state; // pushing into the ladder while centred would climb it
         }
         MovementHelper.moveTowards(ctx, state, positionsToBreak[0]);
         return state;
