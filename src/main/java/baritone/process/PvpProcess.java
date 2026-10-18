@@ -756,6 +756,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private double groundY = Double.NaN;
+    private final CombatFooting footing = new CombatFooting(ctx); // Ostinato
 
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
@@ -788,10 +789,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (me == null || target == null) return;
         if (me.onGround()) groundY = me.getY();
         if (Double.isNaN(groundY)) return;
-        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
         baritone.api.utils.IInputOverrideHandler in = baritone.getInputOverrideHandler();
         double f = (in.isInputForcedDown(Input.MOVE_FORWARD) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_BACK) ? 1 : 0);
         double s = (in.isInputForcedDown(Input.MOVE_LEFT) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_RIGHT) ? 1 : 0);
+        if (CombatFooting.ON && !me.isFallFlying() && !me.isInWater() && !me.isInLava()) { // Ostinato: knockback/edge/lava on PlayerSim
+            boolean jump = in.isInputForcedDown(Input.JUMP);
+            double floor = target.getY() < groundY - 3 ? target.getY() - 1 + CombatFooting.MAX_DROP : groundY; // chasing it down a drop
+            int[] k = footing.guard(me, target, (int) f, (int) s, jump, me.distanceTo(target) < 5, floor);
+            if (k == null) return;
+            in.setInputForceState(Input.MOVE_FORWARD, k[0] > 0);
+            in.setInputForceState(Input.MOVE_BACK, k[0] < 0);
+            in.setInputForceState(Input.MOVE_LEFT, k[1] > 0);
+            in.setInputForceState(Input.MOVE_RIGHT, k[1] < 0);
+            in.setInputForceState(Input.JUMP, k[2] == 1);
+            tickDec = tickDec + "+foot";
+            return;
+        }
+        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
         Vec3 want = new Vec3(s, 0, f).yRot(-me.getYRot() * Mth.DEG_TO_RAD);
         if (want.lengthSqr() > 0) want = want.normalize();
         Vec3 h = me.getDeltaMovement().multiply(4, 0, 4).add(want.scale(1.1));

@@ -60,6 +60,9 @@ final class CombatMelee {
      * Read the tick's facts about the foe and our own state (shield, charge, immunity, rush) and equip for the swing.
      * Null once ready, else the swap decision. Runs before {@link #exchange}, which reads the facts as fields.
      */
+    /** Ostinato: treat a shield still in its warm-up as raised (old behaviour, for foes whose shield blocks at once). */
+    static final boolean RAISE_IS_BLOCK = Boolean.parseBoolean(System.getProperty("ostinato.raiseIsBlock", "true"));
+
     PathingCommand prepare(Player me, LivingEntity target, boolean inReach, boolean chase, boolean targetEating) {
         this.inReach = inReach;
         this.chase = chase;
@@ -67,7 +70,9 @@ final class CombatMelee {
         // a disabled shield stays "raised" for its 5s cooldown; don't keep throwing uncharged axe swings at it
         // only a shield past its 5-tick warm-up is disabled by the axe; a swing into the raise is a wasted cooldown
         // VexBot's shield blocks from its first tick (no warm-up), so the use flag is the shield
-        boolean tgShield = target.isBlocking() || target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
+        // Ostinato: 26.3 shields block only after their warm-up (isBlocking() reads it from the item). SMP bots tap the shield
+        // for 1-4 ticks: ~240 of ~370 uses never blocked, yet each froze our sword and swapped to the axe (reset charge).
+        boolean tgShield = target.isBlocking() || RAISE_IS_BLOCK && target.isUsingItem() && target.getUseItem().getItem() == Items.SHIELD;
         if (tgShield && me.tickCount - shield.lastAxeTick >= 4) shield.axeHeld = false; // it is back up: that swing did not disable it
         // the axe drew blood: there was no shield in its way, so none is on cooldown either
         if (shield.axeHeld && me.tickCount - shield.lastAxeTick <= 3 && target.hurtTime >= 8) shield.axeHeld = false;
