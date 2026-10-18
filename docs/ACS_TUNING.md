@@ -176,3 +176,23 @@ This is the new tuning pool: plenty of headroom, where the sword pool sat at 92-
 - Shield-tap fix, larger A/B (SMP bots, flat, paired seed 42, 48 rounds each): raiseIsBlock=false 7/48 (dealt 34.7, taken 42.5)
   vs default 8/48 (dealt 32.2, taken 40.4). Over both runs it's 10/72 for each. Mechanically correct, but it doesn't change
   results, so the default is kept.
+
+### Why we lose to SMP bots (flat, sword kit, 48-round logs plus server-side counters)
+| per side, 48 rounds | SMP bot | us |
+|---|---|---|
+| swings | 577 | 607 |
+| hits that drew health | 487 (84%) | 407 (67%) |
+| avg health per hit | 4.12 | 3.54 |
+| crits | 0% | ~35% (falling at the swing) |
+| gapples | 63 | 54, 53 of them begun within 4 blocks |
+- Shield: server-side the bot blocks only 5-6% of ticks, and 0.6-1.2 of our attacks per round hit a block.
+  Not the gap.
+- The axe was a leak: 233 of 607 swings, 120 of them at low charge, about 90% into no block. They were triggered by
+  shield taps and by `hiddenShield`, whose window only grows. `-Dostinato.hiddenShield=false -Dostinato.raiseIsBlock=false`
+  (axe only on a visible block), 48 paired rounds: 11/48 vs 10/48, axe swings 6.4 -> 0.8 a round, damage taken
+  43.4 -> 36.7, dealt 32.8 -> 29.1, damage per hit 3.54 -> 3.91. Fewer wasted swings, but the trade ratio barely
+  moved, so it stays opt-in.
+- Server truth: about 72% of our attacks hurt the bot (9.4 of 13.1 a round), at about 2.3-2.8 health per hurt by the
+  damage_dealt stat. It deals ~3.7 per hit back with the same kit. The bot always swings full (gaps of 13-15 ticks).
+  Half our sword swings are at 0.80-0.95 charge (`melee.duelCharge` 0.90), which loses damage and the crit.
+  Next A/B: duelCharge 1.00.
