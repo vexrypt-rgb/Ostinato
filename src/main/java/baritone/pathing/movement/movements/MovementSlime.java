@@ -219,14 +219,14 @@ public class MovementSlime extends Movement {
 
     /**
      * Feet height on a slime pad ahead in direction d below an open drop, and its offset to the side (+ to the
-     * right of d, 0 straight ahead), or null if there is none. Ostinato: off to the side too, up to about 40 degrees.
+     * right of d, 0 straight ahead), or null if there is none. Ostinato: off to the side too, up to the diagonal.
      */
     private static int[] pad(CalculationContext context, int x, int y, int z, int[] d) {
         if (!MovementHelper.fullyPassable(context, x + d[0], y, z + d[1]) || !MovementHelper.fullyPassable(context, x + d[0], y + 1, z + d[1])) {
             return null;
         }
         for (int k = 1; k <= REACH; k++) {
-            for (int a = 0; a <= Math.min(k, k * 3 / 5 + 1); a++) for (int sgn = 1; sgn >= (a == 0 ? 1 : -1); sgn -= 2) {
+            for (int a = 0; a <= k; a++) for (int sgn = 1; sgn >= (a == 0 ? 1 : -1); sgn -= 2) {
                 int l = a * sgn;
                 int cx = x + k * d[0] - l * d[1], cz = z + k * d[1] + l * d[0];
                 if (!MovementHelper.fullyPassable(context, cx, y, cz) || !MovementHelper.fullyPassable(context, cx, y + 1, cz)) {
@@ -236,7 +236,8 @@ public class MovementSlime extends Movement {
                     continue;
                 }
                 for (int yy = y - 1; yy >= y - DEPTH; yy--) {
-                    if (MovementHelper.fullyPassable(context, cx, yy, cz)) {
+                    // Ostinato: a pad at the bottom of a pool bounces too; the water only slows the fall
+                    if (MovementHelper.fullyPassable(context, cx, yy, cz) || MovementHelper.isWater(context.get(cx, yy, cz))) {
                         continue;
                     }
                     if (context.get(cx, yy, cz).getBlock() == Blocks.SLIME_BLOCK && yy <= y - 2) {
@@ -386,8 +387,10 @@ public class MovementSlime extends Movement {
         state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, js.jumped, js.airTicks), ctx.playerRotations().getPitch()), true));
         state.setInput(Input.MOVE_FORWARD, in > 0);
         state.setInput(Input.MOVE_BACK, in < 0);
-        state.setInput(Input.SPRINT, in > 0);
-        state.setInput(Input.JUMP, jump);
+        // in water the plan swims without sprinting (that would start the swim pose) or jumping
+        boolean wet = js.jumped && real.inWater();
+        state.setInput(Input.SPRINT, in > 0 && !wet);
+        state.setInput(Input.JUMP, jump && !wet);
         if ((jump && real.x * js.dirX + real.z * js.dirZ >= js.edge + JumpSearch.EDGE[js.plan[2]]) || (!js.jumped && !real.onGround && real.x * js.dirX + real.z * js.dirZ > js.edge)) {
             js.jumped = true;
             js.airTicks = 0;

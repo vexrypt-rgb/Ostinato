@@ -185,9 +185,9 @@ public final class PlayerSim {
         // vanilla: the swim pose starts with the eyes under, and lasts while sprinting in water, even with the head out
         swimming = sprinting && (swimming ? inWater() : eyesInWater());
         double yaw = Math.toRadians(yawDeg);
-        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        double sin = StrictMath.sin(yaw), cos = StrictMath.cos(yaw); // as tick: the native jump search flies water too
         if (swimming) {
-            double look = -Math.sin(Math.toRadians(pitchDeg));
+            double look = -StrictMath.sin(Math.toRadians(pitchDeg));
             double k = look < -0.2 ? 0.085 : 0.06;
             if (look <= 0 || jump || world.water(floor(x), floor(y + 1 - 0.1), floor(z))) {
                 vy += (look - vy) * k;

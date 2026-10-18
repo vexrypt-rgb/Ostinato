@@ -255,6 +255,9 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (block instanceof AirBlock) { // early return for most common case
             return YES;
         }
+        if (block instanceof SnowLayerBlock && state.getValue(SnowLayerBlock.LAYERS) == 1) {
+            return YES; // Ostinato: one layer has no collision at all: a jump takes off and lands through it like air
+        }
         // exceptions - blocks that are isPassable true, but we can't actually jump through
         if (block instanceof BaseFireBlock
                 || block == Blocks.TRIPWIRE
@@ -528,6 +531,12 @@ public interface MovementHelper extends ActionCosts, Helper {
     public static double collisionTop(BlockState state) {
         net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
         return s.isEmpty() ? -1 : s.max(net.minecraft.core.Direction.Axis.Y);
+    }
+
+    /** Bottom (0..1) of a state's own collision shape, 2 when it has none. */
+    public static double collisionBottom(BlockState state) {
+        net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        return s.isEmpty() ? 2 : s.min(net.minecraft.core.Direction.Axis.Y);
     }
 
     /** The narrower horizontal extent of a state's collision shape, 0 when it has none. */

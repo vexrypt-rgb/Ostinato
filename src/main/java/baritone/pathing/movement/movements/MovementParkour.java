@@ -45,6 +45,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LadderBlock;
@@ -101,6 +102,14 @@ public class MovementParkour extends Movement {
 
     static boolean slowTakeoff(float speedFactor, float jumpFactor) {
         return speedFactor < 1 || jumpFactor < 1;
+    }
+
+    /**
+     * Ostinato: a top slab or other high-bottomed shape over the gap: the head peaks 3.05 above take-off, under its
+     * underside, so the jump flies the same as under open sky.
+     */
+    private static boolean clearsApex(BlockState above) {
+        return above.getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(above) && MovementHelper.collisionBottom(above) >= 0.1;
     }
 
     /** Ostinato: fly a straight jump of distance i from the run-up actually there, in the sim, against the real blocks. */
@@ -183,7 +192,7 @@ public class MovementParkour extends Movement {
         // Ostinato: off a low top (candle, bed, chain, slab) the kinematic driver jumps too; flat jumps only, each one
         // flown in the sim from the real surface below
         boolean lowTakeoff = MovementHelper.isBottomSlab(standingOn);
-        if (MovementHelper.isClimbable(standingOn.getBlock()) || standingOn.getBlock() instanceof StairBlock || lowTakeoff && !context.allowParkourFourGap) {
+        if (MovementHelper.isClimbable(standingOn.getBlock()) || standingOn.getBlock() instanceof StairBlock && standingOn.getValue(StairBlock.HALF) != Half.TOP || lowTakeoff && !context.allowParkourFourGap) {
             return;
         }
         // we can't jump from (frozen) water with assumeWalkOnWater because we can't be sure it will be frozen
@@ -275,7 +284,7 @@ public class MovementParkour extends Movement {
                 break;
             }
 
-            if (!MovementHelper.fullyPassable(context, destX, y + 3, destZ)) {
+            if (!MovementHelper.fullyPassable(context, destX, y + 3, destZ) && !clearsApex(context.get(destX, y + 3, destZ))) {
                 break;
             }
 

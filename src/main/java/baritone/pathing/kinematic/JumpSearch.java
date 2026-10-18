@@ -171,7 +171,11 @@ public final class JumpSearch {
                 facing = stepYaw(facing, cmd);
                 cmd = facing;
             }
-            sim.tick(cmd, in, in > 0, j);
+            if (jumped && sim.inWater()) {
+                sim.tickWater(cmd, 0, in > 0, false, false, false); // Ostinato: falling through water onto a pad
+            } else {
+                sim.tick(cmd, in, in > 0, j);
+            }
             if (takeoff || (!jumped && !sim.onGround && bounceY != Integer.MAX_VALUE && sim.x * dirX + sim.z * dirZ > edge)) {
                 jumped = true; // toward a slime pad, walking off the edge is a take-off too
                 air = 0;

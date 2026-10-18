@@ -73,6 +73,22 @@ public final class JumpTemplates {
             }
             return ledgeCopy;
         }
+
+        private Template lowTopCopy;
+
+        /**
+         * Ostinato: this up jump onto a low top (at most a quarter high: 3 snow layers) in the landing's feet cell. The
+         * planner counts the player as standing in the node above it, though the feet only rise about 1.25: dy one
+         * higher, plus the cell the raised head reaches. Kept only once the sim flies it against the real blocks.
+         */
+        public Template lowTopVariant() {
+            if (lowTopCopy == null) {
+                int[][] more = java.util.Arrays.copyOf(cells, cells.length + 1);
+                more[cells.length] = new int[]{a, dy + 2, b, 0};
+                lowTopCopy = new Template(a, dy + 1, b, runUp, lateral, back, ticks, plan, more, ledge);
+            }
+            return lowTopCopy;
+        }
     }
 
     public static final List<Template> ALL = new ArrayList<>();
