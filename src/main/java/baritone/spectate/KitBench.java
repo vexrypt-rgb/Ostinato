@@ -224,6 +224,8 @@ public final class KitBench implements AbstractGameEventListener {
         String head = scenario.substring(0, scenario.indexOf(':')), kit = scenario.substring(scenario.indexOf(':') + 1);
         String st = style(kit);
         expected = head.equals("1v1") ? 2 : head.startsWith("teams") ? 2 * Integer.parseInt(head.replaceAll("[^0-9]", "")) : Integer.parseInt(head.replaceAll("[^0-9]", ""));
+        // Ostinato: every round on fresh ground 120 blocks on, since crystal rounds blow holes in the floor
+        run(server, me0, String.format(Locale.ROOT, "tp %s %.1f ~ -10", me0, 120.0 * round));
         if (Double.isNaN(baseY)) baseY = Math.floor(Minecraft.getInstance().player.getY()); // Ostinato: watch from a fixed height
         // each bot on its own; a team side is a Carpet faction (allies never target each other), which the client
         // cannot see: only the "t" variant adds scoreboard teams on top
@@ -232,10 +234,10 @@ public final class KitBench implements AbstractGameEventListener {
         for (int i = 0; i < expected; i++) {
             String n = "kb" + round + (teams ? (i < expected / 2 ? "r" : "b") : "p") + i;
             double ang = 2 * Math.PI * i / expected;
-            run(server, null, String.format(Locale.ROOT, "bot spawn %s %s %s at %.1f ~ %.1f", n, st, DIFF, 5 * Math.cos(ang), 5 * Math.sin(ang)));
+            run(server, null, String.format(Locale.ROOT, "bot spawn %s %s %s at %.1f ~ %.1f", n, st, DIFF, 120.0 * round + 5 * Math.cos(ang), 5 * Math.sin(ang)));
             if (teams) side.put(n, i < expected / 2 ? "red" : "blue");
         }
-        run(server, null, String.format(Locale.ROOT, "tp %s 0 %.1f -10 0 35", me0, baseY + 8));
+        run(server, null, String.format(Locale.ROOT, "tp %s %.1f %.1f -10 0 35", me0, 120.0 * round, baseY + 8));
         wait = 60;
     }
 
