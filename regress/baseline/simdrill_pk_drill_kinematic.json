@@ -1,0 +1,544 @@
+{
+  "stage": "simdrill:pk_drill:kinematic",
+  "kind": "simdrill",
+  "status": "ok",
+  "note": "",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "goals",
+      "value": 68.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_ok",
+      "value": 54.0,
+      "better": "higher",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_timeout",
+      "value": 0.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "cost_ok_total",
+      "value": 1327.8,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": "ticks"
+    },
+    {
+      "name": "jumps_in_ok_plans",
+      "value": 61.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "nodes_total",
+      "value": 95747.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "plan_ms_median",
+      "value": 2.2,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 20.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_p95",
+      "value": 1063.4,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 50.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_total",
+      "value": 11781.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 500.0,
+      "rel": 0.5,
+      "unit": "ms"
+    }
+  ],
+  "cases": {
+    "flat_gap1@3000,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 12.9,
+      "detail": "3 steps {gap1=1}"
+    },
+    "flat_gap2@3016,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 7.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "flat_gap3@3032,151,6": {
+      "outcome": "ok",
+      "cost": 23.383,
+      "nodes": 4,
+      "ms": 1.5,
+      "detail": "3 steps {gap3=1}"
+    },
+    "flat_gap4@3048,151,7": {
+      "outcome": "ok",
+      "cost": 30.51,
+      "nodes": 10,
+      "ms": 7.3,
+      "detail": "3 steps {gap4=1}"
+    },
+    "diag_gap1_side1@3065,151,4": {
+      "outcome": "ok",
+      "cost": 19.235,
+      "nodes": 9,
+      "ms": 5.0,
+      "detail": "2 steps {gap1=2}"
+    },
+    "diag_gap2_side1@3081,151,5": {
+      "outcome": "ok",
+      "cost": 23.867,
+      "nodes": 9,
+      "ms": 7.2,
+      "detail": "2 steps {gap1=1, gap2=1}"
+    },
+    "diag_gap2_side2@3098,151,5": {
+      "outcome": "ok",
+      "cost": 31.969,
+      "nodes": 10,
+      "ms": 4.1,
+      "detail": "2 steps {gap1=1, gap2=1}"
+    },
+    "diag_gap3_side1@3113,151,6": {
+      "outcome": "ok",
+      "cost": 24.224,
+      "nodes": 6,
+      "ms": 1.4,
+      "detail": "2 steps {gap1=1, gap3=1}"
+    },
+    "diag_gap3_side2@3130,151,6": {
+      "outcome": "ok",
+      "cost": 31.969,
+      "nodes": 10,
+      "ms": 2.5,
+      "detail": "2 steps {gap1=1, gap3=1}"
+    },
+    "up1_gap1@3144,152,4": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 4,
+      "ms": 0.6,
+      "detail": "3 steps {gap1=1}"
+    },
+    "up1_gap2@3160,152,5": {
+      "outcome": "ok",
+      "cost": 19.819,
+      "nodes": 4,
+      "ms": 0.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "up1_gap3@3176,152,6": {
+      "outcome": "ok",
+      "cost": 30.128,
+      "nodes": 10,
+      "ms": 2.0,
+      "detail": "3 steps {gap3=1}"
+    },
+    "up2_gap0_impossible_check@3192,153,3": {
+      "outcome": "noplan",
+      "ms": 481.4
+    },
+    "down1_gap3@3208,150,6": {
+      "outcome": "ok",
+      "cost": 33.969,
+      "nodes": 10,
+      "ms": 2.3,
+      "detail": "2 steps {gap1=1, gap3=1}"
+    },
+    "down2_gap4@3224,149,7": {
+      "outcome": "ok",
+      "cost": 35.128,
+      "nodes": 6,
+      "ms": 1.2,
+      "detail": "3 steps {gap4=1}"
+    },
+    "down3_gap4@3240,148,7": {
+      "outcome": "ok",
+      "cost": 36.001,
+      "nodes": 8,
+      "ms": 0.7,
+      "detail": "7 steps {drop3=1}"
+    },
+    "momentum_1block_gap3@3256,151,6": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.7,
+      "detail": "1 steps {gap3=1}"
+    },
+    "momentum_1block_gap4@3272,151,7": {
+      "outcome": "partial",
+      "cost": 28.873,
+      "nodes": 6750,
+      "ms": 336.0,
+      "detail": "5 steps {drop3=1}"
+    },
+    "headhitter_gap2@3288,151,5": {
+      "outcome": "ok",
+      "cost": 25.128,
+      "nodes": 10,
+      "ms": 7.0,
+      "detail": "3 steps {gap2=1}"
+    },
+    "headhitter_gap3@3304,151,6": {
+      "outcome": "ok",
+      "cost": 29.128,
+      "nodes": 10,
+      "ms": 11.4,
+      "detail": "3 steps {gap3=1}"
+    },
+    "blind_roof_landing_gap2@3320,151,5": {
+      "outcome": "ok",
+      "cost": 25.128,
+      "nodes": 10,
+      "ms": 1.3,
+      "detail": "3 steps {gap2=1}"
+    },
+    "neo_1wall@3336,151,4": {
+      "outcome": "ok",
+      "cost": 27.04,
+      "nodes": 10,
+      "ms": 12.7,
+      "detail": "2 steps {gap1=1}"
+    },
+    "neo_2wall@3352,151,5": {
+      "outcome": "ok",
+      "cost": 29.04,
+      "nodes": 10,
+      "ms": 2.7,
+      "detail": "2 steps {gap2=1}"
+    },
+    "neo_3wall@3368,151,6": {
+      "outcome": "ok",
+      "cost": 31.04,
+      "nodes": 10,
+      "ms": 1.2,
+      "detail": "2 steps {gap3=1}"
+    },
+    "corner_pillar_diag@3386,151,4": {
+      "outcome": "ok",
+      "cost": 25.564,
+      "nodes": 10,
+      "ms": 16.7,
+      "detail": "2 steps {gap1=1}"
+    },
+    "ladder_grab_gap2@3400,158,7": {
+      "outcome": "partial",
+      "cost": 70.526,
+      "nodes": 9770,
+      "ms": 562.7,
+      "detail": "8 steps {climb=6, gap2=1}"
+    },
+    "vine_grab_gap2@3416,158,7": {
+      "outcome": "partial",
+      "cost": 32.437,
+      "nodes": 10133,
+      "ms": 401.0,
+      "detail": "6 steps {drop3=1}"
+    },
+    "land_oak_fence_gap1@3432,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 3.4,
+      "detail": "3 steps {gap1=1}"
+    },
+    "land_oak_fence_gap2@3448,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 2.7,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_cobblestone_wall_gap1@3464,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 1.5,
+      "detail": "3 steps {gap1=1}"
+    },
+    "land_cobblestone_wall_gap2@3480,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_glass_pane_gap1@3496,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 1.2,
+      "detail": "3 steps {gap1=1}"
+    },
+    "land_glass_pane_gap2@3512,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_iron_bars_gap1@3528,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 1.2,
+      "detail": "3 steps {gap1=1}"
+    },
+    "land_iron_bars_gap2@3544,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_oak_fence_gate_gap1@3560,151,4": {
+      "outcome": "ok",
+      "cost": 18.393,
+      "nodes": 8,
+      "ms": 1.7,
+      "detail": "3 steps {gap1=1}"
+    },
+    "land_oak_fence_gate_gap2@3576,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.9,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_stone_slab@3592,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.8,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_stone_stairs@3608,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_oak_trapdoor@3624,151,5": {
+      "outcome": "noplan",
+      "ms": 646.5
+    },
+    "land_cauldron@3640,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 2.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_hopper@3656,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.4,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_anvil@3672,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.4,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_lantern@3688,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.3,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_candle@3704,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.3,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_candle4@3720,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_sea_pickle@3736,151,5": {
+      "outcome": "noplan",
+      "ms": 783.3
+    },
+    "land_player_head@3752,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 2.6,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_flower_pot@3768,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_end_rod@3784,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 1.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_iron_chain@3800,151,5": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 10,
+      "ms": 2.4,
+      "detail": "3 steps {gap2=1}"
+    },
+    "land_white_carpet_gap1_down1@3816,150,4": {
+      "outcome": "noplan",
+      "ms": 823.9
+    },
+    "land_snow4_gap1_down1@3832,150,4": {
+      "outcome": "noplan",
+      "ms": 823.6
+    },
+    "takeoff_ice_gap3@3848,151,6": {
+      "outcome": "ok",
+      "cost": 17.954,
+      "nodes": 7,
+      "ms": 4.5,
+      "detail": "3 steps {gap3=1}"
+    },
+    "takeoff_packed_ice_gap3@3864,151,6": {
+      "outcome": "ok",
+      "cost": 17.954,
+      "nodes": 7,
+      "ms": 2.2,
+      "detail": "3 steps {gap3=1}"
+    },
+    "takeoff_blue_ice_gap3@3880,151,6": {
+      "outcome": "ok",
+      "cost": 17.825,
+      "nodes": 7,
+      "ms": 0.9,
+      "detail": "3 steps {gap3=1}"
+    },
+    "takeoff_soul_sand_gap2@3896,151,5": {
+      "outcome": "ok",
+      "cost": 30.154,
+      "nodes": 10,
+      "ms": 2.2,
+      "detail": "3 steps {gap2=1}"
+    },
+    "takeoff_honey_gap1@3912,151,4": {
+      "outcome": "ok",
+      "cost": 29.085,
+      "nodes": 10,
+      "ms": 4.6,
+      "detail": "3 steps {gap1=1}"
+    },
+    "slime_bounce_up2@3928,153,8": {
+      "outcome": "partial",
+      "cost": 162.381,
+      "nodes": 22132,
+      "ms": 1089.5,
+      "detail": "7 steps {drop9=1}"
+    },
+    "cobweb_walkthrough@3944,151,8": {
+      "outcome": "partial",
+      "cost": 42.088,
+      "nodes": 22510,
+      "ms": 1063.4,
+      "detail": "5 steps {drop3=1, gap1=3}"
+    },
+    "water_drop_10_swim_out@3960,151,9": {
+      "outcome": "ok",
+      "cost": 50.56,
+      "nodes": 8,
+      "ms": 2.2,
+      "detail": "7 steps {gap1=1, up=1}"
+    },
+    "scaffolding_climb4@3976,155,5": {
+      "outcome": "noplan",
+      "ms": 1005.4
+    },
+    "drop3@3992,151,5": {
+      "outcome": "ok",
+      "cost": 25.309,
+      "nodes": 5,
+      "ms": 0.9,
+      "detail": "4 steps {drop3=1}"
+    },
+    "drop5_gap1@4008,151,5": {
+      "outcome": "partial",
+      "cost": 130.782,
+      "nodes": 23982,
+      "ms": 1007.0,
+      "detail": "4 steps {drop8=1}"
+    },
+    "door_top_edge_gap1@4024,153,7": {
+      "outcome": "ok",
+      "cost": 35.63,
+      "nodes": 12,
+      "ms": 3.8,
+      "detail": "5 steps {gap1=2, up=1}"
+    },
+    "honey_slab_up_slab_impossible_check@4040,152,4": {
+      "outcome": "noplan",
+      "ms": 1360.0
+    },
+    "stone_slab_up_slab@4056,152,4": {
+      "outcome": "ok",
+      "cost": 13.76,
+      "nodes": 4,
+      "ms": 0.8,
+      "detail": "3 steps {up=1}"
+    },
+    "honey_carpet_gap1@4072,151,4": {
+      "outcome": "noplan",
+      "ms": 1226.7
+    }
+  }
+}

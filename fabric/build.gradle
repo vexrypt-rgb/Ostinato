@@ -103,3 +103,17 @@ publishing {
         // Add repositories to publish to here.
     }
 }
+
+// Ostinato: -PclientXmx=<heap> (e.g. 4G) sets the dev client's heap for runClient, for test harness runs (PkTest
+// courses, the regression suite's live stages). The launcher passes its own -Xmx2G and the last -Xmx wins, so it is
+// added when the task starts. Also read from gradle.properties as ostinato_client_xmx. Unset: the launcher's heap.
+tasks.matching { it.name == 'runClient' }.configureEach { t ->
+    t.doFirst {
+        def xmx = project.findProperty('clientXmx') ?: project.findProperty('ostinato_client_xmx')
+        if (xmx) {
+            if (!(xmx.toString() ==~ /(?i)\d+[kmg]?/)) throw new GradleException("clientXmx must look like 4G or 3072M, got '" + xmx + "'")
+            t.jvmArgs("-Xmx" + xmx)
+            println "ostinato: runClient heap -Xmx" + xmx
+        }
+    }
+}

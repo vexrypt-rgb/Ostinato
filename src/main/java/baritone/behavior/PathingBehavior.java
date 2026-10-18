@@ -20,6 +20,7 @@ package baritone.behavior;
 import baritone.pathing.calc.HierarchicalPathFinder;
 import baritone.pathing.calc.hierarchy.SectionGraph;
 import baritone.pathing.seed.SeedPlanning;
+import baritone.pathing.viz.PathViz;
 import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
@@ -82,11 +83,23 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     private final java.util.Map<Goal, Long> overlongGoalLastDiscardMs = new java.util.HashMap<>();
     private static final long OVERLONG_GOAL_COOLDOWN_MS = 5000;
 
-    // Ostinato: where each search for this goal started. A second search from the same block means the last short
-    // one led round in a loop (a best-so-far path into a dead end), so it gets the failure timeout as its primary.
-    // Read and written with pathCalcLock held.
+    // Ostinato: where each search for this goal started, and the time it was given. A second search from the same block
+    // means the last short one led round in a loop (a best-so-far path into a dead end), or held at a drop it could not
+    // see past, so it gets at least the failure timeout as its primary, and twice what the last one had: a retry no
+    // longer than the plan-ahead before it repeats the same nodes (cubed level 6). Read and written with pathCalcLock
+    // held.
     private Goal plannedStartsGoal;
-    private final java.util.Set<BlockPos> plannedStarts = new java.util.HashSet<>();
+
+    /**
+     * Ostinato: positions an exhausted search proved cannot reach {@link #deadGoal}. A short first segment ended in a
+     * pocket the route out of was a one-way drop: the plan-ahead from its end ran out of nodes, and the bot walked the
+     * segment in anyway and stood there for good (cubed level 6, the ladder into the caves). Guarded by itself.
+     */
+    private final it.unimi.dsi.fastutil.longs.LongOpenHashSet dead = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+    private Goal deadGoal;
+    /** Ostinato: the planned segments end in a dead pocket; drop them at the next safe moment and plan again from here. */
+    private volatile boolean sealedReplan;
+    private final java.util.Map<BlockPos, Long> plannedStarts = new java.util.HashMap<>();
 
     private final Object pathPlanLock = new Object();
     /** Last time a moving goal replaced the in-progress search. */
@@ -142,6 +155,9 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         toDispatch.drainTo(curr);
         calcFailedLastTick = curr.contains(PathEvent.CALC_FAILED);
         for (PathEvent event : curr) {
+            if (event == PathEvent.AT_GOAL || event == PathEvent.CANCELED) {
+                PathViz.get().clear();
+            }
             baritone.getGameEventHandler().onPathEvent(event);
         }
     }
@@ -208,6 +224,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                 return;
             }
             safeToCancel = current.onTick();
+            if (sealedReplan && safeToCancel) {
+                sealedReplan = false;
+                logDebug("Planned path ends where the goal cannot be reached from; planning again from here");
+                secretInternalSegmentCancel();
+                return;
+            }
             if (current.failed() || current.finished()) {
                 current = null;
                 // The last tick's forced keys (e.g. the kinematic controller's MOVE_FORWARD) would otherwise outlive
@@ -642,22 +664,36 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             plannedStartsGoal = goal;
             plannedStarts.clear();
         }
-        if (!plannedStarts.add(start) && primaryTimeout < failureTimeout) {
-            logDebug("Searching again from " + start + ", allowing the full " + failureTimeout + "ms");
-            primaryTimeout = failureTimeout;
+        Long lastHere = plannedStarts.get(start);
+        long failureCap = Math.max(failureTimeout, Baritone.settings().failureTimeoutMaxMS.value);
+        if (lastHere != null) {
+            failureTimeout = Math.min(failureCap, Math.max(failureTimeout, Math.min(lastHere, failureCap) * 2));
+            if (primaryTimeout < failureTimeout) {
+                logDebug("Searching again from " + start + ", allowing the full " + failureTimeout + "ms");
+                primaryTimeout = failureTimeout;
+            }
         }
+        plannedStarts.put(start, primaryTimeout);
         final long primary = primaryTimeout;
+        final long failure = failureTimeout;
+        // A search that ran out of time with nodes still open is not a failure while a longer one may follow: hard
+        // parkour can need a thousand nodes of jump checks, more than a couple of seconds holds.
+        final boolean mayEscalate = failureTimeout < failureCap;
         AbstractNodeCostSearch pathfinder = createPathfinder(start, goal, current == null ? null : current.getPath(), context);
         if (!Objects.equals(pathfinder.getGoal(), goal)) { // will return the exact same object if simplification didn't happen
             logDebug("Simplifying " + goal.getClass() + " to GoalXZ due to distance");
         }
+        // Ostinato: hold at the edge of a drop until a longer search sees past it, but only for a goal in loaded chunks
+        // (one a longer search can settle) and while a longer search is still allowed.
+        pathfinder.holdAtDrops = mayEscalate && goal instanceof IGoalRenderPos
+                && context.bsi.worldContainsLoadedChunk(((IGoalRenderPos) goal).getGoalPos().getX(), ((IGoalRenderPos) goal).getGoalPos().getZ());
         inProgress = pathfinder;
         Baritone.getExecutor().execute(() -> {
             if (talkAboutIt) {
                 logDebug("Starting to search for path from " + start + " to " + goal);
             }
 
-            PathCalculationResult calcResult = pathfinder.calculate(primary, failureTimeout);
+            PathCalculationResult calcResult = pathfinder.calculate(primary, failure);
             synchronized (pathPlanLock) {
                 Optional<PathExecutor> executor = calcResult.getPath().map(p -> new PathExecutor(PathingBehavior.this, p));
                 // An over-long route is not walked: from here on it is a calculation that found nothing.
@@ -680,6 +716,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                             logDebug("Warning: discarding orphan path segment with incorrect start");
                             FaultBook.record("P05", "start " + start + " goal " + goal, System.currentTimeMillis());
                         }
+                    } else if (calcResult.getType() != PathCalculationResult.Type.CANCELLATION && clearDead()) {
+                        // Ostinato: nothing found with the dead pocket banned: its proof leaned on sim budgets, or the
+                        // bot is inside it already. Search again without the ban.
+                        logDebug("No path with the dead pocket banned; searching again without it");
+                    } else if (calcResult.getType() == PathCalculationResult.Type.FAILURE && mayEscalate && pathfinder.timedOut()) {
+                        logDebug("Out of time with nodes still open; searching again with longer");
                     } else {
                         if (calcResult.getType() != PathCalculationResult.Type.CANCELLATION && calcResult.getType() != PathCalculationResult.Type.EXCEPTION) {
                             // don't dispatch CALC_FAILED on cancellation
@@ -691,7 +733,17 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     }
                 } else {
                     if (next == null) {
-                        if (executor.isPresent()) {
+                        int n;
+                        if (pathfinder.exhausted() && calcResult.getType() != PathCalculationResult.Type.CANCELLATION
+                                && (executor.isEmpty() || !goal.isInGoal(executor.get().getPath().getDest()))
+                                && (n = markDead(goal, pathfinder, expectedSegmentStart)) > 0) {
+                            // Ostinato: everything reachable from where the current segment ends was searched and none
+                            // of it reaches the goal: walking on is a dead end. Ban it and plan again from here. Also when
+                            // the search found nothing at all: a pocket too small for a partial segment (no node 5 blocks
+                            // out) left the bot walking in and standing there for good (cubed level 6, -2,88,13).
+                            logDebug("Next segment from " + start + " is sealed off from the goal (" + n + " positions); dropping the current one");
+                            sealedReplan = true;
+                        } else if (executor.isPresent()) {
                             if (executor.get().getPath().getSrc().equals(current.getPath().getDest())) {
                                 queuePathEvent(PathEvent.NEXT_SEGMENT_CALC_FINISHED);
                                 next = executor.get();
@@ -729,6 +781,35 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         });
     }
 
+    /**
+     * Ostinato: adds what an exhausted search expanded to the dead set for {@code goal}; returns how many it holds, or 0
+     * (and adds nothing) when the bot already stands in it: there is no planning around a pocket it is in.
+     */
+    private int markDead(Goal goal, AbstractNodeCostSearch pathfinder, BlockPos here) {
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet found = pathfinder.expandedPositions();
+        if (here != null && found.contains(BetterBlockPos.longHash(here.getX(), here.getY(), here.getZ()))) {
+            return 0;
+        }
+        synchronized (dead) {
+            if (!Objects.equals(deadGoal, goal)) {
+                dead.clear();
+                deadGoal = goal;
+            }
+            dead.addAll(found);
+            return dead.size();
+        }
+    }
+
+    /** Ostinato: forgets the dead set; true when it held anything. */
+    private boolean clearDead() {
+        synchronized (dead) {
+            boolean had = !dead.isEmpty();
+            dead.clear();
+            deadGoal = null;
+            return had;
+        }
+    }
+
     /** Ostinato: the A* heuristic weight for a segment starting at {@code start}; 1 unless it is a far segment. */
     public static double farSegmentWeight(Goal goal, BlockPos start) {
         double w = Baritone.settings().pathingFarSegmentWeight.value;
@@ -759,7 +840,13 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         if (Baritone.settings().pathingHierarchical.value) { // Ostinato: opt-in hierarchical planner
             return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
         }
-        return new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
+        AStarPathFinder astar = new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
+        synchronized (dead) {
+            if (!dead.isEmpty() && Objects.equals(deadGoal, goal)) {
+                astar.avoidDead(dead.clone());
+            }
+        }
+        return astar;
 
     }
 

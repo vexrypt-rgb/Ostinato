@@ -1,0 +1,715 @@
+{
+  "stage": "simdrill:pk_practice:kinematic",
+  "kind": "simdrill",
+  "status": "ok",
+  "note": "",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "goals",
+      "value": 95.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_ok",
+      "value": 76.0,
+      "better": "higher",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_timeout",
+      "value": 0.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "cost_ok_total",
+      "value": 2008.1,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": "ticks"
+    },
+    {
+      "name": "jumps_in_ok_plans",
+      "value": 76.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "nodes_total",
+      "value": 15101.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "plan_ms_median",
+      "value": 0.6,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 20.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_p95",
+      "value": 1920.3,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 50.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_total",
+      "value": 31952.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 500.0,
+      "rel": 0.5,
+      "unit": "ms"
+    }
+  ],
+  "cases": {
+    "goal@2,99,267": {
+      "outcome": "ok",
+      "cost": 15.695,
+      "nodes": 4,
+      "ms": 5.0,
+      "detail": "2 steps"
+    },
+    "goal@0,100,269": {
+      "outcome": "ok",
+      "cost": 21.0,
+      "nodes": 3,
+      "ms": 0.8,
+      "detail": "1 steps {gap1=1}"
+    },
+    "goal@-1,100,272": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-1,101,275": {
+      "outcome": "ok",
+      "cost": 12.691,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@2,101,275": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@5,101,278": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@5,101,282": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@5,102,285": {
+      "outcome": "ok",
+      "cost": 12.691,
+      "nodes": 2,
+      "ms": 0.6,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@5,103,288": {
+      "outcome": "ok",
+      "cost": 12.691,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@3,104,291": {
+      "outcome": "ok",
+      "cost": 22.0,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-2,108,291": {
+      "outcome": "ok",
+      "cost": 53.862,
+      "nodes": 8,
+      "ms": 71.3,
+      "detail": "6 steps {climb=4, gap3=1}"
+    },
+    "goal@-1,105,300": {
+      "outcome": "ok",
+      "cost": 72.152,
+      "nodes": 8,
+      "ms": 15.1,
+      "detail": "2 steps {gap3=1, gap7=1}"
+    },
+    "goal@0,106,305": {
+      "outcome": "ok",
+      "cost": 26.564,
+      "nodes": 3,
+      "ms": 41.1,
+      "detail": "2 steps {gap3=1}"
+    },
+    "goal@-461,100,3": {
+      "outcome": "ok",
+      "cost": 15.695,
+      "nodes": 4,
+      "ms": 4.7,
+      "detail": "2 steps"
+    },
+    "goal@-463,101,6": {
+      "outcome": "ok",
+      "cost": 22.0,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-463,102,10": {
+      "outcome": "ok",
+      "cost": 23.0,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-466,102,14": {
+      "outcome": "ok",
+      "cost": 27.0,
+      "nodes": 2,
+      "ms": 0.6,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-469,102,14": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-469,102,18": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-467,102,20": {
+      "outcome": "ok",
+      "cost": 22.0,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap1=1}"
+    },
+    "goal@-464,102,20": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-460,102,20": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-457,108,22": {
+      "outcome": "noplan",
+      "ms": 1523.9
+    },
+    "goal@-457,108,25": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.6,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-457,108,28": {
+      "outcome": "ok",
+      "cost": 42.197,
+      "nodes": 4,
+      "ms": 0.5,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@-457,109,34": {
+      "outcome": "ok",
+      "cost": 30.128,
+      "nodes": 4,
+      "ms": 0.4,
+      "detail": "3 steps {gap3=1}"
+    },
+    "goal@-460,106,45": {
+      "outcome": "ok",
+      "cost": 53.654,
+      "nodes": 2,
+      "ms": 10.6,
+      "detail": "1 steps {gap10=1}"
+    },
+    "goal@-461,106,49": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.7,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-461,104,55": {
+      "outcome": "noplan",
+      "ms": 1488.3
+    },
+    "goal@-461,104,59": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-465,104,59": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-469,104,60": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-467,105,71": {
+      "outcome": "partial",
+      "cost": 38.511,
+      "nodes": 1667,
+      "ms": 1311.2,
+      "detail": "3 steps {climb=1, gap2=1, gap3=1}"
+    },
+    "goal@-462,104,72": {
+      "outcome": "ok",
+      "cost": 27.0,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap4=1}"
+    },
+    "goal@-459,104,73": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 1.0,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-456,104,74": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.9,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@-458,108,79": {
+      "outcome": "noplan",
+      "ms": 957.6
+    },
+    "goal@-462,106,79": {
+      "outcome": "ok",
+      "cost": 28.0,
+      "nodes": 2,
+      "ms": 0.6,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-463,106,83": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@-463,106,87": {
+      "outcome": "ok",
+      "cost": 45.76,
+      "nodes": 4,
+      "ms": 0.3,
+      "detail": "3 steps {gap1=1}"
+    },
+    "goal@-463,106,92": {
+      "outcome": "ok",
+      "cost": 19.819,
+      "nodes": 3,
+      "ms": 0.3,
+      "detail": "2 steps {gap3=1}"
+    },
+    "goal@-463,106,97": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 4,
+      "ms": 0.4,
+      "detail": "3 steps {gap2=1}"
+    },
+    "goal@502,100,2": {
+      "outcome": "ok",
+      "cost": 15.695,
+      "nodes": 4,
+      "ms": 10.9,
+      "detail": "2 steps"
+    },
+    "goal@500,101,6": {
+      "outcome": "ok",
+      "cost": 37.143,
+      "nodes": 32,
+      "ms": 4.8,
+      "detail": "4 steps {gap4=1, up=1}"
+    },
+    "goal@500,102,10": {
+      "outcome": "ok",
+      "cost": 23.0,
+      "nodes": 2,
+      "ms": 0.6,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@498,103,12": {
+      "outcome": "ok",
+      "cost": 21.0,
+      "nodes": 2,
+      "ms": 0.7,
+      "detail": "1 steps {gap1=1}"
+    },
+    "goal@495,103,12": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.9,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@495,103,15": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 1.4,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@493,103,17": {
+      "outcome": "ok",
+      "cost": 22.0,
+      "nodes": 2,
+      "ms": 0.8,
+      "detail": "1 steps {gap1=1}"
+    },
+    "goal@493,103,20": {
+      "outcome": "ok",
+      "cost": 15.899,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@493,105,25": {
+      "outcome": "noplan",
+      "ms": 1541.5
+    },
+    "goal@494,103,26": {
+      "outcome": "ok",
+      "cost": 49.0,
+      "nodes": 4,
+      "ms": 6.8,
+      "detail": "2 steps {gap1=1, gap2=1}"
+    },
+    "goal@496,105,28": {
+      "outcome": "noplan",
+      "ms": 1993.5
+    },
+    "goal@500,103,28": {
+      "outcome": "ok",
+      "cost": 28.0,
+      "nodes": 2,
+      "ms": 0.5,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@503,103,28": {
+      "outcome": "ok",
+      "cost": 42.197,
+      "nodes": 5,
+      "ms": 0.5,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@502,105,28": {
+      "outcome": "noplan",
+      "ms": 2385.0
+    },
+    "goal@508,106,30": {
+      "outcome": "partial",
+      "cost": 40.121,
+      "nodes": 2663,
+      "ms": 1878.8,
+      "detail": "5 steps {drop2=1, gap3=1}"
+    },
+    "goal@508,103,38": {
+      "outcome": "ok",
+      "cost": 46.692,
+      "nodes": 13,
+      "ms": 1.7,
+      "detail": "10 steps {drop3=1}"
+    },
+    "goal@508,103,44": {
+      "outcome": "ok",
+      "cost": 23.383,
+      "nodes": 4,
+      "ms": 0.5,
+      "detail": "3 steps {gap3=1}"
+    },
+    "goal@508,103,48": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@508,103,52": {
+      "outcome": "ok",
+      "cost": 16.255,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@502,103,52": {
+      "outcome": "ok",
+      "cost": 26.947,
+      "nodes": 3,
+      "ms": 0.4,
+      "detail": "2 steps {gap4=1}"
+    },
+    "goal@501,103,56": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@500,103,59": {
+      "outcome": "ok",
+      "cost": 19.462,
+      "nodes": 5,
+      "ms": 0.4,
+      "detail": "2 steps {gap2=1}"
+    },
+    "goal@500,103,65": {
+      "outcome": "ok",
+      "cost": 50.957,
+      "nodes": 8,
+      "ms": 0.9,
+      "detail": "4 steps {gap2=1}"
+    },
+    "goal@500,103,70": {
+      "outcome": "ok",
+      "cost": 23.026,
+      "nodes": 4,
+      "ms": 0.3,
+      "detail": "3 steps {gap2=1}"
+    },
+    "goal@500,103,73": {
+      "outcome": "ok",
+      "cost": 42.197,
+      "nodes": 4,
+      "ms": 0.3,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@500,103,78": {
+      "outcome": "ok",
+      "cost": 19.819,
+      "nodes": 3,
+      "ms": 0.2,
+      "detail": "2 steps {gap3=1}"
+    },
+    "goal@496,104,78": {
+      "outcome": "ok",
+      "cost": 23.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@490,104,79": {
+      "outcome": "noplan",
+      "ms": 1840.3
+    },
+    "goal@490,108,88": {
+      "outcome": "partial",
+      "cost": 50.691,
+      "nodes": 2674,
+      "ms": 1266.7,
+      "detail": "5 steps {gap1=1, gap3=1}"
+    },
+    "goal@492,108,89": {
+      "outcome": "ok",
+      "cost": 14.829,
+      "nodes": 3,
+      "ms": 0.7,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@491,106,89": {
+      "outcome": "ok",
+      "cost": 13.175,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {drop2=1}"
+    },
+    "goal@494,106,90": {
+      "outcome": "noplan",
+      "ms": 1817.1
+    },
+    "goal@497,106,94": {
+      "outcome": "ok",
+      "cost": 27.0,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@497,106,96": {
+      "outcome": "ok",
+      "cost": 29.564,
+      "nodes": 5,
+      "ms": 34.8,
+      "detail": "2 steps {gap2=1}"
+    },
+    "goal@497,108,95": {
+      "outcome": "noplan",
+      "ms": 1361.7
+    },
+    "goal@497,107,101": {
+      "outcome": "ok",
+      "cost": 39.739,
+      "nodes": 5,
+      "ms": 0.9,
+      "detail": "3 steps {drop2=1, gap3=1}"
+    },
+    "goal@499,104,110": {
+      "outcome": "ok",
+      "cost": 52.756,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap8=1}"
+    },
+    "goal@500,104,114": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 5,
+      "ms": 0.5,
+      "detail": "1 steps {gap3=1}"
+    },
+    "goal@500,105,117": {
+      "outcome": "ok",
+      "cost": 12.691,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap2=1}"
+    },
+    "goal@500,105,120": {
+      "outcome": "ok",
+      "cost": 14.829,
+      "nodes": 3,
+      "ms": 0.3,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@500,105,124": {
+      "outcome": "noplan",
+      "ms": 1270.4
+    },
+    "goal@500,107,123": {
+      "outcome": "noplan",
+      "ms": 1683.7
+    },
+    "goal@499,107,114": {
+      "outcome": "partial",
+      "cost": 31.564,
+      "nodes": 3889,
+      "ms": 1510.7,
+      "detail": "2 steps {gap4=1}"
+    },
+    "goal@500,107,113": {
+      "outcome": "ok",
+      "cost": 5.04,
+      "nodes": 2,
+      "ms": 1.3,
+      "detail": "1 steps"
+    },
+    "goal@499,100,108": {
+      "outcome": "ok",
+      "cost": 94.683,
+      "nodes": 42,
+      "ms": 56.0,
+      "detail": "3 steps {drop5=1, gap2=1, up=1}"
+    },
+    "goal@498,106,140": {
+      "outcome": "noplan",
+      "ms": 1920.3
+    },
+    "goal@493,105,140": {
+      "outcome": "ok",
+      "cost": 28.197,
+      "nodes": 4,
+      "ms": 2.5,
+      "detail": "3 steps {gap3=1, up=1}"
+    },
+    "goal@494,113,152": {
+      "outcome": "partial",
+      "cost": 118.17,
+      "nodes": 3902,
+      "ms": 2116.7,
+      "detail": "11 steps {drop6=1, gap1=1}"
+    },
+    "goal@494,112,156": {
+      "outcome": "ok",
+      "cost": 64.409,
+      "nodes": 10,
+      "ms": 49.4,
+      "detail": "4 steps {climb=1, gap2=1, gap3=2}"
+    },
+    "goal@494,113,157": {
+      "outcome": "noplan",
+      "ms": 1622.9
+    },
+    "goal@495,113,159": {
+      "outcome": "ok",
+      "cost": 14.829,
+      "nodes": 3,
+      "ms": 0.8,
+      "detail": "2 steps {gap1=1}"
+    },
+    "goal@495,111,158": {
+      "outcome": "ok",
+      "cost": 13.175,
+      "nodes": 2,
+      "ms": 0.4,
+      "detail": "1 steps {drop2=1}"
+    },
+    "goal@500,106,164": {
+      "outcome": "noplan",
+      "ms": 2116.2
+    }
+  }
+}

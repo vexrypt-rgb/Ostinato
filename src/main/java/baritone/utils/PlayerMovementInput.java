@@ -67,11 +67,9 @@ public class PlayerMovementInput extends ClientInput {
             right = leftImpulse < 0;
         }
 
+        // Ostinato: no 0.3 here. LocalPlayer.modifyInput scales by the sneaking-speed attribute itself, so scaling here
+        // too made a sneak walk 0.09: on ice it barely pushed, and a landing that slid a block past stood there (cubed).
         boolean sneaking = handler.isInputForcedDown(Input.SNEAK) || handler.onMagma();
-        if (sneaking) {
-            leftImpulse *= 0.3D;
-            forwardImpulse *= 0.3D;
-        }
         this.moveVector = new Vec2(leftImpulse, forwardImpulse);
 
         boolean sprinting = handler.isInputForcedDown(Input.SPRINT);

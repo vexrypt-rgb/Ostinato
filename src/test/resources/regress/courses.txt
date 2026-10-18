@@ -1,0 +1,8 @@
+# Ostinato: regression suite sim drills (SimDrillStage). Course files are PkTest scripts, copied from the pk harness
+# (pk/goals). world: the save folder under -Pregress_worlds, or - when the script builds the course with commands.
+# name          file                              world                         modes
+pk_drill        pk_drill.txt                      -                             kinematic,physics
+pk_drill_hh     pk_drill_hh.txt                   -                             kinematic,physics
+pk_oreroute     pk_oreroute.txt                   pk_ore_parkour_of_patience    kinematic
+pk_ore          pk_ore_parkour_of_patience.txt    pk_ore_parkour_of_patience    kinematic
+pk_practice     pk_practice_parkour.txt           pk_practice_parkour           kinematic

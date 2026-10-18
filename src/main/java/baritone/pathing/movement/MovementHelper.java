@@ -558,6 +558,27 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     /**
+     * Ostinato: the bounds of the boxes of a state's collision shape that reach its top, null when it has none. A foot
+     * lands on these: a brewing stand's bounds span its base plate, but its top is the 2/16 rod (cubed level 1).
+     */
+    public static net.minecraft.world.phys.AABB collisionTopBounds(BlockState state) {
+        net.minecraft.world.phys.shapes.VoxelShape s = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        if (s.isEmpty()) return null;
+        double top = s.max(net.minecraft.core.Direction.Axis.Y);
+        net.minecraft.world.phys.AABB out = null;
+        for (net.minecraft.world.phys.AABB b : s.toAabbs()) {
+            if (b.maxY >= top - 1e-6) out = out == null ? b : out.minmax(b);
+        }
+        return out;
+    }
+
+    /** The narrower horizontal extent of {@link #collisionTopBounds}, 0 when there is no shape. */
+    public static double collisionTopWidth(BlockState state) {
+        net.minecraft.world.phys.AABB b = collisionTopBounds(state);
+        return b == null ? 0 : Math.min(b.maxX - b.minX, b.maxZ - b.minZ);
+    }
+
+    /**
      * Whether a collision top this high and this wide holds a player standing in the block above. Below a quarter
      * (carpet, plates, snow layers) the player stands in this block's own cell instead; above one (fences, walls)
      * the player's feet are a cell up, which the node grid does not model.
@@ -837,10 +858,68 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
     }
 
+    /**
+     * Ostinato: where in a node's cell to stand. The centre, unless nothing holds a player there: an open trapdoor's
+     * panel holds only the side of the cell it is on (cubed level 1's trapdoor step walked to the centre of a node held
+     * by a north-facing panel, 0.01 past its edge, and fell every time). Then the point nearest the centre whose hitbox
+     * rests 0.1 onto a top level with the feet and clips nothing at body height.
+     */
+    static Vec3 footing(IPlayerContext ctx, BlockPos pos) {
+        Vec3 c = VecUtils.getBlockPosCenter(pos);
+        net.minecraft.world.level.Level w = ctx.world();
+        if (w == null) return c;
+        int y = pos.getY();
+        List<net.minecraft.world.phys.AABB> floor = new ArrayList<>(), body = new ArrayList<>();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    m.set(pos.getX() + dx, y + dy, pos.getZ() + dz);
+                    for (net.minecraft.world.phys.AABB b : w.getBlockState(m).getCollisionShape(w, m).toAabbs()) {
+                        net.minecraft.world.phys.AABB a = b.move(m);
+                        if (a.maxY > y - 0.6 && a.maxY <= y + 0.6) { // down to a bottom slab, up to a fence top
+                            floor.add(a);
+                        } else if (a.maxY > y + 0.6 && a.minY < y + 1.8) {
+                            body.add(a);
+                        }
+                    }
+                }
+            }
+        }
+        if (floor.isEmpty() || rests(floor, body, c.x, c.z, 1e-3)) return c;
+        double bx = c.x, bz = c.z, best = Double.MAX_VALUE;
+        for (int i = 1; i < 50; i++) {
+            for (int k = 1; k < 50; k++) {
+                double px = pos.getX() + i * 0.02, pz = pos.getZ() + k * 0.02;
+                double d = (px - c.x) * (px - c.x) + (pz - c.z) * (pz - c.z);
+                if (d < best && rests(floor, body, px, pz, 0.1)) {
+                    best = d;
+                    bx = px;
+                    bz = pz;
+                }
+            }
+        }
+        return new Vec3(bx, c.y, bz);
+    }
+
+    /** Whether a hitbox centred at (px, pz) overlaps a floor box by {@code min} (or its whole extent) and no body box. */
+    private static boolean rests(List<net.minecraft.world.phys.AABB> floor, List<net.minecraft.world.phys.AABB> body, double px, double pz, double min) {
+        double h = 0.3;
+        for (net.minecraft.world.phys.AABB a : body) {
+            if (a.minX < px + h && a.maxX > px - h && a.minZ < pz + h && a.maxZ > pz - h) return false;
+        }
+        for (net.minecraft.world.phys.AABB a : floor) {
+            double ox = Math.min(px + h, a.maxX) - Math.max(px - h, a.minX);
+            double oz = Math.min(pz + h, a.maxZ) - Math.max(pz - h, a.minZ);
+            if (ox >= Math.min(min, (a.maxX - a.minX) * 0.9) && oz >= Math.min(min, (a.maxZ - a.minZ) * 0.9)) return true;
+        }
+        return false;
+    }
+
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
         state.setTarget(new MovementTarget(
                 RotationUtils.calcRotationFromVec3d(ctx.playerHead(),
-                        VecUtils.getBlockPosCenter(pos),
+                        footing(ctx, pos),
                         ctx.playerRotations()).withPitch(ctx.playerRotations().getPitch()),
                 false
         )).setInput(Input.MOVE_FORWARD, true);
@@ -875,7 +954,7 @@ public interface MovementHelper extends ActionCosts, Helper {
     static void moveTowardsWithoutRotation(IPlayerContext ctx, MovementState state, BlockPos dest) {
         float idealYaw = RotationUtils.calcRotationFromVec3d(
                 ctx.playerHead(),
-                VecUtils.getBlockPosCenter(dest),
+                footing(ctx, dest),
                 ctx.playerRotations()
         ).getYaw();
         moveTowardsWithoutRotation(ctx, state, idealYaw);
@@ -884,7 +963,7 @@ public interface MovementHelper extends ActionCosts, Helper {
     static void moveTowardsWithSlightRotation(IPlayerContext ctx, MovementState state, BlockPos dest) {
         float idealYaw = RotationUtils.calcRotationFromVec3d(
                 ctx.playerHead(),
-                VecUtils.getBlockPosCenter(dest),
+                footing(ctx, dest),
                 ctx.playerRotations()
         ).getYaw();
         float distance = Rotation.yawDistanceFromOffset(ctx.playerRotations().getYaw(), idealYaw) % 45f;

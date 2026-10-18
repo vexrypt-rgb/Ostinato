@@ -1,0 +1,287 @@
+{
+  "stage": "pathbench:kinematic:game",
+  "kind": "pathbench",
+  "status": "ok",
+  "note": "1 timed rep(s) after a warm-up; per-query ms is the median",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "queries",
+      "value": 35.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "failures",
+      "value": 0.0,
+      "better": "lower",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "timeouts",
+      "value": 3.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "mean_cost",
+      "value": 566.1853,
+      "better": "lower",
+      "severity": "fail",
+      "abs": 0.001,
+      "rel": 0.005,
+      "unit": "ticks"
+    },
+    {
+      "name": "nodes_total",
+      "value": 52448.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.1,
+      "unit": ""
+    },
+    {
+      "name": "plan_ms_median",
+      "value": 114.2,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 5.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_p95",
+      "value": 10003.5,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 20.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "time_to_arrive",
+      "value": 572.9,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 1.0,
+      "rel": 0.02,
+      "unit": "ticks"
+    }
+  ],
+  "cases": {
+    "FLAT/SHORT/0": {
+      "outcome": "ok",
+      "cost": 300.365091,
+      "nodes": 194,
+      "ms": 14.6
+    },
+    "FLAT/SHORT/1": {
+      "outcome": "ok",
+      "cost": 268.963628,
+      "nodes": 41,
+      "ms": 1.1
+    },
+    "FLAT/SHORT/2": {
+      "outcome": "ok",
+      "cost": 225.029857,
+      "nodes": 48,
+      "ms": 1.4
+    },
+    "FLAT/SHORT/3": {
+      "outcome": "ok",
+      "cost": 313.532273,
+      "nodes": 42,
+      "ms": 1.2
+    },
+    "FLAT/MEDIUM/0": {
+      "outcome": "ok",
+      "cost": 895.154454,
+      "nodes": 249,
+      "ms": 128.2
+    },
+    "FLAT/MEDIUM/1": {
+      "outcome": "ok",
+      "cost": 894.313157,
+      "nodes": 250,
+      "ms": 124.1
+    },
+    "FLAT/MEDIUM/2": {
+      "outcome": "ok",
+      "cost": 925.838358,
+      "nodes": 223,
+      "ms": 115.8
+    },
+    "FLAT/MEDIUM/3": {
+      "outcome": "ok",
+      "cost": 925.441151,
+      "nodes": 210,
+      "ms": 4.2
+    },
+    "HILLS/SHORT/0": {
+      "outcome": "ok",
+      "cost": 174.335784,
+      "nodes": 60,
+      "ms": 90.9
+    },
+    "HILLS/SHORT/1": {
+      "outcome": "ok",
+      "cost": 229.392905,
+      "nodes": 1774,
+      "ms": 508.5
+    },
+    "HILLS/SHORT/2": {
+      "outcome": "ok",
+      "cost": 193.244721,
+      "nodes": 514,
+      "ms": 45.2
+    },
+    "HILLS/SHORT/3": {
+      "outcome": "ok",
+      "cost": 228.956214,
+      "nodes": 233,
+      "ms": 153.8
+    },
+    "HILLS/MEDIUM/0": {
+      "outcome": "ok",
+      "cost": 1121.357522,
+      "nodes": 454,
+      "ms": 374.7
+    },
+    "HILLS/MEDIUM/2": {
+      "outcome": "ok",
+      "cost": 1350.587331,
+      "nodes": 16634,
+      "ms": 3520.1
+    },
+    "HILLS/MEDIUM/3": {
+      "outcome": "ok",
+      "cost": 1341.422804,
+      "nodes": 2574,
+      "ms": 1097.8
+    },
+    "CAVES/SHORT/0": {
+      "outcome": "ok",
+      "cost": 404.622593,
+      "nodes": 964,
+      "ms": 325.7
+    },
+    "CAVES/SHORT/1": {
+      "outcome": "ok",
+      "cost": 176.361684,
+      "nodes": 220,
+      "ms": 88.2
+    },
+    "CAVES/SHORT/2": {
+      "outcome": "ok",
+      "cost": 241.064882,
+      "nodes": 373,
+      "ms": 291.1
+    },
+    "CAVES/SHORT/3": {
+      "outcome": "ok",
+      "cost": 178.211481,
+      "nodes": 134,
+      "ms": 87.5
+    },
+    "CAVES/MEDIUM/0": {
+      "outcome": "ok",
+      "cost": 1455.587433,
+      "nodes": 1561,
+      "ms": 860.6
+    },
+    "CAVES/MEDIUM/1": {
+      "outcome": "timeout",
+      "ms": 10003.5
+    },
+    "CAVES/MEDIUM/2": {
+      "outcome": "timeout",
+      "ms": 10002.3
+    },
+    "CAVES/MEDIUM/3": {
+      "outcome": "timeout",
+      "ms": 10020.0
+    },
+    "WATER/SHORT/0": {
+      "outcome": "ok",
+      "cost": 158.282794,
+      "nodes": 36,
+      "ms": 2.7
+    },
+    "WATER/SHORT/1": {
+      "outcome": "ok",
+      "cost": 336.980042,
+      "nodes": 1347,
+      "ms": 146.6
+    },
+    "WATER/SHORT/2": {
+      "outcome": "ok",
+      "cost": 146.758161,
+      "nodes": 36,
+      "ms": 2.7
+    },
+    "WATER/SHORT/3": {
+      "outcome": "ok",
+      "cost": 206.794561,
+      "nodes": 949,
+      "ms": 114.2
+    },
+    "WATER/MEDIUM/0": {
+      "outcome": "ok",
+      "cost": 1087.937157,
+      "nodes": 295,
+      "ms": 30.5
+    },
+    "WATER/MEDIUM/1": {
+      "outcome": "ok",
+      "cost": 1075.073513,
+      "nodes": 283,
+      "ms": 25.4
+    },
+    "WATER/MEDIUM/2": {
+      "outcome": "ok",
+      "cost": 1062.929532,
+      "nodes": 270,
+      "ms": 56.8
+    },
+    "WATER/MEDIUM/3": {
+      "outcome": "ok",
+      "cost": 1210.274508,
+      "nodes": 414,
+      "ms": 110.3
+    },
+    "BREAK_PLACE/SHORT/0": {
+      "outcome": "ok",
+      "cost": 226.141712,
+      "nodes": 484,
+      "ms": 11.7
+    },
+    "BREAK_PLACE/SHORT/1": {
+      "outcome": "ok",
+      "cost": 157.369735,
+      "nodes": 102,
+      "ms": 3.5
+    },
+    "BREAK_PLACE/SHORT/2": {
+      "outcome": "ok",
+      "cost": 337.856772,
+      "nodes": 14566,
+      "ms": 1637.4
+    },
+    "BREAK_PLACE/SHORT/3": {
+      "outcome": "ok",
+      "cost": 267.749171,
+      "nodes": 6914,
+      "ms": 754.1
+    }
+  }
+}
