@@ -4,6 +4,34 @@
 Press `guiKeybind` (default Right Ctrl) to open it. It has tabs including **Tasks**. `renderPathHud` shows a path
 HUD, placed by `pathHudAnchor` (default RIGHT). `#click` opens the click GUI.
 
+### Themes (`guiTheme`)
+`guiTheme` sets the look of the menu and of every Ostinato HUD card (the path card, the Autotune card, and the
+freecam inventory). Change it on the Interface page or with `#set guiTheme singularity`.
+
+- `classic` (default): the dark glass panel with a sidebar.
+- `singularity`: the menu's pages orbit a black hole at the left edge of the screen. Studio, Arcade, Tasks,
+  Modified and each settings category are bodies on the orbit, and one click on a body opens that page. Hovering
+  the orbit magnifies the body under the cursor and pushes its neighbours apart, but clicks go to fixed slots, so
+  nothing moves away from the cursor. Opening the menu flings the bodies out of the core along a spiral. Esc, Done
+  or the close button pulls them back in before the menu closes. Switching category slides the new rows in. The
+  header, search box, rows, tooltips and footer buttons are the same as in classic, in a darker panel.
+  The HUD cards become orbit gauges. The path card is a small black hole at the screen edge whose photon ring fills
+  as the trip goes on, with the ETA, the mover and the current movement in a capsule beside it. The Autotune card is
+  a dome: the values the tuner can stand on are stops on an orbit around a black hole whose ring fills as the trial
+  runs. The trusted value is a solid stop, the candidate a pulsing amber one, the value in force has a photon ring
+  round it, and the stretch being tried is drawn between them. The numbers sit in rows below. The freecam inventory
+  keeps a void-glass panel, since an item grid does not fit a gauge.
+
+While `guiAccentColor` is at its default teal, singularity uses Hawking amber; any other accent colour is kept.
+On a narrow window the orbit hides its labels (the hovered and selected bodies keep theirs) and slides partly off
+the left edge, so the panel stays at least as wide as the classic one. The black hole is computed once, off the
+render thread, the first time it is needed, and is drawn from a texture after that. Until it is ready, a plain disc
+stands in.
+
+![The singularity menu on the Movement page](../images/gui-singularity.png)
+
+![Path and Autotune HUD cards in the singularity theme](../images/hud-singularity.png)
+
 ## Freecam (`#freecam`)
 Toggles a camera body that walks, swims, and slime-jumps with the game's own movement. The key is `freecamKey`
 (default F8) and `freecamSpeed` defaults to 1. Double-tap jump to fly: flight phases the camera through blocks. The bot

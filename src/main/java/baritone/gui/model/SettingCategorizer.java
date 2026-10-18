@@ -63,7 +63,7 @@ public final class SettingCategorizer {
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
         put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune");
-        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
+        put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
         rule("^swarm", SWARM);

@@ -2231,6 +2231,14 @@ public final class Settings {
     /** Accent color of the Ostinato settings screen and path status card. */
     public final Setting<Color> guiAccentColor = new Setting<>(new Color(79, 209, 197));
 
+    /**
+     * Look of the Ostinato menu and of every Ostinato HUD card: {@code classic}, the dark glass panel with a
+     * sidebar, or {@code singularity}, where the menu's sections orbit a black hole and the HUD cards turn to void
+     * glass lit by its accretion disk. While guiAccentColor is left at its default, singularity uses a warm amber
+     * accent instead of the teal.
+     */
+    public final Setting<String> guiTheme = new Setting<>("classic");
+
     
     /**
      * Ostinato: run the TAS brute-force jump search, the physics travel planner, the full jump-plan search and the

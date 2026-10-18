@@ -20,6 +20,7 @@ package baritone.gui.screen;
 
 import baritone.Baritone;
 import baritone.gui.render.GuiDraw;
+import baritone.gui.render.Skin;
 
 import java.awt.Color;
 
@@ -34,7 +35,9 @@ public final class Theme {
 
     public static int accent() {
         Color c = Baritone.settings().guiAccentColor.value;
-        return c == null ? 0xFF4FD1C5 : (0xFF000000 | (c.getRGB() & 0xFFFFFF));
+        int rgb = c == null ? 0xFF4FD1C5 : (0xFF000000 | (c.getRGB() & 0xFFFFFF));
+        // the singularity theme brings its own Hawking amber unless the accent was changed by hand
+        return rgb == 0xFF4FD1C5 && Skin.singularity() ? Skin.HAWKING : rgb;
     }
 
     public static int lighter(int c) {
@@ -47,6 +50,9 @@ public final class Theme {
 
     /** accent -> blue -> violet across n characters */
     public static int[] logoColors(int accent, int n) {
+        if (Skin.singularity()) {
+            return Skin.hotColors(n);
+        }
         int[] out = new int[n];
         for (int i = 0; i < n; i++) {
             float t = n == 1 ? 0 : i / (float) (n - 1);
