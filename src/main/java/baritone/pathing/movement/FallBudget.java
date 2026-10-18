@@ -9,8 +9,13 @@ public final class FallBudget {
 
     /** Half-hearts to keep when experimental movement is off. */
     public static final double FLOOR = 10;
-    /** Tallest damaging fall planned without experimental movement. 6 blocks is 3 damage. */
-    public static final int CAP = 6;
+    /**
+     * Tallest damaging fall planned without experimental movement: 13 blocks is 10 damage, which from full health
+     * lands exactly on {@link #FLOOR}, so health is what really limits it. Maps with fall damage on expect drops like
+     * that (an 11 block roof drop costs 4 hearts), and the cost ({@code fallDamageCost} per half-heart) keeps them a
+     * last resort. The executor asks again with the health it has before stepping off.
+     */
+    public static final int CAP = 13;
 
     private FallBudget() {}
 

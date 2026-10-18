@@ -107,7 +107,8 @@ public class PathingQueueTest {
 
     @Test
     public void fallBudgetKeepsAFloor() {
-        assertEquals(6, FallBudget.maxBlocks(20, FallBudget.FLOOR, 3, FallBudget.CAP));
+        assertEquals(13, FallBudget.maxBlocks(20, FallBudget.FLOOR, 3, FallBudget.CAP));
+        assertEquals(9, FallBudget.maxBlocks(16, FallBudget.FLOOR, 3, FallBudget.CAP));
         assertEquals(3, FallBudget.maxBlocks(8, FallBudget.FLOOR, 3, FallBudget.CAP));
         assertEquals(4, FallBudget.maxBlocks(11, 10, 3, 6));
     }
