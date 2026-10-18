@@ -1,0 +1,139 @@
+{
+  "stage": "simdrill:pk_ore:kinematic",
+  "kind": "simdrill",
+  "status": "ok",
+  "note": "",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "goals",
+      "value": 8.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_ok",
+      "value": 0.0,
+      "better": "higher",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_timeout",
+      "value": 4.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "cost_ok_total",
+      "value": 0.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": "ticks"
+    },
+    {
+      "name": "jumps_in_ok_plans",
+      "value": 0.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "nodes_total",
+      "value": 10400.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "plan_ms_median",
+      "value": 658.6,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 20.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_p95",
+      "value": 4071.9,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 50.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_total",
+      "value": 17195.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 500.0,
+      "rel": 0.5,
+      "unit": "ms"
+    }
+  ],
+  "cases": {
+    "goal@-182,-1,26": {
+      "outcome": "timeout",
+      "cost": 168.772,
+      "nodes": 3264,
+      "ms": 4016.4,
+      "detail": "30 steps {gap1=6}"
+    },
+    "goal@-198,26,32": {
+      "outcome": "timeout",
+      "cost": 56.691,
+      "nodes": 2176,
+      "ms": 4071.9,
+      "detail": "3 steps {gap2=3}"
+    },
+    "goal@-180,52,8": {
+      "outcome": "timeout",
+      "cost": 72.691,
+      "nodes": 4416,
+      "ms": 4032.7,
+      "detail": "3 steps {gap2=1, gap3=1, gap4=1}"
+    },
+    "goal@-191,46,-11": {
+      "outcome": "timeout",
+      "ms": 4004.5
+    },
+    "goal@-191,125,15": {
+      "outcome": "noplan",
+      "ms": 146.1
+    },
+    "goal@-183,175,63": {
+      "outcome": "partial",
+      "cost": 39.114,
+      "nodes": 314,
+      "ms": 658.6,
+      "detail": "5 steps {gap4=1}"
+    },
+    "goal@-204,230,75": {
+      "outcome": "partial",
+      "cost": 30.24,
+      "nodes": 230,
+      "ms": 122.5,
+      "detail": "6 steps"
+    },
+    "goal@-204,296,61": {
+      "outcome": "noplan",
+      "ms": 142.5
+    }
+  }
+}
