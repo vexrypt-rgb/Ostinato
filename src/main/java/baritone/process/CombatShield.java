@@ -97,7 +97,7 @@ final class CombatShield {
             hands.use(true);
             if (blockTicks++ == 0) hands.blockStarted();
             lastShieldTick = me.tickCount;
-            return hands.decide("block");
+            return hands.decide(blockMelee ? "block" + why : "blockArrow"); // Ostinato: the reason, for the fight log
         }
         if (phase.pearlStage == 0 && hands.eatTicks() == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
             hands.select(me, inv.weapon(me));
@@ -147,8 +147,19 @@ final class CombatShield {
         int since = me.tickCount - targetSwingTick;
         boolean due = swingDue(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS), since, dist);
         // raise early enough for the shield's warm-up, hold until the swing is nearly ready
-        return holding ? (cd < (float) p.holdCharge.real() || due) && blockTicks < p.holdMaxTicks.get() : (cd < (float) p.raiseCharge.real() || due) && since > 2;
+        // Ostinato: which reason keeps the shield up goes into the decision name (blockHold, blockDue, blockRaise)
+        if (holding) {
+            boolean on = (cd < (float) p.holdCharge.real() || due) && blockTicks < p.holdMaxTicks.get();
+            why = cd < (float) p.holdCharge.real() ? "Hold" : "Due";
+            return on;
+        }
+        boolean on = (cd < (float) p.raiseCharge.real() || due) && since > 2;
+        why = cd < (float) p.raiseCharge.real() ? "Raise" : "Due";
+        return on;
     }
+
+    /** Ostinato: why {@link #meleeBlock} last said yes, for the fight log. */
+    private String why = "";
 
     /** A sword's next swing is due: {@code since} ticks after its last is inside the window around the gap, and it is near enough to land. */
     boolean swingDue(boolean foeSword, int since, double dist) {
