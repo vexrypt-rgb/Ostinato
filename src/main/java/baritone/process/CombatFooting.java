@@ -165,7 +165,7 @@ final class CombatFooting {
 
     /** Ostinato: -Dostinato.pushFoe=true strafes to the side from which our next hit knocks the foe into a hazard. */
     static final boolean PUSH = Boolean.getBoolean("ostinato.pushFoe");
-    private PlayerSim foeSim;
+    private PlayerSim foeSim, selfSim;
 
     /**
      * +1 (right) or -1 (left): the strafe side that, after {@link #MOVE} ticks, lines our hit up so its knockback
@@ -189,6 +189,15 @@ final class CombatFooting {
             if (!dry) continue;
             double dx = foe.getX() - sim.x, dz = foe.getZ() - sim.z, len = Math.sqrt(dx * dx + dz * dz);
             if (len < 1e-4) continue;
+            // the spot we strafe to must itself survive the foe's hit (pushing from a rim gets us knocked in first)
+            if (selfSim == null) selfSim = new PlayerSim(world);
+            selfSim.copyFrom(sim);
+            PlayerSim mine = start;
+            start = selfSim;
+            double k = foe.isSprinting() ? KNOCK : 0.5;
+            int ours = run(yaw, 0, 0, false, false, -dx / len * k, -dz / len * k, groundY, 0);
+            start = mine;
+            if (ours <= HORIZON) continue;
             foeSim.x = foe.getX();
             foeSim.y = foe.getY();
             foeSim.z = foe.getZ();
