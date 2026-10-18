@@ -173,3 +173,6 @@ win rate. Next: no crit-jumps toward a rim within knockback range.
 - smp kit, all five levels: 12/19 (expert 0/3); the run stopped at 19 rounds.
 - SPSA, mace kit vs skilled+expert (c0=1, a=0.5): running, 61/90 at 91 pairs (expert 21/44, skilled 40/46).
 This is the new tuning pool: plenty of headroom, where the sword pool sat at 92-97%.
+- Shield-tap fix, larger A/B (SMP bots, flat, paired seed 42, 48 rounds each): raiseIsBlock=false 7/48 (dealt 34.7, taken 42.5)
+  vs default 8/48 (dealt 32.2, taken 40.4). Over both runs it's 10/72 for each. Mechanically correct, but it doesn't change
+  results, so the default is kept.
