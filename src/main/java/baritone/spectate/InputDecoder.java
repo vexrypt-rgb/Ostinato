@@ -233,7 +233,7 @@ public final class InputDecoder {
      */
     static final boolean CONTINUOUS = Boolean.getBoolean("ostinato.spectate.continuous");
     /** Chance a player changes keys on a given tick (bench carpet bots ~0.4, people far less). */
-    static final double KEY_HAZARD = 0.2;
+    static double KEY_HAZARD = Double.parseDouble(System.getProperty("ostinato.spectate.keyHazard", "0.4"));
     /**
      * Confidence calibration. Key readings are weighed against each other with their chi-square divided by
      * KEY_TEMP (SIGMA is the packet's noise, but the model's own error is larger, so raw chi-square differences
@@ -241,7 +241,7 @@ public final class InputDecoder {
      * leans over FIT_SCALE toward MISFIT_BASE, how often such misses still read the keys right. Fitted on bench
      * replays (TruthReplayTest); system properties override them for refits.
      */
-    static double KEY_TEMP = Double.parseDouble(System.getProperty("ostinato.spectate.temp", "4"));
+    static double KEY_TEMP = Double.parseDouble(System.getProperty("ostinato.spectate.temp", "1"));
     static double FIT_OK = Double.parseDouble(System.getProperty("ostinato.spectate.fitOk", "12"));
     static double FIT_SCALE = Double.parseDouble(System.getProperty("ostinato.spectate.fitScale", "24"));
     static double MISFIT_BASE = Double.parseDouble(System.getProperty("ostinato.spectate.misfitBase", "0.5"));

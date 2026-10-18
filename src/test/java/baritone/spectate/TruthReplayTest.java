@@ -49,7 +49,8 @@ public class TruthReplayTest {
             InputDecoder.FIT_OK = Double.parseDouble(fo);
             InputDecoder.FIT_SCALE = Double.parseDouble(fs);
             InputDecoder.MISFIT_BASE = Double.parseDouble(mb);
-            System.out.println("TRUTHREPLAY grid temp=" + t + " fitOk=" + fo + " fitScale=" + fs + " misfitBase=" + mb);
+            if (g.length > 4) InputDecoder.KEY_HAZARD = Double.parseDouble(g[4]);
+            System.out.println("TRUTHREPLAY grid temp=" + t + " fitOk=" + fo + " fitScale=" + fs + " misfitBase=" + mb + " hazard=" + InputDecoder.KEY_HAZARD);
             for (String mode : modes.split(",")) run(by, c, mode);
         }
     }
@@ -80,7 +81,9 @@ public class TruthReplayTest {
                     default -> rnd.nextDouble() < 0.43 ? 1 : 2;
                 };
                 double full = 0.98 * (r[c.get("shift")].equals("1") ? 0.3 : 1) * (r[c.get("using")].equals("1") ? 0.2 : 1);
-                int[] tk = {key(Double.parseDouble(r[c.get("zza")]), full), key(Double.parseDouble(r[c.get("xxa")]), full)};
+                int ls = Integer.getInteger("ostinato.truth.labelShift", 0); // A/B of which tick's logged keys moved this one
+                String[] rl = rows.get(Math.max(0, Math.min(rows.size() - 1, k + ls)));
+                int[] tk = {key(Double.parseDouble(rl[c.get("zza")]), full), key(Double.parseDouble(rl[c.get("xxa")]), full)};
                 if (lastKey != null && !Arrays.equals(tk, lastKey)) changes++;
                 steps++;
                 lastKey = tk;
