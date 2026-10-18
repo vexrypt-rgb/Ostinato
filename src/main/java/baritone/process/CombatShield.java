@@ -171,11 +171,12 @@ final class CombatShield {
     }
 
     /**
-     * Ostinato: -Dostinato.hiddenShield=false trusts only a shield the client sees. The window below only grows (any
+     * Ostinato: off by default (fixed bench, vs SMP PvP Bots: wins 65/96 visible-only vs 44/96, p 0.0035; SickSheet
+     * 60/96 vs 64/96, p 0.65); -Dostinato.hiddenShield=true brings the guess back. Off trusts only a shield the client sees. The window below only grows (any
      * click that drew no blood, reach rejections included), so against SMP bots (swing gap ~14) it covered nearly
      * every tick: 233 of 599 swings went to the axe, 120 of them at low charge, ~90% against no block.
      */
-    static final boolean HIDDEN = Boolean.parseBoolean(System.getProperty("ostinato.hiddenShield", "true"));
+    static final boolean HIDDEN = Boolean.parseBoolean(System.getProperty("ostinato.hiddenShield", "false"));
 
     /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */
     boolean hiddenShield(Player me, LivingEntity target) {
