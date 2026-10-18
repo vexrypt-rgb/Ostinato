@@ -21,7 +21,7 @@ public final class PacketTap {
     private PacketTap() {}
 
     public interface Listener {
-        /** A position (and maybe rotation) update; {@code full} for an absolute sync rather than a delta. */
+        /** A position and/or rotation update ({@code pos} null for rotation only); {@code full} for an absolute sync rather than a delta. */
         default void move(Entity e, Vec3 pos, float yRot, float xRot, boolean hasRot, boolean onGround, boolean full) {}
 
         default void teleport(Entity e) {}

@@ -108,6 +108,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         super(baritone);
         book = new FightBook(f -> {}, this::fightEnded);
         PacketTap.add(this);
+        SpectateBench.install(baritone); // -Dostinato.spectbench only
     }
 
     private static Settings s() {
@@ -230,6 +231,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             sn.yaw = yRot;
             sn.pitch = xRot;
         }
+        if (pos == null) return; // rotation only: the next position update carries it
         InputDecoder.Obs o = new InputDecoder.Obs();
         o.x = pos.x;
         o.y = pos.y;

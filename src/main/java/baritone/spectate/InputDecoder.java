@@ -115,52 +115,31 @@ public final class InputDecoder {
         start.speedScale = o.speedScale;
         start.jumpStrength = o.jumpStrength;
         start.jumpBoost = o.jumpBoost;
-        for (int i = 0; i < o.ticks; i++) {
-            yaws[i] = lastYaw + wrap(o.yaw - lastYaw) * (i + 1) / o.ticks;
-        }
         double scale = 0.98 * (o.usingFlag ? 0.2 : 1) * (o.sneakFlag ? 0.3 : 1);
-        int kbHyps = o.kb == null ? 1 : o.ticks + 1;
-        Fit bestFit = null;
-        double[] costs = new double[48];
-        Fit[] fits = new Fit[48];
-        int n = 0;
-        boolean jumpObservable = false;
-        for (int pass = 0; pass < 2; pass++) {
-            boolean sprint = pass == 0 ? o.sprintFlag : !o.sprintFlag;
-            if (pass == 1 && bestFit != null && bestFit.chi2 < 6) break; // the flag's own reading fits: no need to doubt it
-            for (int k = 0; k < kbHyps; k++) {
-                int kbAt = o.kb == null ? -1 : k;
-                // no jump first; a jump is tried on each tick that run stood on the ground at its start
-                Fit f0 = fit(start, o, sprint, -1, kbAt);
-                int grounded = groundMask;
-                jumpObservable |= grounded != 0;
-                for (int j = -1; j < o.ticks; j++) {
-                    if (j >= 0 && (grounded & (1 << j)) == 0) continue;
-                    if (n >= fits.length) break;
-                    Fit f = j < 0 ? f0 : fit(start, o, sprint, j, kbAt);
-                    f.prior = (pass == 1 ? 6 : 0) + (j >= 0 ? 1.5 : 0);
-                    costs[n] = f.chi2 + f.prior;
-                    fits[n++] = f;
-                    if (bestFit == null || f.chi2 + f.prior < bestFit.chi2 + bestFit.prior) bestFit = f;
-                }
-            }
+        // how many server ticks the interval spans is itself a guess (arrival times jitter, and metadata changes send
+        // an update a tick early): try the guess and its neighbours, the guess favoured
+        int guess = o.ticks;
+        Eval best = null;
+        double zt = 0;
+        Eval[] evals = new Eval[3];
+        int ne = 0;
+        for (int tc = Math.max(1, guess - 1); tc <= Math.min(MAX_TICKS, guess + 1); tc++) {
+            o.ticks = tc;
+            Eval e = evaluate(start, o, scale);
+            e.ticks = tc;
+            e.cost += tc == guess ? 0 : TICKS_PRIOR;
+            evals[ne++] = e;
+            if (best == null || e.cost < best.cost) best = e;
+            if (tc == guess && e.bestFit.chi2 < 2) break; // the guess fits within the noise: nothing to gain
         }
-        // posterior of the winner over every hypothesis tried
-        double min = Double.MAX_VALUE;
-        for (int i = 0; i < n; i++) min = Math.min(min, costs[i]);
-        double z = 0, pBest = 0;
-        for (int i = 0; i < n; i++) {
-            double w = Math.exp(-(costs[i] - min) / 2);
-            z += w;
-            if (fits[i] == bestFit) pBest = w;
-        }
-        // hypotheses that decode to the same keys are not rivals: sum them in
-        for (int i = 0; i < n; i++) {
-            if (fits[i] != bestFit && sameKeys(fits[i], bestFit, scale)) pBest += Math.exp(-(costs[i] - min) / 2);
-        }
-        pBest /= z;
+        for (int i = 0; i < ne; i++) zt += Math.exp(-(evals[i].cost - best.cost) / 2);
+        o.ticks = best.ticks;
+        d.ticks = best.ticks;
+        for (int i = 0; i < best.ticks; i++) yaws[i] = lastYaw + wrap(o.yaw - lastYaw) * (i + 1) / best.ticks;
+        Fit bestFit = best.bestFit;
+        double pBest = best.pBest / zt;
         d.jump = bestFit.jumpAt >= 0;
-        d.jumpObservable = jumpObservable;
+        d.jumpObservable = best.jumpObservable;
         d.sprint = bestFit.sprint;
         d.kb = o.kb != null;
         d.forwardImpulse = bestFit.fz / scale;
@@ -187,6 +166,64 @@ public final class InputDecoder {
         lastStrafe = bestFit.sx;
         d.work = work;
         return d;
+    }
+
+    /** Cost of an interval's tick count after an {@link #evaluate}: hypotheses weighed, the best one's fit and posterior. */
+    private static final class Eval {
+        Fit bestFit;
+        double cost, pBest;
+        boolean jumpObservable;
+        int ticks;
+    }
+
+    /** Extra cost of an interval length other than the arrival-time guess. */
+    static final double TICKS_PRIOR = 9;
+
+    private Eval evaluate(PlayerSim start, Obs o, double scale) {
+        for (int i = 0; i < o.ticks; i++) {
+            yaws[i] = lastYaw + wrap(o.yaw - lastYaw) * (i + 1) / o.ticks;
+        }
+        int kbHyps = o.kb == null ? 1 : o.ticks + 1;
+        Fit bestFit = null;
+        double[] costs = new double[48];
+        Fit[] fits = new Fit[48];
+        int n = 0;
+        boolean jumpObservable = false;
+        for (int pass = 0; pass < 2; pass++) {
+            boolean sprint = pass == 0 ? o.sprintFlag : !o.sprintFlag;
+            if (pass == 1 && bestFit != null && bestFit.chi2 < 6) break; // the flag's own reading fits: no need to doubt it
+            for (int k = 0; k < kbHyps; k++) {
+                int kbAt = o.kb == null ? -1 : k;
+                // no jump first; a jump is tried on each tick that run stood on the ground at its start
+                Fit f0 = fit(start, o, sprint, -1, kbAt);
+                int grounded = groundMask;
+                jumpObservable |= grounded != 0;
+                for (int j = -1; j < o.ticks; j++) {
+                    if (j >= 0 && (grounded & (1 << j)) == 0) continue;
+                    if (n >= fits.length) break;
+                    Fit f = j < 0 ? f0 : fit(start, o, sprint, j, kbAt);
+                    f.prior = (pass == 1 ? 6 : 0) + (j >= 0 ? 1.5 : 0);
+                    costs[n] = f.chi2 + f.prior;
+                    fits[n++] = f;
+                    if (bestFit == null || f.chi2 + f.prior < bestFit.chi2 + bestFit.prior) bestFit = f;
+                }
+            }
+        }
+        // posterior of the winner over every hypothesis tried; those that decode to the same keys are not rivals
+        double min = Double.MAX_VALUE;
+        for (int i = 0; i < n; i++) min = Math.min(min, costs[i]);
+        double z = 0, pBest = 0;
+        for (int i = 0; i < n; i++) {
+            double w = Math.exp(-(costs[i] - min) / 2);
+            z += w;
+            if (fits[i] == bestFit || sameKeys(fits[i], bestFit, scale)) pBest += w;
+        }
+        Eval e = new Eval();
+        e.bestFit = bestFit;
+        e.cost = min;
+        e.pBest = pBest / z; // of this tick count's hypotheses; step() weighs the tick counts against each other
+        e.jumpObservable = jumpObservable;
+        return e;
     }
 
     private boolean sameKeys(Fit a, Fit b, double scale) {

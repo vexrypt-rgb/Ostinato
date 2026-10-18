@@ -85,7 +85,7 @@ public final class HealthTrack {
     public void unseen(float maxHealth) {
         max(maxHealth);
         health = max;
-        var = Math.max(var, (max / 4) * (max / 4));
+        var = (max / 4) * (max / 4); // anything from a quarter down to full: assume full, wide
         source = Source.INFERRED;
     }
 

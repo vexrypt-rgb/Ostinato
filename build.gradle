@@ -247,6 +247,8 @@ test {
     // -Postinato_native_require: fail the parity tests instead of skipping them when the library does not load
     systemProperty "ostinato.native.require", project.hasProperty("ostinato_native_require")
     systemProperty "ostinato.bench", project.hasProperty("ostinato_bench")
+    // Ostinato: spectate truth replay (TruthReplayTest)
+    if (project.hasProperty("ostinato_truth")) { systemProperty "ostinato.truth", project.property("ostinato_truth"); systemProperty "ostinato.truth.every", project.findProperty("ostinato_truth_every") ?: "1"; systemProperty "ostinato.truth.prevYaw", project.hasProperty("ostinato_truth_prevyaw") }
     jvmArgs "--enable-native-access=ALL-UNNAMED" // the game prints the one-line FFM warning; tests need not
     testLogging { showStandardStreams = project.hasProperty("ostinato_bench") }
 }

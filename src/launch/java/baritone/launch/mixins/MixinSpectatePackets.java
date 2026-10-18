@@ -31,7 +31,7 @@ public abstract class MixinSpectatePackets {
         Entity e = p.getEntity(level);
         if (e == null) return;
         for (PacketTap.Listener l : PacketTap.listeners()) {
-            l.move(e, e.getPositionCodec().getBase(), p.getYRot(), p.getXRot(), p.hasRotation(), p.isOnGround(), false);
+            l.move(e, p.hasPosition() ? e.getPositionCodec().getBase() : null, p.getYRot(), p.getXRot(), p.hasRotation(), p.isOnGround(), false);
         }
     }
 

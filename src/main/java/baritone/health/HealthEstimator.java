@@ -86,6 +86,7 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
         int useStart = -1;
         ItemStack useItem = ItemStack.EMPTY;
         int lastAttack = -1000; // this entity's last attack (resets its attack strength)
+        final int[] swings = {-1000, -1000, -1000, -1000}; // last main-hand swings: 26.3 resets attack strength on every swing
         ItemStack lastWeapon = ItemStack.EMPTY;
         double peakY = Double.NaN, landedPeak = Double.NaN;
         int landedTick = -1000;
@@ -104,8 +105,10 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
         final DamageSource src;
         final Vec3 at;
         final int prevAttack; // the attacker's attack before this one
+        final int at0; // tick of the hit
 
         Pending(int due, LivingEntity victim, DamageSource src, Vec3 at, int prevAttack) {
+            this.at0 = due - 1;
             this.due = due;
             this.victim = victim;
             this.src = src;
@@ -263,6 +266,13 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
     @Override
     public void animate(Entity e, int action) {
         if (action == 4) critAt.put(e.getId(), tick); // ClientboundAnimatePacket.CRITICAL_HIT, sent for the victim
+        if (action == 0) { // SWING_MAIN_HAND: ServerPlayer.swingAndResetAttackStrength
+            Watch w = watch(e);
+            if (w != null) {
+                System.arraycopy(w.swings, 0, w.swings, 1, w.swings.length - 1);
+                w.swings[0] = tick;
+            }
+        }
     }
 
     @Override
@@ -322,7 +332,7 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
     @Override
     public void move(Entity e, Vec3 pos, float yRot, float xRot, boolean hasRot, boolean onGround, boolean full) {
         Watch w = watches.get(e.getId());
-        if (w == null) return;
+        if (w == null || pos == null) return;
         if (onGround) {
             land(w);
         } else if (Double.isNaN(w.peakY) || pos.y > w.peakY) w.peakY = pos.y;
@@ -353,7 +363,9 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
         ClientLevel level = Minecraft.getInstance().level;
         if (s.is(DamageTypeTags.IS_PLAYER_ATTACK) && cause instanceof Player att) {
             Watch aw = watches.get(att.getId());
-            double[] m = melee(att, aw, p.prevAttack, v, critAt.containsKey(v.getId()));
+            int reset = p.prevAttack;
+            if (aw != null) for (int sw : aw.swings) if (sw < p.at0 && sw > reset) reset = sw; // the swing before this hit's own
+            double[] m = melee(att, aw, reset, v, critAt.containsKey(v.getId()));
             raw = m[0];
             sd = m[1];
         } else if (s.is(DamageTypes.MOB_ATTACK) || s.is(DamageTypes.MOB_ATTACK_NO_AGGRO)) {
@@ -456,7 +468,7 @@ public final class HealthEstimator extends Behavior implements IHealthEstimator,
         double speed = att.getAttributeValue(Attributes.ATTACK_SPEED);
         float scale;
         double sdScale;
-        int since = tick - 1 - prevAttack; // resolved a tick after the hit
+        int since = tick - 1 - prevAttack; // resolved a tick after the hit; prevAttack is the last reset before it
         if (since > 200) {
             scale = 1;
             sdScale = 0.1;

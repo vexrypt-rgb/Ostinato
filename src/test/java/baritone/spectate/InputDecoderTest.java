@@ -75,6 +75,11 @@ public class InputDecoderTest {
      * snapping.
      */
     static Score run(long seed, int ticks, boolean analog, boolean knockback) {
+        return run(seed, ticks, analog, knockback, false);
+    }
+
+    /** {@code irregular}: updates also come a tick early now and then (metadata changes), the decoder told 2 every time. */
+    static Score run(long seed, int ticks, boolean analog, boolean knockback, boolean irregular) {
         Random r = new Random(seed);
         PlayerSim.World w = flat();
         PlayerSim truth = new PlayerSim(w);
@@ -90,6 +95,7 @@ public class InputDecoderTest {
         int lastF = 0, lastS = 0;
         boolean same = true, jumped = false, sprintAll = true;
         double[] kb = null;
+        int lastSent = 0;
         for (int t = 1; t <= ticks; t++) {
             if (--hold <= 0) {
                 fwd = r.nextInt(3) - 1;
@@ -121,7 +127,9 @@ public class InputDecoderTest {
                 kb = new double[]{truth.vx, truth.vy, truth.vz};
             }
             truth.tickImpulse(yaw, 0.98 * as, 0.98 * af, sp, sp, jump);
-            if (t % 2 == 0) {
+            boolean send = irregular ? t - lastSent >= 2 || r.nextInt(3) == 0 : t % 2 == 0;
+            if (send) {
+                lastSent = t;
                 InputDecoder.Obs o = new InputDecoder.Obs();
                 o.x = q(truth.x);
                 o.y = q(truth.y);
@@ -173,6 +181,13 @@ public class InputDecoderTest {
         Score s = run(3, 4000, false, true);
         System.out.println("knockback: " + s);
         assertTrue(s.toString(), s.all() > 0.9);
+    }
+
+    @Test
+    public void irregularIntervalsDecode() {
+        Score s = run(4, 4000, false, false, true);
+        System.out.println("irregular: " + s);
+        assertTrue(s.toString(), s.all() > 0.93);
     }
 
     @Test
