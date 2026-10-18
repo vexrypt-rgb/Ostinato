@@ -143,6 +143,13 @@ class Path extends PathBase {
                 }
             }
         }
+        if (best == null) {
+            // Ostinato: a jump the search used but the jump slots no longer list (MovementJump.toward)
+            best = baritone.pathing.movement.movements.MovementJump.toward(context, src, dest);
+            if (best != null) {
+                bestCost = best.calculateCost(context);
+            }
+        }
         if (best == null && first != null) {
             best = first; // none feasible now: keep the old first-match behaviour
             bestCost = first.calculateCost(context);

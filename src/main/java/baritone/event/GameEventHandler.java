@@ -17,6 +17,7 @@
 
 package baritone.event;
 
+import baritone.pathing.movement.movements.MovementJump;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.calc.hierarchy.SectionGraph;
 import baritone.Baritone;
@@ -111,6 +112,7 @@ public final class GameEventHandler implements IEventBus, Helper {
         // Ostinato: keep the hierarchical planner's section graph in step with the world (cheap when it is off: map removals)
         if (event.isPostPopulate() || isPreUnload) {
             SectionGraph.INSTANCE.invalidateChunk(event.getX(), event.getZ(), world.getMinY() >> 4, world.getMaxY() >> 4);
+            MovementJump.columnChanged(event.getX(), event.getZ());
             if (event.isPostPopulate() && Baritone.settings().pathingHierarchical.value) {
                 final int cx = event.getX(), cz = event.getZ();
                 final CalculationContext pre = new CalculationContext(baritone, true);
@@ -140,6 +142,7 @@ public final class GameEventHandler implements IEventBus, Helper {
         // Ostinato: drop the hierarchical planner's sections around changed blocks
         for (Pair<net.minecraft.core.BlockPos, BlockState> b : event.getBlocks()) {
             SectionGraph.INSTANCE.invalidateBlock(b.first().getX(), b.first().getY(), b.first().getZ());
+            MovementJump.blockChanged(b.first().getX(), b.first().getY(), b.first().getZ());
         }
 
         listeners.forEach(l -> l.onBlockChange(event));
@@ -156,6 +159,7 @@ public final class GameEventHandler implements IEventBus, Helper {
 
         if (event.getState() == EventState.POST) {
             cache.closeWorld();
+            MovementJump.forgetSims();
             if (event.getWorld() != null) {
                 cache.initWorld(event.getWorld());
             }

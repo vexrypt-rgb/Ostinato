@@ -124,6 +124,31 @@ public class PathExecutor implements IPathExecutor, Helper {
     }
 
     /**
+     * Ostinato: a spliced path keeps the movers' state. The spliced path's movements up to here are the same objects at
+     * the same positions, so a takeoff in flight is still the takeoff it was. Fresh movers forgot it mid-air: the next
+     * segment came in while a jump off a brewing stand was landing, and the new takeoff walked back to the run-up spot
+     * off the chest it had just landed on (cubed level 1).
+     */
+    private PathExecutor(PathingBehavior behavior, IPath path, PathExecutor from) {
+        this.behavior = behavior;
+        this.ctx = behavior.ctx;
+        this.kinematic = from.kinematic;
+        this.fall = from.fall;
+        this.swim = from.swim;
+        this.clutch = from.clutch;
+        this.ladder = from.ladder;
+        this.mine = from.mine;
+        this.pillar = from.pillar;
+        this.extension = from.extension;
+        this.takeoff = from.takeoff;
+        this.boatFall = from.boatFall;
+        this.physics = from.physics;
+        this.lastDriver = from.lastDriver;
+        this.path = path;
+        this.pathPosition = 0;
+    }
+
+    /**
      * Tick this executor
      *
      * @return True if a movement just finished (and the player is therefore in a "stable" state, like,
@@ -404,6 +429,8 @@ public class PathExecutor implements IPathExecutor, Helper {
                 Movement future = (Movement) path.movements().get(pathPosition + i);
                 if (future.calculateCost(behavior.secretInternalGetCalculationContext()) >= ActionCosts.COST_INF && canCancel) {
                     logDebug("Something has changed in the world and a future movement has become impossible. Cancelling. " + future.getClass().getSimpleName() + " " + future.getSrc() + " -> " + future.getDest() + " srcState=" + ctx.world().getBlockState(future.getSrc()) + " destState=" + ctx.world().getBlockState(future.getDest()) + " destUp=" + ctx.world().getBlockState(future.getDest().above()) + " player=" + ctx.playerFeet());
+                    // Ostinato: a stored route through it is replayed by the next search as is, and cancelled again, forever
+                    baritone.pathing.RouteReuse.forget(future.getSrc(), future.getDest());
                     cancel();
                     return true;
                 }
@@ -412,6 +439,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         double currentCost = movement.recalculateCost(behavior.secretInternalGetCalculationContext());
         if (currentCost >= ActionCosts.COST_INF && canCancel) {
             logDebug("Something has changed in the world and this movement has become impossible. Cancelling.");
+            baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
             cancel();
             return true;
         }
@@ -432,6 +460,10 @@ public class PathExecutor implements IPathExecutor, Helper {
             logDebug("Movement returns status " + movementStatus);
             Baritone.settings().movementFault.value.accept("M04", movement.getClass().getSimpleName() + " " + movementStatus + " at " + ctx.playerFeet());
             baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
+            if (!(movement instanceof baritone.pathing.movement.movements.MovementJump)) {
+                BetterBlockPos ms = movement.getSrc(), md = movement.getDest();
+                baritone.pathing.movement.JumpFailures.mark(baritone.pathing.movement.JumpFailures.moveKey(ms.x, ms.y, ms.z, md.x, md.y, md.z), System.currentTimeMillis());
+            }
             cancel();
             return true;
         }
@@ -875,7 +907,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                         "Path has end %s instead of %s after splicing",
                         path.getDest(), next.getPath().getDest()));
             }
-            PathExecutor ret = new PathExecutor(behavior, path);
+            PathExecutor ret = new PathExecutor(behavior, path, this);
             ret.pathPosition = pathPosition;
             ret.currentMovementOriginalCostEstimate = currentMovementOriginalCostEstimate;
             ret.costEstimateIndex = costEstimateIndex;

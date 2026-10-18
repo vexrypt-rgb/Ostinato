@@ -119,6 +119,11 @@ public abstract class Movement implements IMovement, MovementHelper {
         return validPositionsCached;
     }
 
+    /** Ostinato: the movement changed its shape (MovementJump took another template before starting). */
+    protected void forgetValidPositions() {
+        validPositionsCached = null;
+    }
+
     protected boolean playerInValidPosition() {
         return getValidPositions().contains(ctx.playerFeet()) || getValidPositions().contains(((PathingBehavior) baritone.getPathingBehavior()).pathStart());
     }

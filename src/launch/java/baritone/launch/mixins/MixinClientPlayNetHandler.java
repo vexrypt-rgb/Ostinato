@@ -42,6 +42,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -151,10 +152,15 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
             at = @At("RETURN")
     )
     private void postHandleBlockChange(ClientboundBlockUpdatePacket packetIn, CallbackInfo ci) {
-        if (!Baritone.settings().repackOnAnyBlockChange.value) {
-            return;
-        }
-        if (!CachedChunk.BLOCKS_TO_KEEP_TRACK_OF.contains(packetIn.getBlockState().getBlock())) {
+        if (!Baritone.settings().repackOnAnyBlockChange.value
+                || !CachedChunk.BLOCKS_TO_KEEP_TRACK_OF.contains(packetIn.getBlockState().getBlock())) {
+            // Ostinato: a single changed block still reaches the planner's caches (a chunk event below covers the rest)
+            IBaritone baritone = BaritoneAPI.getProvider().getBaritoneForConnection((ClientPacketListener) (Object) this);
+            if (baritone != null) {
+                BlockPos pos = packetIn.getPos().immutable();
+                baritone.getGameEventHandler().onBlockChange(new BlockChangeEvent(ChunkPos.containing(pos),
+                        Collections.singletonList(new Pair<>(pos, packetIn.getBlockState()))));
+            }
             return;
         }
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
