@@ -153,3 +153,23 @@ to the axe (the swap resets the charge) on every tap. Only 31 of 334 axe swaps m
 `-Dostinato.raiseIsBlock=false` makes the warm-up count as no block: 3/24 vs 2/24 on paired seeds, axe swaps
 6.8 -> 4.0 per round, damage taken 46.3 -> 43.2. Directionally better but not significant, so it stays opt-in.
 The SMP bots out-trade us: they land 272 hits to our 194, at about the same swing count and distance.
+
+### Footing guard (movement-combat item 1) vs SMP bots in a lava ring (`-Dostinato.vex.arena=lava`, bench-only)
+A 19x11 pad ringed by lava at floor level. `-Dostinato.footing=true` (CombatFooting) plays our keys forward on PlayerSim,
+with and without the foe's knockback. On the ground it picks keys that leave us where the next hit can't push us in,
+and it won't start a bite (or cancels one) while a hit would put us in the lava.
+48 rounds each, paired seed 41: off 4/48, 0.90 lava entries/round; on 3/48, 0.75 entries/round (36 vs 43, not
+significant). Not kept: it stays opt-in.
+What the logs showed:
+- A hit carries us 2.5-4 blocks through the air, and no key steers there. We jump-strafe most of the time, so a hit
+  near the rim is too late to correct.
+- Most early entries came from eating at the rim: at a fifth of the pace, hit after hit walked us in.
+- The old floor scan (ledgeGuard) never saw the lava, because the dirt under it counts as floor.
+SMP bots win almost every round in this arena either way, so a safety gain shows in the entries count before the
+win rate. Next: no crit-jumps toward a rim within knockback range.
+
+### Wider tuning pool (Carpet PvP, harder levels and other kits, no autotune unless noted)
+- mace kit, all five levels: 14/20 (expert 0/4).
+- smp kit, all five levels: 12/19 (expert 0/3); the run stopped at 19 rounds.
+- SPSA, mace kit vs skilled+expert (c0=1, a=0.5): running, 61/90 at 91 pairs (expert 21/44, skilled 40/46).
+This is the new tuning pool: plenty of headroom, where the sword pool sat at 92-97%.
