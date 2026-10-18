@@ -201,7 +201,7 @@ public final class KitBench implements AbstractGameEventListener {
 
     private void next(MinecraftServer server, String me0) {
         if (round >= 0) rounds.add(new Object[]{scenario, new LinkedHashMap<>(truthKit), resultsAtStart, new LinkedHashMap<>(side)});
-        run(server, null, "kill @a[name=!" + me0 + "]", "team remove kbred", "team remove kbblue", "player " + me0 + " faction delete kbred",
+        run(server, null, "kill @a[name=!" + me0 + "]", "kill @e[type=!player]", "team remove kbred", "team remove kbblue", "player " + me0 + " faction delete kbred",
                 "player " + me0 + " faction delete kbblue");
         round++;
         ticks = 0;
@@ -224,9 +224,23 @@ public final class KitBench implements AbstractGameEventListener {
         String head = scenario.substring(0, scenario.indexOf(':')), kit = scenario.substring(scenario.indexOf(':') + 1);
         String st = style(kit);
         expected = head.equals("1v1") ? 2 : head.startsWith("teams") ? 2 * Integer.parseInt(head.replaceAll("[^0-9]", "")) : Integer.parseInt(head.replaceAll("[^0-9]", ""));
-        // Ostinato: every round on fresh ground 120 blocks on, since crystal rounds blow holes in the floor
-        run(server, me0, String.format(Locale.ROOT, "tp %s %.1f ~ -10", me0, 120.0 * round));
         if (Double.isNaN(baseY)) baseY = Math.floor(Minecraft.getInstance().player.getY()); // Ostinato: watch from a fixed height
+        // Ostinato: crystal rounds blow holes in the floor: put the floor back as it was at the start, and clear what
+        // bots placed above it
+        if (floor == null) {
+            floor = new ArrayList<>();
+            net.minecraft.server.level.ServerLevel lv = server.overworld();
+            for (int y = lv.getMinY(); y < baseY; y++) {
+                net.minecraft.world.level.block.state.BlockState b = lv.getBlockState(new net.minecraft.core.BlockPos(0, y, 0));
+                if (b.isAir()) break;
+                floor.add(net.minecraft.world.level.block.state.BlockStateParser.serialize(b));
+                floorTop = y;
+            }
+            log("floor " + floor + " up to y " + floorTop);
+        }
+        int y0 = floorTop - floor.size() + 1;
+        for (int i = 0; i < floor.size(); i++) run(server, null, String.format(Locale.ROOT, "fill -24 %d -24 24 %d 24 %s", y0 + i, y0 + i, floor.get(i)));
+        run(server, null, String.format(Locale.ROOT, "fill -24 %d -24 24 %d 24 air", floorTop + 1, floorTop + 8));
         // each bot on its own; a team side is a Carpet faction (allies never target each other), which the client
         // cannot see: only the "t" variant adds scoreboard teams on top
         side.clear();
@@ -234,13 +248,15 @@ public final class KitBench implements AbstractGameEventListener {
         for (int i = 0; i < expected; i++) {
             String n = "kb" + round + (teams ? (i < expected / 2 ? "r" : "b") : "p") + i;
             double ang = 2 * Math.PI * i / expected;
-            run(server, null, String.format(Locale.ROOT, "bot spawn %s %s %s at %.1f ~ %.1f", n, st, DIFF, 120.0 * round + 5 * Math.cos(ang), 5 * Math.sin(ang)));
+            run(server, null, String.format(Locale.ROOT, "bot spawn %s %s %s at %.1f ~ %.1f", n, st, DIFF, 5 * Math.cos(ang), 5 * Math.sin(ang)));
             if (teams) side.put(n, i < expected / 2 ? "red" : "blue");
         }
-        run(server, null, String.format(Locale.ROOT, "tp %s %.1f %.1f -10 0 35", me0, 120.0 * round, baseY + 8));
+        run(server, null, String.format(Locale.ROOT, "tp %s 0 %.1f -10 0 35", me0, baseY + 8));
         wait = 60;
     }
 
+    private List<String> floor; // Ostinato: the floor column at 0,0, bottom up
+    private int floorTop;
     private double baseY = Double.NaN; // Ostinato: the spectator's starting height, so it does not climb each round
 
     /** Scores each round's groups against what the bots were given. */
