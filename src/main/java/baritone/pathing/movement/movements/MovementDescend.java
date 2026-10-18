@@ -289,7 +289,19 @@ public class MovementDescend extends Movement {
                 return false;
             }
             if (MovementHelper.isBottomSlab(ontoBlock)) {
-                return false; // falling onto a half slab is really glitchy, and can cause more fall damage than we'd expect
+                // Ostinato: a half slab's top is half a block lower than the node height says, so it hurts like one more
+                // block of fall. Only plain landings: no clutch, bucket or boat on half a block.
+                if (reachedMinimum && effectiveStartHeight == y) {
+                    if (unprotectedFallHeight + 1 <= context.maxFallHeightNoWater + 1) {
+                        res.x = cx;
+                        res.y = newY + 1;
+                        res.z = cz;
+                        res.cost = tentativeCost;
+                    } else {
+                        hurtingFall(context, cx, cz, newY, unprotectedFallHeight, tentativeCost, ontoBlock, res);
+                    }
+                }
+                return false;
             }
             if (reachedMinimum && unprotectedFallHeight <= context.maxFallHeightNoWater + 1) {
                 // fallHeight = 4 means onto.up() is 3 blocks down, which is the max
