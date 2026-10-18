@@ -211,7 +211,7 @@ public final class KitBench implements AbstractGameEventListener {
         String head = scenario.substring(0, scenario.indexOf(':')), kit = scenario.substring(scenario.indexOf(':') + 1);
         String st = style(kit);
         expected = head.equals("1v1") ? 2 : head.startsWith("teams") ? 2 * Integer.parseInt(head.replaceAll("[^0-9]", "")) : Integer.parseInt(head.replaceAll("[^0-9]", ""));
-        run(server, me0, "tp " + me0 + " 0 ~ 0");
+        if (Double.isNaN(baseY)) baseY = Math.floor(Minecraft.getInstance().player.getY()); // Ostinato: watch from a fixed height
         // each bot on its own; a team side is a Carpet faction (allies never target each other), which the client
         // cannot see: only the "t" variant adds scoreboard teams on top
         side.clear();
@@ -222,9 +222,11 @@ public final class KitBench implements AbstractGameEventListener {
             run(server, null, String.format(Locale.ROOT, "bot spawn %s %s %s at %.1f ~ %.1f", n, st, DIFF, 5 * Math.cos(ang), 5 * Math.sin(ang)));
             if (teams) side.put(n, i < expected / 2 ? "red" : "blue");
         }
-        run(server, null, "tp " + me0 + " 0 ~8 -10 0 35");
+        run(server, null, String.format(Locale.ROOT, "tp %s 0 %.1f -10 0 35", me0, baseY + 8));
         wait = 60;
     }
+
+    private double baseY = Double.NaN; // Ostinato: the spectator's starting height, so it does not climb each round
 
     /** Scores each round's groups against what the bots were given. */
     private void finish() {
