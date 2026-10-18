@@ -61,7 +61,7 @@ public final class ChainTemplates {
 
     private static int[] plan(String s) {
         int[] plan = new int[JumpSearch.DIMS];
-        for (int k = 0; k < plan.length; k++) plan[k] = s.charAt(k) - '0';
+        for (int k = 0; k < plan.length; k++) plan[k] = Character.digit(s.charAt(k), 36);
         return plan;
     }
 
@@ -202,8 +202,8 @@ public final class ChainTemplates {
                 JumpSearch c2 = stage2(w, d);
                 c2.run(new PlayerSim(w).copyFrom(c1.sim()), plan2, false, 0, sink);
                 StringBuilder s1 = new StringBuilder(), s2 = new StringBuilder();
-                for (int k : l.plan) s1.append(k);
-                for (int k : plan2) s2.append(k);
+                for (int k : l.plan) s1.append(Character.forDigit(k, 36));
+                for (int k : plan2) s2.append(Character.forDigit(k, 36));
                 System.err.println("ok pad=" + d[0] + "," + d[1] + " dest=" + d[2] + "," + d[3] + "," + d[4] + " runUp=" + r + " lat=" + lat + " ticks=" + ticks);
                 return d[0] + " " + d[1] + " " + d[2] + " " + d[3] + " " + d[4] + " " + r + " " + lat + " " + ticks + " " + s1 + " " + s2 + " " + String.join(" ", cells);
             }

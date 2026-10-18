@@ -13,7 +13,13 @@ public final class JumpSearch {
     /** The last is past where a plain block drops you: only searched with {@link #ledge}. */
     public static final double[] EDGE = {-0.5, -0.3, -0.1, 0.1, 0.25, 0.4};
     public static final int PLAIN_EDGES = 5;
-    public static final float[] O1 = {-70, -45, -25, -10, 0, 10, 25, 45, 70};
+    /**
+     * Ostinato: +-90 lets a neo-up swing straight back across onto a one-wide block after clearing the wall's end
+     * (Neo Practice's second jump settled a sliver off the edge at +-70). Plans are stored as one base-36 digit each.
+     */
+    public static final float[] O1 = {-90, -70, -45, -25, -10, 0, 10, 25, 45, 70, 90};
+    /** Index of O1 = 0: fly straight on. */
+    public static final int O1_STRAIGHT = 5;
     public static final int[] SWITCH = {0, 4};
     public static final int NEVER = 999;
     public static final int[] RELEASE = {NEVER, 4, 7, 10};
@@ -342,7 +348,7 @@ public final class JumpSearch {
         int[] best = null, p = new int[DIMS];
         double bestScore = Double.MAX_VALUE;
         p[0] = 1; // O0 = 0
-        p[3] = 4; // O1 = 0
+        p[3] = O1_STRAIGHT;
         for (p[1] = 0; p[1] < HOP.length; p[1]++) for (p[2] = 0; p[2] < (ledge ? EDGE.length : PLAIN_EDGES); p[2]++)
             for (p[5] = 0; p[5] < RELEASE.length; p[5]++) for (p[6] = 0; p[6] < BRAKE.length; p[6]++) {
                 if (p[5] == 0 && p[6] == 1) {
