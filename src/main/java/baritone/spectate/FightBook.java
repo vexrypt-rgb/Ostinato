@@ -97,6 +97,10 @@ public final class FightBook {
     private final Map<String, Integer> multi = new LinkedHashMap<>(); // fights kept out of 1v1 tuning, by type
     private final Map<String, Integer> multiSkills = new LinkedHashMap<>(); // their move counts summed, type.skill
     private int groups;
+    private final Map<Long, Integer> beside = new HashMap<>(); // pairs of open groups seen side by side, in samples
+    /** Seconds two fights must be within {@link #BESIDE_DIST} of each other to be one melee. */
+    static final int BESIDE = 3;
+    static final double BESIDE_DIST = 6;
     private static int serials;
     private java.util.function.Consumer<Fight> onPairEnd;
     private java.util.function.BiConsumer<Fight, Boolean> onSettled;
@@ -135,14 +139,7 @@ public final class FightBook {
         FightGroup ga = groupOf.get(attacker), gv = groupOf.get(victim), g;
         if (ga == null && gv == null) g = new FightGroup(++groups, tick);
         else if (ga == null || gv == null || ga == gv) g = ga != null ? ga : gv;
-        else {
-            g = ga.members.size() >= gv.members.size() ? ga : gv;
-            FightGroup o = g == ga ? gv : ga;
-            g.absorb(o);
-            for (Fight x : active.values()) if (x.group == o) x.group = g;
-            for (Object[] d : g.done) ((Fight) d[0]).group = g;
-            for (Map.Entry<Integer, FightGroup> e : groupOf.entrySet()) if (e.getValue() == o) e.setValue(g);
-        }
+        else g = merge(ga, gv);
         groupOf.put(attacker, g);
         groupOf.put(victim, g);
         g.hit(tick, attacker, attackerName, victim, victimName, crit);
@@ -157,6 +154,26 @@ public final class FightBook {
         if (attacker == f.a) f.hitsA++;
         else f.hitsB++;
         return f;
+    }
+
+    /** Ostinato: one group takes in the other (the larger keeps its id). */
+    private FightGroup merge(FightGroup ga, FightGroup gv) {
+        FightGroup g = ga.members.size() >= gv.members.size() ? ga : gv;
+        FightGroup o = g == ga ? gv : ga;
+        g.absorb(o);
+        for (Fight x : active.values()) if (x.group == o) x.group = g;
+        for (Object[] d : g.done) ((Fight) d[0]).group = g;
+        for (Map.Entry<Integer, FightGroup> e : groupOf.entrySet()) if (e.getValue() == o) e.setValue(g);
+        return g;
+    }
+
+    private static boolean near(FightGroup x, FightGroup y, java.util.function.ToDoubleBiFunction<Integer, Integer> dist) {
+        for (int a : x.members.keySet())
+            for (int b : y.members.keySet()) {
+                double d = dist.applyAsDouble(a, b);
+                if (!Double.isNaN(d) && d < BESIDE_DIST) return true;
+            }
+        return false;
     }
 
     // ---------------------------------------------------------------- Ostinato: kit detection
@@ -296,8 +313,23 @@ public final class FightBook {
      * gone), {@code hp} the estimated health of one (NaN unknown).
      */
     public void tick(int tick, java.util.function.ToDoubleBiFunction<Integer, Integer> dist, java.util.function.ToDoubleFunction<Integer> hp) {
-        // Ostinato: who stands near whom in each open group, for the teams
-        for (FightGroup g : new java.util.HashSet<>(groupOf.values())) g.sample(dist);
+        // Ostinato: who stands near whom in each open group, for the teams; two fights side by side for a few
+        // seconds are one melee (a 2v2 can be two duels next to each other until someone switches)
+        List<FightGroup> open = new ArrayList<>(new java.util.LinkedHashSet<>(groupOf.values()));
+        for (int i = 0; i < open.size(); i++)
+            for (int j = i + 1; j < open.size(); j++) {
+                FightGroup x = open.get(i), y = open.get(j);
+                long k = FightGroup.key(x.id, y.id);
+                if (near(x, y, dist)) {
+                    if (beside.merge(k, 1, Integer::sum) >= BESIDE) {
+                        merge(x, y);
+                        beside.remove(k);
+                        open.remove(y);
+                        j--;
+                    }
+                } else beside.remove(k);
+            }
+        for (FightGroup g : open) g.sample(dist);
         for (Fight f : new ArrayList<>(active.values())) {
             double d = dist.applyAsDouble(f.a, f.b);
             boolean quiet = tick - f.lastExchange > QUIET;

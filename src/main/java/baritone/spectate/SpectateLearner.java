@@ -841,6 +841,15 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         w.write(sb.append('\n').toString());
     }
 
+    /** Forgets everyone's kit evidence (the bench, after it changes their kits). */
+    public void forgetKits() {
+        for (Look lk : looks.values()) {
+            lk.gearTick = -1000;
+            lk.clue = null;
+        }
+        post(l -> l.book.resetPlayers());
+    }
+
     /** Groups closed so far, oldest first (at most 500). */
     public List<GroupResult> results() {
         synchronized (results) {

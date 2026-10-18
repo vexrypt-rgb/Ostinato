@@ -166,6 +166,7 @@ public final class KitBench implements AbstractGameEventListener {
                 run(server, null, "team add kbred", "team add kbblue", "team modify kbred color red", "team modify kbblue color blue");
                 for (Map.Entry<String, String> e : side.entrySet()) run(server, null, "team join kb" + e.getValue() + " " + e.getKey());
             }
+            baritone.getSpectateLearner().forgetKits(); // what they wore before our kit went on is not their kit
             log("round " + round + " " + scenario + " bots " + truthKit.keySet());
             ticks++;
             return;
@@ -244,7 +245,7 @@ public final class KitBench implements AbstractGameEventListener {
             String wantShape = wantType.equals("1v1") ? "1v1" : wantType.equals("team") ? (n / 2) + "v" + (n / 2) : "ffa" + n;
             boolean whole = false;
             Map<String, KitSignatures.Result> lastKit = new LinkedHashMap<>();
-            for (int i = from; i < to && i < res.size(); i++) {
+            for (int i = from; i < res.size(); i++) { // groups close late: any later one with this round's bots
                 SpectateLearner.GroupResult g = res.get(i);
                 boolean ours = false;
                 for (String name : g.kits.keySet()) ours |= truth.containsKey(name);
