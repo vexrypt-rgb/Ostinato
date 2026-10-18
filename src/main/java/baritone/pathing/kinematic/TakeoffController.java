@@ -201,7 +201,7 @@ public final class TakeoffController {
             } else {
                 js.side = 1;
                 js.plan[0] = 1; // straight ahead, no turn
-                js.plan[3] = 4;
+                js.plan[3] = JumpSearch.O1_STRAIGHT;
                 found = js.search(real, false);
             }
             if (Baritone.settings().kinematicTrace.value) {

@@ -89,11 +89,14 @@ public class JumpSearchTest {
         start.vz = 0.28;
         start.onGround = true;
         assertTrue(js.search(start, false));
-        // The plan snaps to its air yaw. With the 32° cap it does not land. Execution still flies a snap plan
-        // when no capped plan exists: waiting out the yaw dropped the run-up speed and neo_2wall went 0/8.
+        // A plan that swings from -15° to +90° at takeoff lands when the look snaps. With the 32° cap it does not.
+        // Execution still flies a snap plan when no capped plan exists: waiting out the yaw dropped the run-up
+        // speed and neo_2wall went 0/8.
+        int[] swing = {0, 0, 3, JumpSearch.O1.length - 1, 0, 2, 0};
+        assertTrue(js.run(start, swing, false, 0, null));
         js.slewYaw = true;
-        js.faceYaw = js.yaw(js.plan, false, 0);
-        assertFalse(js.run(start, js.plan, false, 0, null));
+        js.faceYaw = js.yaw(swing, false, 0);
+        assertFalse(js.run(start, swing, false, 0, null));
     }
 
     @Test

@@ -179,7 +179,7 @@ public class MovementSlime extends Movement {
         JumpSearch js = search(new BsiWorld(context.bsi), x, y, z, dir, side, bounceY);
         js.anyDest = true;
         for (p[0] = straight ? 1 : 0; p[0] < (straight ? 2 : JumpSearch.O0.length); p[0]++)
-            for (p[3] = straight ? 4 : 0; p[3] < (straight ? 5 : JumpSearch.O1.length); p[3]++)
+            for (p[3] = straight ? JumpSearch.O1_STRAIGHT : 0; p[3] < (straight ? JumpSearch.O1_STRAIGHT + 1 : JumpSearch.O1.length); p[3]++)
                 for (p[4] = 0; p[4] < (straight ? 1 : JumpSearch.SWITCH.length); p[4]++) {
                     if (!straight && Math.abs(JumpSearch.O0[p[0]] - JumpSearch.O1[p[3]]) > 30) {
                         continue; // the flight goes where O1 points: a run-up far off it only loses speed
