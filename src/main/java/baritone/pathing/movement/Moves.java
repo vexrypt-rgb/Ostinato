@@ -28,15 +28,17 @@ import net.minecraft.core.Direction;
  * @author leijurv
  */
 public enum Moves {
-    DOWNWARD(0, -1, 0) {
+    DOWNWARD(0, -1, 0, false, true) { // dynamic y: letting go of a ladder falls to the first floor below
         @Override
         public Movement apply0(CalculationContext context, BetterBlockPos src) {
-            return new MovementDownward(context.getBaritone(), src, src.below());
+            MutableMoveResult res = new MutableMoveResult();
+            apply(context, src.x, src.y, src.z, res);
+            return new MovementDownward(context.getBaritone(), src, new BetterBlockPos(src.x, res.y, src.z));
         }
 
         @Override
-        public double cost(CalculationContext context, int x, int y, int z) {
-            return MovementDownward.cost(context, x, y, z);
+        public void apply(CalculationContext context, int x, int y, int z, MutableMoveResult result) {
+            MovementDownward.cost(context, x, y, z, result);
         }
     },
 

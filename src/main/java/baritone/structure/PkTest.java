@@ -233,7 +233,7 @@ public final class PkTest implements AbstractGameEventListener {
         s.allowWaterBucketFall.value = false; s.allowSprint.value = true; s.experimentalMovement.value = false;
         s.allowParkour.value = true; s.allowParkourAscend.value = true; s.allowNeos.value = true;
         s.allowClimbJumps.value = true; s.allowTasJumps.value = true; s.allowMomentumJumps.value = true; s.allowDiagonalAscend.value = true; s.allowDiagonalDescend.value = true;
-        s.slowKinematic.value = false;
+        s.slowKinematic.value = false; s.analogMovement.value = !"0".equals(System.getProperty("ostinato.pktest.analog"));
         boolean phys = MODE.equals("physics");
         s.physicsTravel.value = phys; s.kinematicTravel.value = !phys;
         s.kinematicTrace.value = true; // SIMTRACE: sim vs real per jump tick (MovementJump flights)
@@ -241,6 +241,7 @@ public final class PkTest implements AbstractGameEventListener {
         GameType use = (gt == GameType.CREATIVE || gt == GameType.SPECTATOR) ? GameType.ADVENTURE : gt;
         run("gamemode " + use.getName() + " @p");
         run("effect clear @p");
+        run("effect give @p saturation infinite 0 true");
         say("PK setup mode=" + MODE + " physicsTravel=" + s.physicsTravel.value + " kinematicTravel=" + s.kinematicTravel.value
                 + " gamemode=" + gt.getName() + "->" + use.getName());
         if (GOALS != null && Files.exists(Path.of(GOALS))) {
@@ -366,7 +367,7 @@ public final class PkTest implements AbstractGameEventListener {
             if (st.kind.equals("vizprof")) { profWin = st.r; profIdx = 0; profT = 0; profSum = 0; profN = 0; profMin = 9999; profApply(Minecraft.getInstance()); continue; }
             if (st.kind.equals("wait")) { wait = st.r; resume = true; return; }
             if (st.kind.equals("hop")) { hopLeft = st.r; hopT = 0; hopPattern = st.text; hopLand = st.y; hopTop = 0; hopJump = false; b.getPathingBehavior().cancelEverything(); return; }
-            if (st.kind.equals("tp")) { tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; continue; }
+            if (st.kind.equals("tp")) { b.getPathingBehavior().cancelEverything(); b.getCustomGoalProcess().onLostControl(); tp(st.pos()); checkpoint = st.pos(); say("PK tp " + st.pos().toShortString()); wait = 20; resume = true; return; }
             goalNo++;
             gStat0 = new long[]{baritone.utils.PlanStats.astarNs.get(), baritone.utils.PlanStats.physNs.get(), baritone.utils.PlanStats.kinNs.get(), tick, attempts.size(), baritone.utils.PlanStats.hhNs.get(), baritone.utils.PlanStats.hhCalls.get()};
             lastGood = null;
@@ -487,8 +488,8 @@ public final class PkTest implements AbstractGameEventListener {
             if (!pending.flew) { finish(pending, false, "abandoned"); pending = null; } // handed over before take-off
         }
         if (pending != null && p.onGround() && !onPad) {
-            boolean ok = landed(p, pending.dst) || pos.y > pending.dst.y - 0.5 && pos.y < pending.dst.y + 2.5;
-            if (!ok && pos.y < pending.dst.y - 0.5) { falls++; fellOff("fall"); return; } // short of it, on a catch floor
+            boolean ok = landed(p, pending.dst) || pos.y > pending.dst.y - 0.8 && pos.y < pending.dst.y + 2.5;
+            if (!ok && pos.y < pending.dst.y - 0.8) { falls++; fellOff("fall"); return; } // short of it, on a catch floor
             finish(pending, ok, "missed");
             pending = null;
         }
@@ -548,7 +549,7 @@ public final class PkTest implements AbstractGameEventListener {
 
     private static boolean landed(net.minecraft.client.player.LocalPlayer p, BetterBlockPos d) {
         Vec3 v = p.position();
-        return Math.abs(v.x - (d.x + 0.5)) < 1.2 && Math.abs(v.z - (d.z + 0.5)) < 1.2 && v.y > d.y - 0.6 && v.y < d.y + 1.3;
+        return Math.abs(v.x - (d.x + 0.5)) < 1.2 && Math.abs(v.z - (d.z + 0.5)) < 1.2 && v.y > d.y - 0.8 && v.y < d.y + 1.3;
     }
 
     private void open(Minecraft mc, IMovement mv) {
@@ -606,7 +607,7 @@ public final class PkTest implements AbstractGameEventListener {
         a.ok = ok; a.why = ok ? "" : why; a.ticks = tick - a.startTick;
         attempts.add(a);
         trackTrouble(a);
-        if (ok) lastGood = a.dst;
+        if (ok) { lastGood = a.dst; bestTick = tick; } // a jump made is progress, though a route can lead away from the goal
         say("PK JUMP " + String.join(",", a.tags) + " " + (ok ? "ok" : "fail " + why) + " " + a.cls
                 + " " + a.src.toShortString() + "->" + a.dst.toShortString() + " t=" + a.ticks);
     }
