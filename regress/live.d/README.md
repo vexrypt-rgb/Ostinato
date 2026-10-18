@@ -14,5 +14,7 @@ Nothing here is enabled by default: copy an `.example` to `.sh`, `chmod +x` it a
 - `pktest.sh.example`: a PkTest course in a headless client (Xvfb/HeadlessMC, e.g. the ACS box farm), converted
   with `scripts/regress/pk_results_to_metrics.py`. Needs the headless/real parity check (priorities P0.1) before its
   numbers are trusted.
-- Combat bench: VexBench is not on main yet. When it is, a stage here writes `combat:vexbench.json`; the headless
-  `CombatStage` then leaves it alone instead of recording a skip.
+- `combat.sh.example`: a VexBench match series (default 48 rounds vs the SMP PvP Bots datapack) in a headless client,
+  converted with `scripts/regress/vexbench_to_metrics.py` into `combat:vexbench.json` (win rate fails past -0.15,
+  damage and hit-rate moves warn); the headless `CombatStage` then leaves it alone instead of recording a skip.
+  VexBench is a local bench hook on the combat branches, not on main.
