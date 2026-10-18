@@ -174,6 +174,19 @@ public final class KitBench implements AbstractGameEventListener {
         ticks++;
         if (ticks % 300 == 0) for (String s : baritone.getSpectateLearner().status()) log("status " + s);
         List<ServerPlayer> bots = bots(server, me0);
+        // Ostinato: the spectator follows the fight, as a watching player would, so bots that chase or kite stay in range
+        if (ticks % 100 == 0 && !bots.isEmpty()) {
+            double cx = 0, cy = 0, cz = 0;
+            StringBuilder where = new StringBuilder();
+            for (ServerPlayer b : bots) {
+                cx += b.getX() / bots.size();
+                cy += b.getY() / bots.size();
+                cz += b.getZ() / bots.size();
+                where.append(String.format(Locale.ROOT, " %s@%.0f,%.0f,%.0f", b.getGameProfile().name(), b.getX(), b.getY(), b.getZ()));
+            }
+            if (ticks % 300 == 0) log("where" + where);
+            run(server, null, String.format(Locale.ROOT, "tp %s %.1f %.1f %.1f 0 35", me0, cx, cy + 8, cz - 10));
+        }
         if (ticks > ROUND_TICKS || bots.size() < (scenario.startsWith("1v1") ? 2 : 2)) {
             log("round " + round + " over after " + ticks + " ticks, " + bots.size() + " standing");
             next(server, me0);
