@@ -71,6 +71,12 @@ public final class PathNode {
      */
     public double favor;
 
+    /** Ostinato: cheaper offers into this node over moves not checked yet, cheapest first, each below {@link #cost}. */
+    public PendingOffer pending;
+
+    /** Ostinato: the cost this node was last expanded at. */
+    public double expandedCost = ActionCosts.COST_INF;
+
     public PathNode(int x, int y, int z, Goal goal) {
         this.previous = null;
         this.cost = ActionCosts.COST_INF;

@@ -153,6 +153,8 @@ public class CalculationContext {
     public final int worldMinY;
     /** Ostinato: per-context scratch caches of MovementJump / MovementSwim (were ThreadLocals). Only touched by the planning thread. */
     public Object jumpCache, swimCache;
+    /** Ostinato: offer simulated jumps unchecked (MutableMoveResult.check); set by the A* that runs the checks. */
+    public boolean lazyJumps;
     /** dimensionType().height(), the number of block rows. */
     public final int worldHeight;
     /** Level.getMaxY(): the top block row, worldMinY + worldHeight - 1. */

@@ -42,6 +42,7 @@ import baritone.pathing.movement.StepIn;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.viz.PathViz;
+import baritone.utils.pathing.LazyCheck;
 import baritone.utils.pathing.MutableMoveResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -98,6 +99,8 @@ public class MovementJump extends Movement {
         final int frame;
         final double cost;
         final int x, y, z;
+        /** Ostinato: set when the jump still needs its sim (lazy mode); the pathfinder runs it on reaching the landing. */
+        Pending pending;
 
         Option(JumpTemplates.Template t, int frame, double cost, int x, int y, int z) {
             this.t = t;
@@ -120,6 +123,101 @@ public class MovementJump extends Movement {
         final List<Option> options = new ArrayList<>();
         /** Ledge stand-ins already tried for this node. Cleared each call so the set is not allocated per node. */
         final java.util.Set<Long> ledgeTried = new java.util.HashSet<>();
+        /**
+         * Ostinato: every lazy sim's verdict this calculation, misses too (HH_CACHE forgets a local miss), so the path
+         * built afterwards picks the template that passed.
+         */
+        final java.util.Map<Long, Boolean> verdicts = new java.util.HashMap<>();
+    }
+
+    private static final int CHECKED = 0, CEIL = 1, PARTIAL = 2;
+    /** Ostinato: unchecked templates kept per landing; a costlier one is dropped. */
+    private static final int MAX_ALTS = 4;
+
+    /** One template for a landing, with the sim it still needs (CEIL or PARTIAL) or none (CHECKED). */
+    private record Alt(JumpTemplates.Template t, int frame, double cost, int kind, long key) {
+    }
+
+    /**
+     * Ostinato: the templates landing on one block whose sims have not run, cheapest first, ending at most with one
+     * that needs none. Run in that order when the pathfinder reaches the landing; the first that lands sets the cost.
+     */
+    private static final class Pending implements LazyCheck {
+        final CalculationContext context;
+        final int x, y, z;
+        final double startY;
+        final Cache c;
+        final List<Alt> alts = new ArrayList<>(2);
+
+        Pending(CalculationContext context, int x, int y, int z, double startY, Cache c) {
+            this.context = context;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.startY = startY;
+            this.c = c;
+        }
+
+        void add(Alt a) {
+            int at = 0;
+            while (at < alts.size() && alts.get(at).cost <= a.cost) {
+                if (alts.get(at).kind == CHECKED) {
+                    return; // never reached: a cheaper one needs no sim
+                }
+                at++;
+            }
+            alts.add(at, a);
+            if (a.kind == CHECKED) {
+                alts.subList(at + 1, alts.size()).clear();
+            }
+            if (alts.size() > MAX_ALTS) {
+                alts.remove(alts.get(alts.size() - 1).kind == CHECKED ? alts.size() - 2 : alts.size() - 1);
+            }
+        }
+
+        @Override
+        public double verify() {
+            for (Alt a : alts) {
+                if (a.kind == CHECKED) {
+                    return a.cost;
+                }
+                Boolean v = c.verdicts.get(a.key);
+                if (v == null) {
+                    v = HH_CACHE.get(a.key);
+                }
+                if (v == null) {
+                    v = run(a);
+                    c.verdicts.put(a.key, v);
+                }
+                if (v) {
+                    return a.cost;
+                }
+            }
+            return COST_INF;
+        }
+
+        private boolean run(Alt a) {
+            int[] f = FRAMES[a.frame];
+            JumpTemplates.Template t = a.t;
+            int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
+            long t0 = System.nanoTime();
+            boolean ok;
+            if (a.kind == CEIL) {
+                if (c.sims >= MAX_CALC_SIMS) {
+                    return false;
+                }
+                ok = hhCached(context, x, y, z, a.frame, f, t, dx, y + t.dy, dz, c);
+            } else {
+                if (c.partialSims >= MAX_CALC_PARTIAL) {
+                    return false;
+                }
+                c.partialSims++;
+                ok = partialLands(context, a.key, x, y, z, f, t, dx, y + t.dy, dz, startY, c);
+            }
+            PlanStats.hhNs.addAndGet(System.nanoTime() - t0);
+            PlanStats.hhCalls.incrementAndGet();
+            return ok;
+        }
     }
 
     /** Forget which jumps failed (benches reuse the same coordinates for every course). */
@@ -217,7 +315,8 @@ public class MovementJump extends Movement {
         c.context = context;
         if (c.simContext != context) {
             c.simContext = context;
-            c.sims = c.partialSims = c.partialFull = 0;
+            c.sims = c.simsFull = c.partialSims = c.partialFull = 0; // Ostinato: simsFull too (it was never reset)
+            c.verdicts.clear();
         }
         int nodeSims = 0;
         c.x = x;
@@ -225,6 +324,11 @@ public class MovementJump extends Movement {
         c.z = z;
         c.options.clear();
         if (!context.allowParkour) {
+            return c.options;
+        }
+        // Ostinato: a vine top is walkable to the pathfinder but has no collision: the player sinks into it and
+        // bobs off the ground, so a run-up jump never takes off (cubed level 5 retried one 160 times)
+        if (hollow(context.get(x, y - 1, z))) {
             return c.options;
         }
         boolean dbg = DEBUG != null && DEBUG.contains(BetterBlockPos.longHash(x, y, z)); // TEMP
@@ -253,7 +357,7 @@ public class MovementJump extends Movement {
                     continue;
                 }
                 int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
-                if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz)) {
+                if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz) || hollow(context.get(dx, y + t.dy - 1, dz))) {
                     continue;
                 }
                 double failMul = JumpFailures.multiplier(failKey(x, y, z, dx, y + t.dy, dz), System.currentTimeMillis());
@@ -302,19 +406,28 @@ public class MovementJump extends Movement {
                 if (!ceiling && JumpTemplates.MOMENTUM.contains(t)) {
                     continue;
                 }
+                int kind = CHECKED;
+                long key = 0;
                 if (ceiling) {
                     // Ostinato: cap the sims (cached across replans): per node and per calculation
-                    Boolean known = HH_CACHE.get(hhKey(x, y, z, i, t, dx, dz));
+                    long k = hhKey(x, y, z, i, t, dx, dz);
+                    Boolean known = c.verdicts.get(k);
+                    if (known == null) {
+                        known = HH_CACHE.get(k);
+                    }
                     if (known != null) {
                         if (!known) continue;
+                    } else if (context.lazyJumps) {
+                        kind = CEIL; // Ostinato: simulated only if the search reaches the landing
+                        key = k;
                     } else if (nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
                         continue;
                     }
                 }
                 long hh0 = ceiling ? System.nanoTime() : 0;
-                boolean hhOk = !ceiling || hhCached(context, x, y, z, i, f, t, dx, y + t.dy, dz, c);
-                if (ceiling) nodeSims++;
-                if (ceiling) {
+                boolean hhOk = !ceiling || kind != CHECKED || hhCached(context, x, y, z, i, f, t, dx, y + t.dy, dz, c);
+                if (ceiling && kind == CHECKED) {
+                    nodeSims++;
                     PlanStats.hhNs.addAndGet(System.nanoTime() - hh0);
                     PlanStats.hhCalls.incrementAndGet();
                 }
@@ -323,8 +436,14 @@ public class MovementJump extends Movement {
                 }
                 if (!ceiling && (partialSrc || partialCell || t.ledge || partial(context.get(dx, y + t.dy - 1, dz)))) {
                     long k = hhKey(x, y, z, i, t, dx, dz);
-                    Boolean known = HH_CACHE.get(k);
+                    Boolean known = c.verdicts.get(k);
                     if (known == null) {
+                        known = HH_CACHE.get(k);
+                    }
+                    if (known == null && context.lazyJumps) {
+                        kind = PARTIAL; // Ostinato: simulated only if the search reaches the landing
+                        key = k;
+                    } else if (known == null) {
                         if (partialSims >= MAX_NODE_PARTIAL || c.partialSims >= MAX_CALC_PARTIAL) {
                             continue;
                         }
@@ -336,7 +455,7 @@ public class MovementJump extends Movement {
                         PlanStats.hhCalls.incrementAndGet();
                     }
                     if (dbg) System.out.println("JDBG " + i + " " + t.a + "," + t.dy + "," + t.b + " r" + t.runUp + " partial sim=" + known);
-                    if (!known) {
+                    if (known != null && !known) {
                         continue;
                     }
                 }
@@ -348,10 +467,29 @@ public class MovementJump extends Movement {
                     Option o = c.options.get(k);
                     if (o.x == ddx && o.y == ddy && o.z == ddz) same = k;
                 }
-                if (same < 0) {
-                    c.options.add(new Option(t, i, cost, ddx, ddy, ddz));
-                } else if (cost < c.options.get(same).cost) {
-                    c.options.set(same, new Option(t, i, cost, ddx, ddy, ddz));
+                Option o = same < 0 ? null : c.options.get(same);
+                if (kind == CHECKED && (o == null || o.pending == null)) {
+                    if (o == null) {
+                        c.options.add(new Option(t, i, cost, ddx, ddy, ddz));
+                    } else if (cost < o.cost) {
+                        c.options.set(same, new Option(t, i, cost, ddx, ddy, ddz));
+                    }
+                } else {
+                    // Ostinato: an unchecked template here: keep the cheaper ones in order, each tried if the last fails
+                    Pending p = o == null ? null : o.pending;
+                    if (p == null) {
+                        p = new Pending(context, x, y, z, startY, c);
+                        if (o != null) p.add(new Alt(o.t, o.frame, o.cost, CHECKED, 0));
+                    }
+                    p.add(new Alt(t, i, cost, kind, key));
+                    Alt head = p.alts.get(0);
+                    Option n = new Option(head.t, head.frame, head.cost, ddx, ddy, ddz);
+                    n.pending = head.kind == CHECKED ? null : p;
+                    if (o == null) {
+                        c.options.add(n);
+                    } else {
+                        c.options.set(same, n);
+                    }
                 }
             }
         }
@@ -407,6 +545,11 @@ public class MovementJump extends Movement {
     static final int MAX_NODE_PARTIAL = 32, MAX_CALC_PARTIAL = 4000, MAX_CALC_PARTIAL_FULL = 40;
 
     /** A collision shape short of a full cube that still holds a player (candle, chain, bed, slab, soul sand). */
+    /** Walkable to the pathfinder with nothing to stand on (a vine): no take-off or landing. */
+    static boolean hollow(BlockState state) {
+        return state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO).isEmpty();
+    }
+
     static boolean partial(BlockState state) {
         var shape = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO);
         // by shape, not bounds: a T or cross of panes, iron or copper bars fills the bounds but not the cell
@@ -530,7 +673,7 @@ public class MovementJump extends Movement {
 
     private static boolean hasShorter(List<Option> options, JumpTemplates.Template t, int x, int y, int z) {
         for (Option o : options) {
-            if (o.x == x && o.y == y && o.z == z && JumpTemplates.MOMENTUM.contains(o.t) && o.t.runUp < t.runUp) return true;
+            if (o.pending == null && o.x == x && o.y == y && o.z == z && JumpTemplates.MOMENTUM.contains(o.t) && o.t.runUp < t.runUp) return true;
         }
         return false;
     }
@@ -573,6 +716,7 @@ public class MovementJump extends Movement {
         res.y = y + op.t.dy;
         res.z = z + op.t.a * f[1] + op.t.b * f[3];
         res.cost = op.cost;
+        res.check = op.pending;
     }
 
     public static MovementJump cost(CalculationContext context, BetterBlockPos src, int slot) {

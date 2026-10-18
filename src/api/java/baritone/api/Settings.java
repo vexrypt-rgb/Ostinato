@@ -243,6 +243,12 @@ public final class Settings {
     public final Setting<Boolean> allowTasJumps = new Setting<>(false);
 
     /**
+     * Simulate a jump under a ceiling or onto a partial block only when the search actually reaches its landing,
+     * instead of for every one it considers. The same paths, found with far fewer simulations.
+     */
+    public final Setting<Boolean> lazyJumpChecks = new Setting<>(true);
+
+    /**
      * Steer like a controller stick instead of WASD keys where a movement asks for it: any fraction of walking speed,
      * in any direction, each tick. Vanilla physics, it just isn't limited to full key presses. A standing jump from
      * near a block's side uses it to stop on its take-off spot to the millimetre; a key tap moves ~0.22 blocks.
