@@ -4,6 +4,7 @@
 package baritone.spectate;
 
 import baritone.Baritone;
+import baritone.api.event.events.PlayerUpdateEvent;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.api.event.listener.AbstractGameEventListener;
@@ -30,6 +31,11 @@ import java.util.Locale;
  * health are written to {@code spectbench/truth.csv} from the integrated server's own thread, while the spectator
  * decodes them from packets ({@code -Dostinato.spectate.decodeLog}) and the estimator logs its estimates
  * ({@code -Dostinato.health.log}). {@code tools/spectbench.py} matches the two by position.
+ * <p>
+ * {@code -Dostinato.spectbench.self=true}: instead, we fight one Carpet bot ourselves with Ostinato's own PvP, and
+ * every client tick our own true keys and the position and look we just sent the server go to
+ * {@code spectbench/selftruth.csv} (truth.csv's columns), for TruthReplayTest to decode as a spectator would see
+ * us: real-client movement, where the look that moved us is the look the server was told.
  */
 public final class SpectateBench implements AbstractGameEventListener {
     private static final int ROUNDS = Integer.getInteger("ostinato.spectbench", 0);
@@ -39,6 +45,9 @@ public final class SpectateBench implements AbstractGameEventListener {
     private static final boolean CARPET = BOT.equals("carpet");
     /** Our kits for VexBot; for Carpet PvP its own modes, geared by the mod. */
     private static final String[] KITS = System.getProperty("ostinato.spectbench.kits", CARPET ? "sword,smp,mace,sword" : "sword,pot,sword,potion").split(",");
+    private static final boolean SELF = Boolean.getBoolean("ostinato.spectbench.self");
+    private volatile BufferedWriter selfTruth;
+    private int clientTick;
     private static final String[] DIFFS = System.getProperty("ostinato.spectbench.diffs", CARPET ? "average,skilled,expert,casual" : "medium,hard,expert,easy").split(",");
     private int settle;
 
@@ -68,6 +77,9 @@ public final class SpectateBench implements AbstractGameEventListener {
         if (round < 0) {
             Baritone.settings().spectateLearn.value = true;
             Baritone.settings().spectateSaveLogs.value = Boolean.getBoolean("ostinato.spectbench.logs");
+            // free look moves us on one yaw and leaves the camera (getYRot after the tick) on another, so the logged
+            // look would not be the look the server was sent: off for the self fights
+            if (SELF) Baritone.settings().freeLook.value = false;
             run(server, "gamerule spawn_mobs false", "gamerule immediate_respawn true", "gamerule advance_time false", "time set day",
                     "difficulty normal", "kill @e[type=!player]");
             if (!armed) {
@@ -77,8 +89,10 @@ public final class SpectateBench implements AbstractGameEventListener {
             next(server);
             return;
         }
-        ServerPlayer pa = server.getPlayerList().getPlayerByName(a), pb = server.getPlayerList().getPlayerByName(b);
+        ServerPlayer pa = SELF ? server.getPlayerList().getPlayerByName(me.getGameProfile().name()) : server.getPlayerList().getPlayerByName(a),
+                pb = server.getPlayerList().getPlayerByName(b);
         if (ticks == 0) {
+            if (SELF) pa = server.getPlayerList().getPlayerByName(me.getGameProfile().name());
             if (pa == null || pb == null) {
                 if (wait-- < -400) {
                     log("bots never joined: " + a + " " + b);
@@ -90,6 +104,17 @@ public final class SpectateBench implements AbstractGameEventListener {
             settle = 0;
             String kit = KITS[round % KITS.length];
             String me0 = me.getGameProfile().name();
+            if (SELF) {
+                run(server, "gamemode survival " + me0, "clear " + me0, "effect clear " + me0, "effect give " + me0 + " minecraft:instant_health 1 10 true",
+                        "effect give " + me0 + " minecraft:saturation 1 10 true", "tp " + me0 + " 4 ~ 0 90 0", "tp " + b + " -4 ~ 0 -90 0",
+                        "player " + b + " ai combat true", "player " + b + " ai autotarget true");
+                for (String k : kit("default")) run(server, "item replace entity " + me0 + " " + k);
+                baritone.getPvpProcess().attackPlayer(b);
+                log("round " + round + " self vs " + b + "(" + pb.getId() + ") diff=" + DIFFS[round % DIFFS.length]);
+                recording = true;
+                ticks++;
+                return;
+            }
             run(server, "gamemode spectator " + me0, "tp " + me0 + " 0 ~6 -9 0 30",
                     "tp " + pa.getName().getString() + " 4 ~ 0 90 0", "tp " + pb.getName().getString() + " -4 ~ 0 -90 0");
             if (CARPET) {
@@ -113,10 +138,37 @@ public final class SpectateBench implements AbstractGameEventListener {
             healthCost();
         }
         boolean over = pa == null || pb == null || !pa.isAlive() || !pb.isAlive() || ticks > ROUND_TICKS;
+        if (SELF) over = pb == null || ticks > ROUND_TICKS; // we respawn at once; Carpet bots never die (1 HP, then 20)
         if (over) {
             recording = false;
             log("round " + round + " over after " + ticks + " ticks: " + (pa == null || !pa.isAlive() ? a + " down" : pb == null || !pb.isAlive() ? b + " down" : "time"));
             next(server);
+        }
+    }
+
+    @Override
+    public void onPlayerUpdate(PlayerUpdateEvent event) {
+        if (!SELF || done || event.getState() != EventState.POST) return;
+        clientTick++;
+        LocalPlayer p = Minecraft.getInstance().player;
+        if (p == null || !recording) return;
+        try {
+            if (selfTruth == null) {
+                Path dir = Paths.get("spectbench");
+                Files.createDirectories(dir);
+                selfTruth = Files.newBufferedWriter(dir.resolve("selftruth.csv"));
+                selfTruth.write("stick,round,id,name,x,y,z,yaw,pitch,xxa,zza,cmdF,cmdS,jumping,sprint,shift,using,onGround,hp,abs,hurtTime\n");
+            }
+            var k = p.input.keyPresses;
+            Vec3 v = p.position();
+            selfTruth.write(String.format(Locale.ROOT, "%d,%d,%d,%s,%.6f,%.6f,%.6f,%.2f,%.2f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%d%n",
+                    clientTick, round, p.getId(), p.getGameProfile().name(), v.x, v.y, v.z, p.getYRot(), p.getXRot(), p.xxa, p.zza,
+                    (k.forward() ? 1 : 0) - (k.backward() ? 1 : 0), (k.left() ? 1 : 0) - (k.right() ? 1 : 0), k.jump() ? 1 : 0,
+                    p.isSprinting() ? 1 : 0, p.isShiftKeyDown() ? 1 : 0, p.isUsingItem() ? 1 : 0, p.onGround() ? 1 : 0, p.getHealth(),
+                    p.getAbsorptionAmount(), p.hurtTime));
+            if (clientTick % 100 == 0) selfTruth.flush();
+        } catch (IOException e) {
+            log("self truth: " + e);
         }
     }
 
@@ -137,7 +189,8 @@ public final class SpectateBench implements AbstractGameEventListener {
         a = "vxa" + round;
         b = "vxb" + round;
         String diff = DIFFS[round % DIFFS.length], kit = KITS[round % KITS.length];
-        if (CARPET) run(server, "bot spawn " + a + " " + kit + " " + diff + " at 4 ~ 0", "bot spawn " + b + " " + kit + " " + diff + " at -4 ~ 0");
+        if (SELF) run(server, "bot spawn " + b + " sword " + diff + " at -4 ~ 0");
+        else if (CARPET) run(server, "bot spawn " + a + " " + kit + " " + diff + " at 4 ~ 0", "bot spawn " + b + " " + kit + " " + diff + " at -4 ~ 0");
         else run(server, "vexbot difficulty preset " + diff, "vexbot spawn " + a, "vexbot spawn " + b);
         wait = 40;
     }
@@ -151,6 +204,7 @@ public final class SpectateBench implements AbstractGameEventListener {
         try {
             Thread.sleep(500);
             if (truth != null) truth.close();
+            if (selfTruth != null) selfTruth.close();
         } catch (Exception ignored) {}
         log("SUMMARY done");
         if (Boolean.getBoolean("ostinato.spectbench.exit")) Minecraft.getInstance().stop();

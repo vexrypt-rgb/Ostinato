@@ -35,10 +35,11 @@ def main(d):
     ticks_of = {i: [int(r['stick']) for r in rows] for i, rows in by_id.items()}
     TOL = 4.0 / 4096
     stats = collections.Counter()
-    conf_bins = collections.defaultdict(lambda: [0, 0])
+    conf_bins = collections.defaultdict(lambda: [0, 0, 0.0])
     last = {}
     tick_err = collections.Counter()
     seen = set()
+    offset = {}
     for r in dec:
         i = int(r['id'])
         if i not in by_id:
@@ -50,7 +51,13 @@ def main(d):
         seen.add(dk)
         rows_i, st = by_id[i], ticks_of[i]
         t = int(r['tick'])
-        lo, hi = bisect.bisect_left(st, t - 6), bisect.bisect_right(st, t + 2)
+        # client and server tick counters drift apart over a run (lag, a slow start): track each id's offset,
+        # searching wide until the first match and after a miss
+        off = offset.get(i)
+        if off is None:
+            lo, hi = bisect.bisect_left(st, t - 200), bisect.bisect_right(st, t + 200)
+        else:
+            lo, hi = bisect.bisect_left(st, t + off - 6), bisect.bisect_right(st, t + off + 2)
         x, y, z = float(r['x']), float(r['y']), float(r['z'])
         best, bd = None, TOL
         prev = last.get(i)
@@ -64,8 +71,10 @@ def main(d):
         if best is None:
             stats['unmatched'] += 1
             last.pop(i, None)
+            offset.pop(i, None)
             continue
         k_end = best
+        offset[i] = st[best] - t
         last[i] = k_end
         if r['reset'] == '1' or prev is None:
             stats['reset'] += 1
@@ -76,6 +85,16 @@ def main(d):
             continue
         true_ticks = len(span)
         tick_err[true_ticks - int(r['ticks'])] += 1
+        stats['len_ok'] += true_ticks == int(r['ticks'])
+        if r.get('dtRecv') not in (None, '', 'NaN'):
+            dm, dr, bu = float(r['dtMain']), float(r['dtRecv']), int(r['bursts'])
+            gm = 2 if abs(dm - 2) < 0.75 else max(1, round(dm))
+            stats['clk_n'] += 1
+            stats['clk_main'] += gm == true_ticks
+            if dr == dr:
+                stats['clk_recv'] += max(1, round(dr)) == true_ticks
+                stats['clk_burst'] += bu == true_ticks
+            stats['clk_guess'] += int(r['guess']) == true_ticks
         rows = span
         def applied(t):
             full = 0.98 * (0.3 if t['shift'] == '1' else 1) * (0.2 if t['using'] == '1' else 1)
@@ -115,9 +134,11 @@ def main(d):
         stats['sprint_ok'] += (r['sprint'] == '1') == (rows[-1]['sprint'] == '1')
         stats['sneak_ok'] += (r['sneak'] == '1') == (rows[-1]['shift'] == '1')
         c = float(r['conf'])
+        stats['brier'] += (c - ok) ** 2
         b = min(4, int(c * 5))
         conf_bins[b][0] += 1
         conf_bins[b][1] += ok
+        conf_bins[b][2] += c
         stats['work'] += int(r['work'])
     n = max(1, stats['n'])
     print('decode: %d intervals matched (%d resets, %d unmatched, %d bad spans, %d duplicate rows)' % (stats['n'], stats['reset'], stats['unmatched'], stats['span_bad'], stats['dup']))
@@ -129,10 +150,17 @@ def main(d):
     print('  jump correct %.3f on %d observable intervals (%d true jumps, recall %.3f)' % (stats['jump_ok'] / jn, stats['jump_n'], stats['jump_true'], stats['jump_tp'] / max(1, stats['jump_true'])))
     print('  sprint %.3f  sneak %.3f' % (stats['sprint_ok'] / n, stats['sneak_ok'] / n))
     print('  interval length (true - assumed): %s' % dict(sorted(tick_err.items())))
+    print('  interval length right: %.3f' % (stats['len_ok'] / n))
+    if stats['clk_n']:
+        k = stats['clk_n']
+        print('  timing alone on %d: game-thread clock %.3f, network clock %.3f, burst count %.3f, combined guess %.3f' % (
+            k, stats['clk_main'] / k, stats['clk_recv'] / k, stats['clk_burst'] / k, stats['clk_guess'] / k))
     print('  sim ticks per interval: %.1f' % (stats['work'] / n))
+    ece = sum(abs(o - cs) for t, o, cs in conf_bins.values()) / n
+    print('  confidence: Brier %.3f (lower is better), bin calibration error %.3f' % (stats['brier'] / n, ece))
     for b in sorted(conf_bins):
-        t, o = conf_bins[b]
-        print('  confidence %.1f-%.1f: %d intervals, %.3f exact' % (b / 5, (b + 1) / 5, t, o / max(1, t)))
+        t, o, cs = conf_bins[b]
+        print('  confidence %.1f-%.1f: %d intervals, mean %.3f, %.3f exact' % (b / 5, (b + 1) / 5, t, cs / max(1, t), o / max(1, t)))
     try:
         h = load(d + '/health.csv')
     except FileNotFoundError:

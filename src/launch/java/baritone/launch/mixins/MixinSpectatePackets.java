@@ -30,9 +30,11 @@ public abstract class MixinSpectatePackets {
         if (!PacketTap.any() || !p.hasPosition() && !p.hasRotation()) return;
         Entity e = p.getEntity(level);
         if (e == null) return;
+        PacketTap.begin(p);
         for (PacketTap.Listener l : PacketTap.listeners()) {
             l.move(e, p.hasPosition() ? e.getPositionCodec().getBase() : null, p.getYRot(), p.getXRot(), p.hasRotation(), p.isOnGround(), false);
         }
+        PacketTap.end();
     }
 
     @Inject(method = "handleEntityPositionSync", at = @At("TAIL"))
@@ -40,9 +42,11 @@ public abstract class MixinSpectatePackets {
         if (!PacketTap.any()) return;
         Entity e = level.getEntity(p.id());
         if (e == null) return;
+        PacketTap.begin(p);
         for (PacketTap.Listener l : PacketTap.listeners()) {
             l.move(e, p.position().endPosition(), p.yRot(), p.xRot(), true, p.onGround(), true);
         }
+        PacketTap.end();
     }
 
     @Inject(method = "handleTeleportEntity", at = @At("TAIL"))

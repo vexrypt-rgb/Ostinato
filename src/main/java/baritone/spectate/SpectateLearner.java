@@ -54,10 +54,14 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     private static final double MARGIN = 3;
 
     /** Main-thread state of one watched player. */
+    /** -Dostinato.spectate.mainClock=true: count interval ticks from game-thread arrival as before (A/B only). */
+    private static final boolean MAIN_CLOCK = Boolean.getBoolean("ostinato.spectate.mainClock");
+
     private static final class Seen {
         final Player p;
         long lastNanos;
         int lastTick;
+        long lastRecv, lastBurst; // network-thread stamp of the previous update (PacketTap.stamp)
         float yaw, pitch;
         double[] kb;
         SnapshotWorld world;
@@ -239,11 +243,27 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         o.yaw = hasRot ? yRot : sn.yaw;
         o.pitch = sn.pitch;
         o.onGround = onGround;
-        // server ticks since the last update: players are sent every second tick, sooner when their metadata changes
+        // Server ticks since the last update: players are sent every second tick, sooner when their metadata changes.
+        // Game-thread arrival is only good to a frame or client tick, so the network thread's stamp is used when there
+        // is one: its time, and the count of server-tick bursts between the two updates.
         double dt = sn.lastNanos == 0 ? 2 : (now - sn.lastNanos) / 50e6;
-        int ticks = (int) Math.round(dt);
-        if (Math.abs(dt - 2) < 0.75) ticks = 2;
-        o.ticks = Math.max(1, ticks);
+        o.dtMain = dt;
+        long[] st = PacketTap.stamp();
+        if (st != null && sn.lastRecv != 0) {
+            o.dtSeen = (st[0] - sn.lastRecv) / 50e6;
+            o.burstsSeen = (int) Math.min(64, st[1] - sn.lastBurst);
+            if (!MAIN_CLOCK) {
+                o.dtRecv = o.dtSeen;
+                o.bursts = o.burstsSeen;
+            }
+        }
+        if (st != null) {
+            sn.lastRecv = st[0];
+            sn.lastBurst = st[1];
+        } else {
+            sn.lastRecv = 0;
+        }
+        o.ticks = Math.max(1, InputDecoder.guessTicks(o, MAIN_CLOCK));
         sn.lastNanos = now;
         sn.lastTick = tick;
         Player p = sn.p;
@@ -547,11 +567,11 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         try {
             if (decodeLog == null) {
                 decodeLog = Files.newBufferedWriter(Paths.get(DECODE_LOG));
-                decodeLog.write("tick,id,name,x,y,z,ticks,reset,keys,fwd,str,fi,si,jump,jumpObs,sprint,sneak,using,kb,conf,resid,work\n");
+                decodeLog.write("tick,id,name,x,y,z,ticks,reset,keys,fwd,str,fi,si,jump,jumpObs,sprint,sneak,using,kb,conf,resid,work,guess,dtMain,dtRecv,bursts,pTicks\n");
             }
-            decodeLog.write(String.format(Locale.ROOT, "%d,%d,%s,%.5f,%.5f,%.5f,%d,%d,%s,%d,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%.3f,%.5f,%d%n",
+            decodeLog.write(String.format(Locale.ROOT, "%d,%d,%s,%.5f,%.5f,%.5f,%d,%d,%s,%d,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%.3f,%.5f,%d,%d,%.3f,%.3f,%d,%.3f%n",
                     t, id, name, o.x, o.y, o.z, o.ticks, d.reset ? 1 : 0, d.keys(), d.forward, d.strafe, d.forwardImpulse, d.strafeImpulse,
-                    d.jump ? 1 : 0, d.jumpObservable ? 1 : 0, d.sprint ? 1 : 0, d.sneak ? 1 : 0, d.using ? 1 : 0, d.kb ? 1 : 0, d.confidence, d.residual, d.work));
+                    d.jump ? 1 : 0, d.jumpObservable ? 1 : 0, d.sprint ? 1 : 0, d.sneak ? 1 : 0, d.using ? 1 : 0, d.kb ? 1 : 0, d.confidence, d.residual, d.work, d.guess, o.dtMain, o.dtSeen, o.burstsSeen, d.pTicks));
             if (decodes % 200 == 0) decodeLog.flush();
         } catch (IOException e) {
             decodeLog = null;
