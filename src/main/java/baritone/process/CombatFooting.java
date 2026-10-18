@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 final class CombatFooting {
 
-    static final boolean ON = Boolean.getBoolean("ostinato.footing");
+    static final boolean ON = !"false".equals(System.getProperty("ostinato.footing")); // default since 4 pairs (192 rounds each, SMP lava ring): taken 27.9 vs 31.5 p≈0.0005, fewer lava entries, wins 59 vs 48
     static final int HORIZON = 12;
     static final double MAX_DROP = 3.5;
     /** Knockback of a sprint hit: 0.4 base plus 0.5 for sprinting (LivingEntity.knockback, Player.attack). */
