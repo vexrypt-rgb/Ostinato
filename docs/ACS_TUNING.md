@@ -101,3 +101,39 @@ tick 7 (a jump one tick apart, path ready a tick early or late). That is the "sa
 headless runs showed, so bench numbers are taken with `-Dostinato.lockstep=true`.
 The PC kit (`run-parity.ps1`: clone from a bundle, bench hooks, world copy, options.txt, trace) is in
 `MinecraftDev\acs-parity-kit`.
+
+## Opponents on 26.3 and what the bench measures (2026-10-18)
+
+| opponent | mod (license) | role | style |
+|---|---|---|---|
+| Carpet PvP fake players, modes sword/mace/crystal/anchor/ranged/smp × beginner..expert | carpet-pvp 26.3-19 (Apache-2.0) | tuning pool | planner bot, strafes, crit-jumps, shield, shieldbreak |
+| SickSheet bot, easy..impossible | SickSheets (MIT on Modrinth, CC0 in jar) | held out | blocks almost nonstop, combo attack |
+| SMP PvP bots, easy..perfect | smp-pvp-bot 1.2 on fabric-carpet (ARR, local use only) | held out | axe-swaps on our shield, eats apples in openings |
+| VexBot | 26.2 jar (ARR) | not usable | crashes on 26.3 (missing ServerPlayer APIs, IllegalAccessError) |
+| Mineflayer + mineflayer-pvp | MIT | not usable | minecraft-data stops at 26.1 |
+
+Bot-vs-bot to spectate: `/workspace/acs-farm/w5` + `spectate.sh`, datapack `ospec`
+(`/function ospec:mixes {i:0..5}`, `ospec:duel {a,am,ad,b,bm,bd}`, `ospec:ffa`, `ospec:teams`, `ospec:stop`).
+
+Bench bugs found and fixed before any numbers counted:
+- Carpet PvP's fake player never dies. `die()` sets 1 HP, stamps `diedTick()` and resets to 20 the next tick, so
+  every win was scored as a loss (0/25). The bench reads `diedTick()`, and `PvpProcess.foeKilled` closes the fight
+  record so the learner sees the win too.
+- With `immediate_respawn`, a fake player's death swaps its ServerPlayer object; that also counts as a kill now.
+- Bots that fight on their own (SickSheet, SMP) hit us during the 20-tick settle before our kit, so rounds began at
+  ~11 HP. Both are healed after the kits.
+
+Baselines (sword kit, lockstep, no autotune):
+
+| opponent | wins |
+|---|---|
+| Carpet PvP, all five difficulties | 32/33 |
+| SickSheet | 8/12 (impossible 0/3, ~0 damage dealt: it blocks nonstop) |
+| SMP bots | 1/12 |
+
+SPSA against Carpet PvP, exploring, no verdict yet: c0=3/a=2 won 82% (78/95), c0=1/a=0.5 won 90% (91/101).
+Probing costs wins, and the default probe is too wide. Carpet is near its ceiling for this kit, so the next tuning pool
+adds the harder Carpet modes and kits.
+
+Rule A/Bs on the held-out bots (kept only if they win):
+- Cut a bite under fire (`-Dostinato.biteCut=true`): 12/32 on vs 14/26 off. Not kept (opt-in only).
