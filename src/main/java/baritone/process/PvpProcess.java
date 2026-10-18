@@ -290,6 +290,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (potted != null) return potted;
             PathingCommand wet = buckets.water(me, survival.eatTicks, phase.macePhase == 0 && !me.isFallFlying());
             if (wet != null) return wet;
+            survival.exposed = CombatFooting.ON && footing.exposed(me, target, groundY); // Ostinato
             PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
             if (ate != null) return ate;
 
@@ -802,7 +803,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             in.setInputForceState(Input.MOVE_LEFT, k[1] > 0);
             in.setInputForceState(Input.MOVE_RIGHT, k[1] < 0);
             in.setInputForceState(Input.JUMP, k[2] == 1);
-            tickDec = tickDec + "+foot";
+            tickDec = tickDec + "+foot" + k[3] + ">" + k[4] + (k[0] == (int) f && k[1] == (int) s ? "=" : "*");
             return;
         }
         if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
