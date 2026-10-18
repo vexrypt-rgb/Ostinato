@@ -112,6 +112,14 @@ final class CombatFooting {
                 kz = dz / len * knock;
             }
         }
+        // a crit-jump toward the rim is airborne when the hit lands, and no key steers there: keep the feet down instead
+        if (jump && armed && me.onGround()) {
+            int up = placeScore(yaw, f, s, sprint, true, foe.getX(), foe.getZ(), knock, groundY);
+            if (up <= HORIZON && placeScore(yaw, f, s, sprint, false, foe.getX(), foe.getZ(), knock, groundY) > up) {
+                saves++;
+                return new int[]{f, s, 0, up, -1};
+            }
+        }
         int want = score(yaw, f, s, sprint, jump, kx, kz, groundY, 3);
         if (want > HORIZON) return null;
         // on the ground the keys still steer: pick the place that a hit leaves us dry in; in the air, only the next ticks
