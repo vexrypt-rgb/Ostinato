@@ -34,8 +34,8 @@ stands in.
 
 ## Freecam (`#freecam`)
 Toggles a camera body that walks, swims, and slime-jumps with the game's own movement. The key is `freecamKey`
-(default F8) and `freecamSpeed` defaults to 1. Double-tap jump to fly: flight phases the camera, and the bot on a
-singleplayer world, through blocks. Double-tap again to land; collision comes back for both. `freecamGhostOpacity`
+(default F8) and `freecamSpeed` defaults to 1. Double-tap jump to fly: flight phases the camera through blocks. The bot
+is never affected: it keeps its own flight and collision. Double-tap again to land. `freecamGhostOpacity`
 (0.35) is ignored on 26.3, where the body is drawn solid.
 - The hotbar, hearts, and the first-person arm stay on screen. F5 shows the bot's body, with its hotbar (and any
   open container) drawn above its head. Container screens the bot opens do not cover the view; the survival and

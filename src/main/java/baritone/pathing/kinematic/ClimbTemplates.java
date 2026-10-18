@@ -76,7 +76,7 @@ public final class ClimbTemplates {
                 cells[i - 10] = new int[]{Integer.parseInt(c[0]), Integer.parseInt(c[1]), Integer.parseInt(c[2]), kind};
             }
             int[] plan = new int[JumpSearch.DIMS];
-            for (int k = 0; k < plan.length; k++) plan[k] = p[9].charAt(k) - '0';
+            for (int k = 0; k < plan.length; k++) plan[k] = Character.digit(p[9].charAt(k), 36);
             ALL.add(new Template(Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]),
                     Integer.parseInt(p[4]), destWall(Integer.parseInt(p[1]), Integer.parseInt(p[5])), Integer.parseInt(p[6]), Integer.parseInt(p[7]) / 100.0,
                     Integer.parseInt(p[8]), plan, cells));
@@ -267,7 +267,7 @@ public final class ClimbTemplates {
                     cells.add("s" + (l[0] + wv[0]) + "," + l[1] + "," + (l[2] + wv[1]));
                 }
                 StringBuilder plan = new StringBuilder();
-                for (int k : js.plan) plan.append(k);
+                for (int k : js.plan) plan.append(Character.forDigit(k, 36));
                 out.add((stand ? LEAP_STAND : d[0]) + " " + d[1] + " " + d[2] + " " + d[3] + " " + d[4] + " " + d[5] + " " + r + " " + lat + " " + js.ticks + " " + plan + " " + String.join(" ", cells));
                 System.err.println("ok " + (stand ? "stand-leap" : leap ? "leap" : "grab") + " wall=" + d[1] + " a=" + d[2] + " dy=" + d[3] + " b=" + d[4] + " ladder=" + d[5] + " runUp/rise=" + r + " lat=" + lat + " ticks=" + js.ticks);
                 break search;

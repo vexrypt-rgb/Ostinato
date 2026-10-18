@@ -55,7 +55,7 @@ public class MovementSwim extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
-        SRC.get().context = null; // the world may have changed since
+        if (context.swimCache != null) ((Src) context.swimCache).context = null; // the world may have changed since (Ostinato: was SRC.get().context = null)
         return cost(context, src.x, src.y, src.z, dest.x - src.x, dest.y - src.y, dest.z - src.z);
     }
 
@@ -155,11 +155,15 @@ public class MovementSwim extends Movement {
         boolean wet;
     }
 
-    private static final ThreadLocal<Src> SRC = ThreadLocal.withInitial(Src::new);
+    // Ostinato: was a ThreadLocal<Src>; the cache is only ever valid for one CalculationContext, so it now lives on the
+    // context (CalculationContext.swimCache) and skips the ThreadLocal lookup on every cost() call. Same hits and misses.
 
     /** Swimming, not walking: the source is water, or a cell we will have dug into it. */
     private static boolean wet(CalculationContext c, int x, int y, int z) {
-        Src s = SRC.get();
+        Src s = (Src) c.swimCache; // Ostinato: was SRC.get()
+        if (s == null) {
+            c.swimCache = s = new Src();
+        }
         if (s.context != c || s.x != x || s.y != y || s.z != z) {
             s.context = c;
             s.x = x;

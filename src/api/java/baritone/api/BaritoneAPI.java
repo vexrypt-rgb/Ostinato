@@ -27,22 +27,30 @@ import baritone.api.utils.SettingsUtil;
  */
 public final class BaritoneAPI {
 
-    private static final IBaritoneProvider provider;
     private static final Settings settings;
 
     static {
         settings = new Settings();
         SettingsUtil.readAndApply(settings, SettingsUtil.SETTINGS_DEFAULT_NAME);
+    }
 
-        try {
-            provider = (IBaritoneProvider) Class.forName("baritone.BaritoneProvider").newInstance();
-        } catch (ReflectiveOperationException ex) {
-            throw new RuntimeException(ex);
+    // Ostinato: the provider (which creates the primary Baritone from Minecraft.getInstance()) now lives in a lazy holder
+    // instead of the static block above, so reading settings no longer needs a running client (headless pathfinding
+    // benchmark/tests). It is still created once, on the first getProvider() call.
+    private static final class ProviderHolder {
+        static final IBaritoneProvider provider;
+
+        static {
+            try {
+                provider = (IBaritoneProvider) Class.forName("baritone.BaritoneProvider").newInstance();
+            } catch (ReflectiveOperationException ex) {
+                throw new RuntimeException(ex);
+            }
         }
     }
 
     public static IBaritoneProvider getProvider() {
-        return BaritoneAPI.provider;
+        return ProviderHolder.provider;
     }
 
     public static Settings getSettings() {

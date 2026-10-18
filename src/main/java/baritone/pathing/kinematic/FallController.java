@@ -80,7 +80,7 @@ public final class FallController {
         BetterBlockPos src = fall.getSrc(), dest = fall.getDest();
         int drop = src.y - dest.y;
         // a path left over from before a goal change is not the player's fall: it has to be on this one's way down
-        if (Math.hypot(player.getX() - (src.x + 0.5), player.getZ() - (src.z + 0.5)) > 4
+        if (Math.hypot(player.getX() - (src.x + 0.5), player.getZ() - (src.z + 0.5)) > 4 + fall.steerSpan()
                 || player.getY() > src.y + 2 || player.getY() < dest.y - 2) {
             return -1;
         }
@@ -121,7 +121,13 @@ public final class FallController {
         boolean air = !player.onGround();
         double fx = player.getX() + player.getDeltaMovement().x, fz = player.getZ() + player.getDeltaMovement().z;
         boolean off = Math.abs(fx - centre.x) > 0.1 || Math.abs(fz - centre.z) > 0.1;
+        if (fall.steered() && !air) {
+            // walk off into the fall column, not straight at a landing a few columns over
+            centre = new Vec3(fall.fallX() + 0.5, src.y, fall.fallZ() + 0.5);
+            off = true;
+        }
         Rotation toDest = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), centre, ctx.playerRotations());
+        boolean[] drift = fall.steered() && air ? fall.airKeys(player) : null;
         // the camera goes down as soon as the feet leave the ground (the mouse takes a few ticks), and the water goes onto
         // whatever block the crosshair is on once it is within reach: at 3 or more blocks a tick the window is a single tick,
         // so the click is not held up waiting for the landing column in particular
@@ -131,11 +137,19 @@ public final class FallController {
             inv.setSelectedSlot(water);
         }
         baritone.getLookBehavior().human();
-        baritone.getLookBehavior().updateTarget(new Rotation(toDest.getYaw(), pitch), true);
+        // drifting: keep facing the way the keys were worked out for
+        baritone.getLookBehavior().updateTarget(new Rotation(drift != null ? player.getYRot() : toDest.getYaw(), pitch), true);
         in.clearAllKeys();
-        in.setInputForceState(Input.MOVE_FORWARD, off);
-        // hold sneak while dropping fast so the air steering does not overshoot the column
-        in.setInputForceState(Input.SNEAK, off && air && Math.abs(player.getDeltaMovement().y) > 0.4);
+        if (drift != null) {
+            in.setInputForceState(Input.MOVE_FORWARD, drift[0]);
+            in.setInputForceState(Input.MOVE_BACK, drift[1]);
+            in.setInputForceState(Input.MOVE_LEFT, drift[2]);
+            in.setInputForceState(Input.MOVE_RIGHT, drift[3]);
+        } else {
+            in.setInputForceState(Input.MOVE_FORWARD, off);
+            // hold sneak while dropping fast so the air steering does not overshoot the column
+            in.setInputForceState(Input.SNEAK, off && air && Math.abs(player.getDeltaMovement().y) > 0.4);
+        }
         boolean click = false;
         if (place && player.getXRot() > 80 && ctx.objectMouseOver() instanceof net.minecraft.world.phys.BlockHitResult hit
                 && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK

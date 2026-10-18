@@ -10,6 +10,7 @@ import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.pathing.movement.IMovement;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.SettingsUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.BlockPos;
@@ -29,7 +30,7 @@ import java.util.*;
 /**
  * TEMP parkour harness, installed like BastTest and inert unless -Dostinato.pktest=<save folder> is set.
  * Opens that save, sets the map's game mode (creative/spectator become adventure) and walks a course script
- * (-Dostinato.pktest.goals=<file>: "tp x y z", "cmd <command>", "goal x y z", "near x y z r"), or, without one,
+ * (-Dostinato.pktest.goals=<file>: "tp x y z", "cmd <command>", "set <setting> <value>", "goal x y z", "near x y z r"), or, without one,
  * pressure plates in nearest-first order. Every jump-like movement is recorded. A fall puts the player back where the
  * jump started (as a map checkpoint would); the same jump failing maxFails times is skipped by a tp to its landing.
  * PK lines in the log; CSV + summary under run/pk-results/.
@@ -52,7 +53,7 @@ public final class PkTest implements AbstractGameEventListener {
     }
 
     private static final class Attempt {
-        int goal; String cls; BetterBlockPos src, dst; List<String> tags; boolean ok; String why = ""; int ticks, startTick;
+        int goal; String cls; BetterBlockPos src, dst; List<String> tags; boolean ok, flew; String why = ""; int ticks, startTick;
     }
 
     /** One course-script line. kind: tp, cmd, goal, near. */
@@ -249,6 +250,7 @@ public final class PkTest implements AbstractGameEventListener {
                     String[] a = line.split("\\s+");
                     switch (a[0]) {
                         case "cmd" -> steps.add(new Step("cmd", 0, 0, 0, 0, line.substring(4).trim()));
+                        case "set" -> steps.add(new Step("set", 0, 0, 0, 0, line.substring(4).trim()));
                         case "tag" -> steps.add(new Step("tag", 0, 0, 0, 0, a.length > 1 ? a[1] : ""));
                         case "vizprof" -> steps.add(new Step("vizprof", 0, 0, 0, a.length > 1 ? Integer.parseInt(a[1]) : 200, ""));
                         case "wait" -> steps.add(new Step("wait", 0, 0, 0, Integer.parseInt(a[1]), ""));
@@ -353,6 +355,12 @@ public final class PkTest implements AbstractGameEventListener {
             if (stepIdx >= steps.size()) { say("PK course done"); end(); return; }
             Step st = step();
             if (st.kind.equals("cmd")) { run(st.text); continue; }
+            if (st.kind.equals("set")) { // a Baritone setting the map needs, e.g. its kill floor in blocksToAvoidStandingOn
+                String[] kv = st.text.split("\s+", 2);
+                try { SettingsUtil.parseAndApply(Baritone.settings(), kv[0].toLowerCase(Locale.ROOT), kv.length > 1 ? kv[1] : ""); say("PK set " + st.text); }
+                catch (Exception ex) { say("PK BLOCKER set " + st.text + " " + ex); }
+                continue;
+            }
             if (st.kind.equals("tag")) { drillTag = st.text; say("PK section " + drillTag); continue; }
             if (st.kind.equals("vizprof")) { profWin = st.r; profIdx = 0; profT = 0; profSum = 0; profN = 0; profMin = 9999; profApply(Minecraft.getInstance()); continue; }
             if (st.kind.equals("wait")) { wait = st.r; resume = true; return; }
@@ -467,8 +475,17 @@ public final class PkTest implements AbstractGameEventListener {
         var cur = b.getPathingBehavior().getCurrent();
         IMovement mv = null;
         if (cur != null && cur.getPosition() < cur.getPath().movements().size()) mv = cur.getPath().movements().get(cur.getPosition());
+        // A slime pad bounces the flight on: touching it is neither a landing nor a fall.
+        boolean onPad = mc.level.getBlockState(BlockPos.containing(pos.x, pos.y - 0.2, pos.z)).getBlock() == Blocks.SLIME_BLOCK;
+        if (!p.onGround()) {
+            if (active != null) active.flew = true;
+            if (pending != null) pending.flew = true;
+        }
         // A jump is judged on the first landing after its movement hands over (the executor moves on mid-air).
-        if (pending != null && p.onGround()) {
+        if (pending != null && p.onGround() && !onPad) {
+            if (!pending.flew) { finish(pending, false, "abandoned"); pending = null; } // handed over before take-off
+        }
+        if (pending != null && p.onGround() && !onPad) {
             boolean ok = landed(p, pending.dst) || pos.y > pending.dst.y - 0.5 && pos.y < pending.dst.y + 2.5;
             if (!ok && pos.y < pending.dst.y - 0.5) { falls++; fellOff("fall"); return; } // short of it, on a catch floor
             finish(pending, ok, "missed");
@@ -484,7 +501,9 @@ public final class PkTest implements AbstractGameEventListener {
         }
         if (p.onGround() && active == null && pending == null && solid(mc.level, p.blockPosition().below())) lastGood = p.blockPosition();
         Attempt judge = pending != null ? pending : active;
-        if (judge != null && pos.y < Math.min(judge.src.y, judge.dst.y) - 2.5) { falls++; fellOff("fall"); return; }
+        // a slime jump dips to its pad, up to MovementSlime's 12 blocks down
+        double drop = judge != null && judge.cls.equals("MovementSlime") ? 13.5 : 2.5;
+        if (judge != null && !onPad && pos.y < Math.min(judge.src.y, judge.dst.y) - drop) { falls++; fellOff("fall"); return; }
         double dist = pos.distanceTo(Vec3.atBottomCenterOf(step().pos()));
         if (dist < bestDist - 0.5) { bestDist = dist; bestTick = tick; }
         else if (tick - bestTick > 600) {

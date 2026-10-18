@@ -148,10 +148,14 @@ public interface Helper {
      *
      * @param message The message to display in chat
      */
+    /** Ostinato: debug messages go to stdout instead of nowhere while the parkour harness runs. */
+    boolean DEBUG_TO_STDOUT = System.getProperty("ostinato.pktest") != null;
+
     default void logDebug(String message) {
         if (!BaritoneAPI.getSettings().chatDebug.value) {
-            //System.out.println("Suppressed debug message:");
-            //System.out.println(message);
+            if (DEBUG_TO_STDOUT) {
+                System.out.println("[DBG] " + message); // Ostinato: the parkour harness reads why movements cancel
+            }
             return;
         }
         // We won't log debug chat into toasts

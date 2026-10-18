@@ -17,6 +17,9 @@
 
 package baritone.behavior;
 
+import baritone.pathing.calc.HierarchicalPathFinder;
+import baritone.pathing.calc.hierarchy.SectionGraph;
+import baritone.pathing.seed.SeedPlanning;
 import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
@@ -140,6 +143,8 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     @Override
     public void onTick(TickEvent event) {
         dispatchEvents();
+        // Ostinato: install or clear the seed terrain predictor (setting seedPlanning, off by default)
+        SeedPlanning.sync(ctx.minecraft(), event.getType() == TickEvent.Type.OUT ? null : ctx.world());
         if (event.getType() == TickEvent.Type.OUT) {
             secretInternalSegmentCancel();
             baritone.getPathingControlManager().cancelEverything();
@@ -709,6 +714,16 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         });
     }
 
+    /** Ostinato: the A* heuristic weight for a segment starting at {@code start}; 1 unless it is a far segment. */
+    public static double farSegmentWeight(Goal goal, BlockPos start) {
+        double w = Baritone.settings().pathingFarSegmentWeight.value;
+        if (!(w > 1)) {
+            return 1;
+        }
+        double blocks = goal.heuristic(start.getX(), start.getY(), start.getZ()) / Baritone.settings().costHeuristic.value;
+        return blocks >= Baritone.settings().pathingFarSegmentDistance.value ? w : 1;
+    }
+
     private AbstractNodeCostSearch createPathfinder(BlockPos start, Goal goal, IPath previous, CalculationContext context) {
         Goal transformed = goal;
         if (Baritone.settings().simplifyUnloadedYCoord.value && goal instanceof IGoalRenderPos) {
@@ -724,7 +739,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         if (feet.getY() == realStart.getY() && Math.abs(sub.getX()) <= 1 && Math.abs(sub.getZ()) <= 1) {
             realStart = feet;
         }
-        return new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context);
+        // Ostinato: was always `new AStarPathFinder(..., context)` (weight 1); far segments may now use weighted A*.
+        double weight = farSegmentWeight(transformed, start);
+        if (Baritone.settings().pathingHierarchical.value) { // Ostinato: opt-in hierarchical planner
+            return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
+        }
+        return new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
 
     }
 

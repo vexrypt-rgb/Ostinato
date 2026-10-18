@@ -61,6 +61,28 @@ public final class RouteReuse {
         }
     }
 
+    /**
+     * A step that failed while it ran (UNREACHABLE or FAILED before or during its move): every route through it goes,
+     * or the next search replays the same step from the same cell and fails it again, forever.
+     */
+    public static void forget(BetterBlockPos src, BetterBlockPos dest) {
+        synchronized (ENTRIES) {
+            for (int n = 0; n < MAX; n++) {
+                Entry entry = ENTRIES[n];
+                if (entry == null) {
+                    continue;
+                }
+                for (int i = 0; i + 1 < entry.x.length; i++) {
+                    if (entry.x[i] == src.x && entry.y[i] == src.y && entry.z[i] == src.z
+                            && entry.x[i + 1] == dest.x && entry.y[i + 1] == dest.y && entry.z[i + 1] == dest.z) {
+                        ENTRIES[n] = null;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     /** {@link Long#MIN_VALUE} while a jump failure is still priced, so nothing is stored or replayed. */
     public static long stamp(long now) {
         if (!JumpFailures.settled(now)) {

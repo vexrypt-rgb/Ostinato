@@ -58,6 +58,20 @@ public class MovementState {
         return this.inputState;
     }
 
+    /** Ostinato: a controller stick position for this tick (see Settings.analogMovement), or null for the keys. */
+    private float[] analog;
+
+    public MovementState setAnalog(float left, float forward) {
+        this.analog = new float[]{left, forward};
+        return this;
+    }
+
+    public float[] takeAnalog() {
+        float[] a = this.analog;
+        this.analog = null;
+        return a;
+    }
+
     public static class MovementTarget {
 
         /**

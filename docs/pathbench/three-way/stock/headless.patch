@@ -1,0 +1,125 @@
+diff --git a/src/api/java/baritone/api/BaritoneAPI.java b/src/api/java/baritone/api/BaritoneAPI.java
+index fa98525..b1773d7 100644
+--- a/src/api/java/baritone/api/BaritoneAPI.java
++++ b/src/api/java/baritone/api/BaritoneAPI.java
+@@ -27,22 +27,28 @@ import baritone.api.utils.SettingsUtil;
+  */
+ public final class BaritoneAPI {
+ 
+-    private static final IBaritoneProvider provider;
+     private static final Settings settings;
+ 
+     static {
+         settings = new Settings();
+         SettingsUtil.readAndApply(settings, SettingsUtil.SETTINGS_DEFAULT_NAME);
++    }
++
++    // xbench-local: lazy provider so headless settings access needs no client (same holder Ostinato ships)
++    private static final class ProviderHolder {
++        static final IBaritoneProvider provider;
+ 
+-        try {
+-            provider = (IBaritoneProvider) Class.forName("baritone.BaritoneProvider").newInstance();
+-        } catch (ReflectiveOperationException ex) {
+-            throw new RuntimeException(ex);
++        static {
++            try {
++                provider = (IBaritoneProvider) Class.forName("baritone.BaritoneProvider").newInstance();
++            } catch (ReflectiveOperationException ex) {
++                throw new RuntimeException(ex);
++            }
+         }
+     }
+ 
+     public static IBaritoneProvider getProvider() {
+-        return BaritoneAPI.provider;
++        return ProviderHolder.provider;
+     }
+ 
+     public static Settings getSettings() {
+diff --git a/src/api/java/baritone/api/utils/SettingsUtil.java b/src/api/java/baritone/api/utils/SettingsUtil.java
+index 8b9f6a7..22264bb 100644
+--- a/src/api/java/baritone/api/utils/SettingsUtil.java
++++ b/src/api/java/baritone/api/utils/SettingsUtil.java
+@@ -72,6 +72,10 @@ public class SettingsUtil {
+     }
+ 
+     public static void readAndApply(Settings settings, String settingsName) {
++        // xbench-local: headless bench has no client, keep defaults (same guard Ostinato ships)
++        if (Minecraft.getInstance() == null) {
++            return;
++        }
+         try {
+             forEachLine(settingsByName(settingsName), line -> {
+                 Matcher matcher = SETTING_PATTERN.matcher(line);
+diff --git a/src/main/java/baritone/pathing/movement/CalculationContext.java b/src/main/java/baritone/pathing/movement/CalculationContext.java
+index f616c98..0efba4e 100644
+--- a/src/main/java/baritone/pathing/movement/CalculationContext.java
++++ b/src/main/java/baritone/pathing/movement/CalculationContext.java
+@@ -161,6 +161,44 @@ public class CalculationContext {
+         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
+     }
+ 
++    /** XBENCH (local, never pushed): headless constructor for the three-way pathfinding bench, same settings reads as above with no player. */
++    public CalculationContext(Level world, BlockStateInterface bsi, ToolSet toolSet, boolean hasThrowaway) {
++        this.precomputedData = new PrecomputedData();
++        this.safeForThreadedUse = true;
++        this.baritone = null;
++        this.world = world;
++        this.worldData = null;
++        this.bsi = bsi;
++        this.toolSet = toolSet;
++        this.hasThrowaway = Baritone.settings().allowPlace.value && hasThrowaway;
++        this.hasWaterBucket = false;
++        this.canSprint = Baritone.settings().allowSprint.value;
++        this.placeBlockCost = Baritone.settings().blockPlacementPenalty.value;
++        this.allowBreak = Baritone.settings().allowBreak.value;
++        this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
++        this.allowParkour = Baritone.settings().allowParkour.value;
++        this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
++        this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
++        this.allowParkourAscend = Baritone.settings().allowParkourAscend.value;
++        this.assumeWalkOnWater = Baritone.settings().assumeWalkOnWater.value;
++        this.allowFallIntoLava = false;
++        this.frostWalker = 0;
++        this.allowDiagonalDescend = Baritone.settings().allowDiagonalDescend.value;
++        this.allowDiagonalAscend = Baritone.settings().allowDiagonalAscend.value;
++        this.allowDownward = Baritone.settings().allowDownward.value;
++        this.minFallHeight = 3;
++        this.maxFallHeightNoWater = Baritone.settings().maxFallHeightNoWater.value;
++        this.maxFallHeightBucket = Baritone.settings().maxFallHeightBucket.value;
++        float waterSpeedMultiplier = 1.0f; // as above with no enchanted gear
++        this.waterWalkSpeed = ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier) + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
++        this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
++        this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
++        this.jumpPenalty = Baritone.settings().jumpPenalty.value;
++        this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
++        this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
++        this.worldBorder = bsi.worldBorder;
++    }
++
+     public final IBaritone getBaritone() {
+         return baritone;
+     }
+diff --git a/src/main/java/baritone/utils/BlockStateInterface.java b/src/main/java/baritone/utils/BlockStateInterface.java
+index 7a8420d..1e529c0 100644
+--- a/src/main/java/baritone/utils/BlockStateInterface.java
++++ b/src/main/java/baritone/utils/BlockStateInterface.java
+@@ -76,6 +76,17 @@ public class BlockStateInterface {
+         this.access = new BlockStateInterfaceAccessWrapper(this);
+     }
+ 
++    /** XBENCH (local, never pushed): headless constructor for the three-way pathfinding bench; subclasses override get0/isLoaded. */
++    protected BlockStateInterface(BetterWorldBorder worldBorder) {
++        this.world = null;
++        this.worldBorder = worldBorder;
++        this.worldData = null;
++        this.provider = null;
++        this.useTheRealWorld = false;
++        this.isPassableBlockPos = new BlockPos.MutableBlockPos();
++        this.access = new BlockStateInterfaceAccessWrapper(this);
++    }
++
+     public boolean worldContainsLoadedChunk(int blockX, int blockZ) {
+         return provider.hasChunk(blockX >> 4, blockZ >> 4);
+     }

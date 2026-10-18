@@ -13,7 +13,13 @@ public final class JumpSearch {
     /** The last is past where a plain block drops you: only searched with {@link #ledge}. */
     public static final double[] EDGE = {-0.5, -0.3, -0.1, 0.1, 0.25, 0.4};
     public static final int PLAIN_EDGES = 5;
-    public static final float[] O1 = {-70, -45, -25, -10, 0, 10, 25, 45, 70};
+    /**
+     * Ostinato: +-90 lets a neo-up swing straight back across onto a one-wide block after clearing the wall's end
+     * (Neo Practice's second jump settled a sliver off the edge at +-70). Plans are stored as one base-36 digit each.
+     */
+    public static final float[] O1 = {-90, -70, -45, -25, -10, 0, 10, 25, 45, 70, 90};
+    /** Index of O1 = 0: fly straight on. */
+    public static final int O1_STRAIGHT = 5;
     public static final int[] SWITCH = {0, 4};
     public static final int NEVER = 999;
     public static final int[] RELEASE = {NEVER, 4, 7, 10};
@@ -66,6 +72,12 @@ public final class JumpSearch {
      */
     public boolean slewYaw;
     public float faceYaw;
+    /**
+     * Ostinato: only whether some plan lands, not the best one (the planner's cost check throws the plan away): the
+     * starting plan is flown first and the grid stops at the first landing. The answer is the same; {@link #plan} is
+     * then a landing plan, not the best. Saves most of the grid (thousands of runs) when the jump is good.
+     */
+    public boolean anyLanding;
     /** Degrees per tick, matching {@code LookBehavior}'s aim cap at the default mouse sensitivity. */
     public static final float YAW_STEP = 32f;
     /** Filled by {@link #run}: ticks until settled and the settled distance from the landing block centre. */
@@ -238,7 +250,10 @@ public final class JumpSearch {
      * {@link #plan}. Prefers landing near the centre, then fewer ticks.
      */
     public boolean search(PlayerSim start, boolean local) {
-        return nativeSearch && !local ? searchNative(start) : searchJava(start, local);
+        if (anyLanding && run(start, plan, jumped, airTicks, null)) {
+            return true;
+        }
+        return nativeSearch ? searchNative(start, local) : searchJava(start, local);
     }
 
     private boolean searchJava(PlayerSim start, boolean local) {
@@ -258,6 +273,10 @@ public final class JumpSearch {
                     if (!run(start, p, jumped, airTicks, null)) {
                         continue;
                     }
+                    if (anyLanding) {
+                        System.arraycopy(p, 0, plan, 0, DIMS);
+                        return true;
+                    }
                     // a chain's first jump must land with speed left for the second one, whatever it costs in centring
                     double score = carry ? -landSpeed + 0.004 * ticks : miss + 0.004 * ticks;
                     if (score < bestScore) {
@@ -273,14 +292,14 @@ public final class JumpSearch {
         return true;
     }
 
-    private boolean searchNative(PlayerSim start) {
+    private boolean searchNative(PlayerSim start, boolean local) {
         JumpSearch ref = NativePlanners.verify ? copy() : null;
-        int r = NativePlanners.jumpSearch(this, start);
+        int r = NativePlanners.jumpSearch(this, start, local);
         if (r == NativePlanners.UNKNOWN) {
-            return searchJava(start, false);
+            return searchJava(start, local);
         }
         if (ref != null) {
-            boolean refOk = ref.searchJava(start, false);
+            boolean refOk = ref.searchJava(start, local);
             NativePlanners.checked.incrementAndGet();
             if (refOk != (r == 1) || !java.util.Arrays.equals(plan, ref.plan) || ticks != ref.ticks || Double.compare(miss, ref.miss) != 0
                     || Double.compare(landSpeed, ref.landSpeed) != 0 || destX != ref.destX || destY != ref.destY || destZ != ref.destZ
@@ -316,6 +335,7 @@ public final class JumpSearch {
         c.airTicks = airTicks;
         c.slewYaw = slewYaw;
         c.faceYaw = faceYaw;
+        c.anyLanding = anyLanding;
         c.ticks = ticks;
         c.miss = miss;
         c.landSpeed = landSpeed;
@@ -328,7 +348,7 @@ public final class JumpSearch {
         int[] best = null, p = new int[DIMS];
         double bestScore = Double.MAX_VALUE;
         p[0] = 1; // O0 = 0
-        p[3] = 4; // O1 = 0
+        p[3] = O1_STRAIGHT;
         for (p[1] = 0; p[1] < HOP.length; p[1]++) for (p[2] = 0; p[2] < (ledge ? EDGE.length : PLAIN_EDGES); p[2]++)
             for (p[5] = 0; p[5] < RELEASE.length; p[5]++) for (p[6] = 0; p[6] < BRAKE.length; p[6]++) {
                 if (p[5] == 0 && p[6] == 1) {

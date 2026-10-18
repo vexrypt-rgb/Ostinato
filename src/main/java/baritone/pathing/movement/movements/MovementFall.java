@@ -18,6 +18,7 @@
 package baritone.pathing.movement.movements;
 
 import baritone.utils.BoatUtil;
+import baritone.utils.MountUtil;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
@@ -31,6 +32,7 @@ import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.movement.MovementState.MovementTarget;
+import baritone.utils.AirDrift;
 import baritone.utils.pathing.MutableMoveResult;
 import baritone.Baritone;
 import baritone.behavior.InventoryBehavior;
@@ -84,15 +86,73 @@ public class MovementFall extends Movement {
     private Boolean boatMode;
     private int boatTicks;
 
+    /** The column we walk off into. The fall stays in it unless it's steered. */
+    private final int fx, fz;
+    /**
+     * Holes the fall threads on the way down, {x, z, floorY} each, see MovementDescend.steerThrough; null for a
+     * straight drop.
+     */
+    private final int[] steer;
+
     public MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos dest) {
-        super(baritone, src, dest, MovementFall.buildPositionsToBreak(src, dest));
+        this(baritone, src, dest, dest.x, dest.z, null);
+    }
+
+    public MovementFall(IBaritone baritone, BetterBlockPos src, BetterBlockPos dest, int fx, int fz, int[] steer) {
+        super(baritone, src, dest, steer == null ? MovementFall.buildPositionsToBreak(src, dest) : steeredPositionsToBreak(src, fx, fz));
+        this.fx = fx;
+        this.fz = fz;
+        this.steer = steer;
+    }
+
+    public boolean steered() {
+        return steer != null;
+    }
+
+    public int fallX() {
+        return fx;
+    }
+
+    public int fallZ() {
+        return fz;
+    }
+
+    /** Most columns a steered fall moves sideways from where it started, for telling our own fall from a stale one. */
+    public int steerSpan() {
+        int span = Math.max(Math.abs(dest.x - fx), Math.abs(dest.z - fz));
+        for (int i = 0; steer != null && i < steer.length; i += 3) {
+            span = Math.max(span, Math.max(Math.abs(steer[i] - fx), Math.abs(steer[i + 1] - fz)));
+        }
+        return span;
+    }
+
+    /**
+     * The movement keys to hold in the air on a steered fall, {forward, back, left, right}: over the next hole until
+     * the head is through its floor, then the next one, then the landing.
+     */
+    public boolean[] airKeys(net.minecraft.world.entity.player.Player p) {
+        double tx = dest.x + 0.5, tz = dest.z + 0.5, floorTop = dest.y;
+        for (int i = 0; i < steer.length; i += 3) {
+            if (p.getY() + p.getBbHeight() > steer[i + 2]) {
+                tx = steer[i] + 0.5;
+                tz = steer[i + 1] + 0.5;
+                floorTop = steer[i + 2] + 1;
+                break;
+            }
+        }
+        Vec3 v = p.getDeltaMovement();
+        return AirDrift.keys(p.getX(), p.getZ(), v.x, v.z, p.getY(), v.y, p.getYRot(), tx, tz, floorTop);
+    }
+
+    private boolean landsHere(MutableMoveResult result) {
+        return result.x == dest.x && result.y == dest.y && result.z == dest.z;
     }
 
     @Override
     public double calculateCost(CalculationContext context) {
         MutableMoveResult result = new MutableMoveResult();
-        MovementDescend.cost(context, src.x, src.y, src.z, dest.x, dest.z, result);
-        if (result.y != dest.y) {
+        MovementDescend.cost(context, src.x, src.y, src.z, fx, fz, result);
+        if (!landsHere(result)) {
             return COST_INF; // doesn't apply to us, this position is a descend not a fall
         }
         hurt |= result.damage > 0;
@@ -106,18 +166,38 @@ public class MovementFall extends Movement {
         for (int y = src.y - dest.y; y >= 0; y--) {
             set.add(dest.above(y));
         }
+        if (steer != null) {
+            // anywhere in the box the drift goes through
+            int x0 = Math.min(fx, dest.x), x1 = Math.max(fx, dest.x), z0 = Math.min(fz, dest.z), z1 = Math.max(fz, dest.z);
+            for (int i = 0; i < steer.length; i += 3) {
+                x0 = Math.min(x0, steer[i]);
+                x1 = Math.max(x1, steer[i]);
+                z0 = Math.min(z0, steer[i + 1]);
+                z1 = Math.max(z1, steer[i + 1]);
+            }
+            for (int x = x0; x <= x1; x++) {
+                for (int z = z0; z <= z1; z++) {
+                    for (int y = dest.y; y <= src.y; y++) {
+                        set.add(new BetterBlockPos(x, y, z));
+                    }
+                }
+            }
+        }
         return set;
     }
 
     private boolean willPlaceBucket() {
         CalculationContext context = new CalculationContext(baritone);
         MutableMoveResult result = new MutableMoveResult();
-        return MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, dest.x, dest.z, 0, context.get(dest.x, src.y - 2, dest.z), result);
+        return MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, fx, fz, 0, context.get(fx, src.y - 2, fz), result);
     }
 
     private enum FallMode {
-        NONE, BUCKET, CLUTCH, HURT
+        NONE, BUCKET, CLUTCH, HURT, MOUNT
     }
+
+    // we got on something on the way down (MOUNT), so the fall is over; now we're stepping off it
+    private boolean mounted;
 
     // a deliberate fall that hurts (experimentalMovement). nobody is saving us, we just fall. sticky, because the plan
     // changing under us at the edge (health went down) is the one thing we check for, see updateState
@@ -146,6 +226,7 @@ public class MovementFall extends Movement {
         super.reset();
         clutchGaveUp = false;
         hurt = false;
+        mounted = false;
         ladder = null;
         ladderIn = false;
         ticks = clickedAt = pickupMisses = 0;
@@ -158,8 +239,11 @@ public class MovementFall extends Movement {
     private FallMode fallMode() {
         CalculationContext context = new CalculationContext(baritone);
         MutableMoveResult result = new MutableMoveResult();
-        if (MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, dest.x, dest.z, 0, context.get(dest.x, src.y - 2, dest.z), result)) {
+        if (MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, fx, fz, 0, context.get(fx, src.y - 2, fz), result)) {
             return FallMode.BUCKET;
+        }
+        if (result.mount) {
+            return FallMode.MOUNT;
         }
         if (result.damage > 0) {
             hurt = true;
@@ -178,8 +262,8 @@ public class MovementFall extends Movement {
     private boolean stillPossible() {
         CalculationContext context = new CalculationContext(baritone);
         MutableMoveResult result = new MutableMoveResult();
-        MovementDescend.cost(context, src.x, src.y, src.z, dest.x, dest.z, result);
-        return result.y == dest.y && result.cost < COST_INF;
+        MovementDescend.cost(context, src.x, src.y, src.z, fx, fz, result);
+        return landsHere(result) && result.cost < COST_INF;
     }
 
     @Override
@@ -205,6 +289,12 @@ public class MovementFall extends Movement {
         }
         ticks++;
         confirmLadder();
+
+        if (ctx.player().getVehicle() != null) {
+            // the ride cancelled the fall (LivingEntity.rideTick), now get off and finish on foot. never done while seated
+            mounted = true;
+            return state.setInput(Input.SNEAK, true);
+        }
 
         BlockPos playerFeet = ctx.playerFeet();
         Rotation toDest = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(dest), ctx.playerRotations());
@@ -243,7 +333,9 @@ public class MovementFall extends Movement {
         } else {
             state.setTarget(new MovementTarget(toDest, false));
         }
-        if (playerFeet.equals(dest) && (ctx.player().position().y - playerFeet.getY() < 0.094 || isWater)) { // 0.094 because lilypads
+        boolean slime = !isWater && ctx.world().getBlockState(dest.below()).is(Blocks.SLIME_BLOCK);
+        if (playerFeet.equals(dest) && (ctx.player().position().y - playerFeet.getY() < 0.094 || isWater)
+                && (!slime || ctx.player().onGround() && ctx.player().getDeltaMovement().y < 0.1)) { // 0.094 because lilypads; on slime, once we stop bouncing
             if (isWater) { // only match water, not flowing water (which we cannot pick up with a bucket)
                 if (Inventory.isHotbarSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY))) {
                     ctx.player().getInventory().setSelectedSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY));
@@ -264,6 +356,31 @@ public class MovementFall extends Movement {
         if (mode == FallMode.CLUTCH && !playerFeet.equals(dest) && clutch(state)) {
             return state; // it's doing the steering, the centering below would fight it
         }
+        if (steer != null && (!ctx.player().onGround() || playerFeet.getY() >= src.y)) {
+            if (ctx.player().onGround()) {
+                // walk off into the fall column, the drift starts once we're in the air
+                Vec3 col = new Vec3(fx + 0.5, src.y, fz + 0.5);
+                state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), col, ctx.playerRotations()), false));
+                return state.setInput(Input.MOVE_FORWARD, true);
+            }
+            // the keys are worked out for the way we face now, so don't turn (unless the bucket needs to look down)
+            boolean[] k = airKeys(ctx.player());
+            state.setInput(Input.MOVE_FORWARD, k[0]);
+            state.setInput(Input.MOVE_BACK, k[1]);
+            state.setInput(Input.MOVE_LEFT, k[2]);
+            state.setInput(Input.MOVE_RIGHT, k[3]);
+            state.setInput(Input.SNEAK, false); // sneaking slows the drift to a crawl
+            if (mode == FallMode.MOUNT && !mounted) {
+                Rotation r = mount();
+                if (r != null) {
+                    return state.setTarget(new MovementTarget(r, true));
+                }
+            }
+            if (targetRotation == null) {
+                state.setTarget(new MovementTarget(ctx.playerRotations(), false));
+            }
+            return state;
+        }
         Vec3 destCenter = VecUtils.getBlockPosCenter(dest); // we are moving to the 0.5 center not the edge (like if we were falling on a ladder)
         if (Math.abs(ctx.player().position().x + ctx.player().getDeltaMovement().x - destCenter.x) > 0.1 || Math.abs(ctx.player().position().z + ctx.player().getDeltaMovement().z - destCenter.z) > 0.1) {
             if (!ctx.player().onGround() && Math.abs(ctx.player().getDeltaMovement().y) > 0.4) {
@@ -282,11 +399,64 @@ public class MovementFall extends Movement {
                 state.setInput(Input.SNEAK, false);
             }
         }
+        if (slime) {
+            // sneaking lands for real (with the hit of that drop), so only once a bounce comes down from low enough to be harmless
+            state.setInput(Input.SNEAK, slimeDrop() < MovementDescend.SLIME_SNEAK_DROP);
+        }
+        if (mode == FallMode.MOUNT && !mounted) {
+            state.setInput(Input.SNEAK, false); // sneaking turns the click into "open its inventory" or nothing at all
+            Rotation r = mount();
+            if (r != null) {
+                return state.setTarget(new MovementTarget(r, true));
+            }
+        }
         if (targetRotation == null) {
             Vec3 destCenterOffset = new Vec3(destCenter.x + 0.125 * avoid.getX(), destCenter.y, destCenter.z + 0.125 * avoid.getZ());
             state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), destCenterOffset, ctx.playerRotations()), false));
         }
         return state;
+    }
+
+    /** How far the landing coming up will have fallen: the rest of this drop, or from the top of this bounce. */
+    private double slimeDrop() {
+        double above = ctx.player().position().y - dest.y;
+        double vy = ctx.player().getDeltaMovement().y;
+        return vy > 0 ? above + vy * vy / 0.16 : ctx.player().fallDistance + above;
+    }
+
+    /**
+     * Click on whatever we're landing beside, as late as it still reaches: the server measures from where we were at
+     * the end of last tick, against its box, and gives us 3 blocks over the usual 3. Returns where to look, or null if
+     * there's nothing (left) to get on.
+     */
+    private Rotation mount() {
+        Entity m = MountUtil.mountAt(ctx.world(), dest);
+        if (m == null || ctx.player().onGround()) {
+            return null;
+        }
+        Vec3 aim = m.getBoundingBox().getCenter();
+        Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations());
+        double reach = MountUtil.reach(ctx.player(), m);
+        double nextY = ctx.player().position().y + (ctx.player().getDeltaMovement().y - 0.08) * 0.98;
+        if (reach <= MountUtil.REACH || nextY <= dest.y + 0.5 && reach < MountUtil.SERVER_REACH - 0.5) {
+            emptyHand();
+            Minecraft.getInstance().gameMode.interact(ctx.player(), m, new net.minecraft.world.phys.EntityHitResult(m, aim), InteractionHand.MAIN_HAND);
+        }
+        return r;
+    }
+
+    /** Food, saddles, leads and the like get used on the mount instead of getting on it, so click with nothing in hand. */
+    private void emptyHand() {
+        Inventory inv = ctx.player().getInventory();
+        if (inv.getSelectedItem().isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < 9; i++) {
+            if (inv.getItem(i).isEmpty()) {
+                inv.setSelectedSlot(i);
+                return;
+            }
+        }
     }
 
     /**
@@ -639,6 +809,11 @@ public class MovementFall extends Movement {
         }
         // fetching the ladder is on the ground, nothing to lose but a ladder
         return ctx.playerFeet().equals(src) || state.getStatus() != MovementStatus.RUNNING || pickupStart >= 0;
+    }
+
+    /** A steered fall's columns are all open (planned with nothing to break), only the walk off is checked. */
+    private static BetterBlockPos[] steeredPositionsToBreak(BetterBlockPos src, int fx, int fz) {
+        return new BetterBlockPos[]{new BetterBlockPos(fx, src.y + 1, fz), new BetterBlockPos(fx, src.y, fz), new BetterBlockPos(fx, src.y - 1, fz)};
     }
 
     private static BetterBlockPos[] buildPositionsToBreak(BetterBlockPos src, BetterBlockPos dest) {

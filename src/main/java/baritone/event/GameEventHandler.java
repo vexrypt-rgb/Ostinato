@@ -17,6 +17,8 @@
 
 package baritone.event;
 
+import baritone.pathing.movement.CalculationContext;
+import baritone.pathing.calc.hierarchy.SectionGraph;
 import baritone.Baritone;
 import baritone.api.event.events.*;
 import baritone.api.event.events.type.EventState;
@@ -106,6 +108,16 @@ public final class GameEventHandler implements IEventBus, Helper {
         }
 
 
+        // Ostinato: keep the hierarchical planner's section graph in step with the world (cheap when it is off: map removals)
+        if (event.isPostPopulate() || isPreUnload) {
+            SectionGraph.INSTANCE.invalidateChunk(event.getX(), event.getZ(), world.getMinY() >> 4, world.getMaxY() >> 4);
+            if (event.isPostPopulate() && Baritone.settings().pathingHierarchical.value) {
+                final int cx = event.getX(), cz = event.getZ();
+                final CalculationContext pre = new CalculationContext(baritone, true);
+                Baritone.getExecutor().execute(() -> SectionGraph.INSTANCE.prefetch(pre, cx, cz));
+            }
+        }
+
         listeners.forEach(l -> l.onChunkEvent(event));
     }
 
@@ -123,6 +135,11 @@ public final class GameEventHandler implements IEventBus, Helper {
                     worldData.getCachedWorld().queueForPacking(world.getChunk(pos.x(), pos.z()));
                 });
             }
+        }
+
+        // Ostinato: drop the hierarchical planner's sections around changed blocks
+        for (Pair<net.minecraft.core.BlockPos, BlockState> b : event.getBlocks()) {
+            SectionGraph.INSTANCE.invalidateBlock(b.first().getX(), b.first().getY(), b.first().getZ());
         }
 
         listeners.forEach(l -> l.onBlockChange(event));

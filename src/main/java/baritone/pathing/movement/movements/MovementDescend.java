@@ -31,6 +31,7 @@ import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.AirDrift;
 import baritone.utils.pathing.MutableMoveResult;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
@@ -188,58 +189,73 @@ public class MovementDescend extends Movement {
         if (!MovementHelper.canWalkThrough(context, destX, y - 2, destZ, below)) {
             return false;
         }
+        return fallDown(context, x, y, z, destX, destZ, frontBreak, 3, 0, y - 1, 0, Integer.MIN_VALUE, res);
+    }
+
+    /** At most this many holes threaded in one fall. */
+    private static final int MAX_STEERS = 3;
+    /** Each threaded hole: the steering has to be right, so a plain landing that is about as cheap wins. */
+    static final double STEER_COST = 4;
+
+    /**
+     * The fall down column cx, cz from fallHeight from on. legStart is how far below y the current sideways leg began
+     * (0, or the floor of the last hole we went through) and legTop the highest cell it drifts through; the floor at
+     * noSteerY was already offered its holes by the caller.
+     */
+    private static boolean fallDown(CalculationContext context, int x, int y, int z, int cx, int cz, double frontBreak, int from,
+                                    int legStart, int legTop, int steers, int noSteerY, MutableMoveResult res) {
         double costSoFar = 0;
         int effectiveStartHeight = y;
-        for (int fallHeight = 3; true; fallHeight++) {
+        for (int fallHeight = from; true; fallHeight++) {
             int newY = y - fallHeight;
-            if (newY < context.world.getMinY()) {
+            if (newY < context.worldMinY /* Ostinato: was context.world.getMinY() */) {
                 // when pathing in the end, where you could plausibly fall into the void
                 // this check prevents it from getting the block at y=(below whatever the minimum height is) and crashing
                 return false;
             }
             boolean reachedMinimum = fallHeight >= context.minFallHeight;
-            BlockState ontoBlock = context.get(destX, newY, destZ);
+            BlockState ontoBlock = context.get(cx, newY, cz);
             int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight); // equal to fallHeight - y + effectiveFallHeight, which is equal to -newY + effectiveFallHeight, which is equal to effectiveFallHeight - newY
             double tentativeCost = WALK_OFF_BLOCK_COST + FALL_N_BLOCKS_COST[unprotectedFallHeight] + frontBreak + costSoFar;
             if (reachedMinimum && MovementHelper.isWater(ontoBlock)) {
-                if (!MovementHelper.canWalkThrough(context, destX, newY, destZ, ontoBlock)) {
+                if (!MovementHelper.canWalkThrough(context, cx, newY, cz, ontoBlock)) {
                     return false;
                 }
                 if (context.assumeWalkOnWater) {
                     return false; // TODO fix
                 }
-                if (MovementHelper.isFlowing(destX, newY, destZ, ontoBlock, context.bsi)) {
+                if (MovementHelper.isFlowing(cx, newY, cz, ontoBlock, context.bsi)) {
                     return false; // TODO flowing check required here?
                 }
                 int depth = 1;
-                while (depth < 4 && newY - depth > 0 && MovementHelper.isWater(context.get(destX, newY - depth, destZ))
-                        && !MovementHelper.isFlowing(destX, newY - depth, destZ, context.get(destX, newY - depth, destZ), context.bsi)) {
+                while (depth < 4 && newY - depth > 0 && MovementHelper.isWater(context.get(cx, newY - depth, cz))
+                        && !MovementHelper.isFlowing(cx, newY - depth, cz, context.get(cx, newY - depth, cz), context.bsi)) {
                     depth++;
                 }
-                if (!MovementHelper.canWalkOn(context, destX, newY - depth, destZ)) {
+                if (!MovementHelper.canWalkOn(context, cx, newY - depth, cz)) {
                     // we could punch right through the water into something else
                     return false;
                 }
                 if (depth == 1) {
                     tentativeCost += SHALLOW_WATER_LANDING_PENALTY; // wading out of 1-deep water is slow
-                    if (deepDropBeside(context, destX, newY, destZ, y)) {
+                    if (deepDropBeside(context, cx, newY, cz, y)) {
                         // A drop that reaches the deep water wins by this much. Not refused: under a cliff over a
                         // shelving shore every landing is shallow with deep water two columns out, and no drop reaches that.
                         tentativeCost += DEEP_WATER_PASSED_UP_PENALTY;
                     }
                 }
                 // found a fall into water
-                res.x = destX;
+                res.x = cx;
                 res.y = newY;
-                res.z = destZ;
+                res.z = cz;
                 res.cost = tentativeCost;// TODO incorporate water swim up cost?
                 return false;
             }
             if (reachedMinimum && context.allowFallIntoLava && MovementHelper.isLava(ontoBlock)) {
                 // found a fall into lava
-                res.x = destX;
+                res.x = cx;
                 res.y = newY;
-                res.z = destZ;
+                res.z = cz;
                 res.cost = tentativeCost;
                 return false;
             }
@@ -251,10 +267,25 @@ public class MovementDescend extends Movement {
                 effectiveStartHeight = newY;
                 continue;
             }
-            if (MovementHelper.canWalkThrough(context, destX, newY, destZ, ontoBlock)) {
+            if (MovementHelper.canWalkThrough(context, cx, newY, cz, ontoBlock)) {
                 continue;
             }
-            if (!MovementHelper.canWalkOn(context, destX, newY, destZ, ontoBlock)) {
+            if (reachedMinimum && context.allowSteeredFalls && frontBreak == 0 && steers < MAX_STEERS && newY != noSteerY
+                    && effectiveStartHeight == y && !freeLanding(ontoBlock, unprotectedFallHeight, context)) {
+                MutableMoveResult through = new MutableMoveResult();
+                boolean[] throughBucket = new boolean[1];
+                if (steerThrough(context, x, y, z, cx, cz, fallHeight, newY, legStart, legTop, steers, through, throughBucket)) {
+                    // the plain landing on this floor (a clutch, a bucket, a mount, a hit we can take) might still be cheaper;
+                    // nothing above it changed the fall (no ladder, costSoFar is 0), so pick up right at this floor
+                    boolean bucket = fallDown(context, x, y, z, cx, cz, frontBreak, fallHeight, legStart, legTop, steers, newY, res);
+                    if (through.cost < res.cost) {
+                        copy(through, res);
+                        return throughBucket[0];
+                    }
+                    return bucket;
+                }
+            }
+            if (!MovementHelper.canWalkOn(context, cx, newY, cz, ontoBlock)) {
                 return false;
             }
             if (MovementHelper.isBottomSlab(ontoBlock)) {
@@ -262,44 +293,157 @@ public class MovementDescend extends Movement {
             }
             if (reachedMinimum && unprotectedFallHeight <= context.maxFallHeightNoWater + 1) {
                 // fallHeight = 4 means onto.up() is 3 blocks down, which is the max
-                res.x = destX;
+                res.x = cx;
                 res.y = newY + 1;
-                res.z = destZ;
+                res.z = cz;
                 res.cost = tentativeCost;
                 return false;
             }
+            if (reachedMinimum && (ontoBlock.is(Blocks.SLIME_BLOCK) || ontoBlock.is(Blocks.HAY_BLOCK) && softFallDamage(unprotectedFallHeight - 1, HAY_FALL_MULTIPLIER) == 0)) {
+                // slime throws us back up instead of hurting us (we came down this column, so it's clear going back up),
+                // hay takes a fifth of the hit and up to 7 blocks of that is nothing
+                res.x = cx;
+                res.y = newY + 1;
+                res.z = cz;
+                res.cost = tentativeCost + (ontoBlock.is(Blocks.SLIME_BLOCK) ? slimeSettleTicks(unprotectedFallHeight - 1) : 0);
+                return false;
+            }
             boolean bucketOk = reachedMinimum && context.hasWaterBucket && unprotectedFallHeight <= context.maxFallHeightBucket + 1;
-            double clutch = reachedMinimum ? clutchCost(context, x, z, destX, destZ, effectiveStartHeight, newY + 1) : COST_INF;
+            double clutch = reachedMinimum ? clutchCost(context, x, z, cx, cz, effectiveStartHeight, newY + 1) : COST_INF;
             if (clutch < COST_INF) {
                 clutch += WALK_OFF_BLOCK_COST + frontBreak + costSoFar;
             }
             if (clutch < COST_INF && !(bucketOk && tentativeCost + context.placeBucketCost() <= clutch)) {
                 // the bucket wins ties, it doesn't care about timing
-                res.x = destX;
+                res.x = cx;
                 res.y = newY + 1;
-                res.z = destZ;
+                res.z = cz;
                 res.cost = clutch;
                 res.clutch = true;
                 return false;
             }
             if (bucketOk) {
-                res.x = destX;
+                res.x = cx;
                 res.y = newY + 1;// this is the block we're falling onto, so dest is +1
-                res.z = destZ;
+                res.z = cz;
                 res.cost = tentativeCost + context.placeBucketCost();
                 return true;
             }
             boolean boatThere = context.freeBoatAt(x, y, z);
             if ((context.hasBoat || boatThere) && unprotectedFallHeight <= context.maxFallHeightBoat + 1 && !BOAT_BREAK_HEIGHTS.contains(y - newY - 1)) {
-                res.x = destX;
+                res.x = cx;
                 res.y = newY + 1;
-                res.z = destZ;
+                res.z = cz;
                 res.cost = tentativeCost + (boatThere ? context.boardBoatFallCost() : context.boatFallCost());
                 return true;
             }
-            hurtingFall(context, destX, destZ, newY, unprotectedFallHeight - 1, tentativeCost, ontoBlock, res);
+            if (reachedMinimum && context.mountAt(cx, newY + 1, cz)) {
+                // something to ride on the landing cell or beside it: get on just before we hit, and riding cancels the fall
+                res.x = cx;
+                res.y = newY + 1;
+                res.z = cz;
+                res.cost = tentativeCost + context.mountClutchCost();
+                res.mount = true;
+                return false;
+            }
+            hurtingFall(context, cx, cz, newY, unprotectedFallHeight - 1, tentativeCost, ontoBlock, res);
             return false;
         }
+    }
+
+    /** Landing on this floor costs nothing, no reason to look for a way past it. */
+    private static boolean freeLanding(BlockState onto, int unprotectedFallHeight, CalculationContext context) {
+        return unprotectedFallHeight <= context.maxFallHeightNoWater + 1 || onto.is(Blocks.SLIME_BLOCK)
+                || onto.is(Blocks.HAY_BLOCK) && softFallDamage(unprotectedFallHeight - 1, HAY_FALL_MULTIPLIER) == 0;
+    }
+
+    /** Column offsets within {@link AirDrift#MAX_RADIUS}, nearest first. */
+    private static final int[][] DRIFT_OFFSETS;
+
+    static {
+        java.util.List<int[]> l = new java.util.ArrayList<>();
+        int r = AirDrift.MAX_RADIUS;
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                if (dx != 0 || dz != 0) {
+                    l.add(new int[]{dx, dz});
+                }
+            }
+        }
+        l.sort(java.util.Comparator.comparingInt(o -> o[0] * o[0] + o[1] * o[1]));
+        DRIFT_OFFSETS = l.toArray(new int[0][]);
+    }
+
+    /** Holes tried per floor before giving up on it: each one is a whole fall further down. */
+    private static final int MAX_HOLES_TRIED = 4;
+
+    /**
+     * A floor that would hurt is in the way at newY: drift sideways on the way down into an opening in it (a dropper's
+     * offset hole, the next ledge down) and carry on falling from there. Fills out with the cheapest such fall.
+     */
+    private static boolean steerThrough(CalculationContext context, int x, int y, int z, int cx, int cz, int fallHeight, int newY,
+                                        int legStart, int legTop, int steers, MutableMoveResult out, boolean[] bucketOut) {
+        int toDepth = y - (newY + 1); // feet on the floor's top when we get there
+        int tried = 0;
+        MutableMoveResult sub = new MutableMoveResult();
+        for (int[] o : DRIFT_OFFSETS) {
+            int hx = cx + o[0], hz = cz + o[1];
+            if (!AirDrift.reachable(o[0], o[1], legStart, toDepth)) {
+                continue;
+            }
+            BlockState hole = context.get(hx, newY, hz);
+            if (MovementHelper.isLava(hole) || !context.isLoaded(hx, hz)
+                    || !(MovementHelper.isWater(hole) || MovementHelper.fullyPassable(context, hx, newY, hz))
+                    || !openBox(context, cx, cz, hx, hz, newY + 1, legTop)) {
+                continue;
+            }
+            sub.reset();
+            // water in the opening is a landing on this floor's level, so start the next leg right at it
+            boolean bucket = fallDown(context, x, y, z, hx, hz, 0, fallHeight, y - newY + 2, newY - 1, steers + 1, Integer.MIN_VALUE, sub);
+            if (sub.cost < COST_INF && sub.y <= newY) {
+                sub.cost += STEER_COST;
+                int[] tail = sub.steer == null ? new int[0] : sub.steer;
+                int[] steer = new int[3 + tail.length];
+                steer[0] = hx;
+                steer[1] = hz;
+                steer[2] = newY;
+                System.arraycopy(tail, 0, steer, 3, tail.length);
+                sub.steer = steer;
+                if (sub.cost < out.cost) {
+                    copy(sub, out);
+                    bucketOut[0] = bucket;
+                }
+            }
+            if (++tried >= MAX_HOLES_TRIED) {
+                break;
+            }
+        }
+        return out.cost < COST_INF;
+    }
+
+    /** Everything we can drift through between the two columns, from fromY up to toY. */
+    private static boolean openBox(CalculationContext context, int ax, int az, int bx, int bz, int fromY, int toY) {
+        for (int yy = toY; yy >= fromY; yy--) {
+            for (int xx = Math.min(ax, bx); xx <= Math.max(ax, bx); xx++) {
+                for (int zz = Math.min(az, bz); zz <= Math.max(az, bz); zz++) {
+                    if (!MovementHelper.fullyPassable(context, xx, yy, zz)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private static void copy(MutableMoveResult from, MutableMoveResult to) {
+        to.x = from.x;
+        to.y = from.y;
+        to.z = from.z;
+        to.cost = from.cost;
+        to.damage = from.damage;
+        to.clutch = from.clutch;
+        to.mount = from.mount;
+        to.steer = from.steer;
     }
 
     /**
@@ -339,6 +483,56 @@ public class MovementDescend extends Movement {
 
     static final double LADDER_PICKUP_COST = 20;
 
+    /** HayBlock.fallOn: the hit is scaled by this, rounded down (LivingEntity.calculateFallDamage floors). */
+    static final float HAY_FALL_MULTIPLIER = 0.2F;
+
+    static int softFallDamage(int blocks, float multiplier) {
+        return (int) Math.floor(Math.max(0, blocks - ExperimentalMovement.SAFE_FALL) * multiplier);
+    }
+
+    private static final double[] SLIME_SETTLE = new double[1024];
+
+    /**
+     * Ticks spent bouncing on slime after a fall of this many blocks, past the fall itself. Vanilla reverses the fall
+     * at every landing until we sneak, and sneaking lands for real with the damage of that bounce's drop, so
+     * MovementFall sneaks once a bounce comes down from under 3 blocks. That takes 5 or 6 bounces from any height.
+     */
+    static double slimeSettleTicks(int blocks) {
+        blocks = Math.max(0, Math.min(blocks, SLIME_SETTLE.length - 1));
+        double t = SLIME_SETTLE[blocks];
+        if (t == 0) {
+            SLIME_SETTLE[blocks] = t = simulateSlimeSettle(blocks);
+        }
+        return t;
+    }
+
+    private static double simulateSlimeSettle(int blocks) {
+        double y = blocks, vy = 0, peak = blocks;
+        int ticks = 0, firstFall = -1;
+        while (ticks < 2000) {
+            ticks++;
+            if (y + vy <= 0 && vy < 0) {
+                if (firstFall < 0) {
+                    firstFall = ticks;
+                }
+                if (peak < SLIME_SNEAK_DROP) {
+                    break;
+                }
+                y = 0;
+                vy = -vy;
+                peak = 0;
+            } else {
+                y += vy;
+            }
+            peak = Math.max(peak, y);
+            vy = (vy - 0.08) * 0.98;
+        }
+        return Math.max(1, ticks - Math.max(firstFall, 0));
+    }
+
+    /** A bounce coming down from less than this lands safely when we sneak onto it. */
+    public static final double SLIME_SNEAK_DROP = 2.9;
+
     /** Is this wall the one we are walking towards? Measured in the real game: walking off pins us against it, so a ladder is never placed there. */
     private static boolean inLine(Direction side, int dx, int dz) {
         return side.getStepX() != 0 && side.getStepX() == Integer.signum(dx) || side.getStepZ() != 0 && side.getStepZ() == Integer.signum(dz);
@@ -354,15 +548,16 @@ public class MovementDescend extends Movement {
      * Everything that protects us gets its say first, a fall that hurts never beats one that doesn't.
      */
     private static void hurtingFall(CalculationContext context, int destX, int destZ, int newY, int blocks, double tentativeCost, BlockState onto, MutableMoveResult res) {
-        int damage = ExperimentalMovement.fallDamage(blocks);
+        int damage = onto.is(Blocks.HAY_BLOCK) ? softFallDamage(blocks, HAY_FALL_MULTIPLIER) : ExperimentalMovement.fallDamage(blocks);
+        int hit = damage + ExperimentalMovement.SAFE_FALL; // the plain fall that hurts as much, which is what the caps are in
         if (context.experimental) {
-            if (blocks > ExperimentalMovement.MAX_HURT_FALL) {
+            if (hit > ExperimentalMovement.MAX_HURT_FALL) {
                 return;
             }
             if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
                 return;
             }
-        } else if (blocks > FallBudget.maxBlocks(context.health, FallBudget.FLOOR, context.maxFallHeightNoWater, FallBudget.CAP)) {
+        } else if (hit > FallBudget.maxBlocks(context.health, FallBudget.FLOOR, context.maxFallHeightNoWater, FallBudget.CAP)) {
             return;
         }
         // canWalkOn lets some of these through (we can sneak on magma, that is not the same as landing on it)

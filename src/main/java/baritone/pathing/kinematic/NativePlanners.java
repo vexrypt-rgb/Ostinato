@@ -77,12 +77,12 @@ public final class NativePlanners {
     public static final int UNKNOWN = -1;
 
     /**
-     * {@link JumpSearch#search} over the full grid in Rust, split over {@link NativeTas#threads}
+     * {@link JumpSearch#search} over the full grid (or around the plan when {@code local}) in Rust, split over {@link NativeTas#threads}
      * threads, leaving {@code js} as the Java search would: plan, ticks, miss, landSpeed, the destination
      * (which {@link JumpSearch#anyDest} rewrites) and the sim's state. Returns 1 found, 0 not, or {@link #UNKNOWN} with
      * {@code js} untouched.
      */
-    static int jumpSearch(JumpSearch js, PlayerSim start) {
+    static int jumpSearch(JumpSearch js, PlayerSim start, boolean local) {
         NativeLib lib = NativeLib.get();
         if (lib == null) {
             return UNKNOWN;
@@ -103,7 +103,8 @@ public final class NativePlanners {
                 MemorySegment state = arena.allocateFrom(JAVA_DOUBLE, NativeTas.state(start));
                 MemorySegment params = arena.allocateFrom(JAVA_DOUBLE, js.approachYaw(), js.dirX, js.dirZ, js.edge,
                         js.destX, js.destY, js.destZ, js.side, js.bounceY, b(js.anyDest), b(js.noJump), b(js.grab),
-                        b(js.standJump), b(js.carry), b(js.ledge), b(js.jumped), js.airTicks, b(js.slewYaw), js.faceYaw, NativeTas.threads);
+                        b(js.standJump), b(js.carry), b(js.ledge), b(js.jumped), js.airTicks, b(js.slewYaw), js.faceYaw, NativeTas.threads,
+                        b(local), b(js.anyLanding));
                 MemorySegment plan = arena.allocateFrom(JAVA_INT, js.plan);
                 MemorySegment out = arena.allocate(JAVA_DOUBLE, 6 + NativeTas.STATE);
                 r = (int) lib.jumpSearch.invoke(s[0], s[1], s[2], snap.boxCount, s[3], s[4], state, params, plan, out);

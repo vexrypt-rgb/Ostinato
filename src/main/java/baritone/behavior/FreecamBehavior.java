@@ -33,7 +33,6 @@ import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
@@ -57,7 +56,7 @@ import java.util.Optional;
 /**
  * Detached camera for picking a destination. On the ground it calls the same travel path a living entity does
  * (swim, lava, slime bounce, ladders, ice, honey). Double-tap jump flies, and while it is flying the camera
- * and the bot both phase through blocks. Parkour (not flying) keeps collision on both.
+ * phases through blocks. The bot is never touched: its abilities and collision stay its own whatever the camera does.
  * Left click: follow the entity under the crosshair, else travel to the block under it. In a spar, left click hits.
  * Right click: travel to the camera's own position.
  */
@@ -78,11 +77,6 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private boolean flying;
     private boolean jumpHeld;
     private int jumpTapTicks;
-    /** Bot noclip is on. The saved ability flags are what to put back when flight ends. */
-    private boolean phaseOn;
-    private boolean savedMayfly;
-    private boolean savedFlying;
-    private boolean savedNoPhysics;
 
     public FreecamBehavior(Baritone baritone) {
         super(baritone);
@@ -131,7 +125,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         return camera != null;
     }
 
-    /** Flight phases the camera and the bot. Ground movement, including parkour beside the bot, does not. */
+    /** Flight phases the camera only. Ground movement, including parkour beside the bot, does not. */
     public boolean isFlying() {
         return camera != null && flying;
     }
@@ -284,7 +278,6 @@ public final class FreecamBehavior extends Behavior implements Helper {
         spar.stop();
         sparLine = null;
         canvasLine = null;
-        restorePhase();
         camera = null;
         active = null;
         owner = null;
@@ -346,7 +339,6 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         markAttackers(p);
         move(mc.options);
-        syncBotPhase(p);
         spar.tick(camera, p);
         sparLine = spar.hudLine();
         if (canvas.tickLive(p)) {
@@ -418,48 +410,6 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         boolean sprint = held(gs.keySprint) && fwd > 0;
         camera.step(fwd, strafe, jump, sneak, sprint, flying, Baritone.settings().freecamSpeed.value);
-    }
-
-    /** While freecam flight is on, the bot mayflies and noclip. Parkour (flight off) puts the saved flags back. */
-    private void syncBotPhase(LocalPlayer p) {
-        if (flying) {
-            if (!phaseOn) {
-                savedMayfly = p.getAbilities().mayfly;
-                savedFlying = p.getAbilities().flying;
-                savedNoPhysics = p.noPhysics;
-                phaseOn = true;
-            }
-            applyPhase(p, true);
-        } else if (phaseOn) {
-            applyPhase(p, false);
-            phaseOn = false;
-        }
-    }
-
-    private void restorePhase() {
-        LocalPlayer p = ctx.player();
-        if (phaseOn && p != null) {
-            applyPhase(p, false);
-        }
-        phaseOn = false;
-    }
-
-    private void applyPhase(LocalPlayer p, boolean phase) {
-        // phase on: fly and noclip. phase off: the flags from before flight.
-        p.noPhysics = phase ? true : savedNoPhysics;
-        p.getAbilities().mayfly = phase ? true : savedMayfly;
-        p.getAbilities().flying = phase ? true : savedFlying;
-        if (mc.getSingleplayerServer() == null) {
-            return;
-        }
-        ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(p.getUUID());
-        if (sp == null) {
-            return;
-        }
-        sp.noPhysics = p.noPhysics;
-        sp.getAbilities().mayfly = p.getAbilities().mayfly;
-        sp.getAbilities().flying = p.getAbilities().flying;
-        sp.onUpdateAbilities();
     }
 
     /**

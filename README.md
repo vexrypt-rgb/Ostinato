@@ -88,7 +88,7 @@ Motif plays a short pattern on four pads. Watch, then press 1 to 4 or click the 
 
 ## Freecam
 
-`#freecam` (or `freecamKey`, F8) detaches the camera into a body that walks, swims, and slime-jumps with the game's own movement. Double-tap jump to fly; flying phases the camera, and the bot on a singleplayer world, through blocks. Double-tap again to land: collision comes back for both, so parkour next to the bot stays solid. These pictures are from the 26.3 dev client.
+`#freecam` (or `freecamKey`, F8) detaches the camera into a body that walks, swims, and slime-jumps with the game's own movement. Double-tap jump to fly; flying phases the camera through blocks. The bot is never affected: it keeps its own flight and collision whatever the camera does. Double-tap again to land. These pictures are from the 26.3 dev client.
 
 ![Freecam in third person: the bot with its nametag and hotbar drawn above its head](docs/images/freecam-body.png)
 
@@ -116,7 +116,7 @@ Left click follows the entity under the crosshair or sends the bot to the block;
 
 On a flat canvas, apply places only the blocks you added. In edit mode, apply also breaks the blocks you removed. Clicks on a canvas never send the bot anywhere.
 
-Limits: these features are on 26.3 (`main`) only. Flight phases the bot only on a singleplayer world; on a server the bot is pulled back. Landing while inside a block can leave the camera stuck. `freecamGhostOpacity` is ignored on 26.3, where the body is drawn solid. The pictures show the HUD, the body, the overhead hotbar, the inventory doll, the Studio palette, and the flat canvas; spar, the edit ghost, and the builder carrying out an apply have no picture yet.
+Limits: these features are on 26.3 (`main`) only. Landing while inside a block can leave the camera stuck. `freecamGhostOpacity` is ignored on 26.3, where the body is drawn solid. The pictures show the HUD, the body, the overhead hotbar, the inventory doll, the Studio palette, and the flat canvas; spar, the edit ghost, and the builder carrying out an apply have no picture yet.
 
 ## Path view
 

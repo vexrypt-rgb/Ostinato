@@ -42,13 +42,33 @@ import java.util.Optional;
 public final class AStarPathFinder extends AbstractNodeCostSearch {
 
     private final Favoring favoring;
+
+    /** Ostinato: optional corridor for the hierarchical planner; nodes it rejects are never expanded into. Null = stock. */
+    public interface NodeFilter {
+        boolean allow(int x, int y, int z);
+    }
+
+    NodeFilter nodeFilter;
     private final CalculationContext calcContext;
 
+    /**
+     * Ostinato: weight on h in the open-set key (f = g + weight * h), i.e. explicit weighted A*. 1 is stock Baritone.
+     * With an admissible h the path found costs at most weight times the optimum; the best-so-far partial-path
+     * coefficients still use the unweighted h. See Settings#pathingFarSegmentWeight.
+     */
+    private final double heuristicWeight;
+
     public AStarPathFinder(BetterBlockPos realStart, int startX, int startY, int startZ, Goal goal, Favoring favoring, CalculationContext context) {
+        this(realStart, startX, startY, startZ, goal, favoring, context, 1);
+    }
+
+    // Ostinato: the weighted constructor; the original one above delegates here with weight 1 (unchanged behaviour).
+    public AStarPathFinder(BetterBlockPos realStart, int startX, int startY, int startZ, Goal goal, Favoring favoring, CalculationContext context, double heuristicWeight) {
         super(realStart, startX, startY, startZ, goal, context);
         this.favoring = favoring;
         this.calcContext = context;
         allowReuse = !favoring.hasAvoidance();
+        this.heuristicWeight = heuristicWeight;
     }
 
     @Override
@@ -57,7 +77,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int height = calcContext.maxY;
         startNode = getNodeAtPosition(startX, startY, startZ, BetterBlockPos.longHash(startX, startY, startZ));
         startNode.cost = 0;
-        startNode.combinedCost = startNode.estimatedCostToGoal;
+        startNode.combinedCost = heuristicWeight * startNode.estimatedCostToGoal; // Ostinato: weighted (weight 1 = stock)
         BinaryHeapOpenSet openSet = new BinaryHeapOpenSet();
         openSet.insert(startNode);
         double[] bestHeuristicSoFar = new double[COEFFICIENTS.length];//keep track of the best node by the metric of (estimatedCostToGoal + cost / COEFFICIENTS[i])
@@ -170,6 +190,9 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                             SettingsUtil.maybeCensor(res.y),
                             SettingsUtil.maybeCensor(currentNode.y + moves.yOffset)));
                 }
+                if (nodeFilter != null && !nodeFilter.allow(res.x, res.y, res.z)) { // Ostinato: corridor (null in stock planning)
+                    continue;
+                }
                 long hashCode = BetterBlockPos.longHash(res.x, res.y, res.z);
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 if (isFavoring) {
@@ -186,7 +209,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 if (neighbor.cost - tentativeCost > minimumImprovement) {
                     neighbor.previous = currentNode;
                     neighbor.cost = tentativeCost;
-                    neighbor.combinedCost = tentativeCost + neighbor.estimatedCostToGoal;
+                    neighbor.combinedCost = tentativeCost + heuristicWeight * neighbor.estimatedCostToGoal; // Ostinato: weighted (weight 1 = stock)
                     if (neighbor.isOpen()) {
                         openSet.update(neighbor);
                     } else {

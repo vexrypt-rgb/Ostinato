@@ -77,6 +77,32 @@ public class BlockStateInterface {
         this.access = new BlockStateInterfaceAccessWrapper(this);
     }
 
+    // Ostinato: headless constructor for snapshot/synthetic worlds (pathfinding benchmark and tests). A subclass overrides
+    // get0, isLoaded and worldContainsLoadedChunk; there is no client world or chunk provider. New, replaces nothing.
+    protected BlockStateInterface(int minY, int height, BetterWorldBorder worldBorder) {
+        this.world = null;
+        this.provider = null;
+        this.worldData = null;
+        this.worldBorder = worldBorder;
+        this.useTheRealWorld = false;
+        this.headlessMinY = minY;
+        this.headlessHeight = height;
+        this.isPassableBlockPos = new BlockPos.MutableBlockPos();
+        this.access = new BlockStateInterfaceAccessWrapper(this);
+    }
+
+    // Ostinato: world height bounds that also work headless; replaces direct bsi.world.getMinY()/getHeight() reads in BlockStateInterfaceAccessWrapper.
+    private int headlessMinY;
+    private int headlessHeight;
+
+    public int minY() {
+        return world != null ? world.getMinY() : headlessMinY;
+    }
+
+    public int height() {
+        return world != null ? world.getHeight() : headlessHeight;
+    }
+
     public boolean worldContainsLoadedChunk(int blockX, int blockZ) {
         return provider.hasChunk(blockX >> 4, blockZ >> 4);
     }
@@ -145,6 +171,14 @@ public class BlockStateInterface {
     }
 
     public boolean isLoaded(int x, int z) {
+        return isKnown(x, z) || SeedPlan.covers(x, z);
+    }
+
+    /**
+     * Ostinato: true where the client has real terrain for this column (a loaded chunk or the world cache), as opposed
+     * to {@link #isLoaded}, which also counts columns only the seed predictor ({@link SeedPlan}) covers.
+     */
+    public boolean isKnown(int x, int z) {
         LevelChunk prevChunk = prev;
         if (prevChunk != null && prevChunk.getPos().x() == x >> 4 && prevChunk.getPos().z() == z >> 4) {
             return true;
@@ -156,17 +190,17 @@ public class BlockStateInterface {
         }
         CachedRegion prevRegion = prevCached;
         if (prevRegion != null && prevRegion.getX() == x >> 9 && prevRegion.getZ() == z >> 9) {
-            return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
+            return prevRegion.isCached(x & 511, z & 511);
         }
         if (worldData == null) {
-            return SeedPlan.covers(x, z);
+            return false;
         }
         prevRegion = worldData.cache.getRegion(x >> 9, z >> 9);
         if (prevRegion == null) {
-            return SeedPlan.covers(x, z);
+            return false;
         }
         prevCached = prevRegion;
-        return prevRegion.isCached(x & 511, z & 511) || SeedPlan.covers(x, z);
+        return prevRegion.isCached(x & 511, z & 511);
     }
 
     // get the block at x,y,z from this chunk WITHOUT creating a single blockpos object

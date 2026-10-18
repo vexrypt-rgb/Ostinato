@@ -243,6 +243,20 @@ public final class Settings {
     public final Setting<Boolean> allowTasJumps = new Setting<>(false);
 
     /**
+     * Steer like a controller stick instead of WASD keys where a movement asks for it: any fraction of walking speed,
+     * in any direction, each tick. Vanilla physics, it just isn't limited to full key presses. A standing jump from
+     * near a block's side uses it to stop on its take-off spot to the millimetre; a key tap moves ~0.22 blocks.
+     */
+    public final Setting<Boolean> analogMovement = new Setting<>(false);
+
+    /**
+     * Ostinato: degrees of yaw a jump may turn in one tick while it is flying a parkour plan, in place of the usual
+     * 32° look cap. Jump plans assume the look keeps up; a standing up-one neo swings 53° between two air ticks and
+     * at 32° drifts off its landing. 32 restores the old cap. Not used with {@link #humanLookEverywhere}.
+     */
+    public final Setting<Float> parkourTurnCap = new Setting<>(180f);
+
+    /**
      * Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it, like a water bucket clutch.
      * Needs a ladder or vine on the hotbar.
      */
@@ -307,6 +321,12 @@ public final class Settings {
     public final Setting<List<Block>> blocksToAvoid = new Setting<>(new ArrayList<>(List.of(
             Blocks.TRIPWIRE
     )));
+
+    /**
+     * Blocks that Baritone will never stand on, for example a parkour map's kill floor or a block a
+     * command block reacts to. {@link #blocksToAvoid} only keeps it from walking through blocks.
+     */
+    public final Setting<List<Block>> blocksToAvoidStandingOn = new Setting<>(new ArrayList<>());
 
     /**
      * Blocks that Baritone is not allowed to break
@@ -489,6 +509,18 @@ public final class Settings {
     public final Setting<Boolean> allowBoatFall = new Setting<>(true);
 
     /**
+     * Survive a fall by getting on whatever we land beside: a horse, donkey, mule, llama or camel, a saddled pig or
+     * strider, a boat or a minecart. Riding cancels the fall, so the height doesn't matter.
+     */
+    public final Setting<Boolean> allowMountClutch = new Setting<>(true);
+
+    /**
+     * Steer sideways while falling to drop through a hole in a floor below instead of landing on it, the way a dropper
+     * map is played. Only where air control can make it in time.
+     */
+    public final Setting<Boolean> allowSteeredFalls = new Setting<>(true);
+
+    /**
      * How far a boat can fall onto land with us in it
      */
     public final Setting<Integer> maxFallHeightBoat = new Setting<>(64);
@@ -547,6 +579,96 @@ public final class Settings {
      * Finding the optimal path is worth it, so it's the default.
      */
     public final Setting<Double> costHeuristic = new Setting<>(3.563);
+
+    /**
+     * Ostinato: explicit weighted A* for far segments. When the segment's start is at least
+     * {@link #pathingFarSegmentDistance} blocks (by the goal heuristic) from the goal, A* orders its open set by
+     * g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly,
+     * Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).
+     * Ostinato: default 2 (user-approved; benchmark: ~5.8x faster on far queries, +2.4% mean path cost, no failures).
+     */
+    public final Setting<Double> pathingFarSegmentWeight = new Setting<>(2.0);
+
+    /**
+     * Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for
+     * {@link #pathingFarSegmentWeight} to apply.
+     */
+    public final Setting<Integer> pathingFarSegmentDistance = new Setting<>(128);
+
+    /**
+     * Ostinato: plan through the section-level (16x16x16) abstract graph first and keep block-level A* inside the
+     * resulting corridor (HierarchicalPathFinder). Falls back to plain A* when there is no abstract route. Off until proven.
+     */
+    public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
+
+    /** Ostinato: how many sections beyond the start/goal box the abstract search may detour through. */
+    public final Setting<Integer> pathingHierarchyMargin = new Setting<>(3);
+
+    /** Ostinato: corridor half-width in sections around the abstract route. */
+    public final Setting<Integer> pathingHierarchyCorridorRadius = new Setting<>(1);
+
+    /**
+     * Ostinato: levels of the multi-level (Distant Horizons-style) hierarchy used by {@link #pathingHierarchical}.
+     * 1 = 16^3 sections only; 2 = plan on a coarse level first (cells of 16 &lt;&lt; pathingHierarchyCoarseFactorShift
+     * blocks), then refine on sections inside the coarse corridor, then blocks inside the section corridor.
+     */
+    public final Setting<Integer> pathingHierarchyLevels = new Setting<>(1);
+
+    /** Ostinato: horizontal start-goal distance (blocks) below which the hierarchical planner uses plain A* directly. */
+    public final Setting<Integer> pathingHierarchyMinDistance = new Setting<>(64);
+
+    /** Ostinato: coarse cell size as a shift over 16-block sections: 2 = 64 blocks, 3 = 128, 4 = 256. */
+    public final Setting<Integer> pathingHierarchyCoarseFactorShift = new Setting<>(2);
+
+    /**
+     * Ostinato: abstract route candidates to try before falling back to plain A*. 2 = when the first corridor's block
+     * search misses, re-plan the abstract route with the first one's sections penalised and search that corridor.
+     */
+    public final Setting<Integer> pathingHierarchyCandidates = new Setting<>(1);
+
+    /** Ostinato: cost multiplier on the first candidate's sections when looking for the second. */
+    public final Setting<Double> pathingHierarchyCandidatePenalty = new Setting<>(3.0);
+
+    /**
+     * Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic
+     * (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.
+     */
+    public final Setting<Double> pathingHierarchyHeuristicFactor = new Setting<>(0.0);
+
+    /**
+     * Ostinato: find the abstract route with a bidirectional search from start and goal at once instead of one backward
+     * search from the goal. Same route cost, fewer sections priced. Ignored while pathingHierarchyHeuristicFactor is
+     * above 0, which needs the full backward cost-to-go map.
+     */
+    public final Setting<Boolean> pathingHierarchyBidirectional = new Setting<>(true);
+
+    /**
+     * Ostinato: let the section hierarchy route through terrain the client has never loaded or cached, instead of
+     * falling back to plain A* whenever the goal lies past render distance. Unknown sections get a flat cost per block
+     * ({@link #pathingHierarchyUnknownCost}), or a coarse terrain estimate when {@link #seedPlanning} predicts them, and
+     * the block-level path stops at the loaded edge and is replanned as chunks arrive.
+     */
+    public final Setting<Boolean> pathingHierarchyFarTerrain = new Setting<>(true);
+
+    /** Ostinato: ticks per block the hierarchy assumes across terrain it has no data for (sprinting is about 3.6). */
+    public final Setting<Double> pathingHierarchyUnknownCost = new Setting<>(6.0);
+
+    /**
+     * Ostinato: predict terrain the client has not loaded or cached from the world seed, so long routes can be planned
+     * past render distance. Base noise terrain only (no surface blocks, carver caves, ores, trees or structures);
+     * loaded and cached chunks always win, and routes through predicted terrain are replanned as it loads. Off by default.
+     */
+    public final Setting<Boolean> seedPlanning = new Setting<>(false);
+
+    /**
+     * Ostinato: the world seed for {@link #seedPlanning}, a number or text as on the create-world screen. Blank in
+     * singleplayer uses the world's own generator; on a server it must be set.
+     */
+    public final Setting<String> seedPlanningSeed = new Setting<>("");
+
+    /** Ostinato: how many predicted columns {@link #seedPlanning} keeps (about 1.5 KB each). */
+    public final Setting<Integer> seedPlanningCacheColumns = new Setting<>(8192);
+
 
     // a bunch of obscure internal A* settings that you probably don't want to change
     /**

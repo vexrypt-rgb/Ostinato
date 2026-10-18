@@ -5,13 +5,13 @@
 use crate::jmath::{floor_i, jabs, jmax, jmin, round_d, UNSUPPORTED};
 use crate::sim::{feet_cell, node_height, Box6, Sim, Snap, HALF_WIDTH};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
 
 pub const O0: [f32; 6] = [-15.0, 0.0, 15.0, 30.0, 45.0, 60.0];
 pub const HOP: [i32; 2] = [0, 1];
 pub const EDGE: [f64; 6] = [-0.5, -0.3, -0.1, 0.1, 0.25, 0.4];
 pub const PLAIN_EDGES: usize = 5;
-pub const O1: [f32; 9] = [-70.0, -45.0, -25.0, -10.0, 0.0, 10.0, 25.0, 45.0, 70.0];
+pub const O1: [f32; 11] = [-90.0, -70.0, -45.0, -25.0, -10.0, 0.0, 10.0, 25.0, 45.0, 70.0, 90.0];
 pub const SWITCH: [i32; 2] = [0, 4];
 pub const NEVER: i32 = 999;
 pub const RELEASE: [i32; 4] = [NEVER, 4, 7, 10];
@@ -49,6 +49,9 @@ pub struct JumpSearch<'a> {
     pub air_ticks: i32,
     pub slew_yaw: bool,
     pub face_yaw: f32,
+    /// `local`: only the neighbourhood of [`Self::plan`]; `anyLanding`: the first plan that lands in grid order.
+    pub local: bool,
+    pub any_landing: bool,
     pub ticks: i32,
     pub miss: f64,
     pub land_speed: f64,
@@ -80,6 +83,8 @@ impl<'a> JumpSearch<'a> {
             air_ticks: 0,
             slew_yaw: false,
             face_yaw: 0.0,
+            local: false,
+            any_landing: false,
             ticks: 0,
             miss: 0.0,
             land_speed: 0.0,
@@ -239,8 +244,8 @@ impl<'a> JumpSearch<'a> {
         let mut hi = [0i32; DIMS];
         for k in 0..DIMS {
             let fixed = self.jumped && k <= 2;
-            lo[k] = if fixed { c[k] } else { 0 };
-            hi[k] = if fixed { c[k] } else { size[k] - 1 };
+            lo[k] = if fixed { c[k] } else if self.local { (c[k] - 1).max(0) } else { 0 };
+            hi[k] = if fixed { c[k] } else if self.local { (c[k] + 1).min(size[k] - 1) } else { size[k] - 1 };
         }
         // the grid in the Java loops' order, the last index fastest
         let mut plans: Vec<[i32; DIMS]> = Vec::new();
@@ -261,6 +266,9 @@ impl<'a> JumpSearch<'a> {
             }
         }
         let (jumped, air) = (self.jumped, self.air_ticks);
+        if self.any_landing {
+            return self.first_landing(start, &plans, jumped, air, threads);
+        }
         let parts = if self.any_dest { 1 } else { threads.max(1).min(plans.len().div_ceil(MIN_PER_THREAD)).max(1) };
         let best = if parts == 1 {
             self.best_of(start, &plans, jumped, air)
@@ -299,6 +307,62 @@ impl<'a> JumpSearch<'a> {
         };
         let Some((_, b)) = best else { return false };
         self.plan = b;
+        let plan = self.plan;
+        self.run(start, &plan, jumped, air);
+        true
+    }
+
+    /// `anyLanding`: the first plan of `plans` (grid order) that lands, as the Java loop returns it. Threads take
+    /// interleaved chunks and stop at any plan past the lowest landing found so far, so the answer is the single-threaded one.
+    fn first_landing(&mut self, start: &Sim, plans: &[[i32; DIMS]], jumped: bool, air: i32, threads: usize) -> bool {
+        let parts = if self.any_dest { 1 } else { threads.max(1).min(plans.len().div_ceil(MIN_PER_THREAD)).max(1) };
+        let found = AtomicUsize::new(usize::MAX);
+        if parts == 1 {
+            for (i, p) in plans.iter().enumerate() {
+                if self.run(start, p, jumped, air) {
+                    found.store(i, Relaxed);
+                    break;
+                }
+            }
+        } else {
+            const STRIDE: usize = 64; // plans per block; thread t flies blocks t, t+parts, ...
+            let unsupported = AtomicBool::new(false);
+            std::thread::scope(|sc| {
+                for t in 0..parts {
+                    let mut js = self.worker();
+                    let (found, unsup) = (&found, &unsupported);
+                    sc.spawn(move || {
+                        let mut b = t;
+                        'blocks: while b * STRIDE < plans.len() {
+                            for i in b * STRIDE..((b + 1) * STRIDE).min(plans.len()) {
+                                if i >= found.load(Relaxed) {
+                                    break 'blocks;
+                                }
+                                if js.run(start, &plans[i], jumped, air) {
+                                    found.fetch_min(i, Relaxed);
+                                    break 'blocks;
+                                }
+                            }
+                            b += parts;
+                        }
+                        if UNSUPPORTED.with(|u| u.get()) {
+                            unsup.store(true, Relaxed);
+                        }
+                    });
+                }
+            });
+            if unsupported.load(Relaxed) {
+                UNSUPPORTED.with(|u| u.set(true));
+            }
+        }
+        let i = found.load(Relaxed);
+        if i == usize::MAX {
+            // a failed search leaves the sim where the grid's last run left it
+            let last = plans[plans.len() - 1];
+            self.run(start, &last, jumped, air);
+            return false;
+        }
+        self.plan = plans[i];
         let plan = self.plan;
         self.run(start, &plan, jumped, air);
         true
