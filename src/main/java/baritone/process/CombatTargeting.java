@@ -47,7 +47,7 @@ final class CombatTargeting {
 
     /** With several opponents in reach, finish the weakest one rather than whichever was nearest first. Returns the target to use. */
     LivingEntity retarget(Player me, LivingEntity target) {
-        java.util.function.ToDoubleFunction<LivingEntity> score = e -> e.getHealth() + e.getAbsorptionAmount() + 0.6 * me.distanceTo(e);
+        java.util.function.ToDoubleFunction<LivingEntity> score = e -> baritone.health.Hp.total(e) + 0.6 * me.distanceTo(e); // Ostinato: estimated health
         LivingEntity best = ctx.world().getEntitiesOfClass(LivingEntity.class, me.getBoundingBox().inflate(7),
                         e -> e != me && e.isAlive() && !e.isRemoved() && !e.isSpectator() && matches.test(e))
                 .stream().min(Comparator.comparingDouble(score)).orElse(null);

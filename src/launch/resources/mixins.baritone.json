@@ -42,7 +42,11 @@
     "MixinScreen",
     "MixinWorldRenderer",
     "MixinWindowPlacement",
-    "MixinNoMouseGrab"
+    "MixinNoMouseGrab",
+    "MixinSpectatePackets",
+    "MixinSpectateRecv",
+    "MixinLivingEntityEffects",
+    "MixinBossHealthOverlay"
   ],
   "mixins": [
   ]

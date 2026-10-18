@@ -107,6 +107,13 @@ final class CombatSpsa {
                 // a number fought whole under may name what is carried (apple, heal, totem, pearl): the fight tells whether it was
                 use[i] = t.whole ? t.kit == null || kit.contains(t.kit) || CARRIED.contains(t.kit)
                         : (t.kit == null || kit.contains(t.kit)) && (t.not == null || !kit.contains(t.not));
+                // Ostinato: a fresh search starts where watched fights point (spectateLearn, 20+ fights, at most two
+                // steps); only the search point moves, the trusted value stays the baseline until GSPRT confirms
+                double prior = use[i] && t.whole ? baritone.spectate.SpectatePriors.get().startSteps(t.name, t.base, t.step) : 0;
+                if (prior != 0) {
+                    phi[i] = prior;
+                    if (sink != null) sink.accept(String.format(java.util.Locale.ROOT, "acs-prior %s %s start %+.2f steps (spectated)", name, t.name, prior));
+                }
             }
             newPair();
         }
