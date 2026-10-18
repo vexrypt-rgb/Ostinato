@@ -132,6 +132,9 @@ public class MovementDiagonal extends Movement {
             if (MovementHelper.isTallTop(destInto) && !MovementHelper.isTallTop(fromDown)) {
                 return; // Ostinato: as MovementAscend, a jump rises 1.25 and a fence/wall top is 1.5 up
             }
+            if (MovementHelper.isBottomSlab(fromDown) && !MovementHelper.isBottomSlab(destInto)) {
+                return; // Ostinato: as MovementAscend, from a bottom slab a full block is 1.5 up
+            }
         } else {
             destWalkOn = context.get(destX, y - 1, destZ);
             fromDown = context.get(x, y - 1, z);
