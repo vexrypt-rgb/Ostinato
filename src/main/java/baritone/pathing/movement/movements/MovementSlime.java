@@ -48,8 +48,12 @@ import java.util.Set;
 public class MovementSlime extends Movement {
 
     public static final int SLOTS = 4;
-    /** How far ahead the pad may start and how far below the feet it may be. */
-    private static final int REACH = 8, DEPTH = 12;
+    /**
+     * How far ahead the pad may start and how far below the feet it may be. Ostinato: a slime landing takes no damage
+     * however tall the drop, and the taller it is the higher the bounce: courses drop from high ledges onto pads to
+     * bounce up to something out of reach, so look further down than any fall the planner takes otherwise.
+     */
+    private static final int REACH = 8, DEPTH = 20;
 
     private static final BetterBlockPos[] EMPTY = new BetterBlockPos[]{};
     private static final int[][] DIRS = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
