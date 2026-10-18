@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Ostinato: live combat stage for scripts/regress.sh --live (template; copy to combat.sh and fill in LAUNCH).
+# Runs a VexBench match series in a headless client and converts pvpbench/vexbench.csv into combat:vexbench.json,
+# which the headless CombatStage then leaves alone. VexBench is a local bench hook on the combat branches.
+set -euo pipefail
+: "${OSTINATO_REGRESS_METRICS_DIR:?}" "${OSTINATO_REGRESS_COMMIT:?}" "${OSTINATO_REGRESS_TREE:?}"
+RUN_DIR="${VEX_RUN_DIR:?set VEX_RUN_DIR to the client game directory}"
+OPP="${VEX_OPPONENT:-smpbot}"                 # smpbot | sicksheet | carpetpvp (needs those mods in the client)
+ROUNDS="${VEX_ROUNDS:-48}"
+JVM="-Dostinato.vexbench=$ROUNDS -Dostinato.vex.bot=$OPP -Dostinato.lockstep=true -Dostinato.vexbench.exit=true -Dostinato.seed=${VEX_SEED:-48}"
+# LAUNCH must start the client built from $OSTINATO_REGRESS_TREE with $JVM and block until it exits
+# (on the ACS box: the acs-farm opp.sh launcher, which also resets the arena world).
+: "${LAUNCH:?set LAUNCH to a command that takes the JVM args as \$JVM}"
+start=$(date +%s)
+JVM="$JVM" bash -c "$LAUNCH"
+csv="$RUN_DIR/pvpbench/vexbench.csv"
+if [ ! -f "$csv" ] || [ "$(stat -c %Y "$csv")" -lt "$start" ]; then
+  printf '{"stage":"combat:vexbench","kind":"combat","status":"skipped","note":"no vexbench.csv written","metrics":[],"cases":{}}\n' \
+    > "$OSTINATO_REGRESS_METRICS_DIR/combat_vexbench.json"
+  exit 0
+fi
+python3 "$(dirname "$0")/../../scripts/regress/vexbench_to_metrics.py" --csv "$csv" --out "$OSTINATO_REGRESS_METRICS_DIR" \
+  --opponent "$OPP" --commit "$OSTINATO_REGRESS_COMMIT"

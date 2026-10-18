@@ -1,0 +1,112 @@
+// Ostinato: regression suite tasks (docs/REGRESSION.md). Applied from build.gradle. New file.
+//
+//   ./gradlew regress              unit tests + headless stages, then the pass/fail report against regress/baseline
+//   ./gradlew regressBaseline      the same stages, then store the results as the new baseline
+//
+// -Pregress_stages=unit,pathbench,simdrill,combat   -Pregress_worlds=<folder with the pk_* map saves>
+// -Pregress_courses=pk_drill,...  -Pregress_modes=kinematic,physics  -Pregress_engines=BARITONE:astar,KINEMATIC:game
+// -Pregress_planMs=4000  -Pregress_benchReps=1  -Pregress_extra=<dir>[:<dir>] (live-stage metrics)  -Pregress_nofail
+// -Pregress_commit=<sha> (default: git HEAD)  -Pregress_baseline=<dir> (default: regress/baseline)
+
+def regressOut = layout.buildDirectory.dir("regress")
+def regressMetrics = layout.buildDirectory.dir("regress/metrics")
+def rp = { String k, String d -> project.findProperty("regress_" + k)?.toString() ?: d }
+def regressCommit = {
+    def c = project.findProperty("regress_commit")
+    if (c) return c.toString()
+    try {
+        def p = ["git", "-C", rootDir.absolutePath, "rev-parse", "HEAD"].execute()
+        p.waitFor()
+        return p.text.trim()
+    } catch (Exception ignored) {
+        return ""
+    }
+}
+def stagesWanted = { rp("stages", "unit,pathbench,simdrill,combat").split(",").collect { it.trim() } }
+
+tasks.named("test") {
+    exclude "baritone/regress/**"
+}
+
+gradle.taskGraph.whenReady { g ->
+    if (g.hasTask(":regressReport") || g.hasTask(":regressBaselineWrite")) {
+        // the report reads the failures; a red unit test must not stop the other stages from running
+        tasks.named("test").get().ignoreFailures = true
+    }
+}
+
+def regressSim = tasks.register("regressSim", Test) {
+    description = "Ostinato: headless regression stages (sim drills, path benchmark, combat slot)"
+    group = "verification"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include "baritone/regress/**"
+    maxHeapSize = "3g"
+    jvmArgs "--enable-native-access=ALL-UNNAMED"
+    outputs.upToDateWhen { false }
+    mustRunAfter tasks.named("test")
+    // a separate results folder, so the unit stage's JUnit read never sees these
+    reports.junitXml.outputLocation = layout.buildDirectory.dir("regress/junit")
+    reports.html.required = false
+    testLogging { showStandardStreams = true; events "failed" }
+    doFirst {
+        def m = regressMetrics.get().asFile
+        project.delete(m)
+        m.mkdirs()
+        systemProperty "ostinato.regress", "true"
+        systemProperty "ostinato.regress.out", m.absolutePath
+        systemProperty "ostinato.regress.stages", stagesWanted().join(",")
+        systemProperty "ostinato.regress.worlds", rp("worlds", System.getenv("OSTINATO_REGRESS_WORLDS") ?: "")
+        systemProperty "ostinato.regress.courses", rp("courses", "")
+        systemProperty "ostinato.regress.modes", rp("modes", "")
+        systemProperty "ostinato.regress.engines", rp("engines", "")
+        systemProperty "ostinato.regress.planMs", rp("planMs", "4000")
+        systemProperty "ostinato.regress.benchReps", rp("benchReps", "1")
+        systemProperty "ostinato.regress.commit", regressCommit()
+    }
+}
+
+def reportArgs = { boolean writeBaseline ->
+    def a = ["--metrics", regressMetrics.get().asFile.absolutePath,
+             "--baseline", file(rp("baseline", "regress/baseline")).absolutePath,
+             "--out", regressOut.get().asFile.absolutePath,
+             "--commit", regressCommit()]
+    if (stagesWanted().contains("unit")) a += ["--junit", layout.buildDirectory.dir("test-results/test").get().asFile.absolutePath]
+    def extra = rp("extra", "")
+    if (extra) a += ["--extra", extra]
+    if (project.hasProperty("regress_nofail")) a += ["--no-fail"]
+    if (writeBaseline) a += ["--write-baseline"]
+    return a
+}
+
+def regressReport = tasks.register("regressReport", JavaExec) {
+    description = "Ostinato: compare the regression stages with the baseline and write build/regress/report.md"
+    group = "verification"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "baritone.regress.RegressReport"
+    mustRunAfter regressSim
+    doFirst { args reportArgs(false) }
+}
+
+tasks.register("regressBaselineWrite", JavaExec) {
+    description = "Ostinato: store the current regression metrics as regress/baseline"
+    group = "verification"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "baritone.regress.RegressReport"
+    mustRunAfter regressSim
+    doFirst { args reportArgs(true) }
+}
+
+tasks.register("regress") {
+    description = "Ostinato: unit tests + headless regression stages + pass/fail report against the baseline"
+    group = "verification"
+    dependsOn regressSim, regressReport
+    if (stagesWanted().contains("unit")) dependsOn "test"
+}
+
+tasks.register("regressBaseline") {
+    description = "Ostinato: run the regression stages and store them as the new baseline"
+    group = "verification"
+    dependsOn regressSim, "regressBaselineWrite"
+    if (stagesWanted().contains("unit")) dependsOn "test"
+}

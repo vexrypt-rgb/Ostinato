@@ -1,0 +1,11 @@
+# level signs (Cobble..Diamond), end = heavy plate. The start button removes this barrier.
+cmd setblock -157 -9 54 minecraft:air
+tp -148.5 -12 59.5
+near -182 -1 26 2
+near -198 26 32 2
+near -180 52 8 2
+near -191 46 -11 2
+near -191 125 15 2
+near -183 175 63 2
+near -204 230 75 2
+goal -204 296 61

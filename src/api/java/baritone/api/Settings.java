@@ -2259,6 +2259,13 @@ public final class Settings {
      */
     public final Setting<Boolean> nativeAcceleration = new Setting<>(true);
 
+    /**
+     * Ostinato: let the in-client test harnesses run (the parkour course runner PkTest and BastTest). Each still needs
+     * its own launch property to say what to run ({@code -Dostinato.pktest=<save>}, {@code -Dostinato.basttest=true});
+     * {@code -Dostinato.testHarness=true} turns this on for one launch. Off, those properties do nothing.
+     */
+    public final Setting<Boolean> testHarness = new Setting<>(false);
+
     // here be dragons
 
     Settings() {

@@ -1,0 +1,2393 @@
+{
+  "stage": "unit:junit",
+  "kind": "unit",
+  "status": "ok",
+  "note": "",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "tests",
+      "value": 782.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "failed",
+      "value": 0.0,
+      "better": "lower",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "skipped",
+      "value": 5.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "seconds",
+      "value": 151.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 30.0,
+      "rel": 0.5,
+      "unit": "s"
+    }
+  ],
+  "cases": {
+    "SchematicPartitionerTest.rejectsBadArguments": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.gridAndLayerSeamsFollowTheirOwnCuts": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.explicitAxisAndGridColumnsStillTile": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.moreBotsThanCells": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.balanceIsByNonAirCountNotVolume": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.balanceWithinTenPercentOnLargeSchematics": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.materialCountsSumToTheSchematicTotals": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.onlyLayersAreOrdered": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.everyStrategyTilesTheSchematicForOneToEightBots": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.seamsAreDeterministic": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.maskedSchematicsClaimEachCellOnce": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.emptySchematicIsSplitByVolumeAndStillTiles": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.balanceWithinOneSliceOfTheIdealShare": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.seamBandStraddlesEachCutWithTheExtraLayerOnTheLowerIndexSide": {
+      "outcome": "ok"
+    },
+    "SchematicPartitionerTest.rotatedMasksStillTileTheRotatedFootprint": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.goldBookkeeping": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.damageIsBlocksPastThree": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.aDropMustLeaveTheHealthWeFightWith": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.clutchEarlyNotAtTheBottom": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.noDropWhenTargetIsNotBelow": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.choosesSurvivableDropThatSavesTheStairs": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.aDropMayNotLandBesideABrute": {
+      "outcome": "ok"
+    },
+    "BastionFallGoldTest.aFallPastThePlannedLandingIsNotPlanned": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.doorWhenDeepOrFar": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.sealOnlyWhenBothCellsClean": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.needsDoorAndFloor": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.descentStepsAndDoors": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.swimWhenShallowAndClose": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.edgeCostsLeaveBridgesARoute": {
+      "outcome": "ok"
+    },
+    "BastionLavaTest.edgeRule": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.barterRespectsReserveAndConcurrency": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.settingsParse": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.climbingCostsMoreThanDropping": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.treasureVisitsCoreBeforeRamparts": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.barterStopsWhenTargetsMet": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.lootFilters": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.bridgeMinesChaliceGoldFirst": {
+      "outcome": "ok"
+    },
+    "BastionLogicTest.nearestFirstChainsFromLastPoint": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.stables": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.bridge": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.tiers": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.goldBreakingAndOpening": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.routesAndChests": {
+      "outcome": "ok"
+    },
+    "BastionPriorsTest.losAndFloorGold": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.tacticStepsClaimNothingAndGoldStepsAreGated": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.housingIntermediateTopTripleTogether": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.treasureStepsClaimTheRightBlocks": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.housingPicksMatchTemplates": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.bridgeChaliceFirst": {
+      "outcome": "ok"
+    },
+    "BastionRouteResolverTest.stablesGapGoldThenBottomChest": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.throwAdapt": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.distractGate": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.otherLayouts": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.tradeWaitsForTheRoute": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.treasureBeginnerVsIntermediate": {
+      "outcome": "ok"
+    },
+    "BastionRoutesTest.pitGoldOrderAndRhythm": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.runnerAdvancesAndSkips": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.pillarPocketAndGap": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.housingDigAndTunnel": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.elevatorAndLava": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.everyTacticStepHasAScript": {
+      "outcome": "ok"
+    },
+    "BastionScriptTest.frameAndBasaltBridge": {
+      "outcome": "ok"
+    },
+    "BastionTrapTest.choosesNearestSafeSite": {
+      "outcome": "ok"
+    },
+    "BastionTrapTest.needsWallsAndSeparateHoles": {
+      "outcome": "ok"
+    },
+    "BruteTacticsTest.candidatesAndScoop": {
+      "outcome": "ok"
+    },
+    "BruteTacticsTest.lureAndTrap": {
+      "outcome": "ok"
+    },
+    "BruteTacticsTest.pourNeverReachesUs": {
+      "outcome": "ok"
+    },
+    "BruteTacticsTest.pitSharesAWallNotOurSide": {
+      "outcome": "ok"
+    },
+    "BruteTacticsTest.choosePlan": {
+      "outcome": "ok"
+    },
+    "DamageBudgetTest.abortBelowFloor": {
+      "outcome": "ok"
+    },
+    "DamageBudgetTest.twoBruteHitsAreTooMany": {
+      "outcome": "ok"
+    },
+    "DamageBudgetTest.twoPiglinHitsAreFine": {
+      "outcome": "ok"
+    },
+    "DamageBudgetTest.hazardsVeto": {
+      "outcome": "ok"
+    },
+    "DamageBudgetTest.fullHpRawBruteHitBreaksFloor": {
+      "outcome": "ok"
+    },
+    "EndermanHuntTest.onlyWhenTradingImpossible": {
+      "outcome": "ok"
+    },
+    "EndermanHuntTest.gapNeedsCeiling": {
+      "outcome": "ok"
+    },
+    "EndermanHuntTest.offIsOff": {
+      "outcome": "ok"
+    },
+    "EndermanHuntTest.oneAtATime": {
+      "outcome": "ok"
+    },
+    "EndermanHuntTest.pearlTargetStops": {
+      "outcome": "ok"
+    },
+    "FluidPocketTest.swimsUpWhenTheSurfaceIsCloseEnough": {
+      "outcome": "ok"
+    },
+    "FluidPocketTest.sealedCeilingNeedsAPocket": {
+      "outcome": "ok"
+    },
+    "FluidPocketTest.neverMinesNextToFluid": {
+      "outcome": "ok"
+    },
+    "FluidPocketTest.pocketRefillsThenTunnelsOrLeaves": {
+      "outcome": "ok"
+    },
+    "ItemThrowTest.aimsIntoFarCornerOfHole": {
+      "outcome": "ok"
+    },
+    "ItemThrowTest.lookingDownDropsAtFeet": {
+      "outcome": "ok"
+    },
+    "ItemThrowTest.flatThrowTravelsAboutTwoBlocks": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.waterIsFaster": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.pushesTowardDrop": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.wallsBlock": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.spreadsSevenAtTenTicksPerStep": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.horizonLimits": {
+      "outcome": "ok"
+    },
+    "LavaFlowTest.fallsFirstIntoAPit": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.sufficientStops": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.beforeRouteEndsInside": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.oneGuardedGoesToWastes": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.offAndForce": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.outsideMargin": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.lureCountClamps": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.farWastesStays": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.freePiglinsStayInside": {
+      "outcome": "ok"
+    },
+    "OutsideTradeTest.guardedLuresOut": {
+      "outcome": "ok"
+    },
+    "ShelterTest.aStepDownIsBuiltUpFromItsFloor": {
+      "outcome": "ok"
+    },
+    "ShelterTest.theRingShutsTheCornersAndTopsTheWalls": {
+      "outcome": "ok"
+    },
+    "ShelterTest.overADeepDropTheWallHangsFromOurOwnFloor": {
+      "outcome": "ok"
+    },
+    "ShelterTest.theSlitIsAtEyeLevelInTheWallFacingTheBrute": {
+      "outcome": "ok"
+    },
+    "ShelterTest.inTheOpenTenBlocksShutUsIn": {
+      "outcome": "ok"
+    },
+    "ShelterTest.aCellSomebodyStandsInIsPassedOver": {
+      "outcome": "ok"
+    },
+    "ShelterTest.inACorridorOnlyTheOpenEndsAreFilled": {
+      "outcome": "ok"
+    },
+    "ShelterTest.theRingOnASlabIsAsHighAsTheWalls": {
+      "outcome": "ok"
+    },
+    "ShelterTest.onASlabTheWallsGoOneHigher": {
+      "outcome": "ok"
+    },
+    "ShelterTest.theSideFacingTheBruteClosesFirst": {
+      "outcome": "ok"
+    },
+    "ShelterTest.underALowCeilingTheWallsAreEnough": {
+      "outcome": "ok"
+    },
+    "ShelterTest.theRoofIsNeverAFallingBlocksJobAndComesLast": {
+      "outcome": "ok"
+    },
+    "ShelterTest.aCornerOverADropHangsFromTheWalls": {
+      "outcome": "ok"
+    },
+    "UnderwaterLootTest.lowAirGoesUpOrPockets": {
+      "outcome": "ok"
+    },
+    "UnderwaterLootTest.swimsThenOpens": {
+      "outcome": "ok"
+    },
+    "UnderwaterLootTest.takesOnlyUsefulItems": {
+      "outcome": "ok"
+    },
+    "UnderwaterLootTest.buriedChestPocketThenDig": {
+      "outcome": "ok"
+    },
+    "UnderwaterLootTest.shipwreckChestOrder": {
+      "outcome": "ok"
+    },
+    "CachedRegionTest.blockPosSaving": {
+      "outcome": "ok"
+    },
+    "CommandGuardTest.aRefusalStopsTheCommandAndSaysWhy": {
+      "outcome": "ok"
+    },
+    "CommandGuardTest.anEmptyAnswerRuns": {
+      "outcome": "ok"
+    },
+    "CommandGuardTest.noGuardRunsEverything": {
+      "outcome": "ok"
+    },
+    "CommandGuardTest.aBrokenGuardDoesNotBreakOstinato": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.rigPutsTheBedBetweenTwoAnchors": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.rigFacesTheNodeFromTheFrontStand": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.standIsTheFrontCheatSheetAndTwoLowerOnAStraight": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.pillarsSitOnTheRadius42Ring": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.nodesMatchTheSineTable": {
+      "outcome": "ok"
+    },
+    "ZeroCycleTest.flatPodiumKeepsTheFirstInnerNode": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.quietBrushDoesNotInventANote": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.sphereIncludesTheShellAndARadiusOneHollowIsSolid": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.copyPasteKeepsAirAndFourRotationsAreIdentity": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.fillReplaceWallAndLineWriteOnlyTheCellsTheyClaim": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.selectionFillUsesTheTracedCornersAndUndoRestoresThem": {
+      "outcome": "ok"
+    },
+    "EditOpsTest.rotateThatDoesNotFitLeavesTheVolumeAlone": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.animEasesWithInjectedClock": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.textInput": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.hudFormat": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.mergerReplacesRemovesAndAppendsOnlyTouchedSettings": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.keyNames": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.rangesSnapAndClamp": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.mergerKeyOf": {
+      "outcome": "ok"
+    },
+    "GuiModelTest.filterScores": {
+      "outcome": "ok"
+    },
+    "SettingCatalogTest.everySettingHasACategory": {
+      "outcome": "ok"
+    },
+    "SettingCatalogTest.newGuiSettingsAreInInterface": {
+      "outcome": "ok"
+    },
+    "SettingCatalogTest.descriptionsJsonIsUpToDate": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.orbitClampsPitchAndDollyClampsDistance": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.slideMergesOncePerCell": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.pickHitsTheFaceNeighborAndTheFloor": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.volumeRoundTripsAndRejectsUnknownBlocks": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.motifRejectsAWrongPadAndGrowsAfterARound": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.firstMineClickIsSafeAndAFlagDoesNotOpen": {
+      "outcome": "ok"
+    },
+    "StudioLogicTest.cameraLooksDownPlusZAndProjectsTheTargetToCenter": {
+      "outcome": "ok"
+    },
+    "SingularityThemeTest.themeNameIsForgiving": {
+      "outcome": "ok"
+    },
+    "SingularityThemeTest.orbitSlotsStayOutsideTheDiskAndOnScreen": {
+      "outcome": "ok"
+    },
+    "SingularityThemeTest.approachingSideOfTheDiskIsBrighter": {
+      "outcome": "ok"
+    },
+    "SingularityThemeTest.hotRampRunsWhiteToEmber": {
+      "outcome": "ok"
+    },
+    "SingularityThemeTest.holeIsBlackInsideAndClearFarOutside": {
+      "outcome": "ok"
+    },
+    "TaskModelTest.listEditing": {
+      "outcome": "ok"
+    },
+    "TaskModelTest.changingTypeKeepsSharedParams": {
+      "outcome": "ok"
+    },
+    "TaskModelTest.validation": {
+      "outcome": "ok"
+    },
+    "TaskModelTest.jsonAndFilesRoundTrip": {
+      "outcome": "ok"
+    },
+    "TaskModelTest.commandsMatchBaritoneSyntax": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.waitUsesTheClockAndPausesFreezeIt": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.loopRestartsAndCountsCycles": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.invalidStepFailsBeforeAnythingRuns": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.idleWithoutEverBeingBusyWaitsForGrace": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.pauseResumeStopDriveBaritone": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.startErrorFailsTheStep": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.runnerWorksOnACopy": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.verifyErrorFailsAndCancels": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.timedStepsFinishOnTheClock": {
+      "outcome": "ok"
+    },
+    "TaskRunnerTest.runsStepsInOrder": {
+      "outcome": "ok"
+    },
+    "PathResultTest.pathResultFactories": {
+      "outcome": "ok"
+    },
+    "PathResultTest.tenorClefEntryPointsStay": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.moveFamilyIsCached": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.searchProfileNamesTheCounters": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.bidirectionalMatchesTheUniquePath": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.routeReuseForgetsAStepThatFailed": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.seedHookIsOffUntilRegistered": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.calibrationWaitsAndNeverGoesBelowOne": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.failedJumpCostsMoreThenFades": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.fallBudgetKeepsAFloor": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.routeReuseDropsWhenTheBlocksOrTheCostsChange": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.doorOpenerHasToBeOnThisSideAndStayOpen": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.lineWalkIsShorterThanTheCorner": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.surfaceSpeedLeavesStoneAlone": {
+      "outcome": "ok"
+    },
+    "PathingQueueTest.movingGoalKeepsAPathThatStillApproaches": {
+      "outcome": "ok"
+    },
+    "FarTerrainTest.farTerrainOffFallsBack": {
+      "outcome": "ok"
+    },
+    "FarTerrainTest.unknownGoalGivesPartialCorridorPath": {
+      "outcome": "ok"
+    },
+    "FarTerrainTest.seedPredictionPricesFarSectionsAndReachesTheGoal": {
+      "outcome": "ok"
+    },
+    "PathBenchTest.engines": {
+      "outcome": "skip"
+    },
+    "PathBenchTest.stockAStarMatchesGoldenCosts": {
+      "outcome": "ok"
+    },
+    "PathBenchTest.benchmark": {
+      "outcome": "skip"
+    },
+    "XBenchTest.threeWay": {
+      "outcome": "skip"
+    },
+    "BidirectionalRouteTest.sameCostAsBackwardDijkstra": {
+      "outcome": "ok"
+    },
+    "CoarseGraphTest.flatCoarseEdgesAndInvalidation": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[0]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[1]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[2]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[3]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[4]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[5]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[6]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[7]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[8]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[9]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[10]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[11]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[12]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[13]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[14]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[15]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[16]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[17]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[18]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[19]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[20]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[21]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[22]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[23]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[24]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[25]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[26]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[27]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[28]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[29]": {
+      "outcome": "ok"
+    },
+    "OpenSetsTest.testSize[30]": {
+      "outcome": "ok"
+    },
+    "GoalGetToBlockTest.isInGoal": {
+      "outcome": "ok"
+    },
+    "ChainTemplatesTest.templatesLoadAndReachFurtherThanOneJump": {
+      "outcome": "ok"
+    },
+    "ChainTemplatesTest.everyChainFliesInItsOwnWorld": {
+      "outcome": "ok"
+    },
+    "ClimbTemplatesTest.templatesLoadAndAreSane": {
+      "outcome": "ok"
+    },
+    "ClimbTemplatesTest.aGrabTemplateReplaysInItsOwnWorld": {
+      "outcome": "ok"
+    },
+    "ClimbTemplatesTest.hangingOnALadderSlowsTheFall": {
+      "outcome": "ok"
+    },
+    "ClimbTemplatesTest.pressingIntoALadderClimbs": {
+      "outcome": "ok"
+    },
+    "GenTemplatesManual.gen": {
+      "outcome": "ok"
+    },
+    "HHProbeManual.bruteForce": {
+      "outcome": "ok"
+    },
+    "HHProbeManual.probe": {
+      "outcome": "ok"
+    },
+    "HoneyScratchTest.scan": {
+      "outcome": "ok"
+    },
+    "HotPathBench.bench": {
+      "outcome": "skip"
+    },
+    "JumpReachTest.sprintJumpCrossesAFourBlockGap": {
+      "outcome": "ok"
+    },
+    "JumpReachTest.fiveBlockGapIsOutOfReach": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.feetCellFollowsPlayerFeet": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.landsOnABlockTopBelowTheCellFloor": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.slewFromTheWrongYawDoesNotFlyTheSnap": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.landsOnAFullBlock": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.yawStepsTowardThePlan": {
+      "outcome": "ok"
+    },
+    "JumpSearchTest.landsUpOnSoulSandHeight": {
+      "outcome": "ok"
+    },
+    "JumpWorthItTest.jumpWhenClearlyFaster": {
+      "outcome": "ok"
+    },
+    "JumpWorthItTest.flatRunDoesNotHop": {
+      "outcome": "ok"
+    },
+    "JumpWorthItTest.jumpWhenRunningGoesNowhere": {
+      "outcome": "ok"
+    },
+    "LineProjectionTest.aJumpAlongTheLineStaysOnIt": {
+      "outcome": "ok"
+    },
+    "LineProjectionTest.onTheLineIsOnTheLine": {
+      "outcome": "ok"
+    },
+    "LineProjectionTest.aRolloutCannotSkipAheadByFalling": {
+      "outcome": "ok"
+    },
+    "LineProjectionTest.theAirAboveALowerStretchIsNotOnIt": {
+      "outcome": "ok"
+    },
+    "NarrowArriveTest.farAndFastCoasts": {
+      "outcome": "ok"
+    },
+    "NarrowArriveTest.farAndSlowKeepsGoing": {
+      "outcome": "ok"
+    },
+    "NarrowArriveTest.standingOnACandleIsNotAStepUp": {
+      "outcome": "ok"
+    },
+    "NarrowArriveTest.overTheMiddleBrakes": {
+      "outcome": "ok"
+    },
+    "NarrowArriveTest.candleTopIsTheFloorNotAFall": {
+      "outcome": "ok"
+    },
+    "NativeBench.javaAgainstRust": {
+      "outcome": "skip"
+    },
+    "NativeParityTest.randomWorldsSearchTheSame": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.strictTrigTheSame": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.simulatorTicksTheSame": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.alignedNeo3": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.headHitterGap2UnderTheLookCap": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.sliverOfTheBoxCountsAsStanding": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.courseNeo3AroundTheEastEdge": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.angledSlimeBounce": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.courseNeo3JumpSearchUnderTheLookCap": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.alignedNeo1and2": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.neo1ShortRunUp": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.candleJumpSearch": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.headHitterLipFacingTheGap": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.ladderCornerLeap": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.courseNeo3CenterColumnExecutorBudget": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.floatingLadderRow": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.alignedNeo3FromThePreviousJump": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.candleToCandle": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.strafeSearchStillLands": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.landingSpeedSurvivesOneJumpAndDiesIfItWaits": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.overhangStepsBackOnInsteadOfSlidingOff": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.flatGap3": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.ladderLedgeGap5Down2": {
+      "outcome": "ok"
+    },
+    "NativeParityTest.alignedNeo3FromARunUp": {
+      "outcome": "ok"
+    },
+    "NativePlannerParityTest.momentumHopTheSame": {
+      "outcome": "ok"
+    },
+    "NativePlannerParityTest.jumpSearchCoursesTheSame": {
+      "outcome": "ok"
+    },
+    "NativePlannerParityTest.physicsRandomWorldsPlanTheSame": {
+      "outcome": "ok"
+    },
+    "NativePlannerParityTest.physicsCoursesPlanTheSame": {
+      "outcome": "ok"
+    },
+    "NativePlannerParityTest.jumpSearchRandomWorldsTheSame": {
+      "outcome": "ok"
+    },
+    "NeoTemplatesTest.oneWallDownNeo": {
+      "outcome": "ok"
+    },
+    "NeoTemplatesTest.oneWallUpNeoFromAStandstill": {
+      "outcome": "ok"
+    },
+    "NeoTemplatesTest.roundAPillarWithAGapEitherSide": {
+      "outcome": "ok"
+    },
+    "NeoTemplatesTest.twoWallFlatNeo": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.theDragEndsHalfABlockUp": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.rolloutsCarryTheEffectsAlong": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.jumpBoostRaisesTheApex": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.honeyHalvesTheJump": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.honeySlidesAFallDownItsSide": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.speedEffectScalesGroundSpeed": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.wallStopsAndStepClimbsSlab": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.jumpApex": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.speedEffectLeavesAirControlAlone": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.movementEfficiencyUndoesTheDrag": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.sprintTopSpeed": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.awayFromTheSideThereIsNoSlide": {
+      "outcome": "ok"
+    },
+    "PlayerSimTest.soulSandSlowsTheWalk": {
+      "outcome": "ok"
+    },
+    "SimTraceTest.aSimThatMatchesTheWorldHasNoError": {
+      "outcome": "ok"
+    },
+    "SimTraceTest.wrongFrictionShowsUpAsStepAndDrift": {
+      "outcome": "ok"
+    },
+    "SimTraceTest.yawLagIsReported": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.alignedNeo3": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.headHitterGap2UnderTheLookCap": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.sliverOfTheBoxCountsAsStanding": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.courseNeo3AroundTheEastEdge": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.angledSlimeBounce": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.courseNeo3JumpSearchUnderTheLookCap": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.alignedNeo1and2": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.neo1ShortRunUp": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.candleJumpSearch": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.headHitterLipFacingTheGap": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.ladderCornerLeap": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.courseNeo3CenterColumnExecutorBudget": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.floatingLadderRow": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.alignedNeo3FromThePreviousJump": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.candleToCandle": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.strafeSearchStillLands": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.landingSpeedSurvivesOneJumpAndDiesIfItWaits": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.overhangStepsBackOnInsteadOfSlidingOff": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.flatGap3": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.ladderLedgeGap5Down2": {
+      "outcome": "ok"
+    },
+    "TasBruteTest.alignedNeo3FromARunUp": {
+      "outcome": "ok"
+    },
+    "ActionCostsTest.testFallNBlocksCost": {
+      "outcome": "ok"
+    },
+    "LineWalkTest.knightCorridorIsTheOpenRectangleAndIsReused": {
+      "outcome": "ok"
+    },
+    "LowFloorTest.thinOrTallTopsDoNot": {
+      "outcome": "ok"
+    },
+    "LowFloorTest.lowTopsAreLowFloors": {
+      "outcome": "ok"
+    },
+    "LowFloorTest.tallTopsNeedAThirdCell": {
+      "outcome": "ok"
+    },
+    "LowFloorTest.smallTopsHoldAPlayer": {
+      "outcome": "ok"
+    },
+    "BackOffTest.refusedOnANeighbouringBlock": {
+      "outcome": "ok"
+    },
+    "BackOffTest.allowedNearTheCentreOfTheSource": {
+      "outcome": "ok"
+    },
+    "BackOffTest.aFullBackwardStepFromTheLimitStaysOnTheBlock": {
+      "outcome": "ok"
+    },
+    "BackOffTest.refusedOnceOffCentreOnEitherAxis": {
+      "outcome": "ok"
+    },
+    "BubbleLiftTest.aDownColumnIsNoLift": {
+      "outcome": "ok"
+    },
+    "BubbleLiftTest.aRoofedColumnIsNoLift": {
+      "outcome": "ok"
+    },
+    "BubbleLiftTest.ridesUpToTheLedge": {
+      "outcome": "ok"
+    },
+    "BubbleLiftTest.aLedgeTooHighIsNoLift": {
+      "outcome": "ok"
+    },
+    "HeadHitterJumpTest.gapOneUnderTwoHighCeiling": {
+      "outcome": "ok"
+    },
+    "HeadHitterJumpTest.tooFarIsRefused": {
+      "outcome": "ok"
+    },
+    "HeadHitterJumpTest.openSkyStillLands": {
+      "outcome": "ok"
+    },
+    "HeadHitterJumpTest.gapTwoUnderFullTwoHighRoofNeedsMomentum": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.honeyAndSoulSandAreSlowTakeoffs": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.soulSandSlowsTheRunUpInTheSim": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.onlyHoneysFactorIsALowJump": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.slabOrCarpetOverHoneyReadsTheHoney": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.slabOverHoneyHalvesTheJumpInTheSim": {
+      "outcome": "ok"
+    },
+    "HoneyJumpTest.honeyJumpCannotClimbABlockOrSlab": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.tickStartsFollowTheFall": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.plainFallCountsEverythingButTheLandingMove": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.landingCellClutchesAnyHeight": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.reachBoundsHowFastItCanBeDone": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.wallHighUpIsNoGood": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.existingClimbablesAreGrabbedExactly": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.noWallNoClutch": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.pickerHasToLandInsideTheCell": {
+      "outcome": "ok"
+    },
+    "LadderClutchTest.slidingStartsFromWhereItGrabbed": {
+      "outcome": "ok"
+    },
+    "MovementLineSpecialTest.lineLeavesDoorsGatesAndClimbsToTraverse": {
+      "outcome": "ok"
+    },
+    "SoftLandingTest.slimeFromLowLandsAtOnce": {
+      "outcome": "ok"
+    },
+    "SoftLandingTest.hayTakesAFifth": {
+      "outcome": "ok"
+    },
+    "SoftLandingTest.slimeSettlesInAFewBounces": {
+      "outcome": "ok"
+    },
+    "SteeredFallTest.withoutSteeringItLandsOnTheFirstFloor": {
+      "outcome": "ok"
+    },
+    "SteeredFallTest.keysPointAtTheTarget": {
+      "outcome": "ok"
+    },
+    "SteeredFallTest.reach": {
+      "outcome": "ok"
+    },
+    "SteeredFallTest.threadsBothHolesIntoTheWater": {
+      "outcome": "ok"
+    },
+    "SteeredFallTest.aHoleTooFarOverIsNotThreaded": {
+      "outcome": "ok"
+    },
+    "JumpCostTest.takeOffCostsMoreThanRunning": {
+      "outcome": "ok"
+    },
+    "JumpCostTest.holdingJumpInTheAirIsFree": {
+      "outcome": "ok"
+    },
+    "PhysicsPathfinderTest.turnsACorner": {
+      "outcome": "ok"
+    },
+    "PhysicsPathfinderTest.jumpsATwoBlockGap": {
+      "outcome": "ok"
+    },
+    "PhysicsPathfinderTest.walksAcrossFlatGround": {
+      "outcome": "ok"
+    },
+    "PhysicsPathfinderVizTest.recordsTheExploredTreeWhenOn": {
+      "outcome": "ok"
+    },
+    "PhysicsPathfinderVizTest.recordsNothingWhenOffAndPlansTheSame": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.netherHasRoofAndFloor": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.cacheStaysBounded": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.installedPredictorAnswersThroughSeedPlan": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.offByDefault": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.sameSeedSameTerrainOtherSeedNot": {
+      "outcome": "ok"
+    },
+    "SeedTerrainTest.overworldLooksLikeTerrain": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.searchEmitsTreePlanActualAndReplans": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.nothingIsEmittedWhenAllOff": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.rolloutFanShowsLosersAboveTheChosenPlan": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.jumpEmitsArcRingsAndHandback": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.corridorEmitsCyanPathAndYellowTube": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.corridorTurnsRedAfterAStuckHandback": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.inputsEmitLettersTrajectoryAndGhosts": {
+      "outcome": "ok"
+    },
+    "PathVizDrawTest.speedTrailEmits": {
+      "outcome": "ok"
+    },
+    "PathVizTest.togglesOffCollectNothing": {
+      "outcome": "ok"
+    },
+    "PathVizTest.aPauseStartsANewTrail": {
+      "outcome": "ok"
+    },
+    "PathVizTest.eachToggleGatesOnlyItsOwnView": {
+      "outcome": "ok"
+    },
+    "PathVizTest.rolloutFanRecordsChoiceAndReasons": {
+      "outcome": "ok"
+    },
+    "PathVizTest.physTickGhostOnGrab": {
+      "outcome": "ok"
+    },
+    "PathVizTest.ringReusesItsSlots": {
+      "outcome": "ok"
+    },
+    "PathVizTest.physTickMarksJumpApexLandingGhosts": {
+      "outcome": "ok"
+    },
+    "PathVizTest.corridorCopiesTheLineAndFindsTheNextNode": {
+      "outcome": "ok"
+    },
+    "PathVizTest.corridorIsBounded": {
+      "outcome": "ok"
+    },
+    "PathVizTest.ringKeepsTheNewestInOrder": {
+      "outcome": "ok"
+    },
+    "PathVizTest.jumpTakeoffApexLanding": {
+      "outcome": "ok"
+    },
+    "PathVizTest.rolloutPointsAndPoolAreBounded": {
+      "outcome": "ok"
+    },
+    "PathVizTest.plannedAgainstActualError": {
+      "outcome": "ok"
+    },
+    "PathVizTest.historiesAreBounded": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.aLongFallGetsWaterAShortOneDoesNot": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.lavaIsPouredFromItsBandAtAFoeThatWillStandInIt": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.lavaIsTakenBackWhenTheFoeBurnsOrItsTimeIsUp": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.waterIsTakenBackOnlyWhenItsWorkIsDone": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.lavaIsNotSpentOnAFoeItCannotSetAlight": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.noWaterWhereItBoilsOffOrWhenAlreadyWet": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.fireThatIsNotFeltIsNotDoused": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.waterGoesOnAFireOnLavaAndOnACobweb": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.aTryThatDoesNotComeToRestIsGivenUp": {
+      "outcome": "ok"
+    },
+    "CombatBucketsTest.aSourceThatCannotBeFetchedIsLeft": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.nothingIsToldBeforeAFightBegan": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.whatIsPickedUpIsNotSpentBackwards": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightTheKindOfFoeOrTheLagChangesUnderIsMarked": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightWonIsWorthWhatTheFoeLostLessWhatWeDid": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightTheStanceChangesUnderIsMarked": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.whatIsHealedBackIsNotLostButTheLowestIsKept": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.ourDeathCostsAllWeBeganWith": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aWaveIsWorthAsManyBarsAsWereKilled": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aKillTheTickReadsIsAWinToo": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.healthIsCountedInBarsOfWhoeversItIs": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.whatADeathDropsWasNotSpent": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.everyFoeCountsForWhatItLostWhileItWasOurs": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightBegunHurtIsNotHeldAgainstIt": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aDeathNoTickShowedIsADeath": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFoeDeadFarOffStillEndsTheFightAsWon": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightWithAWindowTheServerDidNotShowIsMarked": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightThatNeverEndsIsWrittenDownAsItStands": {
+      "outcome": "ok"
+    },
+    "CombatFightScoreTest.aFightThatStopsWithTheFoeAliveIsADraw": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatScoresMoreIsKeptButNotEarly": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aFightThatCannotBeReadOrWasFoughtUnderSomethingElseIsNotCounted": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatScoresLessIsDroppedAtTheFirstLook": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueWorseIsNotKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.offItDoesNothing": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theNumbersAFightIsFoughtWholeUnder": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theDeathShareIsComparedAsTwoProportions": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatDiesLessIsKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.resetForgetsEverything": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueClearlyBetterIsMostlyKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aNumberIsOnlyTriedWithWhatItIsAboutCarried": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theRulesHangTogether": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.everyKitFoeAndLagBandIsLearnedApart": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theCardIsToldWhatIsOnTrial": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aKeptValueGivesItsPlaceBackWhenTheOldOneIsAhead": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.whatWasLearnedIsReadBackWithTheTrialUnderWay": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatScoresMoreAndDiesMoreIsNotKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatDiesMoreIsDroppedAtTheFirstLook": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueThatSpendsFarMoreIsNotKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueNoBetterIsRarelyKept": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aLineThatCannotStandIsLeftOut": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theTurnsAreLevelAndInNoFixedOrder": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aFightWithoutAUseForTheNumberIsNotCountedAndTheTrialIsPutAway": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.theFirstTrialWaitsForTheWarmUpAndStepsDown": {
+      "outcome": "ok"
+    },
+    "CombatFightTunerTest.aValueNoDifferentIsGivenUp": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.aBarePlaceGetsTheBestPieceCarriedForIt": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.oneItsNextHitWouldBreakIsPassedOver": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.theBestTierIsTakenAndTheLeastWornOfEquals": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.withNothingElseTheLastHitIsStillAHit": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.aPieceAboutToBreakGivesItsPlaceToACarriedOne": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.whatDoesNotWearHasNoEnd": {
+      "outcome": "ok"
+    },
+    "CombatGearTest.whatIsKeptBackIsNotToSpare": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aSecondClickInsideTheWaitLeavesTheFirstCounting": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aServerThatGivesNoFigureIsTakenAsNearUntilTheHitsSay": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aBeatOfSomeOtherHurtIsNotReadAsLag": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aStrayFlashOrTwoDoesNotMoveTheMeasure": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aFlashThatIsNotOursIsNotCounted": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.untilEnoughHitsHaveLandedTheServersFigureIsRead": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.aServerTwoTicksOffReadsAsTwo": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.anotherServerStartsFromNothing": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.withTheServerInOurOwnProcessThereIsNoLag": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.onlyTheNewestHitsAreKept": {
+      "outcome": "ok"
+    },
+    "CombatLagTest.theBandHoldsAgainstAMeasureBetweenTwo": {
+      "outcome": "ok"
+    },
+    "CombatMaceSmashTest.leftAloneTheDiveSwingsAtTheChargeItAlwaysDid": {
+      "outcome": "ok"
+    },
+    "CombatMaceSmashTest.theSprintIsLeftOnTheWayDownAndNotOnTheWayUp": {
+      "outcome": "ok"
+    },
+    "CombatMaceSmashTest.aSprintHoldsTheSwingBackOnlyUntilTheLastTick": {
+      "outcome": "ok"
+    },
+    "CombatMaceSmashTest.afterTheCriticalHitItWaitsForTheChargeThatGivesOne": {
+      "outcome": "ok"
+    },
+    "CombatMendingTest.aFoeThatCannotBeShakenIsFought": {
+      "outcome": "ok"
+    },
+    "CombatMendingTest.theFoeComingBackEndsIt": {
+      "outcome": "ok"
+    },
+    "CombatMendingTest.onceBegunItGoesOnUntilThePieceIsSound": {
+      "outcome": "ok"
+    },
+    "CombatMendingTest.groundIsGivenOnlyForAPieceAboutToBreak": {
+      "outcome": "ok"
+    },
+    "CombatMendingTest.bottlesComeOutForAWornPieceWhenTheFoeGivesRoom": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aStoppedFightKeepsItsPartWindowAndStartsOver": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aMobIsKeptApartFromAPlayer": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aMovedValueClosesTheWindowUnderTheOldOne": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aKillFarAwayOrLongAfterOurClickIsNotOurs": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.theBandIsAMarkOnTheNameAndNoLagHasNone": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.healingIsNotNegativeDamage": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.theSameFightCountsTheSameUnderAnyValue": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aKillOnTheTickAfterAFullWindowIsNotLost": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aDeathNoTickShowedCostsWhatWeHadLeft": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aFarServersAnswerIsOursForAsLongAsItTakes": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.theFirstTickOnAFoeIsNotActive": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.theKillingBlowIsCountedThoughNoTickReadsIt": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aDeathStartsTheCountOver": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aDeathWeSawEndsTheWindowAndIsKept": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aDeathWeSawIsNotCountedAgainOnRespawn": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.theKitIsTheOneTheEngagementBeganWith": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aFullWindowClosesAndTheNextOneOpens": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aNewTargetWithLessHealthIsNotAHit": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.anUnreadableHealthCountsNothingAndPoisonsNothing": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.windowsAreNumberedWithinTheirEngagement": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.flashesWithNoDropMarkTheWindowUnsynced": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aDropWithinTwoTicksOfOurClickIsOurs": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.clearForgetsTheTotalsOnly": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aWindowTheLagChangesUnderIsClosedAsSuch": {
+      "outcome": "ok"
+    },
+    "CombatOutcomeTest.aFoeOutOfRangeIsNotActiveButWhatWeTakeThereIsKept": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.breachForAShortFallOnArmourDensityForALongOne": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.thePearlLeavesTheHandFacedAndGrounded": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.theSlowCountRunsOnlyWhileFarAndNotGaining": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.notWhenTheLandingIsMoreThanWeCanAfford": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.theFallBonusIsTheGamesOwn": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.armourStopsLessOfAHarderHitAndLessStillUnderBreach": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.aPearlGoesWhenTheRunHasStoppedGaining": {
+      "outcome": "ok"
+    },
+    "CombatPearlChaseTest.notWhenRunningGetsThereOrTheThrowIsAGuess": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.regenerationWaitsForSomethingToRegenerate": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.aBoostIsNotSharedWithTheFoe": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.whatHarmsIsThrownFromItsBandAndInSight": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.aBoostStillRunningIsNotThrownAgain": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.aHealingPotionGoesAtTheLineAndNotAboveIt": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.aBiteGoingDownIsFinishedUnlessItIsTooLate": {
+      "outcome": "ok"
+    },
+    "CombatPotionsTest.theBaselinesAreTheNumbersTheyWere": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.resetPutsTheBaselineDecisionBack": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.theRestOfTheDueTestIsUntouched": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.untouchedItDecidesAsItAlwaysDid": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.theBaselineWindowEndsWhereThePolicySays": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.theSettingIsNamedByWhatHasMoved": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.aValueOutsideTheBoundsChangesNothing": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.aMovedValueReachesTheBlockDecision": {
+      "outcome": "ok"
+    },
+    "CombatShieldTuneTest.theBaselinesAreTheNumbersTheyWere": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.swordsAndAxesStay": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.allWeaponsFallsBackToTheLastSlot": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.theSlotInHandGoesLast": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.anEmptySlotComesFirst": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.whenEverySlotWasPulledIntoTheOldestGoes": {
+      "outcome": "ok"
+    },
+    "CombatSpareSlotTest.twoItemsPulledInTurnDoNotEvictEachOther": {
+      "outcome": "ok"
+    },
+    "CombatTotemTest.aTotemIsWantedWhenLowAndAllThroughAnExplosiveFight": {
+      "outcome": "ok"
+    },
+    "CombatTotemTest.aSpareTotemIsHeldWhileABlastIsNearAndTheOffhandIsEmpty": {
+      "outcome": "ok"
+    },
+    "CombatTotemTest.withoutABlastOnlyNextToNoHealthTakesTheHand": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.whateverTheFightsItStaysInsideTheRules": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aNumberSomethingElseInTheKitTakesThePlaceOfIsLeftAlone": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aLineThatDoesNotFitIsLeftOut": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.theOpeningOfAFightIsNotCountedAsScatter": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.eachPartOfAFightTakesItsOwnTurns": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.thePartsAreWeighedByWhatBothValuesFought": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.atTheBaselinesNoCostIsReadBack": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aValueIsShownInItsOwnUnit": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.withTooFewOpeningsTheWindowsAreTakenTogether": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.theCostOfTheStepsTakenIsReadBackToo": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aTrialUnderWayIsTakenUpWhereItStopped": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.whatIsReadBackIsWatchedBeforeItIsTested": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aStepKeptOnOneNumberStaysWhileTheOthersAreTried": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aTrialThatDoesNotFitIsLeftOutAndTheLineStands": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.theNumbersAreTakenUpInTurnAndThenItRests": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aTrialGivenUpIsNotWrittenOut": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aGainIsFoundAcrossFightsThatOpenHard": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.inTheLoopNoWindowIsCutByAMoveWhateverPartOfTheFightItIs": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.whatWasLearnedIsReadBack": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aNumberTheKitHasNoUseForIsLeftAlone": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.aNumberForOneKindOfFoeIsLeftAloneAgainstTheOther": {
+      "outcome": "ok"
+    },
+    "CombatTunerKnobsTest.itSaysWhenThereIsSomethingToWrite": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aValueThatDealsMoreAtNoCostIsKeptAndTheNextStepIsTried": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.withNoRealDifferenceAlmostNothingIsKept": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeptValueInsideTheMarginKeepsItsPlace": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aCandidateFallingBehindIsGivenUpEarly": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aWindowCutByAChangeOfLagIsNotJudgedEitherWay": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aRealGainIsUsuallyFound": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.takingLessIsKeptWhenWhatItCostsIsUnderTheMargin": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aWindowCutShortCountsForWhatItHoldsAndTheOtherSideCatchesUp": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aValueThatDealsLessIsDroppedAtTheFirstLook": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aSmallLeadRunsToTheLastLookAndIsNotEnough": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.whatIsLearnedWithOneKitStaysWithIt": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.theBaselineIsLeftAloneLongerEachTimeNothingIsFound": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.stepsUnderTheMarginAreRefusedOnceTogetherTheyAreOverIt": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.everyValueNamedIsInsideTheBoundsHoweverGoodTheEdgeLooks": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aValueNotShownBetterIsDroppedAndTheTrustedOneStays": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.takingLessIsRefusedWhenItCostsDamageDealt": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.whileItWaitsOnlyWindowsUnderTheTrustedSettingCount": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.inTheLoopAValueMovesOnlyBetweenWindowsAndReachesTheShield": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.theStatusSaysWhatTheTunerIsDoingAndAskingChangesNothing": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.theSameSecondStepIsKeptWhenTheFirstCostNothing": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.nothingIsTriedBeforeTheWarmUp": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.fewerActiveTicksIsNotAGain": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aBandHasTheSameNumbersToTuneAsItsKit": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.theStopsAreWholeStepsFromTheBaseline": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.underTheMarginTheSameGainIsKept": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.stepsThatEachCostALittleDamageDealtAreRefusedOnceTogetherTheyCostTooMuch": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aTrialTakesTurnsSoBothSidesMeetTheSameMinutes": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aWindowFoughtUnderSomeOtherValueIsNeitherSides": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.takingLessByFightingLessIsNotAGain": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeptValueIsTestedAgainEveryRest": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.insideTheMarginTheBaselineComesBackOnlyByBeingShownBetter": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aValueThatTakesLessAtNoCostIsKept": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeepEndsTheLongerWaits": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.overTheMarginItIsNotKeptEvenWhenTheExtraCostIsNotCertain": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeptValueCanLoseItsPlace": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeptValueShownToTakeTooMuchGivesItsPlaceBack": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.whatIsLearnedAtOneLatencyStaysWithIt": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aKeptValueShownToDealTooLittleGivesItsPlaceBack": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.itNeverWritesTheNumberItself": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.switchedOffItIsTheBaselineAgainAndSwitchedOnItRemembers": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.offItNamesTheBaselineAndLearnsNothing": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aValueThatDealsMoreButTakesMoreIsRefused": {
+      "outcome": "ok"
+    },
+    "CombatTunerTest.aWindowWithTheFoesHealthNotShownEndsTheTrialAndNothingIsConcluded": {
+      "outcome": "ok"
+    },
+    "ElytraHitboxTest.testPositiveMotionVectors": {
+      "outcome": "ok"
+    },
+    "ElytraHitboxTest.testZeroMotionAxis": {
+      "outcome": "ok"
+    },
+    "ElytraHitboxTest.testNegativeMotionVectors": {
+      "outcome": "ok"
+    },
+    "ElytraHitboxTest.testExpandTowardsWithSafetyPadding": {
+      "outcome": "ok"
+    },
+    "ElytraHitboxTest.testMixedMotionVectors": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.frameIsTheFloorPlusTheCasts": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.clearCellsCoverEverythingPlacedAndThePortal": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.facingSouthXGrowsWest": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.frameSurroundsATwoByThreeInterior": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.eightOrientationsRoundTrip": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.castOrderKeepsTheWaterWhereItIsNeeded": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.everyClickHasItsSupportByThen": {
+      "outcome": "ok"
+    },
+    "PortalLayoutTest.anchoredSitePutsTheAnchorThere": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.tooMuchInTheWayIsRejected": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.nothingFoundWithoutLava": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.rejectsAPoolTooSmallToPourFrom": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.flagsAPoolOneDeepAndWantsAPickaxe": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.acceptsADeepPool": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.aMirroredSiteFitsBesideABlockedColumn": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.rejectsARowThatIsNotLava": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.stoneAtARowEndIsDugAndCast": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.findsTheShoreFromEverySideAndBothHands": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.aMissingRimEndIsFilledInButNotAMiddleOne": {
+      "outcome": "ok"
+    },
+    "PortalSiteFinderTest.listsWhatIsInTheWay": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.layersBuildBandByBand": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.stripsBuildTheHouseTogether": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.lostOrderIsResent": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.memberCannotOrderAsTheLead": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.gridBuildTheHouseTogether": {
+      "outcome": "ok"
+    },
+    "SwarmBuildIntegrationTest.stopHaltsEveryone": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.layersWaitForTheBandBelow": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.fileNamesStayInTheSchematicsFolder": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.onlyTheLeadCanOrder": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.failureAndStopAreReported": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.stopOfAnEarlierJobLeavesTheCurrentOneRunning": {
+      "outcome": "ok"
+    },
+    "SwarmBuildTest.stripsStartEveryMemberAndFinish": {
+      "outcome": "ok"
+    },
+    "SwarmConfigTest.defaultsMatchSettingDefaults": {
+      "outcome": "ok"
+    },
+    "SwarmConfigTest.clampsOutOfRangeValues": {
+      "outcome": "ok"
+    },
+    "SwarmConfigTest.autoFrameBudgetIsExactlyTheSingleLineLimit": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.pingPongRoundTripInMemory": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.ageFormatting": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.nonMemberWithTheKeyIsRejected": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.pingNullPingsAllMyGroupsAndRefusesForeignGroup": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.pingPongOverGlobalChat": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.outOfRangeOrUnknownSenderNeverThrows": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.bodyFieldsAreSanitised": {
+      "outcome": "ok"
+    },
+    "SwarmControlTest.pingPongOverVanillaWhispersWithRateLimits": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointS2STest.unsignedRejectedOnS2SWireEvenWhenNotRequired": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointS2STest.unsignedRejectedWhenRequired": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointS2STest.signedRoundTrip": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointS2STest.sendWithoutSignetFailsClosed": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.defaultWireIsS2AndBothWiresInteroperate": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.plaintextAndForeignLinesAreRejected": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.broadcastReachesOthersNotSender": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.s2SpecificRejections": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.everyLineOnTheWireIsASingleSealedToken": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.replayedLineIsRejected": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.addressedMessageDeliveredBetweenTwoEndpoints": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.multiFrameMessageSurvivesReorderAndDuplication": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.notForMeAndOwnEchoAreDropped": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.groupMustMatchTheCircleThatOpenedIt": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.missingFrameCountsAsExpired": {
+      "outcome": "ok"
+    },
+    "SwarmEndpointTest.sendSideRefusals": {
+      "outcome": "ok"
+    },
+    "SwarmKeysTest.resolvesOnlyMyGroupsAndSkipsOtherRecords": {
+      "outcome": "ok"
+    },
+    "SwarmKeysTest.homeFromSettingThenEnv": {
+      "outcome": "ok"
+    },
+    "SwarmKeysTest.refusesDuplicateRecords": {
+      "outcome": "ok"
+    },
+    "SwarmKeysTest.explainsMissingPieces": {
+      "outcome": "ok"
+    },
+    "SigilCodebookV2Test.lexiconIsThePinnedOne": {
+      "outcome": "ok"
+    },
+    "SigilCodebookV2Test.rejectsNonV2": {
+      "outcome": "ok"
+    },
+    "SigilCodebookV2Test.expandMatchesSigilOnRandomStreamsIncludingFailures": {
+      "outcome": "ok"
+    },
+    "SigilCodebookV2Test.expandMatchesSigilOnCompressedTexts": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.nameIsBoundEvenWhenSlugCollides": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.roundTripAcrossLengthsAndUnicode": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.keyringRefusesTamperedOrWrongKind": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.keyringAcceptsSigilRecord": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.keyringRefusesWeakerOrForeignKdf": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.toStringNeverLeaksKey": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.refusesUnimplementedModes": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.freshNonceEverySeal": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.sealSingleRefusesMultiLine": {
+      "outcome": "ok"
+    },
+    "SigilS1CTest.loadsSigilHomeDirectory": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.signetModesAreRecognisedButNotImplemented": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.s1StillOpensAndWiresStaySeparate": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.roundTripSingleMultiUnicodeSenderEmpty": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.spliceAcrossMessagesNeverAssembles": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.strictValidationEvenWithValidTag": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.capacityMatchesSigilReadme": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.relabelledPartsFail": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.senderTamperFails": {
+      "outcome": "ok"
+    },
+    "SigilS2CTest.tooManyPartsAndLongSender": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.sealingReproducesRecordedBytes": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.everyNegativeVectorFails": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.s1FrameRelabelledAsS2DoesNotOpenEvenWithTheRightKey": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.headerAndCounts": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.wholeMessageVectors": {
+      "outcome": "ok"
+    },
+    "SigilS2CVectorsTest.everyPositiveVectorOpensAndRejoins": {
+      "outcome": "ok"
+    },
+    "SigilS2STest.codecFindsS2SToken": {
+      "outcome": "ok"
+    },
+    "SigilS2STest.roundTripSingle": {
+      "outcome": "ok"
+    },
+    "SigilS2STest.unsignedRelabelFails": {
+      "outcome": "ok"
+    },
+    "SigilS2STest.unknownSignerRefused": {
+      "outcome": "ok"
+    },
+    "SigilSignetsTest.theSeedSurvivesItsOwnPublicPin": {
+      "outcome": "ok"
+    },
+    "SigilSignetsTest.seedMustMatchPublic": {
+      "outcome": "ok"
+    },
+    "SigilSignetsTest.twoKeysForOneNameAreRefused": {
+      "outcome": "ok"
+    },
+    "SigilSignetsTest.publicOnly": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.headerMatchesCodecConstants": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.everyNegativeVectorFails": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.everyPositiveVectorOpens": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.plainChunkingMatchesSigil": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.everyPositivePartResealsByteIdentical": {
+      "outcome": "ok"
+    },
+    "SigilVectorsTest.circlesDeriveIdenticalKeys": {
+      "outcome": "ok"
+    },
+    "SwarmFrameTest.rejectsMalformed": {
+      "outcome": "ok"
+    },
+    "SwarmFrameTest.seqMustBelongToMessageId": {
+      "outcome": "ok"
+    },
+    "SwarmFrameTest.encodeDecodeRoundTrip": {
+      "outcome": "ok"
+    },
+    "SwarmFrameTest.broadcastAndEmptyBody": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.reassemblesOutOfOrderWithDuplicates": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.spliceAcrossMessagesIsRefused": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.chunkerFitsBudgetAndBindsSeqToMsg": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.interleavedMessagesStaySeparate": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.pendingLimitAndChunkLimit": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.missingPartExpires": {
+      "outcome": "ok"
+    },
+    "SwarmReassemblerTest.chunkerRefusesOversizedMessageWithoutBurningSeq": {
+      "outcome": "ok"
+    },
+    "SwarmReplayGuardTest.epochsOnlyMoveForward": {
+      "outcome": "ok"
+    },
+    "SwarmReplayGuardTest.belowWindowIsRefused": {
+      "outcome": "ok"
+    },
+    "SwarmReplayGuardTest.eachSeqOnceOutOfOrderInsideWindow": {
+      "outcome": "ok"
+    },
+    "SwarmReplayGuardTest.peerLimitRefusesNewSendersWithoutForgetting": {
+      "outcome": "ok"
+    },
+    "SwarmReplayGuardTest.clockSkewIsOffByDefaultAndConfigurable": {
+      "outcome": "ok"
+    },
+    "SwarmRosterTest.windowsLineEndingsAndEmpty": {
+      "outcome": "ok"
+    },
+    "SwarmRosterTest.rejectsBadLines": {
+      "outcome": "ok"
+    },
+    "SwarmRosterTest.parsesGroups": {
+      "outcome": "ok"
+    },
+    "SwarmRosterTest.rejectsUnknownParentAndCycles": {
+      "outcome": "ok"
+    },
+    "SwarmRosterTest.rejectsSharedCircle": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.directWhisperAndCustomTemplate": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.whisperBroadcastFansOutToGroupExceptSelf": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.inboundQueueIsBounded": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.templateOverheadMatchesDefaultReserve": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.refusesUnsealedAndOverlongLines": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.globalAndTeamSendOneLine": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.drainIsRateLimited": {
+      "outcome": "ok"
+    },
+    "ChatSwarmTransportTest.whisperBroadcastWithoutGroupReachesEveryRosterMemberOnce": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.vanillaWhisper": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.publicAndPluginFormats": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.sigilMultiPartFragmentsIgnored": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.ownWhisperEchoStillParses": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.junkIgnored": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.trailingPunctuationAndQuotes": {
+      "outcome": "ok"
+    },
+    "ChatTokensTest.multipleTokensCappedPerLine": {
+      "outcome": "ok"
+    },
+    "LocalSpoolTransportTest.broadcastGoesToEveryOtherInbox": {
+      "outcome": "ok"
+    },
+    "LocalSpoolTransportTest.twoEndpointsExchangeThroughTheSpool": {
+      "outcome": "ok"
+    },
+    "LocalSpoolTransportTest.mailWaitsForAMemberThatStartsLater": {
+      "outcome": "ok"
+    },
+    "LocalSpoolTransportTest.refusesPlaintextAndUnsafeIds": {
+      "outcome": "ok"
+    },
+    "LocalSpoolTransportTest.spoolDirSettingOverridesDefault": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.clampedUnderVanillaUnlessUnsafe": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.fullQueueDropsLowerPriorityFirst": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.highPriorityGoesFirstFifoWithinPriority": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.unsafeSettingsDoTripIt": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.defaultsStaySafeAt10Tps": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.lateHighPriorityOvertakesQueuedLow": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.burstThenNothingUntilRefill": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.clampedMaximumNeverTripsVanillaSpamKickAt20Tps": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.sustainedRateMatchesSetting": {
+      "outcome": "ok"
+    },
+    "SwarmRateLimiterTest.idleTimeDoesNotBankMoreThanBurst": {
+      "outcome": "ok"
+    },
+    "ExperimentalMovementTest.affordFallKeepsMinHealth": {
+      "outcome": "ok"
+    },
+    "ExperimentalMovementTest.fallDamageIsBlocksPastSafeFall": {
+      "outcome": "ok"
+    },
+    "FaultBookTest.severityFromPrefix": {
+      "outcome": "ok"
+    },
+    "FaultBookTest.loopDetectorIgnoresSlowOrThreeWayChanges": {
+      "outcome": "ok"
+    },
+    "FaultBookTest.loopDetectorFlagsAnyAlternatingPair": {
+      "outcome": "ok"
+    },
+    "FaultBookTest.episodesTrackSecondsLostAndSummaryIsSortedByCost": {
+      "outcome": "ok"
+    },
+    "AvoidanceTest.aPaintedSphereIsFlatAndStopsAtTheRadius": {
+      "outcome": "ok"
+    },
+    "AvoidanceTest.dangerIsTheCenterAndGonePastTheReach": {
+      "outcome": "ok"
+    },
+    "BetterBlockPosTest.testSimple": {
+      "outcome": "ok"
+    },
+    "PathingBlockTypeTest.testBits": {
+      "outcome": "ok"
+    }
+  }
+}

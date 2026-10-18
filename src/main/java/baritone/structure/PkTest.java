@@ -28,7 +28,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * TEMP parkour harness, installed like BastTest and inert unless -Dostinato.pktest=<save folder> is set.
+ * Ostinato: parkour course harness, installed by {@link baritone.harness.TestHarness} (testHarness setting or
+ * -Dostinato.testHarness=true) and inert unless -Dostinato.pktest=<save folder> is set too.
  * Opens that save, sets the map's game mode (creative/spectator become adventure) and walks a course script
  * (-Dostinato.pktest.goals=<file>: "tp x y z", "cmd <command>", "set <setting> <value>", "goal x y z", "near x y z r"), or, without one,
  * pressure plates in nearest-first order. Every jump-like movement is recorded. A fall puts the player back where the
