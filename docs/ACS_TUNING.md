@@ -196,3 +196,13 @@ This is the new tuning pool: plenty of headroom, where the sword pool sat at 92-
   damage_dealt stat. It deals ~3.7 per hit back with the same kit. The bot always swings full (gaps of 13-15 ticks).
   Half our sword swings are at 0.80-0.95 charge (`melee.duelCharge` 0.90), which loses damage and the crit.
   Next A/B: duelCharge 1.00.
+
+### Footing v6 (adds: no crit-jump that a hit would carry off the rim), lava ring vs SMP, 48 paired rounds, seed 46
+on: 6/48, 0.62 lava entries/round (30), taken 28.4. off: 4/48, 0.92/round (44), taken 32.4.
+Pooled with v5: 66 vs 87 entries over 96 rounds each (-24%, p ~0.1). Consistently fewer, not yet significant. Opt-in
+for now; one more 48-round pair would settle it.
+
+### Bench artifact fixed: round-start saturation
+The heal after the kits gave `saturation 1 20` (20 s, longer than a round), so both sides regenerated at full speed
+all round. It's now 1 s. SMP numbers before 11:10 (UTC-7) used the 20 s version. A/Bs within one run stay comparable;
+absolute win rates do not (an early fixed-bench arm runs ~46% vs SMP, where it was 10-20% before).
