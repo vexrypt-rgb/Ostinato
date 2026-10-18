@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.utils.OstinatoRandom;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.damagesource.CombatRules;
@@ -156,6 +157,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
     @Override
     public boolean isActive() {
         return (filter != null || !enemies.isEmpty()) && ctx.player() != null;
+    }
+
+    /** Ostinato: the action this tick chose, for the parity trace ({@code -} when none was named). */
+    public String traceDec() {
+        return tickDec;
     }
 
     @Override
@@ -599,9 +605,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
     /** Moves the policy's tuned numbers between windows while {@code pvpAutotune} is on. Off, it is never asked. */
     private final CombatTuner tuner = new CombatTuner(policy.tuned, recorder::note);
     /** Moves the numbers a fight is fought whole under, between two fights, while it is on. Off, it is never asked either. */
-    private final CombatFightTuner fights = new CombatFightTuner(policy.whole, recorder::note, new Random());
+    private final CombatFightTuner fights = new CombatFightTuner(policy.whole, recorder::note, OstinatoRandom.create("pvp.fights")); // Ostinato: seedable
     /** Ostinato: the spsa mode of the autotune, over both kinds of numbers (per-window ones first, then the whole-fight ones). */
-    private final CombatSpsa spsa = new CombatSpsa(spsaKnobs(policy), recorder::note, new Random());
+    private final CombatSpsa spsa = new CombatSpsa(spsaKnobs(policy), recorder::note, OstinatoRandom.create("pvp.spsa")); // Ostinato: seedable
 
     // Ostinato: the order CombatSpsa indexes the numbers in
     private static List<CombatPolicy.Tuned> spsaKnobs(CombatPolicy policy) {

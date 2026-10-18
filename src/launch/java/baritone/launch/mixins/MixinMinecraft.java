@@ -55,11 +55,28 @@ public class MixinMinecraft {
     @Unique
     private BiFunction<EventState, TickEvent.Type, TickEvent> tickProvider;
 
+    @Unique
+    private static final boolean OSTINATO_TICK_PACKETS = !"false".equals(System.getProperty("ostinato.tickPackets")); // Ostinato
+
     /** Every rendered frame, not just every tick: the look layer's per-frame mouse prototype. */
     @Inject(method = "runTick", at = @At("HEAD"))
     private void ostinato$frame(boolean renderLevel, CallbackInfo ci) {
+        baritone.utils.ParityTrace.frames++; // Ostinato
         for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
             if (baritone.getLookBehavior() instanceof baritone.behavior.LookBehavior lb) lb.frame();
+        }
+    }
+
+    /** Ostinato: as each client tick begins, the look puts the view where the per-tick model has it, whatever the frame rate. */
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void ostinato$tickStart(CallbackInfo ci) {
+        // Packets are handled once per rendered frame (runTick), so at under 20 frames a second two ticks ran on one
+        // frame's news and a slow client fought a step behind a fast one. Handle what has arrived before every tick,
+        // as a fast client effectively does. -Dostinato.tickPackets=false leaves vanilla's once-per-frame alone.
+        if (OSTINATO_TICK_PACKETS) ((Minecraft) (Object) this).packetProcessor().processQueuedPackets();
+        if (baritone.utils.Lockstep.engaged()) ((AccessorEventLoop) this).ostinato$runAllTasks();
+        for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (baritone.getLookBehavior() instanceof baritone.behavior.LookBehavior lb) lb.tickStart();
         }
     }
 

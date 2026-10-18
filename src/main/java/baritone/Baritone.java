@@ -143,6 +143,8 @@ public class Baritone implements IBaritone {
             this.registerProcess(BoatProcess::new);
             this.portalBuildProcess      = this.registerProcess(PortalBuildProcess::new);
             baritone.process.SimBench.install(this);
+            baritone.utils.Lockstep.install(this); // Ostinato: -Dostinato.lockstep (before the trace, so a traced tick is one the server has answered)
+            baritone.utils.ParityTrace.install(this); // Ostinato: -Dostinato.trace
         }
 
         this.worldProvider = new WorldProvider(this);

@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.utils.OstinatoRandom;
 import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.behavior.ILookBehavior;
@@ -68,7 +69,11 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         if (Baritone.settings().humanLookEverywhere.value && !ctx.player().isFallFlying()) this.human = true;
         // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
         this.target = new Target(rotation, this.human ? Target.Mode.CLIENT : Target.Mode.resolve(ctx, blockInteract));
+        this.traceTarget = rotation; // Ostinato
     }
+
+    /** Ostinato: the last rotation asked for, before the hand or the aim jitter, for the parity trace. */
+    public Rotation traceTarget;
 
     @Override
     public IAimProcessor getAimProcessor() {
@@ -108,29 +113,75 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * Prototype (the frameLook setting): between ticks the view keeps moving toward the last aim goal, one small
      * mouse-count step per rendered frame, as a hand does, instead of arriving in one jump at the tick. The goal is
      * dropped after two ticks without a refresh, so a stale aim never drags the view.
+     * <p>
+     * Ostinato: the frames only draw the move. Where the view stands when a tick begins is fixed per tick
+     * ({@link #tickStart}): the tick step's 60% of the gap, in whole mouse counts, whatever the frame rate. Moving
+     * the real rotation per frame made every decision depend on how many frames fell between two ticks (at a high
+     * frame rate the per-frame pieces rounded to zero mouse counts and the last degrees never closed; a slow client
+     * closed them), so a headless client at a few frames a second fought a different fight from the same code.
      */
-        private Rotation frameGoal;
+    private Rotation frameGoal;
     private int frameGoalTick;
-    private long lastFrameNanos;
+    // Ostinato: the rotation the last tick left and the one the next tick begins on; frames draw the way between
+    private Rotation frameFrom, frameTo;
+    private long frameFromNanos;
 
     public void frame() {
         if (!Baritone.settings().frameLook.value) return;
-        long now = System.nanoTime();
-        double ticks = lastFrameNanos == 0 ? 0 : Math.min(2.0, (now - lastFrameNanos) / 50_000_000.0);
-        lastFrameNanos = now;
         net.minecraft.client.player.LocalPlayer p = ctx.player();
-        if (frameGoal == null || p == null || ticks <= 0) return;
-        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) {
+        if (frameGoal == null || frameFrom == null || frameTo == null || p == null) return;
+        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) return; // tickStart drops it
+        double frac = Math.max(0.0, Math.min(1.0, (System.nanoTime() - frameFromNanos) / 50_000_000.0));
+        float step = mouseStep();
+        float dy = net.minecraft.util.Mth.wrapDegrees(frameTo.getYaw() - frameFrom.getYaw()), dp = frameTo.getPitch() - frameFrom.getPitch();
+        float wy = frameFrom.getYaw() + Math.round(dy * frac / step) * step;
+        float wp = net.minecraft.util.Mth.clamp(frameFrom.getPitch() + Math.round(dp * frac / step) * step, -90f, 90f);
+        float my = net.minecraft.util.Mth.wrapDegrees(wy - p.getYRot()), mp = wp - p.getXRot();
+        if (my == 0 && mp == 0) return;
+        turnBy(p, my, mp);
+    }
+
+    /**
+     * Ostinato: called as each client tick begins, before anything reads the rotation. The view is put exactly where
+     * the per-tick model says the frames should have brought it, and the next tick's step is planned from there when
+     * no fresh aim arrives. Deterministic per tick, so a client's frame rate cannot change a fight.
+     */
+    public void tickStart() {
+        if (!Baritone.settings().frameLook.value) {
             frameGoal = null;
             return;
         }
-        float dy = net.minecraft.util.Mth.wrapDegrees(frameGoal.getYaw() - p.getYRot()), dp = frameGoal.getPitch() - p.getXRot();
-        // the tick step closes 60% of the gap per tick: the same rate, in frame-sized pieces
-        float k = (float) (1 - Math.pow(0.4, ticks));
+        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        if (frameGoal == null || p == null) return;
+        if (frameTo != null) {
+            float my = net.minecraft.util.Mth.wrapDegrees(frameTo.getYaw() - p.getYRot()), mp = frameTo.getPitch() - p.getXRot();
+            if (my != 0 || mp != 0) turnBy(p, my, mp);
+        }
+        if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) {
+            frameGoal = null;
+            frameFrom = frameTo = null;
+            return;
+        }
+        planFrameStep(p);
+    }
+
+    /** Ostinato: from the current view, this tick's step toward the goal: 60% of the gap in whole mouse counts. */
+    private void planFrameStep(net.minecraft.client.player.LocalPlayer p) {
+        float cy = p.getYRot(), cp = p.getXRot();
+        float dy = net.minecraft.util.Mth.wrapDegrees(frameGoal.getYaw() - cy), dp = frameGoal.getPitch() - cp;
+        float step = mouseStep();
+        float my = Math.round(dy * 0.6f / step) * step, mp = Math.round(dp * 0.6f / step) * step;
+        frameFrom = new Rotation(cy, cp);
+        frameTo = new Rotation(cy + my, net.minecraft.util.Mth.clamp(cp + mp, -90f, 90f));
+        frameFromNanos = System.nanoTime();
+    }
+
+    private float mouseStep() {
         double f = ctx.minecraft().options.sensitivity().get() * 0.6 + 0.2;
-        float step = (float) (f * f * f * 8.0 * 0.15);
-        float my = Math.round(dy * k / step) * step, mp = Math.round(dp * k / step) * step;
-        if (my == 0 && mp == 0) return;
+        return (float) (f * f * f * 8.0 * 0.15);
+    }
+
+    private static void turnBy(net.minecraft.client.player.LocalPlayer p, float my, float mp) {
         p.setYRot(p.getYRot() + my);
         p.setXRot(net.minecraft.util.Mth.clamp(p.getXRot() + mp, -90f, 90f));
         p.yRotO += my;
@@ -149,7 +200,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     }
 
     private float velYaw, velPitch;
-    private final java.util.Random handNoise = new java.util.Random();
+    private final java.util.Random handNoise = OstinatoRandom.create("look.hand"); // Ostinato: seedable
+    /** Ostinato: draws taken from the hand's tremor so far, for the parity trace. */
+    public long handDraws;
 
     /** Yaw speed of the simulated hand, degrees per tick, for predicting where the camera will be. */
     public float yawVelocity() {
@@ -189,6 +242,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         if (Math.abs(dy) > 25f) outY += velYaw * 0.12f;
         outP += outY * 0.06f * (float) Math.signum(dp == 0 ? 1 : dp) * (Math.abs(dy) > 10f ? 1 : 0);
         double tremor = Math.min(1.0, Math.abs(dy) / 6.0) < 1.0 ? 0.08 : 0.0;
+        handDraws += 2; // Ostinato
         outY += (float) (handNoise.nextGaussian() * tremor);
         outP += (float) (handNoise.nextGaussian() * tremor);
         velYaw = outY;
@@ -237,6 +291,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                         // the camera stays on the rotation that was sent
                         this.frameGoal = this.target.rotation;
                         this.frameGoalTick = ctx.player().tickCount;
+                        planFrameStep(ctx.player()); // Ostinato
                     } else if (this.target.mode == Target.Mode.SERVER) {
                         ctx.player().setYRot(this.prevRotation.getYaw());
                         ctx.player().setXRot(this.prevRotation.getPitch());
@@ -329,7 +384,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
         public AbstractAimProcessor(IPlayerContext ctx) {
             this.ctx = ctx;
-            this.rand = new ForkableRandom();
+            this.rand = new ForkableRandom(OstinatoRandom.seed("look.aim")); // Ostinato: seedable
         }
 
         private AbstractAimProcessor(final AbstractAimProcessor source) {

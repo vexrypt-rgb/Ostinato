@@ -56,3 +56,42 @@ seeds, hill width 1.5 steps (`docs` numbers are copied from that run):
 On the null landscape neither mode kept anything in 60 seeds. With a wider hill (2.5 steps) spsa reaches 0.565 at
 4000 fights where coordinate reaches 0.503. These are made-up fights: they rank the two learners, and say nothing
 about how much a real kit can gain. A live bench run is needed for that.
+
+## Parity: same code, same fight, same ticks
+
+A headless and a real client running the same build gave different fight results. Before any headless number counts
+for tuning, the same drill has to play out tick for tick on both. The drill: a 1000-HP still husk, fixed seed, the same
+world copy and options.txt, two 400-tick rounds.
+
+Tools (all inert unless their property is set):
+
+- `-Dostinato.seed=N` (`OstinatoRandom`): every Ostinato RNG that steers play is seeded from N plus its own name
+  (look hand noise, aim, fight sampling, SPSA, hotbar pick, kinematic wander). Without it they stay clock-seeded.
+- `-Dostinato.trace=FILE` (`ParityTrace`): one line per client tick with position, velocity, rotation at tick start and
+  end, keys and forced inputs, the fight decision, slot and cooldown, hand-noise draws, look target, path, the
+  target's state, and (in lockstep) the server's view of both.
+- `-Dostinato.lockstep=true` (`Lockstep` plus three mixins): the integrated server runs exactly one tick per client
+  tick. The client sends its packets and waits until the server has read them, then lets one server tick run and waits
+  for it (each go is numbered, and only a gated tick answers it). It then waits until the client has read all the
+  replies, and handles them at the start of its next tick.
+- `tools/paritydiff.py A B --ignore fr,t,lm,st`: lines the two traces up on the first fight tick and reports the first
+  tick that differs, with context.
+
+Root causes found, in the order they showed up (first divergence on the box, run against run):
+
+| cause | effect | fix |
+|---|---|---|
+| per-frame rotation smoothing | view at tick start depended on frame count | `frame()` is cosmetic; the per-tick model owns the rotation (`tickStart`/`planFrameStep`) |
+| unseeded RNGs | hand noise, aim, sampling differ run to run | `OstinatoRandom` |
+| zombie sunburn / mob RNG | dummy took fire damage at random | drill dummy is a NoAI husk |
+| free-running integrated server | hits landed a tick apart (div. at fight tick 0-1) | lockstep |
+| async path search | a chase started a tick early or late | lockstep waits for the search |
+| packets handled once per frame | at <20 fps two ticks ran on one frame's packets | `processQueuedPackets` at every tick start (`-Dostinato.tickPackets=false` restores vanilla) |
+| stale "done" from an ungated server tick | server one tick behind the client (div. at fight tick 4) | numbered go/done handshake |
+| server gate timing out during slow frames / `submit().join()` | the server ticked on its own; mob tracker phase shifted (div. at fight tick 39, then 450) | gate waits 60 s and runs this tick's tasks while it waits (`shouldRun` override) |
+
+Result on the box, lockstep on: two runs side by side match on every field over all 900 fight ticks, with 0 lockstep
+misses. So does a run at maxFps 260 / render distance 12 against one at maxFps 30 / render distance 6. Lockstep also
+halves the drill's wall time (68 s vs 131 s). Lockstep off, the results depend on timing by design; that is the
+vanilla behaviour a real client has.
+Still to check: the real client on the PC against the box trace.

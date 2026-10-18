@@ -93,7 +93,7 @@ public final class KinematicController {
     private boolean head;
     private float camYaw, camVel0;
     private double wander;
-    private final Random rng = new Random();
+    private final Random rng = baritone.utils.OstinatoRandom.create("kinematic.wander"); // Ostinato: seedable for the parity check
     private int lastDrivenTick = -10;
     private boolean longJump; // the driven stretch holds a 3 or 4 block gap
     private boolean endsAtPlace; // the stretch stops at a movement that breaks or places, which needs the player slow at the edge
