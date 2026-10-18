@@ -206,3 +206,13 @@ for now; one more 48-round pair would settle it.
 The heal after the kits gave `saturation 1 20` (20 s, longer than a round), so both sides regenerated at full speed
 all round. It's now 1 s. SMP numbers before 11:10 (UTC-7) used the 20 s version. A/Bs within one run stay comparable;
 absolute win rates do not (an early fixed-bench arm runs ~46% vs SMP, where it was 10-20% before).
+
+### Bench bug: respawned fake players were immune for ~40 ticks of every round
+26.3 treats a player as invulnerable until its client reports loaded (`ServerGamePacketListenerImpl.hasClientLoaded`,
+60-tick timeout). Carpet fake players have no client, so after each round's respawn the bot ignored our hits until
+the timeout. The bench waits only 20 ticks, so about 40 ticks were left. Server-side miss logging: 96 of 166 attacks
+that drew no hurt landed on a bot at 20 HP, fully charged, in reach and not blocking, at round ticks 12-42, with
+`loaded=false`. The bench now marks the fake connection loaded at round start, after which there are no such misses.
+This bias was in every SMP and SickSheet number before 11:40 (UTC-7): our opening swings were wasted while the bot
+hit freely. The bias was the same in both arms of an A/B, but absolute held-out win rates were understated.
+Carpet PvP bots die in place and never respawn, so the tuning pool wasn't affected.
