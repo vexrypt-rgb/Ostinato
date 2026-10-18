@@ -48,6 +48,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -124,14 +125,64 @@ public class MovementJump extends Movement {
          * others' on them and lost its real jumps.
          */
         int partialSims, partialFull, tallSims, tallFull;
+        /**
+         * Ostinato: a recheck of one jump: only templates landing on this column are listed, and the per-node sim cap
+         * is off. The cap bounds a search node's fan-out; spent on the sibling landings it left the path's own one
+         * unsimulated, "impossible", and the replan found the same jump forever (cubed level 1's head-hitter).
+         */
+        boolean focused;
+        int fx, fz;
         final List<Option> options = new ArrayList<>();
+        /**
+         * Ostinato: every landing, before the cut to the jump slots. Rebuilding a path or rechecking a jump recomputes
+         * the list with the search's sim verdicts known, which reprices landings, and the cut then dropped the one the
+         * path holds: "impossible", replan, the same path, forever (cubed levels 1 and 3).
+         */
+        final List<Option> all = new ArrayList<>();
         /** Ledge stand-ins already tried for this node. Cleared each call so the set is not allocated per node. */
         final java.util.Set<Long> ledgeTried = new java.util.HashSet<>();
         /**
          * Ostinato: every lazy sim's verdict this calculation, misses too (HH_CACHE forgets a local miss), so the path
          * built afterwards picks the template that passed.
          */
-        final java.util.Map<Long, Boolean> verdicts = new java.util.HashMap<>();
+        final java.util.Map<Long, Boolean> verdicts;
+        final Thread owner = Thread.currentThread();
+
+        Cache(java.util.Map<Long, Boolean> verdicts) {
+            this.verdicts = verdicts;
+        }
+    }
+
+    /**
+     * Ostinato: one context's caches, one per thread. The executor rechecks a path's jumps on the context the plan-ahead
+     * search is running on at that moment: sharing one cache, each overwrote the landings the other was reading, and a
+     * jump the planner had proven came back impossible, cancelling the path again and again (cubed levels 1 and 7). The
+     * sim verdicts are shared, so a recheck still sees what the search's sims found.
+     */
+    private static final class Caches {
+        final java.util.concurrent.ConcurrentHashMap<Thread, Cache> byThread = new java.util.concurrent.ConcurrentHashMap<>(4);
+        final java.util.Map<Long, Boolean> verdicts = new java.util.concurrent.ConcurrentHashMap<>();
+        volatile Cache last;
+    }
+
+    private static Cache cache(CalculationContext context) {
+        Caches cs = (Caches) context.jumpCache;
+        if (cs == null) {
+            synchronized (context) {
+                cs = (Caches) context.jumpCache;
+                if (cs == null) {
+                    context.jumpCache = cs = new Caches();
+                }
+            }
+        }
+        Thread me = Thread.currentThread();
+        Cache c = cs.last;
+        if (c == null || c.owner != me) {
+            java.util.Map<Long, Boolean> verdicts = cs.verdicts;
+            c = cs.byThread.computeIfAbsent(me, k -> new Cache(verdicts));
+            cs.last = c;
+        }
+        return c;
     }
 
     private static final int CHECKED = 0, CEIL = 1, PARTIAL = 2, CEIL_TALL = 3, PARTIAL_TALL = 4;
@@ -182,22 +233,26 @@ public class MovementJump extends Movement {
         @Override
         public double verify() {
             for (Alt a : alts) {
-                if (a.kind == CHECKED) {
-                    return a.cost;
-                }
-                Boolean v = c.verdicts.get(a.key);
-                if (v == null) {
-                    v = HH_CACHE.get(a.key);
-                }
-                if (v == null) {
-                    v = run(a);
-                    c.verdicts.put(a.key, v);
-                }
-                if (v) {
+                if (lands(a)) {
                     return a.cost;
                 }
             }
             return COST_INF;
+        }
+
+        boolean lands(Alt a) {
+            if (a.kind == CHECKED) {
+                return true;
+            }
+            Boolean v = c.verdicts.get(a.key);
+            if (v == null) {
+                v = HH_CACHE.get(a.key);
+            }
+            if (v == null) {
+                v = run(a);
+                c.verdicts.put(a.key, v);
+            }
+            return v;
         }
 
         private boolean run(Alt a) {
@@ -245,10 +300,11 @@ public class MovementJump extends Movement {
     // Ostinato: was a ThreadLocal<Cache>; the cache is only ever valid for one CalculationContext, so it now lives on the
     // context (CalculationContext.jumpCache) and skips the ThreadLocal lookup on every cost() call. Same hits and misses.
 
-    private final JumpTemplates.Template t;
-    private final int[] f;
+    private JumpTemplates.Template t;
+    private int[] f;
     private JumpSearch js;
     private PlayerSim real;
+    private PlayerSim glide;
     private boolean running, landed;
     private int settle;
     private int replans, replanCooldown;
@@ -309,10 +365,12 @@ public class MovementJump extends Movement {
     }
 
     private static List<Option> options(CalculationContext context, int x, int y, int z) {
-        Cache c = (Cache) context.jumpCache; // Ostinato: was CACHE.get()
-        if (c == null) {
-            context.jumpCache = c = new Cache();
+        if (!context.canSprint) {
+            // Ostinato: every template is flown sprinting. A hungry bot walked them at 0.21 b/t and fell short
+            // (cubed's late gap-3s), so none of them is a jump it can make.
+            return Collections.emptyList();
         }
+        Cache c = cache(context); // Ostinato: was CACHE.get()
         if (c.context == context && c.x == x && c.y == y && c.z == z) {
             return c.options;
         }
@@ -320,19 +378,26 @@ public class MovementJump extends Movement {
         if (c.simContext != context) {
             c.simContext = context;
             c.sims = c.simsFull = c.partialSims = c.partialFull = c.tallSims = c.tallFull = 0; // Ostinato: simsFull too (it was never reset)
-            c.verdicts.clear();
+            // (the verdicts live with the context, shared by its threads' caches: a cache never changes context)
         }
         int nodeSims = 0, tallSims = 0; // Ostinato: tall: the sims of jumps past a fence/wall cell, capped apart
         c.x = x;
         c.y = y;
         c.z = z;
         c.options.clear();
+        c.all.clear();
         if (!context.allowParkour) {
             return c.options;
         }
         // Ostinato: a vine top is walkable to the pathfinder but has no collision: the player sinks into it and
         // bobs off the ground, so a run-up jump never takes off (cubed level 5 retried one 160 times)
         if (hollow(context.get(x, y - 1, z))) {
+            return c.options;
+        }
+        // Ostinato: nor off a ladder top: its box is a sliver against the wall, so a player at the cell's centre is
+        // still in the ladder, climbing, and never takes off (cubed level 8 tried one 553 times). MovementParkour
+        // already refuses it.
+        if (MovementHelper.isClimbable(context.get(x, y - 1, z).getBlock())) {
             return c.options;
         }
         boolean dbg = DEBUG != null && DEBUG.contains(BetterBlockPos.longHash(x, y, z)); // TEMP
@@ -344,6 +409,7 @@ public class MovementJump extends Movement {
         // refuse an up jump off it; a diagonal template was still offered and the drill fell off the side.
         boolean low = MovementParkour.lowJump(MovementParkour.factorBlock(context, x, y, z));
         double startY = MovementParkour.standingY(context, x, y, z);
+        double srcTop = MovementHelper.collisionTop(context.get(x, y - 1, z)); // a fence top under take-off stands 1.5 up
         int partialSims = 0;
         c.ledgeTried.clear();
         for (int i = 0; i < FRAMES.length; i++) {
@@ -361,15 +427,37 @@ public class MovementJump extends Movement {
                     continue;
                 }
                 int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
+                if (c.focused && (dx != c.fx || dz != c.fz)) {
+                    continue;
+                }
                 if (t.dy == 1 && lowTopLanding(context, dx, y + 1, dz, startY)) {
                     t = t.lowTopVariant(); // Ostinato: onto 3 snow layers: the node is a cell up, the jump still about 1.25
+                } else if (t.dy < 1 && !MovementHelper.canWalkThrough(context, dx, y + t.dy, dz) && lowTopLanding(context, dx, y + t.dy, dz, startY)) {
+                    // Ostinato: level or down onto 4 snow layers: the walk counts that as the node a cell up (playerFeet
+                    // does too). Landed in the snow's own cell, the path's next move was a step up onto where the feet
+                    // already were, abandoned, and the jump after it set off from the wrong node (cubed's snow ledge).
+                    t = t.lowTopVariant();
                 }
                 if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz) || hollow(context.get(dx, y + t.dy - 1, dz))) {
                     continue;
                 }
+                if (inBody(context.get(dx, y + t.dy, dz), 0.4, 1.0) || inBody(context.get(dx, y + t.dy + 1, dz), 0.0, 0.8)
+                        || fillsCell(context.get(dx, y + t.dy, dz), 0.875 - 1e-6, 1.0) || fillsCell(context.get(dx, y + t.dy + 1, dz), 0.0, 0.8)) {
+                    // Ostinato: a pane, fence or bars through the landing's body column: the sim can land beside it, but
+                    // then the node sits on one side of a wall and the next move walks through it (cubed's window)
+                    continue;
+                }
+                if (y + t.dy - 1 + MovementHelper.collisionTop(context.get(dx, y + t.dy - 1, dz)) - Math.max(startY, y - 1 + srcTop) > 1.2522) {
+                    // Ostinato: a fence, wall or gate top is 1.5 high: a jump a cell up onto it from flat ground rises
+                    // past a jump's 1.25, and the run-up was walked over and over before each give-up (cubed level 8)
+                    continue;
+                }
                 double failMul = JumpFailures.multiplier(failKey(x, y, z, dx, y + t.dy, dz), System.currentTimeMillis());
                 for (int r = 1; r <= t.runUp; r++) {
-                    if (!MovementHelper.canWalkOn(context, x - r * f[0], y - 1, z - r * f[1])) {
+                    // Ostinato: and room for the body there: a wall top behind the take-off is floor too
+                    if (!MovementHelper.canWalkOn(context, x - r * f[0], y - 1, z - r * f[1])
+                            || !MovementHelper.canWalkThrough(context, x - r * f[0], y, z - r * f[1])
+                            || !MovementHelper.canWalkThrough(context, x - r * f[0], y + 1, z - r * f[1])) {
                         // Ostinato: no room to run up, but a ledge juts from the front edge: try it from a standstill
                         if (!t.neo && ledgeAt(context, x + f[0], y - 1, z + f[1], startY) && c.ledgeTried.add(((long) i << 32) ^ (t.a << 16) ^ ((t.dy & 0xFF) << 8) ^ (t.b & 0xFF))) {
                             t = t.ledgeVariant();
@@ -442,7 +530,7 @@ public class MovementJump extends Movement {
                     } else if (context.lazyJumps) {
                         kind = tall ? CEIL_TALL : CEIL; // Ostinato: simulated only if the search reaches the landing
                         key = k;
-                    } else if (tall ? tallSims >= MAX_NODE_SIMS || c.tallSims >= MAX_CALC_SIMS : nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
+                    } else if (tall ? !c.focused && tallSims >= MAX_NODE_SIMS || c.tallSims >= MAX_CALC_SIMS : !c.focused && nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
                         continue;
                     }
                 }
@@ -467,7 +555,7 @@ public class MovementJump extends Movement {
                         kind = tall ? PARTIAL_TALL : PARTIAL; // Ostinato: simulated only if the search reaches the landing
                         key = k;
                     } else if (known == null) {
-                        if (tall ? tallSims >= MAX_NODE_PARTIAL || c.tallSims >= MAX_CALC_PARTIAL : partialSims >= MAX_NODE_PARTIAL || c.partialSims >= MAX_CALC_PARTIAL) {
+                        if (tall ? !c.focused && tallSims >= MAX_NODE_PARTIAL || c.tallSims >= MAX_CALC_PARTIAL : !c.focused && partialSims >= MAX_NODE_PARTIAL || c.partialSims >= MAX_CALC_PARTIAL) {
                             continue;
                         }
                         if (tall) {
@@ -521,6 +609,8 @@ public class MovementJump extends Movement {
                 }
             }
         }
+        c.all.clear();
+        c.all.addAll(c.options);
         if (c.options.size() > SLOTS) {
             trim(context, c.options);
         }
@@ -576,6 +666,47 @@ public class MovementJump extends Movement {
     /** Walkable to the pathfinder with nothing to stand on (a vine): no take-off or landing. */
     static boolean hollow(BlockState state) {
         return state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO).isEmpty();
+    }
+
+    /**
+     * Ostinato: collision between heights {@code lo} and {@code hi} of the cell that crosses a player centred in it and
+     * runs wall to wall, splitting the cell (a straight pane, a T of bars): a node there is on one side of it. A post or
+     * an L corner leaves the cell in one piece, and the player stands beside it (cubed level 2's window corner).
+     */
+    static boolean inBody(BlockState state, double lo, double hi) {
+        var shape = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO);
+        if (shape.isEmpty()) {
+            return false;
+        }
+        double a = 0.5 - PlayerSim.HALF_WIDTH + 1e-3, b = 0.5 + PlayerSim.HALF_WIDTH - 1e-3;
+        boolean centre = false;
+        double x0 = 1, x1 = 0, z0 = 1, z1 = 0;
+        for (net.minecraft.world.phys.AABB box : shape.toAabbs()) {
+            if (box.maxY > lo && box.minY < hi) {
+                centre |= box.minX < b && box.maxX > a && box.minZ < b && box.maxZ > a;
+                x0 = Math.min(x0, box.minX);
+                x1 = Math.max(x1, box.maxX);
+                z0 = Math.min(z0, box.minZ);
+                z1 = Math.max(z1, box.maxZ);
+            }
+        }
+        return centre && (x0 < 1e-3 && x1 > 1 - 1e-3 || z0 < 1e-3 && z1 > 1 - 1e-3);
+    }
+
+    /**
+     * Ostinato: a box that reaches {@code [lo, hi)} of the cell and that a body standing anywhere in the cell would
+     * touch, so no stance has its centre there. The sim counts a landing whose hitbox overlaps the cell, so it took the
+     * bot wedged beside a stack of chests, on an anvil's foot, for a landing in the chests (cubed level 1).
+     */
+    static boolean fillsCell(BlockState state, double lo, double hi) {
+        var shape = state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO);
+        double a = PlayerSim.HALF_WIDTH, b = 1 - PlayerSim.HALF_WIDTH;
+        for (net.minecraft.world.phys.AABB box : shape.toAabbs()) {
+            if (box.maxY >= lo && box.minY < hi && box.minX < a && box.maxX > b && box.minZ < a && box.maxZ > b) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static boolean partial(BlockState state) {
@@ -647,20 +778,18 @@ public class MovementJump extends Movement {
     /** Flies the template from the real surface: around its own plan first, the whole plan grid while budget lasts. */
     private static boolean partialLands(CalculationContext context, long k, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY, Cache c,
                                         boolean tall) {
-        long now = System.currentTimeMillis();
-        if (now - hhCacheBorn > 30000) {
-            HH_CACHE.clear();
-            hhCacheBorn = now;
-        }
         PlayerSim.World world = new BsiWorld(context.bsi);
         JumpSearch js = jumpSearch(world, x, y, z, f, t, dx, dy, dz, context.nativeSearch);
         js.anyLanding = true; // a cost check: whether it lands, not how best
         PlayerSim start = startState(world, x, z, f, t, startY);
         long t0 = System.nanoTime();
-        boolean ok = js.search(start, true);
+        boolean localMiss = LOCAL_MISS.get(k) != null;
+        boolean ok = !localMiss && js.search(start, true);
         long t1 = System.nanoTime();
-        PlanStats.partNs.addAndGet(t1 - t0);
-        PlanStats.partSims.incrementAndGet();
+        if (!localMiss) {
+            PlanStats.partNs.addAndGet(t1 - t0);
+            PlanStats.partSims.incrementAndGet();
+        }
         boolean full = !ok && (tall ? c.tallFull < MAX_CALC_TALL_FULL : c.partialFull < MAX_CALC_PARTIAL_FULL);
         if (full) {
             if (tall) c.tallFull++;
@@ -670,7 +799,9 @@ public class MovementJump extends Movement {
             PlanStats.fullSims.incrementAndGet();
         }
         if (ok || full) {
-            HH_CACHE.put(k, ok); // a local miss without the full search may still land later: not remembered
+            HH_CACHE.put(x, y, z, k, ok); // a local miss without the full search may still land later: not remembered
+        } else {
+            LOCAL_MISS.put(x, y, z, k, false);
         }
         return ok;
     }
@@ -696,15 +827,146 @@ public class MovementJump extends Movement {
         double lat = Math.min(t.lateral, 0.75);
         double a = t.startA(), b = 0.5 + lat;
         PlayerSim start = new PlayerSim(world);
-        start.x = x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2];
+        double[] at = clearStance(world, x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2], startY, z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3]);
+        start.x = at[0];
         start.y = startY;
-        start.z = z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
+        start.z = at[1];
         start.onGround = true;
         start.vy = -0.0784000015258789; // Ostinato: vanilla's resting value, as the templates: at 0 the first tick counts as airborne
         return start;
     }
-    private static final java.util.Map<Long, Boolean> HH_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
-    private static volatile long hhCacheBorn = System.currentTimeMillis();
+    /**
+     * Ostinato: the spot nearest (x, z) where a player standing with feet at y touches no collision and has something
+     * under the box, or (x, z) itself when it is clear (or nothing within half a block is). A node beside a pane's L
+     * corner (landed on purpose, see {@link #inBody}) has the post in its middle: the run-up start there was inside it,
+     * the sim flew the jump from a place the player can never be, and the walk to it pushed into the post (cubed level 2).
+     */
+    static double[] clearStance(PlayerSim.World world, double x, double y, double z) {
+        java.util.List<double[]> boxes = new java.util.ArrayList<>();
+        double r = PlayerSim.HALF_WIDTH;
+        world.collect(x - r - 0.5, y - 0.1, z - r - 0.5, x + r + 0.5, y + PlayerSim.HEIGHT, z + r + 0.5, boxes);
+        if (stands(boxes, x, y, z)) {
+            return new double[]{x, z};
+        }
+        double best = Double.MAX_VALUE, bx = x, bz = z;
+        for (int i = -16; i <= 16; i++) {
+            for (int j = -16; j <= 16; j++) {
+                double ox = i / 32.0, oz = j / 32.0, d = ox * ox + oz * oz;
+                if (d < best && d <= 0.25 && stands(boxes, x + ox, y, z + oz)) {
+                    best = d;
+                    bx = x + ox;
+                    bz = z + oz;
+                }
+            }
+        }
+        return new double[]{bx, bz};
+    }
+
+    /** The box at (x, y, z) overlaps none of {@code boxes} and rests on one. */
+    private static boolean stands(java.util.List<double[]> boxes, double x, double y, double z) {
+        double r = PlayerSim.HALF_WIDTH, e = 1e-4;
+        boolean floor = false;
+        for (double[] b : boxes) {
+            if (b[0] < x + r - e && b[3] > x - r + e && b[2] < z + r - e && b[5] > z - r + e) {
+                if (b[1] < y + PlayerSim.HEIGHT - e && b[4] > y + e) {
+                    return false;
+                }
+                floor |= Math.abs(b[4] - y) < 0.01;
+            }
+        }
+        return floor;
+    }
+    private static final SimCache HH_CACHE = new SimCache();
+    /**
+     * Ostinato: misses of the local search alone. HH_CACHE leaves them out, as the full search may still land, but the
+     * local search gives the same miss every time: once the calculation's full searches ran out, every replan flew
+     * them all again (cubed's head-hitter levels: 30k+ sims, most of A*'s time).
+     */
+    private static final SimCache LOCAL_MISS = new SimCache();
+
+    /** Ostinato: the world changed here; jump sims that could pass by it are run again. */
+    public static void blockChanged(int x, int y, int z) {
+        HH_CACHE.blockChanged(x, y, z);
+        LOCAL_MISS.blockChanged(x, y, z);
+    }
+
+    /** Ostinato: a chunk column arrived or left: sims next to it saw other blocks than are there now. */
+    public static void columnChanged(int cx, int cz) {
+        HH_CACHE.columnChanged(cx, cz);
+        LOCAL_MISS.columnChanged(cx, cz);
+    }
+
+    /** Ostinato: a new world: no sim verdict carries over. */
+    public static void forgetSims() {
+        HH_CACHE.clear();
+        LOCAL_MISS.clear();
+    }
+
+    /**
+     * Ostinato: jump sim verdicts kept across replans (most of a parkour search's time) until a block one could pass
+     * changes. Forgetting them all every 30 s made every live retry re-run the same sims and run out of time.
+     */
+    static final class SimCache {
+        private static final int REACH_XZ = 8, REACH_UP = 4, REACH_DOWN = 24; // take-off to any block its flight touches
+        private static final int MAX_ENTRIES = 1 << 20;
+        private final java.util.concurrent.ConcurrentHashMap<Long, Boolean> verdicts = new java.util.concurrent.ConcurrentHashMap<>();
+        private final java.util.concurrent.ConcurrentHashMap<Long, java.util.Set<Long>> byRegion = new java.util.concurrent.ConcurrentHashMap<>();
+
+        Boolean get(long k) {
+            return verdicts.get(k);
+        }
+
+        void put(int x, int y, int z, long k, boolean v) {
+            if (verdicts.size() >= MAX_ENTRIES) {
+                clear();
+            }
+            byRegion.computeIfAbsent(region(x >> 4, y >> 4, z >> 4), r -> java.util.concurrent.ConcurrentHashMap.newKeySet()).add(k);
+            verdicts.put(k, v);
+        }
+
+        void blockChanged(int x, int y, int z) {
+            // a take-off within reach of the block: up to REACH_DOWN above it (a drop), REACH_UP below (a climb)
+            for (int rx = (x - REACH_XZ) >> 4; rx <= (x + REACH_XZ) >> 4; rx++) {
+                for (int rz = (z - REACH_XZ) >> 4; rz <= (z + REACH_XZ) >> 4; rz++) {
+                    for (int ry = (y - REACH_UP) >> 4; ry <= (y + REACH_DOWN) >> 4; ry++) {
+                        drop(region(rx, ry, rz));
+                    }
+                }
+            }
+        }
+
+        void columnChanged(int cx, int cz) {
+            for (int rx = cx - 1; rx <= cx + 1; rx++) {
+                for (int rz = cz - 1; rz <= cz + 1; rz++) {
+                    for (int ry = -8; ry < 24; ry++) { // y -128..383: any world height
+                        drop(region(rx, ry, rz));
+                    }
+                }
+            }
+        }
+
+        void clear() {
+            byRegion.clear();
+            verdicts.clear();
+        }
+
+        int size() {
+            return verdicts.size();
+        }
+
+        private void drop(long region) {
+            java.util.Set<Long> keys = byRegion.remove(region);
+            if (keys != null) {
+                for (Long k : keys) {
+                    verdicts.remove(k);
+                }
+            }
+        }
+
+        private static long region(int rx, int ry, int rz) {
+            return ((long) (rx & 0x3FFFFF) << 42) | ((long) (rz & 0x3FFFFF) << 20) | (ry & 0xFFFFF);
+        }
+    }
 
     private static long hhKey(int x, int y, int z, int frame, JumpTemplates.Template t, int dx, int dz) {
         int ti = System.identityHashCode(t);
@@ -713,18 +975,16 @@ public class MovementJump extends Movement {
 
     private static boolean hhCached(CalculationContext context, int x, int y, int z, int frame, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, Cache c,
                                     boolean tall) {
-        long now = System.currentTimeMillis();
-        if (now - hhCacheBorn > 30000) { // blocks change: forget sims older than ~30 s
-            HH_CACHE.clear();
-            hhCacheBorn = now;
-        }
         long k = hhKey(x, y, z, frame, t, dx, dz);
         Boolean v = HH_CACHE.get(k);
         if (v == null) {
+            boolean full = tall ? c.tallFull < MAX_CALC_TALL_FULL : c.simsFull < MAX_CALC_SIMS_FULL;
+            if (!full && LOCAL_MISS.get(k) != null) {
+                return false;
+            }
             if (tall) c.tallSims++;
             else c.sims++;
             long t0 = System.nanoTime();
-            boolean full = tall ? c.tallFull < MAX_CALC_TALL_FULL : c.simsFull < MAX_CALC_SIMS_FULL;
             v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz, y, context.nativeSearch, full);
             long dt = System.nanoTime() - t0;
             PlanStats.ceilNs.addAndGet(dt);
@@ -734,7 +994,9 @@ public class MovementJump extends Movement {
                 else c.simsFull++;
             }
             if (v || full) {
-                HH_CACHE.put(k, v); // a local miss without the full search may still land later: not remembered
+                HH_CACHE.put(x, y, z, k, v); // a local miss without the full search may still land later: not remembered
+            } else {
+                LOCAL_MISS.put(x, y, z, k, false);
             }
         }
         return v;
@@ -803,15 +1065,95 @@ public class MovementJump extends Movement {
         return new MovementJump(context.getBaritone(), src, o.get(slot).t, o.get(slot).frame);
     }
 
+    /**
+     * Ostinato: the jump from src landing on dest, out of every landing (not only those in the slots), the template the
+     * search's verdicts let land; null if none. For a path rebuild that no slot matches any more.
+     */
+    public static MovementJump toward(CalculationContext context, BetterBlockPos src, BetterBlockPos dest) {
+        options(context, src.x, src.y, src.z);
+        for (Option o : cache(context).all) {
+            if (o.x != dest.x || o.y != dest.y || o.z != dest.z) {
+                continue;
+            }
+            if (o.pending == null) {
+                return new MovementJump(context.getBaritone(), src, o.t, o.frame);
+            }
+            for (Alt a : o.pending.alts) {
+                if (o.pending.lands(a)) {
+                    return new MovementJump(context.getBaritone(), src, a.t, a.frame);
+                }
+            }
+        }
+        return null;
+    }
+
     @Override
     public double calculateCost(CalculationContext context) {
-        if (context.jumpCache != null) ((Cache) context.jumpCache).context = null; // the world may have changed since (Ostinato: was CACHE.get().context = null)
-        for (Option o : options(context, src.x, src.y, src.z)) {
-            if (o.t == t && FRAMES[o.frame] == f) {
-                return o.cost;
+        {
+            Cache c = cache(context);
+            c.context = null; // the world may have changed since (Ostinato: was CACHE.get().context = null)
+            // Ostinato: the executor rechecks on one context for the whole path, so its full-search budget ran out and a
+            // jump the planner's full search had proven was only tried around its template plan: "impossible" (cubed level 7).
+            // Only the budgets: the search's verdicts stay, a re-sim of one could miss where the search's had landed (level 1).
+            c.sims = c.simsFull = c.partialSims = c.partialFull = c.tallSims = c.tallFull = 0;
+            c.focused = true;
+            c.fx = dest.x;
+            c.fz = dest.z;
+        }
+        try {
+            return recheck(context);
+        } finally {
+            Cache c = cache(context);
+            c.focused = false;
+            c.context = null; // the focused list is not the node's full one
+        }
+    }
+
+    private double recheck(CalculationContext context) {
+        options(context, src.x, src.y, src.z);
+        for (Option o : cache(context).all) {
+            if (o.pending == null) {
+                if (o.t == t && FRAMES[o.frame] == f) {
+                    return o.cost;
+                }
+                continue;
+            }
+            // Ostinato: a lazy context lists the cheapest unchecked template per landing first; the path may hold one
+            // further down that the search's sim passed (the head missed). Matching only the head called this jump
+            // impossible on every recheck and the executor replanned it in a loop (cubed's fence post).
+            for (Alt a : o.pending.alts) {
+                if (a.t == t && FRAMES[a.frame] == f && o.pending.lands(a)) {
+                    return a.cost;
+                }
+            }
+        }
+        // Ostinato: this template is not listed any more, but another lands on the same block: a cheaper one now known
+        // to land took its place, or a shorter run-up skipped it. Calling the jump impossible cancelled the path, and
+        // the replan found the same path: a loop forever (cubed's head-hitter corridor over lava). Take the one listed
+        // if the jump has not started.
+        for (Option o : cache(context).all) {
+            if (o.x != dest.x || o.y != dest.y || o.z != dest.z) {
+                continue;
+            }
+            if (o.pending == null) {
+                return adopt(o.t, o.frame, o.cost);
+            }
+            for (Alt a : o.pending.alts) {
+                if (o.pending.lands(a)) {
+                    return adopt(a.t, a.frame, a.cost);
+                }
             }
         }
         return COST_INF;
+    }
+
+    private double adopt(JumpTemplates.Template nt, int frame, double cost) {
+        if (!running && !landed && js == null && (t != nt || f != FRAMES[frame])) {
+            t = nt;
+            f = FRAMES[frame];
+            forgetValidPositions();
+        }
+        return cost;
     }
 
     @Override
@@ -841,9 +1183,33 @@ public class MovementJump extends Movement {
         if (hs <= 0.2) {
             return false;
         }
-        double nx = s.x + s.vx * 0.546, nz = s.z + s.vz * 0.546;
+        // On ice the next movement inherits a coast that friction barely slows, so the whole glide, not one tick,
+        // has to stay on dest; otherwise settle here with sneak held (its edge guard keeps the feet on the block).
+        double keep = slip(s) * 0.91, carry = slip(s) > 0.6 ? keep / (1 - keep) : keep;
+        double nx = s.x + s.vx * carry, nz = s.z + s.vz * carry;
         return nx > dest.x + PlayerSim.HALF_WIDTH && nx < dest.x + 1 - PlayerSim.HALF_WIDTH
                 && nz > dest.z + PlayerSim.HALF_WIDTH && nz < dest.z + 1 - PlayerSim.HALF_WIDTH;
+    }
+
+    /** Ostinato: whether letting go of every key here slides the player off its footing within two seconds. */
+    private boolean glidesOff(PlayerSim s) {
+        if (glide == null) {
+            glide = new PlayerSim(s.world());
+        }
+        glide.copyFrom(s);
+        float yaw = ctx.player().getYRot();
+        for (int i = 0; i < 40 && Math.abs(glide.vx) + Math.abs(glide.vz) > 0.003; i++) {
+            glide.tick(yaw, 0, false, false);
+            if (glide.y < s.y - 0.5) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Slipperiness of the block the sim stands on: 0.6 for most, 0.98 for ice. */
+    private static float slip(PlayerSim s) {
+        return s.world().slipperiness(PlayerSim.floor(s.x), PlayerSim.floor(s.y - 0.5000001), PlayerSim.floor(s.z));
     }
 
     /** The whole foot box is over dest, so the next tick cannot walk off the side. */
@@ -1024,10 +1390,12 @@ public class MovementJump extends Movement {
             if (hitboxOnDest(real) && (speed < 0.03 || keepsSpeed(real))) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
-            if (settle > 12 && ctx.playerFeet().equals(dest) && speed < 0.05) {
+            // ice keeps 0.89 of the speed a tick, so stopping under sneak takes a few times longer than on stone
+            int settleTicks = slip(real) > 0.6 ? 40 : 12;
+            if (settle > settleTicks && ctx.playerFeet().equals(dest) && speed < 0.05) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
-            if (settle > 12) {
+            if (settle > settleTicks) {
                 return fail(state, "landing slid off");
             }
             stepIn(state);
@@ -1040,6 +1408,12 @@ public class MovementJump extends Movement {
             // Head-hitter hops are not this. They need their own run-up and timing; starting one from a fast
             // arrival makes MomentumHop.find fail on the first tick and the jump is dropped.
             double along = real.vx * js.dirX + real.vz * js.dirZ;
+            if (slip(real) > 0.6) {
+                // Ostinato: on ice the arrival's speed is worth keeping whichever way the jump goes: a diagonal landed
+                // at 0.2 has only 0.14 along the frame's axis, and stopping to walk back lost the sprint (cubed level 4)
+                double ox = dest.x - src.x, oz = dest.z - src.z, ol = Math.hypot(ox, oz);
+                along = Math.max(along, (real.vx * ox + real.vz * oz) / ol);
+            }
             if (!JumpTemplates.MOMENTUM.contains(t) && ctx.playerFeet().equals(src) && real.onGround && along > 0.18 && !carrySearched) {
                 carrySearched = true;
                 slewTried = true;
@@ -1060,9 +1434,15 @@ public class MovementJump extends Movement {
                 }
             }
             if (!running) {
+                // Ostinato: on ice the landing slides on while the look turns to the run-up, and a walk across the
+                // corner it slid out onto stepped off (cubed level 4). Sneak holds the box on the blocks until the run,
+                // but only while the glide would leave them: a crouch tick ends the sprint, and the jump after it flew
+                // without the sprint boost (cubed level 4, 0 of 4).
+                state.setInput(Input.SNEAK, real.onGround && slip(real) > 0.6 && glidesOff(real));
                 // walk to the run-up start, standing clear of the edge so the box stays on the block
                 double lat = Math.min(t.lateral, 0.75);
-                double tx = wx(t.startA(), 0.5 + lat), tz = wz(t.startA(), 0.5 + lat);
+                double[] spot = clearStance(hopWorld, wx(t.startA(), 0.5 + lat), floorY(src), wz(t.startA(), 0.5 + lat));
+                double tx = spot[0], tz = spot[1];
                 double dx = tx - p.x, dz = tz - p.z;
                 boolean edge = t.runUp == 0 && t.lateral >= 0.5 && !JumpTemplates.MOMENTUM.contains(t);
                 if (edge && Baritone.settings().analogMovement.value && (dx * dx + dz * dz > 0.004 * 0.004 || Math.abs(m.x) + Math.abs(m.z) > 0.003) && stopWait++ < 80) {
@@ -1079,6 +1459,7 @@ public class MovementJump extends Movement {
                 }
                 if (JumpTemplates.MOMENTUM.contains(t)) {
                     running = true;
+                    state.setInput(Input.SNEAK, false);
                     PositionSync.sync(ctx.player());
                 } else {
                     boolean still = Math.abs(m.x) + Math.abs(m.z) <= 0.02;
@@ -1095,6 +1476,12 @@ public class MovementJump extends Movement {
                         // missed; a plan the look can follow is used when this search finds one.
                         float want = js.yaw(js.plan, false, 0);
                         float err = Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot()));
+                        if (along <= 0 && err > JumpSearch.YAW_STEP) {
+                            // Ostinato: still moving away from the jump (the last landing's slide): that speed is no
+                            // run-up, and a plan from it snaps the look round mid-run. Cubed level 1's head-hitter
+                            // flew one 72° behind and fell short every time; stop, then take the turn-first start.
+                            return state;
+                        }
                         if (!slewTried && err > JumpSearch.YAW_STEP) {
                             slewTried = true;
                             js.slewYaw = true;
@@ -1132,6 +1519,7 @@ public class MovementJump extends Movement {
                         }
                     }
                     running = true;
+                    state.setInput(Input.SNEAK, false);
                     // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
                     // position first, or it replays the jump from a stale spot inside the wall and rubber-bands us back
                     PositionSync.sync(ctx.player());

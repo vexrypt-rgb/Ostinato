@@ -148,6 +148,12 @@ public final class TakeoffController {
         }
 
         if (!running) {
+            if (ctx.playerFeet().equals(dest) && player.onGround()) {
+                // Ostinato: already on the landing (a jump flown before this takeoff took over): walking back to the
+                // run-up from here crosses the gap on foot
+                in.clearAllKeys();
+                return pathPosition + 1;
+            }
             double tx, tz;
             if (jump != null) {
                 double lat = Math.min(jump.lateral(), 0.75);
@@ -155,7 +161,12 @@ public final class TakeoffController {
                 tx = pt[0];
                 tz = pt[1];
             } else {
-                boolean room = MovementHelper.canWalkOn(new baritone.utils.BlockStateInterface(ctx), src.x - dx, src.y - 1, src.z - dz);
+                baritone.utils.BlockStateInterface bsi = new baritone.utils.BlockStateInterface(ctx);
+                // Ostinato: and room to stand: a fence post behind the take-off block left the walk back pushing into
+                // it for 240 ticks before handing back (cubed level 6)
+                boolean room = MovementHelper.canWalkOn(bsi, src.x - dx, src.y - 1, src.z - dz)
+                        && MovementHelper.fullyPassable(ctx, new BetterBlockPos(src.x - dx, src.y, src.z - dz))
+                        && MovementHelper.fullyPassable(ctx, new BetterBlockPos(src.x - dx, src.y + 1, src.z - dz));
                 double back = room ? 1.0 : 0.0;
                 tx = src.x + 0.5 - dx * back;
                 tz = src.z + 0.5 - dz * back;

@@ -123,16 +123,26 @@ public final class KinematicController {
         }
         boolean jumpNext = pathPosition < path.movements().size() && (path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementParkour
                 || path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementJump);
+        if (r < 0 && !narrowEnd && declined != null && Baritone.settings().kinematicTrace.value && pathPosition < path.movements().size()) {
+            BetterBlockPos d = path.movements().get(pathPosition).getDest();
+            if (narrowAt(new double[]{d.x + 0.5, d.y, d.z + 0.5})) {
+                System.out.printf("KTRACE decline p=%d why=%s%n", pathPosition, declined);
+            }
+        }
         if ((narrowEnd || jumpNext) && Baritone.settings().kinematicTrace.value) {
             // Ostinato: per-tick trace onto a narrow landing or through a jump: who drives, where the player is, how it moves
             net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
-            System.out.printf("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
-                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround());
+            System.out.printf("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b yaw=%.1f%n", r,
+                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround(), Mth.wrapDegrees(ctx.player().getYRot()));
         }
         return r;
     }
 
+    /** Ostinato: why the controller left the last tick to Baritone before it looked at the stretch (trace only). */
+    private String declined;
+
     private int drive(Baritone baritone, IPath path, int pathPosition) {
+        declined = "state";
         if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
                 || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
                 || ctx.player().isFallFlying() || ctx.player().isPassenger() || !ClientWorld.plainGravity(ctx)) {
@@ -140,10 +150,12 @@ public final class KinematicController {
         }
         if (cooldown > 0) {
             cooldown--;
+            declined = "cooldown";
             return -1;
         }
         world.reset();
         if (!buildLine(path, pathPosition)) {
+            declined = endsAtPlace ? "place" : "line";
             return -1;
         }
         ClientWorld.readPlayer(ctx, real);
@@ -152,8 +164,10 @@ public final class KinematicController {
         double end = line.get(line.size() - 1)[3];
         double handback = endsAtPlace ? PLACE_HANDBACK : HANDBACK;
         if (here[1] > WIDE + 0.2) {
+            declined = "off line " + here[1];
             return -1;
         }
+        declined = null;
         PathViz viz = PathViz.get();
         viz.corridor(line, here[0], WIDE);
         boolean arriving = end - here[0] < handback;
@@ -180,6 +194,15 @@ public final class KinematicController {
         if (newPos > pathPosition) {
             recenters = 0;
         }
+        if (airAim != null) {
+            if (real.onGround) {
+                airAim = null;
+            } else {
+                // Ostinato: still flying onto a narrow block the position sync has already counted reached (the feet
+                // cell is its cell mid-air): keep steering for its middle, or the coast carried past an iron bar (cubed)
+                return steerAir(baritone, newPos, airAim[0], airAim[1]);
+            }
+        }
         if (recenter > 0) {
             recenter--;
             // the second time, once back on the line, walk along it: the rollout keeps steering into the same snag
@@ -203,6 +226,15 @@ public final class KinematicController {
         if (narrowStart && real.onGround) {
             // no run-up on a block an eighth wide: jump from where we stand (or hand the takeoff to TakeoffController)
             return narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
+        }
+        boolean backing = ctx.player().tickCount - narrowBackTick <= 15; // backing up for a run-up takes it out of range
+        if (narrowEnd && real.onGround && end - here[0] < NARROW_RANGE + (backing ? 1.5 : 0)) {
+            // Ostinato: a short hop onto a narrow block: the rollouts score how far along the line a jump gets before
+            // the horizon, and a jump that falls past an open trapdoor's edge is still above it then (cubed level 1)
+            int nt = narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
+            if (nt >= 0) {
+                return nt;
+            }
         }
         if (arriving) {
             return arrive(baritone, newPos, line.get(line.size() - 1));
@@ -343,7 +375,7 @@ public final class KinematicController {
         }
         // a sixteenth in on each side (honey, chest, cake) lands like a full block; honey read as narrow had the
         // controller hunting for a landing onto the honey it was taking off from
-        return MovementHelper.collisionWidth(st) < 0.8;
+        return MovementHelper.collisionTopWidth(st) < 0.8;
     }
 
     /**
@@ -353,62 +385,168 @@ public final class KinematicController {
      * Acts on the first tick of the first plan found (fewest ticks, walking before sprinting), searched again each tick.
      */
     private int narrowTakeoff(Baritone baritone, int newPos, double[] to) {
-        double top = to[1] - to[4], cx = to[0], cz = to[2];
-        BlockPos feet = BlockPos.containing(cx, to[1] + 0.01, cz);
-        BlockState st = ctx.world().getBlockState(feet);
-        if (MovementHelper.collisionTop(st) <= 0) {
-            st = ctx.world().getBlockState(feet.below());
+        double top = to[1] - to[4];
+        double[] n = narrowTarget(to);
+        double cx = n[0], cz = n[1];
+        if (Math.abs(real.y - top) < 0.02 && narrowWalks(top, cx, cz, n[2], n[3])) {
+            // Ostinato: already level with it and the floor carries the feet there (an open trapdoor against a full
+            // block of the same top): walk, a hop from the wide side landed off the plate (cubed level 1)
+            return arrive(baritone, newPos, to);
         }
-        double reach = 0.3 + MovementHelper.collisionWidth(st) / 2 - NARROW_OVERLAP;
-        for (int sp = 0; sp <= 1; sp++) {
-            for (int delay = 0; delay <= 12; delay++) {
-                if (narrowLands(sp == 1, delay, top, cx, cz, reach)) {
-                    float yaw = (float) Math.toDegrees(Math.atan2(-(cx - real.x), cz - real.z));
-                    baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
-                    InputOverrideHandler in = baritone.getInputOverrideHandler();
-                    in.clearAllKeys();
-                    in.setInputForceState(Input.MOVE_FORWARD, true);
-                    in.setInputForceState(Input.SPRINT, sp == 1);
-                    in.setInputForceState(Input.JUMP, delay == 0);
-                    if (delay == 0) {
-                        narrowFlight = true;
-                        narrowJumpTick = ctx.player().tickCount;
+        // Ostinato: and if nothing lands from here, back away from it first for a run-up: on the edge of a 3/16 trapdoor
+        // rail every walk toward the landing stepped off at once, and the standing jump fell short (cubed level 1).
+        // Per back-up the plan landing furthest inside the shape wins: the fewest-ticks plan just reached the edge, and
+        // the camera's lag in the real client then missed it. The first back-up with a margin of NARROW_SAFE is taken,
+        // else the best plan of all.
+        int pick = -1, pickSp = 0, pickDelay = 0;
+        double pickM = 0;
+        for (int back = 0; back <= NARROW_BACK && pickM < NARROW_SAFE; back += 2) {
+            for (int sp = 0; sp <= 1; sp++) {
+                for (int delay = 0; delay <= 12; delay++) {
+                    double m = narrowLands(back, sp == 1, delay, top, cx, cz, n[2], n[3]);
+                    if (m > pickM) {
+                        pick = back;
+                        pickSp = sp;
+                        pickDelay = delay;
+                        pickM = m;
                     }
-                    lastDrivenTick = ctx.player().tickCount;
-                    if (Baritone.settings().kinematicTrace.value) {
-                        System.out.printf("KTRACE narrowTakeoff sprint=%b delay=%d reach=%.3f%n", sp == 1, delay, reach);
-                    }
-                    return newPos;
                 }
             }
         }
-        return -1;
+        if (pick < 0) {
+            if (Baritone.settings().kinematicTrace.value) {
+                System.out.printf("KTRACE narrowTakeoff none at=%.3f,%.3f reach=%.3f,%.3f%n", cx, cz, n[2], n[3]);
+            }
+            double[] h = narrowTarget(new double[]{real.x, real.y, real.z, 0, 0});
+            if (!real.onGround || Math.min(h[2], h[3]) >= 0.45) {
+                return -1;
+            }
+            // Ostinato: standing on a narrow block with no takeoff from here (landed on its very edge): the arrival
+            // walk toward the next one stepped off it (cubed level 1). Sneak back toward its middle instead, the edge
+            // guard keeps the feet on it, and plan again from there.
+            double hx = h[0] - real.x, hz = h[1] - real.z;
+            InputOverrideHandler in = baritone.getInputOverrideHandler();
+            in.clearAllKeys();
+            in.setInputForceState(Input.SNEAK, true);
+            float hy = (float) Math.toDegrees(Math.atan2(-hx, hz));
+            baritone.getLookBehavior().updateTarget(new Rotation(hy, 4f), true);
+            in.setInputForceState(Input.MOVE_FORWARD, Math.hypot(hx, hz) > 0.05 && Math.abs(Mth.wrapDegrees(hy - ctx.player().getYRot())) < 30);
+            lastDrivenTick = ctx.player().tickCount;
+            return newPos;
+        }
+        int back = pick, sp = pickSp, delay = pickDelay;
+        float yaw = (float) Math.toDegrees(Math.atan2(-(cx - real.x), cz - real.z));
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
+        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        in.clearAllKeys();
+        lastDrivenTick = ctx.player().tickCount;
+        if (Baritone.settings().kinematicTrace.value) {
+            System.out.printf("KTRACE narrowTakeoff back=%d sprint=%b delay=%d margin=%.3f at=%.3f,%.3f reach=%.3f,%.3f%n", back, sp == 1, delay, pickM, cx, cz, n[2], n[3]);
+        }
+        if (Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot())) > NARROW_TURN && Math.hypot(real.vx, real.vz) < 0.05) {
+            // Ostinato: the plan walks toward the target at once; from a stand (a teleport, a landing) the
+            // camera is still turning, and W then walked sideways off an iron bar (cubed level 10). Turn first, under
+            // sneak: a landing's last drift carried the feet off a trapdoor's edge while turning (cubed level 1).
+            in.setInputForceState(Input.SNEAK, true);
+            return newPos;
+        }
+        if (back > 0) {
+            in.setInputForceState(Input.MOVE_BACK, true);
+            narrowBackTick = ctx.player().tickCount;
+            return newPos;
+        }
+        in.setInputForceState(Input.MOVE_FORWARD, true);
+        in.setInputForceState(Input.SPRINT, sp == 1);
+        in.setInputForceState(Input.JUMP, delay == 0);
+        if (delay == 0) {
+            narrowFlight = true;
+            narrowJumpTick = ctx.player().tickCount;
+        }
+        return newPos;
     }
 
     static final double NARROW_OVERLAP = 0.05;
-    private boolean narrowFlight;
-    private int narrowJumpTick;
+    /** The most ticks a narrow takeoff backs away from its landing for a run-up. */
+    static final int NARROW_BACK = 10;
+    /** How far inside the landing's reach (blocks, on the tighter axis) a narrow takeoff plan should land. */
+    static final double NARROW_SAFE = 0.05;
+    /** How far (degrees) the camera may still be off the takeoff heading when a narrow takeoff from a stand starts walking. */
+    static final float NARROW_TURN = 6;
+    /** The middle of the narrow landing being flown onto, kept until the feet are down. */
+    private double[] airAim;
+    /** How far from a narrow stretch end the controller plans the takeoff itself rather than the rollouts. */
+    static final double NARROW_RANGE = 2.0;
 
-    private boolean narrowLands(boolean sprint, int delay, double top, double cx, double cz, double reach) {
+    /**
+     * Ostinato: where to land on a narrow stretch end: the middle of its support's collision shape and, per axis, how
+     * far the feet may be from it and still overlap the shape by {@link #NARROW_OVERLAP}. Not the cell middle: an
+     * open trapdoor is a 3/16 wall along one side of its cell, so aiming at the middle jumped past it.
+     */
+    private double[] narrowTarget(double[] to) {
+        BlockPos feet = BlockPos.containing(to[0], to[1] + 0.01, to[2]);
+        BlockState st = ctx.world().getBlockState(feet);
+        BlockPos at = feet;
+        if (MovementHelper.collisionTop(st) <= 0) {
+            at = feet.below();
+            st = ctx.world().getBlockState(at);
+        }
+        net.minecraft.world.phys.AABB b = MovementHelper.collisionTopBounds(st);
+        if (b == null) {
+            double r = 0.3 + 0.5 - NARROW_OVERLAP;
+            return new double[]{to[0], to[2], r, r};
+        }
+        double[] x = narrowSpan(at.getX(), b.minX, b.maxX), z = narrowSpan(at.getZ(), b.minZ, b.maxZ);
+        return new double[]{x[0], z[0], x[1], z[1]};
+    }
+
+    /** Middle and half width of the feet positions over [lo, hi) of the cell at c that overlap it and stay in the cell. */
+    static double[] narrowSpan(int c, double lo, double hi) {
+        double a = Math.max(c + lo - 0.3 + NARROW_OVERLAP, c + 0.01), b = Math.min(c + hi + 0.3 - NARROW_OVERLAP, c + 0.99);
+        return b < a ? new double[]{c + (lo + hi) / 2, 0} : new double[]{(a + b) / 2, (b - a) / 2};
+    }
+    private boolean narrowFlight;
+    private int narrowJumpTick, narrowBackTick = -100;
+
+    /** Whether {@link #arrive}'s ground steering settles the feet inside the reach without leaving the top. */
+    private boolean narrowWalks(double top, double cx, double cz, double reachX, double reachZ) {
+        sim.copyFrom(real);
+        for (int t = 0; t < 40; t++) {
+            if (!sim.onGround || Math.abs(sim.y - top) > 0.02) return false;
+            double dx = cx - sim.x, dz = cz - sim.z, d = Math.hypot(dx, dz), speed = Math.hypot(sim.vx, sim.vz);
+            if (speed < 0.03 && Math.min(reachX - Math.abs(dx), reachZ - Math.abs(dz)) >= NARROW_SAFE) return true;
+            double want = Math.min(0.22, 0.04 + d * 0.3);
+            int a = speed < want && d > 0.12 ? 1 : speed > want + 0.07 && d < 1.0 ? -1 : 0;
+            sim.tick((float) Math.toDegrees(Math.atan2(-dx, dz)), a, false, false);
+        }
+        return false;
+    }
+
+    /** How far inside the reach the plan lands (blocks, tighter axis), or -1 if it does not. */
+    private double narrowLands(int back, boolean sprint, int delay, double top, double cx, double cz, double reachX, double reachZ) {
         sim.copyFrom(real);
         boolean air = false;
+        for (int t = 0; t < back; t++) {
+            if (!sim.onGround) return -1; // backed off the far edge
+            sim.tick((float) Math.toDegrees(Math.atan2(-(cx - sim.x), cz - sim.z)), -1, false, false);
+        }
         for (int t = 0; t < delay + 40; t++) {
             float yaw = (float) Math.toDegrees(Math.atan2(-(cx - sim.x), cz - sim.z));
             if (t <= delay) {
-                if (!sim.onGround) return false; // walked off the edge before the jump
+                if (!sim.onGround) return -1; // walked off the edge before the jump
                 sim.tick(yaw, 1, sprint, t == delay);
                 continue;
             }
             if (!sim.onGround) air = true;
             if (air && sim.onGround) {
-                return Math.abs(sim.y - top) < 0.02 && Math.abs(sim.x - cx) <= reach && Math.abs(sim.z - cz) <= reach;
+                double m = Math.min(reachX - Math.abs(sim.x - cx), reachZ - Math.abs(sim.z - cz));
+                return Math.abs(sim.y - top) < 0.02 && m >= 0 ? m + 1e-6 : -1;
             }
-            if (sim.y < top - 1.0) return false;
+            if (sim.y < top - 1.0) return -1;
             double d = Math.hypot(cx - sim.x, cz - sim.z);
             int a = airArrive(d, Math.hypot(sim.vx, sim.vz));
             sim.tick(yaw, a, false, false);
         }
-        return false;
+        return -1;
     }
 
     /** Ostinato: mid-air over a narrow landing: 1 hold forward toward its middle, -1 brake, 0 coast. */
@@ -421,9 +559,25 @@ public final class KinematicController {
         return speed > 0.08 ? -1 : 0;
     }
 
+    /** Ostinato: mid-air onto a narrow landing whose middle is (cx, cz): the arrival steering of {@link #arrive}. */
+    private int steerAir(Baritone baritone, int newPos, double cx, double cz) {
+        double dx = cx - real.x, dz = cz - real.z;
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        baritone.getLookBehavior().human();
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
+        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        in.clearAllKeys();
+        int a = airArrive(Math.hypot(dx, dz), Math.hypot(real.vx, real.vz));
+        in.setInputForceState(Input.MOVE_FORWARD, a > 0 && Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot())) < 60);
+        in.setInputForceState(Input.MOVE_BACK, a < 0);
+        lastDrivenTick = ctx.player().tickCount;
+        return newPos;
+    }
+
     /** Stretch end: ease onto the last point (slow, no sprint) so the next movement starts from rest. */
     private int arrive(Baritone baritone, int newPos, double[] to) {
-        double dx = to[0] - real.x, dz = to[2] - real.z;
+        double[] n = narrowEnd ? narrowTarget(to) : null;
+        double dx = (n != null ? n[0] : to[0]) - real.x, dz = (n != null ? n[1] : to[2]) - real.z;
         double d = Math.hypot(dx, dz);
         double speed = Math.hypot(real.vx, real.vz);
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
@@ -435,6 +589,7 @@ public final class KinematicController {
         float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot()));
         if (narrowEnd && !real.onGround) {
             // Ostinato: in flight onto a candle, pot or rod: braking now drops short of it; steer for its middle instead
+            airAim = new double[]{n[0], n[1]};
             int a = airArrive(d, speed);
             in.setInputForceState(Input.MOVE_FORWARD, a > 0 && diff < 60);
             in.setInputForceState(Input.MOVE_BACK, a < 0);
@@ -489,6 +644,7 @@ public final class KinematicController {
         int lookahead = longJump ? LOOKAHEAD : HORIZON;
         float cam = camYaw, camVel = camVel0;
         float[] vel = new float[1];
+        simJumped = false;
         for (int t = 0; t < lookahead; t++) {
             float off = t < 4 ? yawOffset : 0;
             // off long gaps a jump plan jumps once, now; toward one it keeps hopping to carry the speed over
@@ -499,7 +655,12 @@ public final class KinematicController {
                 camVel = vel[0];
                 want = cam;
             }
+            boolean air = !sim.onGround;
+            simJumped |= jump;
             sim.tick(want, 1, !sim.onGround && t < 4 ? rolloutStrafe : 0, true, jump);
+            if (air && sim.onGround && simJumped && !landsSquare()) {
+                return reject("lands on edge");
+            }
             if (sim.collidedH && !wasBumping && t < HORIZON) {
                 bumps++; // grazing a wall or trunk cancels sprint (and the sprint-jump boost) in vanilla
             }
@@ -514,8 +675,9 @@ public final class KinematicController {
                 if (pr[1] > WIDE) return reject("exits corridor");
                 if (hazard(sim.x, sim.y, sim.z)) return reject("hazard");
                 if (sim.y < floorAt(pr[0]) - 0.4) return reject("falls below path");
+                if (wetBelow(pr[0])) return reject("into water");
                 if (climbedOff(pr[0])) return reject("climbs off path");
-            } else if (hardLanding() || pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || climbedOff(pr[0])) {
+            } else if (hardLanding() || pr[1] > WIDE || hazard(sim.x, sim.y, sim.z) || sim.y < floorAt(pr[0]) - 0.4 || wetBelow(pr[0]) || climbedOff(pr[0])) {
                 return -1e9;
             }
             s = Math.max(s, pr[0]);
@@ -527,7 +689,8 @@ public final class KinematicController {
                 score = s + 0.5 * Math.sqrt(sim.vx * sim.vx + sim.vz * sim.vz) - BUMP * bumps;
             }
             if (t >= HORIZON - 1 && sim.onGround && (delay == NEVER || s >= end - 0.3)) {
-                return score; // on the path with no jump pending: nothing later in this plan can fall in
+                // on the path with no jump pending: nothing later in this plan can fall in
+                return edgeHolds() ? score : reject("slides off edge");
             }
         }
         return settles(cam, camVel, s) ? score : reject("lands in gap");
@@ -555,31 +718,109 @@ public final class KinematicController {
                 want = cam;
             }
             sim.tick(want, true, true, false);
+            if (sim.onGround && simJumped && !landsSquare()) {
+                return false;
+            }
             double[] pr = project(line, sim.x, sim.y, sim.z, s + REACH_AHEAD);
-            if (hardLanding() || pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
+            if (hardLanding() || pr[1] > WIDE || sim.y < floorAt(pr[0]) - 0.4 || wetBelow(pr[0]) || hazard(sim.x, sim.y, sim.z) || climbedOff(pr[0])) {
                 return false;
             }
             s = Math.max(s, pr[0]);
         }
-        return sim.onGround;
+        return sim.onGround && edgeHolds();
     }
 
-    /** A long jump must still land if it leaves a quarter block late: no barely-landing plans. */
+    /**
+     * Ostinato: in water under the path's floor. Water slows a fall, so a jump short into the pool under a gap stayed
+     * above the falls-below-path line long enough to swim out onto the landing in the sim (cubed level 3).
+     */
+    private boolean wetBelow(double s) {
+        return sim.y < floorAt(s) - 0.05 && sim.inWater();
+    }
+
+    private final List<double[]> under = new ArrayList<>();
+
+    /**
+     * Ostinato: a plan that ends on the ground with nothing under the middle of the feet hangs on an edge, and the
+     * speed it has may carry it off. A short jump came down on the very lip of its takeoff block heading into the gap:
+     * the horizon ended on that landing tick, and the next tick fell (cubed level 3). Coast it a few ticks, no keys.
+     */
+    private boolean edgeHolds() {
+        if (!sim.onGround) {
+            return true;
+        }
+        under.clear();
+        world.collect(sim.x - 0.01, sim.y - 0.05, sim.z - 0.01, sim.x + 0.01, sim.y, sim.z + 0.01, under);
+        for (double[] b : under) {
+            if (b[0] <= sim.x && b[3] >= sim.x && b[2] <= sim.z && b[5] >= sim.z && b[4] >= sim.y - 0.05 && b[1] < sim.y) {
+                return true;
+            }
+        }
+        for (int t = 0; t < 5; t++) {
+            sim.tick(0, false, false, false);
+            if (!sim.onGround) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the current rollout has jumped (its touchdowns are checked by {@link #landsSquare}). */
+    private boolean simJumped;
+    /** How far in from the box's sides a jump's touchdown must still have the floor under it. */
+    static final double LAND_INSET = 0.2;
+
+    /**
+     * Ostinato: a jump touches down with the floor under the middle of the feet, give or take {@link #LAND_INSET} of the
+     * box's 0.3 to each side, or with the floor just ahead of it (a long jump reaching the near lip is fine). A touchdown
+     * on a side edge only held in the sim: the real camera turned a few degrees less in flight, and a gap3 onto a
+     * one-wide block taken from 0.7 off the line came down 0.3 east of it (cubed level 6).
+     */
+    private boolean landsSquare() {
+        double hs = Math.hypot(sim.vx, sim.vz), ux = hs < 1e-4 ? 0 : sim.vx / hs, uz = hs < 1e-4 ? 0 : sim.vz / hs;
+        double h = 0.3 - LAND_INSET, ax = ux * 0.3, az = uz * 0.3;
+        double minX = sim.x - h + Math.min(0, ax), maxX = sim.x + h + Math.max(0, ax);
+        double minZ = sim.z - h + Math.min(0, az), maxZ = sim.z + h + Math.max(0, az);
+        under.clear();
+        world.collect(minX, sim.y - 0.05, minZ, maxX, sim.y, maxZ, under);
+        for (double[] b : under) {
+            if (b[0] < maxX && b[3] > minX && b[2] < maxZ && b[5] > minZ && b[4] >= sim.y - 0.05 && b[1] < sim.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static final double LATERAL_MARGIN = 0.15;
+
+    /**
+     * A long jump must still land if it leaves a quarter block late, or a little to either side: no barely-landing
+     * plans. Ostinato: the side shifts catch a jump cutting toward a path that turns after the landing, which touched
+     * down on the landing block's very edge in the sim and fell past it for real (cubed level 9).
+     */
     private boolean holdsWithMargin(float off, int delay, double s0) {
         double hs = Math.hypot(real.vx, real.vz);
         if (!longJump || !real.onGround || hs < 0.01) {
             return true;
         }
+        double ux = real.vx / hs, uz = real.vz / hs;
+        double[][] shifts = {{-ux * 0.25, -uz * 0.25}, {-uz * LATERAL_MARGIN, ux * LATERAL_MARGIN}, {uz * LATERAL_MARGIN, -ux * LATERAL_MARGIN}};
         double x = real.x, z = real.z;
-        real.x -= real.vx / hs * 0.25;
-        real.z -= real.vz / hs * 0.25;
         boolean rec = vizRec;
         vizRec = false;
-        double r = rollout(off, delay, false, s0);
+        boolean holds = true;
+        for (double[] d : shifts) {
+            real.x = x + d[0];
+            real.z = z + d[1];
+            if (rollout(off, delay, false, s0) <= -1e8) {
+                holds = false;
+                break;
+            }
+        }
         vizRec = rec;
         real.x = x;
         real.z = z;
-        return r > -1e8;
+        return holds;
     }
 
     /**
