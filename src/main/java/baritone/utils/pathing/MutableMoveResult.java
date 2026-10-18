@@ -38,6 +38,8 @@ public final class MutableMoveResult {
     public boolean mount;
     /** A fall steered through holes on the way down: {x, z, floorY} for each hole, in order, or null for a straight drop. */
     public int[] steer;
+    /** Ostinato: set when the cost is offered before its check; the pathfinder runs it when it pops the destination. */
+    public LazyCheck check;
 
     public MutableMoveResult() {
         reset();
@@ -52,5 +54,6 @@ public final class MutableMoveResult {
         clutch = false;
         mount = false;
         steer = null;
+        check = null;
     }
 }

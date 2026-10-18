@@ -74,6 +74,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
     @Override
     protected Optional<IPath> calculate0(long primaryTimeout, long failureTimeout) {
         int minY = calcContext.minY;
+        calcContext.lazyJumps = Baritone.settings().lazyJumpChecks.value;
         int height = calcContext.maxY;
         startNode = getNodeAtPosition(startX, startY, startZ, BetterBlockPos.longHash(startX, startY, startZ));
         startNode.cost = 0;
@@ -125,6 +126,33 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             PathNode currentNode = openSet.removeLowest();
             mostRecentConsidered = currentNode;
             numNodes++;
+            if (currentNode.pending != null) {
+                // Ostinato: popped on an unchecked offer: check it now. Passed at the offered cost, the node expands as
+                // usual; otherwise it goes back in at whatever it is worth now (its checked cost or the next offer).
+                PendingOffer o = currentNode.pending;
+                currentNode.pending = o.next;
+                double v = o.check.verify();
+                double checked = v >= ActionCosts.COST_INF ? ActionCosts.COST_INF : o.cost + (v - o.raw) * o.mult;
+                if (currentNode.cost - checked > minimumImprovement) {
+                    currentNode.cost = checked;
+                    currentNode.previous = o.prev;
+                    prune(currentNode, minimumImprovement);
+                    if (noteBest(currentNode, bestHeuristicSoFar, minimumImprovement)) {
+                        failing = false;
+                    }
+                }
+                if (v != o.raw || currentNode.pending != null || currentNode.cost != checked) {
+                    double key = currentNode.pending != null ? currentNode.pending.cost : currentNode.cost;
+                    if (currentNode.pending != null || currentNode.expandedCost - currentNode.cost > minimumImprovement) {
+                        if (key < ActionCosts.COST_INF) {
+                            currentNode.combinedCost = key + heuristicWeight * currentNode.estimatedCostToGoal;
+                            openSet.insert(currentNode);
+                        }
+                    }
+                    continue;
+                }
+            }
+            currentNode.expandedCost = currentNode.cost;
             if (goal.isInGoal(currentNode.x, currentNode.y, currentNode.z)) {
                 logDebug(profileLine(numNodes, numMovementsConsidered, numRejected, numEmptyChunk, numFavored));
                 logDebug("Took " + (System.currentTimeMillis() - startTime) + "ms, " + numMovementsConsidered + " movements considered");
@@ -206,24 +234,30 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     actionCost *= neighbor.favor;
                 }
                 double tentativeCost = currentNode.cost + actionCost;
+                if (res.check != null) {
+                    // Ostinato: an unchecked move: queued on the node, which keeps its checked cost and parent for now
+                    if (neighbor.cost - tentativeCost > minimumImprovement && offer(neighbor, new PendingOffer(tentativeCost, res.cost, actionCost / res.cost, currentNode, res.check))) {
+                        neighbor.combinedCost = neighbor.pending.cost + heuristicWeight * neighbor.estimatedCostToGoal;
+                        if (neighbor.isOpen()) {
+                            openSet.update(neighbor);
+                        } else {
+                            openSet.insert(neighbor);
+                        }
+                    }
+                    continue;
+                }
                 if (neighbor.cost - tentativeCost > minimumImprovement) {
                     neighbor.previous = currentNode;
                     neighbor.cost = tentativeCost;
-                    neighbor.combinedCost = tentativeCost + heuristicWeight * neighbor.estimatedCostToGoal; // Ostinato: weighted (weight 1 = stock)
+                    prune(neighbor, minimumImprovement); // Ostinato: offers no cheaper than this need no check
+                    neighbor.combinedCost = (neighbor.pending != null ? neighbor.pending.cost : tentativeCost) + heuristicWeight * neighbor.estimatedCostToGoal; // Ostinato: weighted (weight 1 = stock)
                     if (neighbor.isOpen()) {
                         openSet.update(neighbor);
                     } else {
                         openSet.insert(neighbor);//dont double count, dont insert into open set if it's already there
                     }
-                    for (int i = 0; i < COEFFICIENTS.length; i++) {
-                        double heuristic = neighbor.estimatedCostToGoal + neighbor.cost * INVERSE_COEFFICIENTS[i];
-                        if (bestHeuristicSoFar[i] - heuristic > minimumImprovement) {
-                            bestHeuristicSoFar[i] = heuristic;
-                            bestSoFar[i] = neighbor;
-                            if (failing && getDistFromStartSq(neighbor) > MIN_DIST_PATH * MIN_DIST_PATH) {
-                                failing = false;
-                            }
-                        }
+                    if (noteBest(neighbor, bestHeuristicSoFar, minimumImprovement)) {
+                        failing = false;
                     }
                 }
             }
@@ -242,6 +276,67 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             logDebug("Took " + (System.currentTimeMillis() - startTime) + "ms, " + numMovementsConsidered + " movements considered");
         }
         return result;
+    }
+
+    /** Ostinato: max unchecked offers queued on one node; a costlier one is dropped. */
+    private static final int MAX_PENDING = 4;
+
+    /** Queues an unchecked offer in cost order; false when it is dropped as one too many. */
+    private static boolean offer(PathNode node, PendingOffer o) {
+        PendingOffer prev = null, at = node.pending;
+        int n = 0;
+        while (at != null && at.cost <= o.cost) {
+            prev = at;
+            at = at.next;
+            n++;
+        }
+        if (n >= MAX_PENDING) {
+            return false;
+        }
+        o.next = at;
+        if (prev == null) {
+            node.pending = o;
+        } else {
+            prev.next = o;
+        }
+        for (PendingOffer e = o; e.next != null; e = e.next) {
+            if (++n >= MAX_PENDING) {
+                e.next = null;
+                break;
+            }
+        }
+        return true;
+    }
+
+    /** Drops queued offers no cheaper than the node's checked cost. */
+    private static void prune(PathNode node, double minimumImprovement) {
+        PendingOffer prev = null;
+        for (PendingOffer e = node.pending; e != null; prev = e, e = e.next) {
+            if (!(node.cost - e.cost > minimumImprovement)) {
+                if (prev == null) {
+                    node.pending = null;
+                } else {
+                    prev.next = null;
+                }
+                return;
+            }
+        }
+    }
+
+    /** Updates the best node by each coefficient; true when one of them is past MIN_DIST_PATH from the start. */
+    private boolean noteBest(PathNode node, double[] bestHeuristicSoFar, double minimumImprovement) {
+        boolean far = false;
+        for (int i = 0; i < COEFFICIENTS.length; i++) {
+            double heuristic = node.estimatedCostToGoal + node.cost * INVERSE_COEFFICIENTS[i];
+            if (bestHeuristicSoFar[i] - heuristic > minimumImprovement) {
+                bestHeuristicSoFar[i] = heuristic;
+                bestSoFar[i] = node;
+                if (getDistFromStartSq(node) > MIN_DIST_PATH * MIN_DIST_PATH) {
+                    far = true;
+                }
+            }
+        }
+        return far;
     }
 
     private static String profileLine(int nodes, int movements, int rejected, int emptyChunks, int favored) {
