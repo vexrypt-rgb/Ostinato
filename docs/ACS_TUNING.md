@@ -139,3 +139,17 @@ Rule A/Bs on the held-out bots (kept only if they win):
 - Cut a bite under fire (`-Dostinato.biteCut=true`): 12/32 on vs 14/26 off. Not kept (opt-in only).
 - Shield-break sooner against a blocking foe (`-Dostinato.axeGap=8` vs 25), first run: SickSheet 9/12 vs 8/12, SMP 3/12 vs 1/12.
   Paired confirmation (SMP, same seed, 24 rounds each): 2/24 vs 4/24. Combined on SMP it's 5/36 for each, so the default stays 25.
+
+### SPSA verdicts (2026-10-18, Carpet PvP, sword kit)
+- c0=1, a=0.5: 277/300 (92.3%). One candidate tested, rejected by GSPRT (21 pairs, -0.252 a pair, llr -1.61). Nothing kept.
+- c0=3, a=2: 243/284 (85.6%), stuck at round 285 (Carpet spawn). One candidate rejected (25 pairs, -0.193 a pair, llr -1.66). Nothing kept.
+- Both runs cost wins while exploring, and neither found a better point: on this pool the hand-tuned defaults are at the ceiling.
+  Each run spent ~150 pairs on gradient steps for one test, so a run of this size tests one or two points.
+
+### Our axe vs the SMP bots' shield
+Not a disable bug. The SMP bots tap the shield: about 240 of 370 uses last 1-4 ticks, which is under 26.3's 5-tick
+warm-up, so the shield never blocks. CombatMelee counted any shield in use as raised. It held the sword and swapped
+to the axe (the swap resets the charge) on every tap. Only 31 of 334 axe swaps met a real block.
+`-Dostinato.raiseIsBlock=false` makes the warm-up count as no block: 3/24 vs 2/24 on paired seeds, axe swaps
+6.8 -> 4.0 per round, damage taken 46.3 -> 43.2. Directionally better but not significant, so it stays opt-in.
+The SMP bots out-trade us: they land 272 hits to our 194, at about the same swing count and distance.
