@@ -73,6 +73,17 @@ final class CombatMovement {
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
     }
 
+    /** Ostinato: in reach, strafe to the side whose hit knocks the foe into a hazard, if there is one; true if a key went down. */
+    boolean pushStrafe(Player me, LivingEntity target) {
+        int side = push == null ? 0 : push.applyAsInt(me, target);
+        if (side == 0) return false;
+        strafeDir = side;
+        strafeLeft = Math.max(strafeLeft, 3);
+        pushTicks++;
+        hands.key(side > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
+        return true;
+    }
+
     /** Close in on an aimed shooter, reversing sideways often enough that its lead on our velocity is wrong. */
     void dodgeRanged(Player me) {
         if (--dodgeLeft <= 0) {

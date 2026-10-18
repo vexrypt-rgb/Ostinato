@@ -113,11 +113,24 @@ final class CombatMelee {
         return null;
     }
 
+    /** Ostinato: -Dostinato.dodge=true steps out of the foe's reach when its swing is due and ours is not. */
+    static final boolean DODGE = Boolean.getBoolean("ostinato.dodge");
+
+    /** Horizontal distance between the two of us {@code k} ticks on, each carried by its current velocity. */
+    static double predictedDist(Player me, LivingEntity target, int k) {
+        var a = me.getDeltaMovement();
+        var b = target.getDeltaMovement();
+        double dx = target.getX() + b.x * k - me.getX() - a.x * k, dz = target.getZ() + b.z * k - me.getZ() - a.z * k;
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
     PathingCommand exchange(Player me, LivingEntity target, double dist) {
         if (!inReach) movement.steer(me, target, dist, chase, critArmed);
+        else if (DODGE && foeArmed && foeDueIn <= 2 && cd < 0.9f && predictedDist(me, target, 2) < 3.3) hands.key(Input.MOVE_BACK); // Ostinato: out of its reach for the swing that is due
         else if (dist < 1.4) hands.key(Input.MOVE_BACK); // sword: too close, make space
         // its reach is measured centre to centre, a little shorter than ours: recharge just outside it
         else if ((duel || foeArmed && p.spaceAny.get() > 0) && cd < (float) p.spaceCharge.real() && dist < p.duelSpace.real()) hands.key(Input.MOVE_BACK);
+        if (inReach && CombatFooting.PUSH) movement.pushStrafe(me, target); // Ostinato: line the hit up with a hazard behind it
         if (me.hurtTime == me.hurtDuration - 1 && canJump) hands.key(Input.JUMP); // jump reset
 
         if (axeTime && inReach && me.tickCount - shield.lastShieldTick >= 2) { // an axe disables a raised shield whatever the charge
