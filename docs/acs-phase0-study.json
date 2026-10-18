@@ -1,0 +1,180 @@
+{
+ "files": 5108,
+ "fights": 5084,
+ "vex_fights": 5054,
+ "per_kit": {
+  "mace+shield": {
+   "fights": 1211,
+   "results": {
+    "lost": 540,
+    "win": 645,
+    "death": 26
+   },
+   "win_rate": 0.533,
+   "mean_fight_ticks": 169.8,
+   "windows": 1432,
+   "full_windows": 231,
+   "windows_per_fight": 1.18,
+   "cv_dealt_window": 1.404,
+   "cv_taken_window": 0.912,
+   "lag1_autocorr_dealt": 0.093,
+   "design_effect_dealt": 1.06,
+   "score_sd_bars": 0.518,
+   "win_sd": 0.499
+  },
+  "mace+spear+shield": {
+   "fights": 908,
+   "results": {
+    "lost": 371,
+    "death": 243,
+    "win": 294
+   },
+   "win_rate": 0.324,
+   "mean_fight_ticks": 422.4,
+   "windows": 2095,
+   "full_windows": 1191,
+   "windows_per_fight": 2.31,
+   "cv_dealt_window": 1.623,
+   "cv_taken_window": 1.0,
+   "lag1_autocorr_dealt": 0.407,
+   "design_effect_dealt": 1.64,
+   "score_sd_bars": 0.948,
+   "win_sd": 0.468
+  },
+  "sword+bow+shield": {
+   "fights": 795,
+   "results": {
+    "win": 432,
+    "death": 197,
+    "lost": 166
+   },
+   "win_rate": 0.543,
+   "mean_fight_ticks": 908.8,
+   "windows": 3736,
+   "full_windows": 2949,
+   "windows_per_fight": 4.7,
+   "cv_dealt_window": 0.45,
+   "cv_taken_window": 0.823,
+   "lag1_autocorr_dealt": 0.269,
+   "design_effect_dealt": 2.04,
+   "score_sd_bars": 2.449,
+   "win_sd": 0.498
+  },
+  "sword+shield": {
+   "fights": 500,
+   "results": {
+    "win": 320,
+    "lost": 72,
+    "death": 108
+   },
+   "win_rate": 0.64,
+   "mean_fight_ticks": 707.6,
+   "windows": 1979,
+   "full_windows": 1481,
+   "windows_per_fight": 3.96,
+   "cv_dealt_window": 0.468,
+   "cv_taken_window": 0.897,
+   "lag1_autocorr_dealt": 0.367,
+   "design_effect_dealt": 2.38,
+   "score_sd_bars": 2.516,
+   "win_sd": 0.48
+  },
+  "anchor+sword+totem": {
+   "fights": 402,
+   "results": {
+    "lost": 301,
+    "death": 86,
+    "win": 15
+   },
+   "win_rate": 0.037,
+   "mean_fight_ticks": 570.8,
+   "windows": 1097,
+   "full_windows": 697,
+   "windows_per_fight": 2.73,
+   "cv_dealt_window": 3.257,
+   "cv_taken_window": 2.258,
+   "lag1_autocorr_dealt": -0.014,
+   "design_effect_dealt": 1.8,
+   "score_sd_bars": 1.386,
+   "win_sd": 0.19
+  },
+  "axe+sword+shield": {
+   "fights": 355,
+   "results": {
+    "death": 72,
+    "win": 222,
+    "lost": 61
+   },
+   "win_rate": 0.625,
+   "mean_fight_ticks": 180.2,
+   "windows": 482,
+   "full_windows": 127,
+   "windows_per_fight": 1.36,
+   "cv_dealt_window": 0.402,
+   "cv_taken_window": 1.23,
+   "lag1_autocorr_dealt": 0.635,
+   "design_effect_dealt": 2.25,
+   "score_sd_bars": 1.372,
+   "win_sd": 0.484
+  },
+  "crystal+sword+totem": {
+   "fights": 322,
+   "results": {
+    "lost": 294,
+    "death": 27,
+    "win": 1
+   },
+   "win_rate": 0.003,
+   "mean_fight_ticks": 814.9,
+   "windows": 1301,
+   "full_windows": 979,
+   "windows_per_fight": 4.04,
+   "cv_dealt_window": 2.167,
+   "cv_taken_window": 1.554,
+   "lag1_autocorr_dealt": 0.547,
+   "design_effect_dealt": 2.86,
+   "score_sd_bars": 1.222,
+   "win_sd": 0.056
+  },
+  "axe+shield": {
+   "fights": 269,
+   "results": {
+    "death": 32,
+    "lost": 43,
+    "win": 194
+   },
+   "win_rate": 0.721,
+   "mean_fight_ticks": 504.5,
+   "windows": 787,
+   "full_windows": 522,
+   "windows_per_fight": 2.93,
+   "cv_dealt_window": 0.386,
+   "cv_taken_window": 0.888,
+   "lag1_autocorr_dealt": 0.111,
+   "design_effect_dealt": 1.21,
+   "score_sd_bars": 1.845,
+   "win_sd": 0.448
+  },
+  "mace+sword+shield": {
+   "fights": 239,
+   "results": {
+    "death": 3,
+    "lost": 40,
+    "win": 196
+   },
+   "win_rate": 0.82,
+   "mean_fight_ticks": 374.7,
+   "windows": 489,
+   "full_windows": 254,
+   "windows_per_fight": 2.05,
+   "cv_dealt_window": 1.197,
+   "cv_taken_window": 1.355,
+   "lag1_autocorr_dealt": 0.22,
+   "design_effect_dealt": 1.34,
+   "score_sd_bars": 0.631,
+   "win_sd": 0.384
+  }
+ },
+ "corpus_gz_bytes": 86688497,
+ "summary_chars_per_fight": 2802.7
+}

@@ -33,6 +33,13 @@ final class CombatSurvival {
     }
 
     int eatTicks, fleeTicks;
+    /** Ostinato: hits taken in the bite now going, and the tick before which no new bite starts after one was cut. */
+    private int biteHits, noBiteUntil;
+    /**
+     * Ostinato: opt-in (-Dostinato.biteCut=true). Measured 2026-10-18 on the held-out bots, lockstep, same seeds:
+     * cut on 12/32 wins (SickSheet 8/16, SMP 4/16), cut off 14/26 (7/10, 7/16). No gain, so play leaves it off.
+     */
+    private static final boolean BITE_CUT = Boolean.getBoolean("ostinato.biteCut");
     private int handTicks;
 
     private final IPlayerContext ctx;
@@ -86,9 +93,22 @@ final class CombatSurvival {
         boolean few = apples > 0 && apples <= heal.keep.get(); // the last ones are for the near line
         boolean critical = me.getHealth() <= (roomy && !few ? heal.eatFar.real() : heal.eatNear.real()) && (eatTicks > 0 || !pressed);
         boolean longFall = !me.onGround() && me.fallDistance > 3; // a long fall is the whole problem: no time to eat through it
-        if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall)) {
+        // Ostinato: 080055 smp hard: an apple started at 12 in its reach and went on through five 6.41s to the
+        // death. A bite eaten under a sword that keeps landing is a race lost; with a shield to hand, cut it on the
+        // first hit that leaves most of it to chew and cover up instead, and leave apples alone for a second.
+        if (eatTicks > 0 && me.hurtTime == me.hurtDuration - 1) biteHits++;
+        boolean shieldReady = me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
+        boolean underFire = BITE_CUT && eatTicks > 0 && eatTicks < 20 && biteHits > 0 && shieldReady && me.getHealth() > 4
+                && eyeToBox(me, target) < 4 && target.getMainHandItem().getItem() != Items.MACE;
+        // Ostinato: an apple at a fifth of the pace let hit after hit walk us back into the lava (20-35 ticks, lava ring logs)
+        boolean cornered = exposed && me.getHealth() > 4;
+        if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall || underFire || cornered)) {
             hands.use(false);
             eatTicks = 0;
+            biteHits = 0;
+            if (underFire) noBiteUntil = me.tickCount + 20;
+        } else if (eatTicks == 0 && me.tickCount < noBiteUntil && me.getHealth() > 4) {
+            // Ostinato: just cut a bite under fire: the shield has the next second
         } else if (!longFall && !(eatTicks == 0 && overhead && target.getY() > me.getY() + 2.0) // cancelling a bite for a dive and restarting it next tick flickered the shield (it needs ~5 steady ticks)
             && !explosives.blastThreat(me) && (!charging || critical) && (eatTicks > 0 || (critical || me.getHealth() <= heal.eatSafe.real() && !few && (safe || opening) && !pressed || explosives.fighting() && me.getAbsorptionAmount() == 0 && me.getHealth() <= (inv.slotOf(me, Items.RESPAWN_ANCHOR) >= 0 ? 12 : 16)) && (!me.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION) || me.getHealth() <= 8) // regen is too slow to trust when one hit finishes us
                 && (inv.slotOf(me, Items.GOLDEN_APPLE) >= 0 || inv.slotOf(me, Items.ENCHANTED_GOLDEN_APPLE) >= 0))) {
@@ -96,7 +116,8 @@ final class CombatSurvival {
                 hands.use(false);
                 hands.abortCharge();
             }
-            if (eat(me, target)) return hands.decide("eat");
+            // Ostinato: no new bite where the foe's next hit drifts us into lava or off a drop (CombatFooting.exposed)
+            if (!(eatTicks == 0 && exposed && me.getHealth() > 4) && eat(me, target)) return hands.decide("eat");
         }
         // ordinary food: a hungry bar stops regeneration and the sprint, so top it up when the foe gives room
         boolean peckish = me.getFoodData().getFoodLevel() <= 14;
@@ -109,6 +130,8 @@ final class CombatSurvival {
     }
 
     int foodTicks;
+    /** Ostinato: set each tick by PvpProcess from {@link CombatFooting#exposed}. */
+    boolean exposed;
 
     /** An ordinary edible item (not a golden apple, not one that hurts), pulled into the hotbar. Best saturation first. */
     private int foodSlot(Player me) {
@@ -196,13 +219,17 @@ final class CombatSurvival {
             hands.use(false);
             return true;
         }
-        if (eatTicks++ == 0) hands.gappleEaten();
+        if (eatTicks++ == 0) {
+            hands.gappleEaten();
+            biteHits = 0; // Ostinato
+        }
         hands.key(Input.MOVE_BACK); // back off while chewing
         hands.use(true);
         hands.look(target.getEyePosition());
         if (eatTicks > 36) {
             hands.use(false);
             eatTicks = 0;
+            biteHits = 0; // Ostinato
         }
         return true;
     }

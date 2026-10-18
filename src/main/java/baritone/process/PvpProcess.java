@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.utils.OstinatoRandom;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.damagesource.CombatRules;
@@ -158,6 +159,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return (filter != null || !enemies.isEmpty()) && ctx.player() != null;
     }
 
+    /** Ostinato: the action this tick chose, for the parity trace ({@code -} when none was named). */
+    public String traceDec() {
+        return tickDec;
+    }
+
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         Player me = ctx.player();
@@ -213,15 +219,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
         tuneLag = lagBand(me);
         tuneContext = CombatOutcome.context(tuneKit, target instanceof Player, tuneLag);
         boolean auto = Baritone.settings().pvpAutotune.value;
-        if (auto != tuner.on()) {
-            tuner.on(auto);
-            fights.on(auto);
-            if (!auto) { // off is the baselines, whatever was trusted or on trial
-                policy.tuned.forEach(CombatPolicy.Tuned::reset);
-                policy.whole.forEach(CombatPolicy.Tuned::reset);
-            }
+        // Ostinato: the spsa mode stands in for both learners while it is chosen; a change of mode starts from the baselines
+        boolean spsaMode = auto && "spsa".equalsIgnoreCase(Baritone.settings().pvpAutotuneMode.value);
+        if ((auto && !spsaMode) != tuner.on() || spsaMode != spsa.on()) {
+            tuner.on(auto && !spsaMode);
+            fights.on(auto && !spsaMode);
+            spsa.on(spsaMode);
+            policy.tuned.forEach(CombatPolicy.Tuned::reset); // off is the baselines, whatever was trusted or on trial
+            policy.whole.forEach(CombatPolicy.Tuned::reset);
         }
-        if (auto) {
+        if (spsaMode) {
+            // Ostinato: every number, of both kinds, is the same for a whole fight: they move only between two
+            if (outcome.between()) {
+                int nt = policy.tuned.size();
+                for (int i = 0; i < nt; i++) policy.tuned.get(i).set(spsa.value(tuneContext, i));
+                for (int i = 0; i < policy.whole.size(); i++) policy.whole.get(i).set(spsa.value(tuneContext, nt + i));
+            }
+        } else if (auto) {
             boolean opening = outcome.opening();
             for (int i = 0; i < policy.tuned.size(); i++) policy.tuned.get(i).set(tuner.value(tuneContext, i, opening));
             // a fight is fought whole under one value of these: they move only between two
@@ -276,6 +290,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (potted != null) return potted;
             PathingCommand wet = buckets.water(me, survival.eatTicks, phase.macePhase == 0 && !me.isFallFlying());
             if (wet != null) return wet;
+            survival.exposed = CombatFooting.ON && footing.exposed(me, target, groundY); // Ostinato
             PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
             if (ate != null) return ate;
 
@@ -383,7 +398,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             outcome.tick(target.getId(), target instanceof Player, life(target), target.hurtTime, target.hurtDuration, life(me), seen,
                     attacks != outcomeAttacks, tuneKit, policy.setting(), tuneLag);
             outcomeAttacks = attacks;
-            if (tuner.urgent() || fights.urgent()) remember(true); // a verdict is the one thing not to lose
+            if (tuner.urgent() || fights.urgent() || spsa.urgent()) remember(true); // a verdict is the one thing not to lose // Ostinato: spsa too
         }
     }
 
@@ -441,6 +456,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if ("reset".equals(arg)) {
             tuner.clear();
             fights.clear();
+            spsa.clear(); // Ostinato: spsa forgets too
             all.forEach(CombatPolicy.Tuned::reset);
             remember(true);
         } else if ("clear".equals(arg)) {
@@ -470,6 +486,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         for (String line : outcome.report()) sb.append('\n').append(line);
         for (String line : tuner.report()) sb.append('\n').append(line);
         for (String line : fights.report()) sb.append('\n').append(line);
+        for (String line : spsa.report()) sb.append('\n').append(line); // Ostinato: spsa mode
         return sb.toString();
     }
 
@@ -496,7 +513,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * the memory.
      */
     private void remember(boolean now) {
-        if (!tuner.dirty() && !fights.dirty()) return;
+        if (!tuner.dirty() && !fights.dirty() && !spsa.dirty()) return; // Ostinato: spsa too
         long ms = System.currentTimeMillis();
         if (!now && ms - rememberedAt < 60_000) return;
         rememberedAt = ms;
@@ -505,6 +522,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             Files.createDirectories(tunerFile.getParent());
             List<String> lines = tuner.save();
             lines.addAll(fights.save());
+            lines.addAll(spsa.save()); // Ostinato: spsa after both, read back by its own version line
             Files.write(tmp, lines, StandardCharsets.UTF_8);
             Files.move(tmp, tunerFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | RuntimeException e) {
@@ -513,6 +531,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
         }
         tuner.saved(); // not again until there is something new to write
         fights.saved();
+        spsa.saved(); // Ostinato
     }
 
     /** Reads back what an earlier session learned. Nothing read is in force while {@code pvpAutotune} is off. */
@@ -522,6 +541,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             List<String> lines = Files.readAllLines(tunerFile, StandardCharsets.UTF_8);
             tuner.load(lines);
             fights.load(lines);
+            spsa.load(lines); // Ostinato
         } catch (IOException | RuntimeException e) {
             // an unreadable file is a first session
         }
@@ -586,11 +606,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
     /** Moves the policy's tuned numbers between windows while {@code pvpAutotune} is on. Off, it is never asked. */
     private final CombatTuner tuner = new CombatTuner(policy.tuned, recorder::note);
     /** Moves the numbers a fight is fought whole under, between two fights, while it is on. Off, it is never asked either. */
-    private final CombatFightTuner fights = new CombatFightTuner(policy.whole, recorder::note, new Random());
+    private final CombatFightTuner fights = new CombatFightTuner(policy.whole, recorder::note, OstinatoRandom.create("pvp.fights")); // Ostinato: seedable
+    /** Ostinato: the spsa mode of the autotune, over both kinds of numbers (per-window ones first, then the whole-fight ones). */
+    private final CombatSpsa spsa = new CombatSpsa(spsaKnobs(policy), recorder::note, OstinatoRandom.create("pvp.spsa")); // Ostinato: seedable
+
+    // Ostinato: the order CombatSpsa indexes the numbers in
+    private static List<CombatPolicy.Tuned> spsaKnobs(CombatPolicy policy) {
+        List<CombatPolicy.Tuned> all = new java.util.ArrayList<>(policy.tuned);
+        all.addAll(policy.whole);
+        return all;
+    }
     /** Counts what the fights are worth under each setting of them. Reads only: no decision looks at it. */
     private final CombatOutcome outcome = new CombatOutcome(recorder::note, new CombatOutcome.Listener() {
         public void window(String context, String setting, CombatOutcome.Tally window, String end) { tuner.window(context, setting, window, end); }
-        public void fight(CombatOutcome.Fight fight) { fights.fight(fight); }
+        public void fight(CombatOutcome.Fight fight) {
+            fights.fight(fight);
+            spsa.fight(fight); // Ostinato: off, it ignores the fight
+        }
     });
     private String tuneKit, tuneContext; // this tick's kit and what its windows are kept under
     private final CombatLag lag = new CombatLag();
@@ -725,6 +757,8 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     private double groundY = Double.NaN;
+    private final CombatFooting footing = new CombatFooting(ctx); // Ostinato
+    { if (CombatFooting.PUSH) movement.push = (me, t) -> footing.pushSide(me, t, groundY); } // Ostinato: knock the foe into a hazard
 
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
@@ -757,10 +791,23 @@ public final class PvpProcess extends BaritoneProcessHelper {
         if (me == null || target == null) return;
         if (me.onGround()) groundY = me.getY();
         if (Double.isNaN(groundY)) return;
-        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
         baritone.api.utils.IInputOverrideHandler in = baritone.getInputOverrideHandler();
         double f = (in.isInputForcedDown(Input.MOVE_FORWARD) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_BACK) ? 1 : 0);
         double s = (in.isInputForcedDown(Input.MOVE_LEFT) ? 1 : 0) - (in.isInputForcedDown(Input.MOVE_RIGHT) ? 1 : 0);
+        if (CombatFooting.ON && !me.isFallFlying() && !me.isInWater() && !me.isInLava()) { // Ostinato: knockback/edge/lava on PlayerSim
+            boolean jump = in.isInputForcedDown(Input.JUMP);
+            double floor = target.getY() < groundY - 3 ? target.getY() - 1 + CombatFooting.MAX_DROP : groundY; // chasing it down a drop
+            int[] k = footing.guard(me, target, (int) f, (int) s, jump, me.distanceTo(target) < 5, floor);
+            if (k == null) return;
+            in.setInputForceState(Input.MOVE_FORWARD, k[0] > 0);
+            in.setInputForceState(Input.MOVE_BACK, k[0] < 0);
+            in.setInputForceState(Input.MOVE_LEFT, k[1] > 0);
+            in.setInputForceState(Input.MOVE_RIGHT, k[1] < 0);
+            in.setInputForceState(Input.JUMP, k[2] == 1);
+            tickDec = tickDec + "+foot" + k[3] + ">" + k[4] + (k[0] == (int) f && k[1] == (int) s ? "=" : "*");
+            return;
+        }
+        if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
         Vec3 want = new Vec3(s, 0, f).yRot(-me.getYRot() * Mth.DEG_TO_RAD);
         if (want.lengthSqr() > 0) want = want.normalize();
         Vec3 h = me.getDeltaMovement().multiply(4, 0, 4).add(want.scale(1.1));
@@ -794,6 +841,18 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
      * so the round dealt 0. Set the slot as well as clicking the key.
      */
+    /**
+     * Ostinato: a foe that died where the client could not see it, put back at full health in place by the server
+     * (Carpet PvP's fake players do this; so do some duel plugins). The fight record counts it as the kill it was.
+     */
+    public void foeKilled(Entity foe) {
+        Player me = ctx.player();
+        if (me == null || !(foe instanceof LivingEntity le)) return; // Ostinato
+        outcome.foeDied(le.getId(), CombatGeometry.eyeToBox(me, le));
+        // close it now: next tick the same foe reads full health again and the record would take the kill back
+        outcome.interrupt("kill");
+    }
+
     private boolean select(Player me, int slot) {
         slot = inv.toHotbar(me, slot); // from the main inventory this takes two ticks: false until it is up
         if (slot < 0) return false;

@@ -97,7 +97,7 @@ final class CombatShield {
             hands.use(true);
             if (blockTicks++ == 0) hands.blockStarted();
             lastShieldTick = me.tickCount;
-            return hands.decide("block");
+            return hands.decide(blockMelee ? "block" + why : "blockArrow"); // Ostinato: the reason, for the fight log
         }
         if (phase.pearlStage == 0 && hands.eatTicks() == 0 && phase.macePhase == 0 && defense.foeAimed(target, dist)) {
             hands.select(me, inv.weapon(me));
@@ -128,7 +128,7 @@ final class CombatShield {
         // 221131 expert: VexBot's sword put our shield on cooldown with the first blocked swing, and the
         // next 60 ticks were spent standing behind a shield that was not there.
         if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) return false;
-        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > 25) return false;
+        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > AXE_GAP) return false; // Ostinato
         if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
                 || isSpear(target.getMainHandItem())
                 || target.getMainHandItem().getItem() == Items.MACE)) return false;
@@ -147,8 +147,22 @@ final class CombatShield {
         int since = me.tickCount - targetSwingTick;
         boolean due = swingDue(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS), since, dist);
         // raise early enough for the shield's warm-up, hold until the swing is nearly ready
-        return holding ? (cd < (float) p.holdCharge.real() || due) && blockTicks < p.holdMaxTicks.get() : (cd < (float) p.raiseCharge.real() || due) && since > 2;
+        // Ostinato: which reason keeps the shield up goes into the decision name (blockHold, blockDue, blockRaise)
+        if (holding) {
+            boolean on = (cd < (float) p.holdCharge.real() || due) && blockTicks < p.holdMaxTicks.get();
+            why = cd < (float) p.holdCharge.real() ? "Hold" : "Due";
+            return on;
+        }
+        boolean on = (cd < (float) p.raiseCharge.real() || due) && since > 2;
+        why = cd < (float) p.raiseCharge.real() ? "Raise" : "Due";
+        return on;
     }
+
+    /** Ostinato: ticks after an axe swing before a blocking foe gets the axe again instead of our shield (bench A/B: -Dostinato.axeGap). */
+    private static final int AXE_GAP = Integer.getInteger("ostinato.axeGap", 25);
+
+    /** Ostinato: why {@link #meleeBlock} last said yes, for the fight log. */
+    private String why = "";
 
     /** A sword's next swing is due: {@code since} ticks after its last is inside the window around the gap, and it is near enough to land. */
     boolean swingDue(boolean foeSword, int since, double dist) {
@@ -156,9 +170,18 @@ final class CombatShield {
         return foeSword && since >= gap - p.dueEarly.get() && since < gap + p.dueLate.get() && dist < p.dueDist.real();
     }
 
+    /**
+     * Ostinato: off by default (fixed bench, vs SMP PvP Bots: wins 65/96 visible-only vs 44/96, p 0.0035; SickSheet
+     * 60/96 vs 64/96, p 0.65); -Dostinato.hiddenShield=true brings the guess back. Off trusts only a shield the client sees. The window below only grows (any
+     * click that drew no blood, reach rejections included), so against SMP bots (swing gap ~14) it covered nearly
+     * every tick: 233 of 599 swings went to the axe, 120 of them at low charge, ~90% against no block.
+     */
+    static final boolean HIDDEN = Boolean.parseBoolean(System.getProperty("ostinato.hiddenShield", "false"));
+
     /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */
     boolean hiddenShield(Player me, LivingEntity target) {
         this.target = target;
+        if (!HIDDEN) return false;
         int since = me.tickCount - targetSwingTick;
         return since >= 0 && since < unseenBlock && !(axeHeld && me.tickCount - lastAxeTick < 100);
     }

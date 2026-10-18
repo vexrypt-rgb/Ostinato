@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.utils.OstinatoRandom;
 import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.event.events.TickEvent;
@@ -93,6 +94,8 @@ public final class InventoryBehavior extends Behavior implements Helper {
         return true;
     }
 
+    private final Random HOTBAR_PICK = OstinatoRandom.create("inventory.hotbar"); // Ostinato: seedable
+
     public OptionalInt getTempHotbarSlot(Predicate<Integer> disallowedHotbar) {
         // we're using 0 and 8 for pickaxe and throwaway
         ArrayList<Integer> candidates = new ArrayList<>();
@@ -111,7 +114,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (candidates.isEmpty()) {
             return OptionalInt.empty();
         }
-        return OptionalInt.of(candidates.get(new Random().nextInt(candidates.size())));
+        return OptionalInt.of(candidates.get(HOTBAR_PICK.nextInt(candidates.size())));
     }
 
     private boolean requestSwapWithHotBar(int inInventory, int inHotbar) {
