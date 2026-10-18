@@ -235,6 +235,66 @@ impl Sim {
         self.vz *= slip;
     }
 
+    pub fn in_water(&self, w: &Snap) -> bool {
+        w.water(floor_i(self.x), floor_i(self.y + 0.1), floor_i(self.z))
+    }
+
+    pub fn eyes_in_water(&self, w: &Snap) -> bool {
+        w.water(floor_i(self.x), floor_i(self.y + 1.62 - 0.11), floor_i(self.z))
+    }
+
+    /// `PlayerSim.tickWater(yaw, pitch, forward, sprint, jump, sneak)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick_water(&mut self, w: &Snap, buf: &mut Vec<Box6>, yaw_deg: f32, pitch_deg: f32, forward: bool, sprint: bool, jump: bool, sneak: bool) {
+        if jabs(self.vx) < 0.003 {
+            self.vx = 0.0;
+        }
+        if jabs(self.vy) < 0.003 {
+            self.vy = 0.0;
+        }
+        if jabs(self.vz) < 0.003 {
+            self.vz = 0.0;
+        }
+        self.sprinting = forward && !self.collided_h && (sprint || self.sprinting);
+        self.swimming = self.sprinting && if self.swimming { self.in_water(w) } else { self.eyes_in_water(w) };
+        let yaw = to_radians(yaw_deg as f64);
+        let (sn, cs) = (sin(yaw), cos(yaw));
+        if self.swimming {
+            let look = -sin(to_radians(pitch_deg as f64));
+            let k = if look < -0.2 { 0.085 } else { 0.06 };
+            if look <= 0.0 || jump || w.water(floor_i(self.x), floor_i(self.y + 1.0 - 0.1), floor_i(self.z)) {
+                self.vy += (look - self.vy) * k;
+            }
+        }
+        if forward {
+            let f = 0.98 * 0.02;
+            self.vx += -sn * f;
+            self.vz += cs * f;
+        }
+        if jump {
+            self.vy += 0.04;
+        }
+        if sneak {
+            self.vy -= 0.04;
+        }
+        let start_y = self.y;
+        self.mv(w, buf, self.vx, self.vy, self.vz);
+        let drag = if self.sprinting { 0.9 } else { 0.8 };
+        self.vx *= drag;
+        self.vz *= drag;
+        self.vy *= 0.8;
+        if !self.sprinting {
+            self.vy -= 0.08 / 16.0;
+        }
+        if self.collided_h {
+            let dy = self.vy + 0.6 - self.y + start_y;
+            let r = collide(w, buf, self.x, self.y, self.z, self.vx, dy, self.vz);
+            if r[0] == self.vx && r[1] == dy && r[2] == self.vz && !w.water(floor_i(self.x + self.vx), floor_i(self.y + dy), floor_i(self.z + self.vz)) {
+                self.vy = 0.3;
+            }
+        }
+    }
+
     pub fn climbable(&self, w: &Snap) -> bool {
         w.climbable(floor_i(self.x), floor_i(self.y), floor_i(self.z))
     }

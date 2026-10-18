@@ -153,7 +153,11 @@ impl<'a> JumpSearch<'a> {
                 facing = Self::step_yaw(facing, cmd);
                 cmd = facing;
             }
-            self.sim.tick(self.w, &mut self.buf, cmd, inp, 0, inp > 0, j);
+            if jumped && self.sim.in_water(self.w) {
+                self.sim.tick_water(self.w, &mut self.buf, cmd, 0.0, inp > 0, false, false, false); // falling through water onto a pad
+            } else {
+                self.sim.tick(self.w, &mut self.buf, cmd, inp, 0, inp > 0, j);
+            }
             if takeoff
                 || (!jumped && !self.sim.on_ground && self.bounce_y != i32::MAX && self.sim.x * self.dir_x + self.sim.z * self.dir_z > self.edge)
             {

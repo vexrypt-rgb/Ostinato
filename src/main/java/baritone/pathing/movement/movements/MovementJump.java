@@ -357,6 +357,9 @@ public class MovementJump extends Movement {
                     continue;
                 }
                 int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
+                if (t.dy == 1 && lowTopLanding(context, dx, y + 1, dz, startY)) {
+                    t = t.lowTopVariant(); // Ostinato: onto 3 snow layers: the node is a cell up, the jump still about 1.25
+                }
                 if (!MovementHelper.canWalkOn(context, dx, y + t.dy - 1, dz) || hollow(context.get(dx, y + t.dy - 1, dz))) {
                     continue;
                 }
@@ -373,6 +376,7 @@ public class MovementJump extends Movement {
                     }
                 }
                 boolean ceiling = false, partialCell = false;
+                int corners = 0, sideCells = 0;
                 for (int[] cell : t.cells) {
                     int cx = x + cell[0] * f[0] + cell[2] * f[2], cy = y + cell[1], cz = z + cell[0] * f[1] + cell[2] * f[3];
                     if (MovementHelper.fullyPassable(context, cx, cy, cz) == (cell[3] == 1)) {
@@ -382,6 +386,19 @@ public class MovementJump extends Movement {
                         }
                         if (cell[3] == 0 && partialCell(context, cx, cy, cz)) {
                             partialCell = true; // Ostinato: a thin shape in the way: the sim flies past its real outline
+                            continue;
+                        }
+                        if (cell[3] == 0 && takeoffSideCell(context, t, cell, cx, cy, cz) && ++sideCells <= MAX_TAKEOFF_SIDE_CELLS) {
+                            // Ostinato: a wall beside the take-off block on the landing's side: the template's diagonal
+                            // grazes it, one that runs straight first and swings out later clears it (cubed level 3's
+                            // tree branches): the sim flies it against the real blocks
+                            partialCell = true;
+                            continue;
+                        }
+                        if (cell[3] == 0 && cornerCell(context, t, cell, cx, cy, cz) && ++corners <= MAX_CORNER_CELLS) {
+                            // Ostinato: a wall corner beside the landing: the template's box grazes it, a jump hugging
+                            // the corner may still clear it (cubed level 3's window): the sim flies it against the real blocks
+                            partialCell = true;
                             continue;
                         }
                         if (cell[3] == 1 && cell[1] >= 2 && t.neo && !MovementHelper.fullyPassable(context, cx, y + 1, cz)) {
@@ -572,6 +589,44 @@ public class MovementJump extends Movement {
             return false;
         }
         return partial(state);
+    }
+
+    /**
+     * Ostinato: a top at most a quarter high (3 snow layers) that the planner counts as the node above it, low enough
+     * to land on from {@code startY}: a jump onto it rises the same 1.25 as onto a full block a cell lower.
+     */
+    static boolean lowTopLanding(CalculationContext context, int x, int y, int z, double startY) {
+        BlockState state = context.get(x, y, z);
+        if (!state.getFluidState().isEmpty() || MovementHelper.avoidWalkingInto(state) || !partial(state) || !MovementHelper.canWalkOn(context, x, y, z)) {
+            return false;
+        }
+        return y + MovementHelper.collisionTop(state) <= startY + 1.252;
+    }
+
+    static final int MAX_CORNER_CELLS = 3;
+    /** Ostinato: one column beside take-off, feet to above the head, and the next column's lower half. */
+    static final int MAX_TAKEOFF_SIDE_CELLS = 6;
+
+    /** Ostinato: a cell of the column (or the one after it) beside take-off, on the +b side a sideways jump heads to. */
+    static boolean takeoffSideCell(CalculationContext context, JumpTemplates.Template t, int[] cell, int cx, int cy, int cz) {
+        if (t.b == 0 || t.neo || cell[2] != Integer.signum(t.b) || cell[0] < 0 || cell[0] > 1 || t.a - cell[0] < 2 || cell[1] < 0 || cell[1] > 3) {
+            return false;
+        }
+        BlockState state = context.get(cx, cy, cz);
+        return state.getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(state);
+    }
+
+    /**
+     * Ostinato: a solid cell in the template's sweep diagonally or straight beside the landing column, at feet or head
+     * height: the corner of a wall the landing tucks in behind, which the template's box (plus margin) grazes.
+     */
+    static boolean cornerCell(CalculationContext context, JumpTemplates.Template t, int[] cell, int cx, int cy, int cz) {
+        int da = Math.abs(cell[0] - t.a), db = Math.abs(cell[2] - t.b);
+        if (da > 1 || db > 1 || da + db == 0 || cell[1] < Math.min(t.dy, 0) || cell[1] > t.dy + 1) {
+            return false;
+        }
+        BlockState state = context.get(cx, cy, cz);
+        return state.getFluidState().isEmpty() && !MovementHelper.avoidWalkingInto(state);
     }
 
     /** Flies the template from the real surface: around its own plan first, the whole plan grid while budget lasts. */
