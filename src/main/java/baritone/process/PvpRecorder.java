@@ -154,6 +154,11 @@ public final class PvpRecorder {
         if (out != null) quiet("@" + ticks + " " + s);
     }
 
+    /** Ostinato: a whole line as given (spectator logs: {@code #type} and {@code #kit} before {@code #end}). */
+    public void meta(String s) {
+        if (out != null) quiet(s);
+    }
+
     private void quiet(String s) {
         try {
             line(s);

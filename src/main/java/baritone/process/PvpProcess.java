@@ -21,6 +21,8 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.utils.BaritoneProcessHelper;
+import baritone.spectate.GearReader; // Ostinato: spectator kit detection
+import baritone.spectate.SpectatePriors; // Ostinato
 import static baritone.process.CombatAim.press;
 import static baritone.process.CombatInventory.*;
 import static baritone.process.CombatGeometry.*;
@@ -217,6 +219,9 @@ public final class PvpProcess extends BaritoneProcessHelper {
         // before anything is decided, so a whole tick is fought under one setting. The tuner only names another one
         // when a window has closed, which happens after a tick's decisions; the kit is read once for both of them
         tuneKit = outcome.idle() ? kit(me) : outcome.kit();
+        // Ostinato: priors from watched fights come from fighters of our own kit, as spectator kit detection labels it
+        if (outcome.idle() && Baritone.settings().spectateLearn.value && me.tickCount % 10 == 0)
+            SpectatePriors.get().ownKit(Baritone.settings().spectateKitDetect.value ? GearReader.ownLabel(me) : null);
         tuneLag = lagBand(me);
         tuneContext = CombatOutcome.context(tuneKit, target instanceof Player, tuneLag);
         boolean auto = Baritone.settings().pvpAutotune.value;

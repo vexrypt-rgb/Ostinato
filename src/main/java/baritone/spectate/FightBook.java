@@ -30,8 +30,22 @@ public final class FightBook {
         public final String nameA, nameB;
         public final int start;
         int lastExchange;
+        /** Ostinato: unique for the book's life (the same two players may fight again). */
+        public final int serial = ++serials;
         public final Habits ha = new Habits(), hb = new Habits();
         int hitsA, hitsB;
+        // Ostinato: kit detection and fight type, set when the fight's group closes
+        public FightGroup group;
+        public KitSignatures.Result kitA, kitB;
+
+        /** {@code 1v1}, {@code ffa} or {@code team}; 1v1 until the group closes. */
+        public String type() {
+            return group == null ? "1v1" : group.type;
+        }
+
+        public KitSignatures.Result kitOf(int id) {
+            return id == a ? kitA : id == b ? kitB : null;
+        }
 
         Fight(int a, String nameA, int b, String nameB, int tick) {
             this.a = a;
@@ -71,9 +85,26 @@ public final class FightBook {
 
     private final Map<Long, Fight> active = new HashMap<>();
     private final Map<String, Stat> winners = new LinkedHashMap<>(), losers = new LinkedHashMap<>();
+    // Ostinato: the same, per kit of the fighter (1v1 fights only)
+    private final Map<String, Map<String, Stat>> winnersByKit = new LinkedHashMap<>(), losersByKit = new LinkedHashMap<>();
     private final Consumer<Fight> onStart;
     private final FightEnd onEnd;
     int finished, draws, discarded;
+    // Ostinato: fight groups (1v1 / FFA / team), kit evidence per player, what the client shows of their team
+    private final Map<Integer, FightGroup> groupOf = new HashMap<>();
+    private final Map<Integer, KitEvidence> kits = new HashMap<>();
+    private final Map<Integer, FightGroup.Clue> clues = new HashMap<>();
+    private final Map<String, Integer> multi = new LinkedHashMap<>(); // fights kept out of 1v1 tuning, by type
+    private final Map<String, Integer> multiSkills = new LinkedHashMap<>(); // their move counts summed, type.skill
+    private int groups;
+    private static int serials;
+    private java.util.function.Consumer<Fight> onPairEnd;
+    private java.util.function.BiConsumer<Fight, Boolean> onSettled;
+    private boolean multiApart = true;
+    private java.util.function.Consumer<FightGroup> onGroup;
+    private KitSignatures signatures;
+    /** A label below this confidence counts as unknown for the per-kit tallies. */
+    public static final double KIT_SURE = 0.45;
 
     public interface FightEnd {
         /** {@code winner} is an entity id, or -1 for a draw. */
@@ -91,17 +122,115 @@ public final class FightBook {
 
     /** {@code attacker} hit {@code victim}; starts their fight if none is on. */
     public Fight hit(int tick, int attacker, String attackerName, int victim, String victimName) {
+        return hit(tick, attacker, attackerName, victim, victimName, false);
+    }
+
+    /** Ostinato: {@code crit} kept on the group's hit list. */
+    public Fight hit(int tick, int attacker, String attackerName, int victim, String victimName, boolean crit) {
         long k = key(attacker, victim);
         Fight f = active.get(k);
+        // Ostinato: the hit ties both into one group, merging two groups it crosses
+        FightGroup ga = groupOf.get(attacker), gv = groupOf.get(victim), g;
+        if (ga == null && gv == null) g = new FightGroup(++groups, tick);
+        else if (ga == null || gv == null || ga == gv) g = ga != null ? ga : gv;
+        else {
+            g = ga.members.size() >= gv.members.size() ? ga : gv;
+            FightGroup o = g == ga ? gv : ga;
+            g.absorb(o);
+            for (Fight x : active.values()) if (x.group == o) x.group = g;
+            for (Object[] d : g.done) ((Fight) d[0]).group = g;
+            for (Map.Entry<Integer, FightGroup> e : groupOf.entrySet()) if (e.getValue() == o) e.setValue(g);
+        }
+        groupOf.put(attacker, g);
+        groupOf.put(victim, g);
+        g.hit(tick, attacker, attackerName, victim, victimName, crit);
         if (f == null) {
             f = attacker < victim ? new Fight(attacker, attackerName, victim, victimName, tick) : new Fight(victim, victimName, attacker, attackerName, tick);
             active.put(k, f);
+            f.group = g;
+            g.open++;
             if (onStart != null) onStart.accept(f);
         }
         f.lastExchange = tick;
         if (attacker == f.a) f.hitsA++;
         else f.hitsB++;
         return f;
+    }
+
+    // ---------------------------------------------------------------- Ostinato: kit detection
+
+    /** What this player wears and holds from {@code tick} on (see {@link KitEvidence#gear}). */
+    public void gear(int tick, int id, Map<String, Double> tokens) {
+        kits.computeIfAbsent(id, k -> new KitEvidence()).gear(tick, tokens);
+    }
+
+    /** Something they did that tells of their kit. */
+    public void kitEvent(int tick, int id, String token) {
+        kits.computeIfAbsent(id, k -> new KitEvidence()).event(tick, token);
+    }
+
+    /** What the client shows of their team (scoreboard team, colours, dye). */
+    public void clue(int id, FightGroup.Clue c) {
+        clues.put(id, c);
+    }
+
+    /** Forgets a player's kit evidence (they died, left or changed world: the next kit may differ). */
+    public void forgetKit(int id) {
+        kits.remove(id);
+    }
+
+    public void onGroup(java.util.function.Consumer<FightGroup> l) {
+        onGroup = l;
+    }
+
+    /** Called as soon as a fight between two players is over, before its group has closed. */
+    public void onPairEnd(java.util.function.Consumer<Fight> l) {
+        onPairEnd = l;
+    }
+
+    /** Called for every fight once its group has closed, {@code true} if it was long enough to count. */
+    public void onSettled(java.util.function.BiConsumer<Fight, Boolean> l) {
+        onSettled = l;
+    }
+
+    /** Whether FFA and team fights are kept out of the 1v1 tallies ({@code spectateFightTypes}); on by default. */
+    public void multiApart(boolean on) {
+        multiApart = on;
+    }
+
+    /** Forgets everyone's kit and team clues (another world: entity ids start over). */
+    public void resetPlayers() {
+        kits.clear();
+        clues.clear();
+    }
+
+    /** Once a second: where each player in an open group is and their health ({x, y, z, hp}), for the group log. */
+    public void track(int tick, Map<Integer, double[]> where) {
+        for (FightGroup g : new java.util.HashSet<>(groupOf.values())) g.track(tick, where);
+    }
+
+    public void signatures(KitSignatures k) {
+        signatures = k;
+    }
+
+    private KitSignatures sig() {
+        return signatures != null ? signatures : KitSignatures.get();
+    }
+
+    /** This player's kit as seen so far. */
+    public KitSignatures.Result kit(int tick, int id) {
+        KitEvidence ev = kits.get(id);
+        if (ev == null) return new KitSignatures.Result(KitSignatures.UNKNOWN, 0, KitSignatures.UNKNOWN, 0);
+        return sig().classify(ev, tick);
+    }
+
+    public KitEvidence evidence(int id) {
+        return kits.get(id);
+    }
+
+    /** The group a player is fighting in, if any. */
+    public FightGroup groupOf(int id) {
+        return groupOf.get(id);
     }
 
     /** Every fight this player is in. */
@@ -117,7 +246,14 @@ public final class FightBook {
 
     /** This player died: every fight of theirs is lost. */
     public void died(int tick, int id) {
+        // Ostinato: their kit is read before the evidence goes (they may come back with another)
+        FightGroup g = groupOf.get(id);
+        if (g != null) {
+            g.kits.put(id, kit(tick, id));
+            g.dead.add(id);
+        }
         for (Fight f : fightsOf(id)) finish(f, f.other(id), "death", tick);
+        forgetKit(id);
     }
 
     /**
@@ -125,6 +261,8 @@ public final class FightBook {
      * gone), {@code hp} the estimated health of one (NaN unknown).
      */
     public void tick(int tick, java.util.function.ToDoubleBiFunction<Integer, Integer> dist, java.util.function.ToDoubleFunction<Integer> hp) {
+        // Ostinato: who stands near whom in each open group, for the teams
+        for (FightGroup g : new java.util.HashSet<>(groupOf.values())) g.sample(dist);
         for (Fight f : new ArrayList<>(active.values())) {
             double d = dist.applyAsDouble(f.a, f.b);
             boolean quiet = tick - f.lastExchange > QUIET;
@@ -137,8 +275,50 @@ public final class FightBook {
 
     private void finish(Fight f, int winner, String why, int tick) {
         active.remove(key(f.a, f.b));
-        if (tick - f.start < MIN_TICKS || f.hitsA + f.hitsB < MIN_HITS) {
+        if (onPairEnd != null) onPairEnd.accept(f);
+        // Ostinato: kits are read now; the fight waits for its group to close to learn whether it was a 1v1
+        f.kitA = f.group != null && f.group.kits.containsKey(f.a) ? f.group.kits.get(f.a) : kit(tick, f.a);
+        f.kitB = f.group != null && f.group.kits.containsKey(f.b) ? f.group.kits.get(f.b) : kit(tick, f.b);
+        FightGroup g = f.group;
+        if (g == null) {
+            settle(f, winner, why, tick);
+            return;
+        }
+        g.done.add(new Object[]{f, winner, why, tick});
+        g.open--;
+        if (g.open <= 0) closeGroup(g, tick);
+    }
+
+    /** Ostinato: the group's last fight is over: what kind of fight it was, then each of its fights is counted. */
+    private void closeGroup(FightGroup g, int tick) {
+        Map<Integer, FightGroup.Clue> cl = new HashMap<>();
+        for (int m : g.members.keySet()) {
+            KitSignatures.Result k = g.kits.containsKey(m) ? g.kits.get(m) : kit(tick, m);
+            g.kits.put(m, k);
+            FightGroup.Clue c = clues.getOrDefault(m, FightGroup.Clue.NONE);
+            cl.put(m, c.withKit(k.confidence >= KIT_SURE ? k.label : ""));
+        }
+        g.close(cl);
+        for (Map.Entry<Integer, FightGroup> e : new ArrayList<>(groupOf.entrySet())) if (e.getValue() == g) groupOf.remove(e.getKey());
+        if (!g.type.equals("1v1")) {
+            multi.merge(g.type, 1, Integer::sum);
+            for (Map<String, Integer> sk : g.skills.values()) for (Map.Entry<String, Integer> e : sk.entrySet()) multiSkills.merge(g.type + "." + e.getKey(), e.getValue(), Integer::sum);
+        }
+        for (Object[] d : g.done) settle((Fight) d[0], (Integer) d[1], (String) d[2], (Integer) d[3]);
+        g.done.clear();
+        if (onGroup != null) onGroup.accept(g);
+    }
+
+    private void settle(Fight f, int winner, String why, int tick) {
+        boolean counts = tick - f.start >= MIN_TICKS && f.hitsA + f.hitsB >= MIN_HITS;
+        if (onSettled != null) onSettled.accept(f, counts);
+        if (!counts) {
             discarded++;
+            return;
+        }
+        // Ostinato: FFA and team fights stay out of the 1v1 tallies (kept in the group for multi-opponent skills)
+        if (multiApart && !f.type().equals("1v1")) {
+            if (onEnd != null) onEnd.ended(f, winner, why);
             return;
         }
         if (winner < 0) draws++;
@@ -147,8 +327,16 @@ public final class FightBook {
             Habits w = f.of(winner), l = f.of(f.other(winner));
             add(winners, w.traits());
             add(losers, l.traits());
+            // Ostinato: and per kit, under each side's own kit
+            add(winnersByKit.computeIfAbsent(kitKey(f.kitOf(winner)), k -> new LinkedHashMap<>()), w.traits());
+            add(losersByKit.computeIfAbsent(kitKey(f.kitOf(f.other(winner))), k -> new LinkedHashMap<>()), l.traits());
         }
         if (onEnd != null) onEnd.ended(f, winner, why);
+    }
+
+    /** Ostinato: the kit a fighter's numbers are kept under: the label, or unknown below {@link #KIT_SURE}. */
+    static String kitKey(KitSignatures.Result r) {
+        return r == null || r.confidence < KIT_SURE ? KitSignatures.UNKNOWN : r.label;
     }
 
     private static void add(Map<String, Stat> book, Map<String, Double> traits) {
@@ -166,6 +354,29 @@ public final class FightBook {
         return s == null ? 0 : s.n;
     }
 
+    /** Ostinato: winners' mean of one trait among winners of one kit (1v1 only). */
+    public double winnerMean(String kit, String trait) {
+        Map<String, Stat> m = winnersByKit.get(kit);
+        Stat s = m == null ? null : m.get(trait);
+        return s == null || s.n == 0 ? Double.NaN : s.mean;
+    }
+
+    public int winnerCount(String kit, String trait) {
+        Map<String, Stat> m = winnersByKit.get(kit);
+        Stat s = m == null ? null : m.get(trait);
+        return s == null ? 0 : s.n;
+    }
+
+    /** Ostinato: the kits winners have been counted under. */
+    public java.util.Set<String> kitsSeen() {
+        return winnersByKit.keySet();
+    }
+
+    /** Ostinato: fights kept out of 1v1 tuning, by type. */
+    public Map<String, Integer> multi() {
+        return multi;
+    }
+
     /** Lines of "trait: winners mean (n) vs losers mean (n), effect d", strongest effect first. */
     public List<String> report() {
         List<String[]> rows = new ArrayList<>();
@@ -180,6 +391,14 @@ public final class FightBook {
         rows.sort((x, y) -> x[0].compareTo(y[0]));
         List<String> out = new ArrayList<>();
         out.add(String.format(Locale.ROOT, "spectated fights: %d decided, %d draws, %d too short; %d on now", finished, draws, discarded, active.size()));
+        // Ostinato: per kit, and the fights kept apart
+        StringBuilder kb = new StringBuilder();
+        for (Map.Entry<String, Map<String, Stat>> e : winnersByKit.entrySet()) {
+            Stat s = e.getValue().get("cps");
+            kb.append(kb.length() > 0 ? ", " : "").append(e.getKey()).append(' ').append(s == null ? 0 : s.n);
+        }
+        if (kb.length() > 0) out.add("1v1 winners by kit: " + kb);
+        if (!multi.isEmpty()) out.add("kept out of 1v1 tuning: " + multi + " moves " + multiSkills);
         for (String[] r : rows) out.add(r[1]);
         return out;
     }
