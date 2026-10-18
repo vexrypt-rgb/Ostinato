@@ -2219,6 +2219,15 @@ public final class Settings {
      */
     public final Setting<Boolean> pvpAutotune = new Setting<>(false);
 
+    // Ostinato: how the autotune moves the numbers
+    /**
+     * How {@code pvpAutotune} moves the combat numbers. {@code coordinate} (the default) tries one number one step
+     * at a time against the value it trusts. {@code spsa} moves every number of the kit at once in pairs of whole
+     * fights, judged by fights won with the damage margin as a tie-break, and puts a new setting in force only
+     * after a sequential test on fresh fights shows it wins more. Neither mode moves how the bot aims or clicks.
+     */
+    public final Setting<String> pvpAutotuneMode = new Setting<>("coordinate");
+
     /** Show the Autotune Combat System card on the HUD while {@code #pvp} is fighting. Hidden while F3 is open. */
     public final Setting<Boolean> renderAcsHud = new Setting<>(true);
 
