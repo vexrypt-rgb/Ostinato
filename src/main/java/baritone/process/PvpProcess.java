@@ -1,6 +1,7 @@
 package baritone.process;
 
 import baritone.utils.OstinatoRandom;
+import baritone.health.Hp; // Ostinato: estimated health
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.damagesource.CombatRules;
@@ -299,7 +300,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (phase.pearlCool > 0) phase.pearlCool--;
             tools.coolFire();
             if (spears.spearCool > 0) spears.spearCool--;
-            if (hp <= 6 && !survival.canHeal(me) && target.getHealth() + target.getAbsorptionAmount() > 6 && !targetEating) {
+            if (hp <= 6 && !survival.canHeal(me) && Hp.total(target) > 6 && !targetEating) { // Ostinato: estimated health
                 return decide("flee", survival.flee(me, target, dist));
             }
             boolean free = phase.macePhase == 0 && phase.pearlStage == 0 && !me.isFallFlying() && !charging;

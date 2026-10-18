@@ -69,6 +69,11 @@ final class CombatShield {
     private boolean targetWasSwinging;
 
     void observe(Player me, LivingEntity target) {
+        // Ostinato: before we have timed this foe ourselves, start from how they swung when watched (spectateLearn)
+        if (swingGap == 0 && target instanceof Player tp) {
+            int g = baritone.spectate.SpectatePriors.get().swingGap(tp.getName().getString());
+            if (g >= 6 && g <= 40) swingGap = g;
+        }
         // VexBot answers a raised shield with an axe flick inside three ticks: once it has, the shield is only bait
         if (target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) && me.getOffhandItem().getItem() == Items.SHIELD
                 && me.getCooldowns().isOnCooldown(me.getOffhandItem())) flicked = true;

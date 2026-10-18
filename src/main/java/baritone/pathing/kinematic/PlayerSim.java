@@ -109,7 +109,24 @@ public final class PlayerSim {
 
     /** With a strafe key too: +1 is A (left), -1 is D (right). Vanilla normalises a diagonal so strafing adds no speed. */
     public void tick(float yawDeg, int input, int strafe, boolean sprint, boolean jump) {
-        boolean forward = input > 0;
+        tickImpulse(yawDeg, 0.98 * strafe, 0.98 * input, input > 0, sprint, jump);
+    }
+
+    /**
+     * Ostinato: one tick from the input as vanilla's xxa/zza hold it once the keys are read (after the 0.98 input
+     * friction, item-use and sneak slow-downs, square-movement correction): {@code strafeImpulse} +left, {@code
+     * forwardImpulse} +forward. For decoding someone else's movement, where the impulse is fitted, not pressed.
+     * {@link #tick(float, int, int, boolean, boolean)} is this with {@code 0.98 * key}, bit for bit.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean sprint, boolean jump) {
+        tickImpulse(yawDeg, strafeImpulse, forwardImpulse, forwardImpulse > 1.0E-5, sprint, jump);
+    }
+
+    /**
+     * Ostinato: as above, with whether a sprint may hold this tick given by the caller instead of read off the forward
+     * impulse. A server-side bot (VexBot) sprints while it strafes; a vanilla client stops.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump) {
         if (Math.abs(vx) < 0.003) vx = 0;
         if (Math.abs(vy) < 0.003) vy = 0;
         if (Math.abs(vz) < 0.003) vz = 0;
@@ -137,8 +154,8 @@ public final class PlayerSim {
         } else {
             speed = sprinting ? 0.026 : 0.02;
         }
-        if (input != 0 || strafe != 0) {
-            double fz = 0.98 * input, fx = 0.98 * strafe;
+        if (forwardImpulse != 0 || strafeImpulse != 0) {
+            double fz = forwardImpulse, fx = strafeImpulse;
             double len = Math.sqrt(fx * fx + fz * fz);
             if (len > 1) {
                 fx /= len;

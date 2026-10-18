@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.health.Hp; // Ostinato: estimated health
 import baritone.Baritone;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.pathing.goals.GoalRunAway;
@@ -187,7 +188,7 @@ public final class PveProcess extends BaritoneProcessHelper {
                 adjacent++;
                 crowd = crowd.add(e.position());
             }
-            double score = d - p.threat * 0.25 + e.getHealth() / 20.0 + (p.kind == MobProfile.Kind.AVOID ? 6 : 0);
+            double score = d - p.threat * 0.25 + Hp.health(e) / 20.0 + (p.kind == MobProfile.Kind.AVOID ? 6 : 0); // Ostinato: estimated health
             if (score < bestScore) {
                 bestScore = score;
                 pick = e;

@@ -2228,6 +2228,36 @@ public final class Settings {
      */
     public final Setting<String> pvpAutotuneMode = new Setting<>("coordinate");
 
+    // Ostinato: spectator learning
+    /**
+     * Watch fights between other players nearby and learn from them: which keys they press (worked out from where
+     * the server says they move), how fast they click, when they eat, pearl or back off, and what the winners do
+     * that the losers do not. What is learned only gives the Autotune Combat System a place to start and tells it how
+     * an opponent fights; it never puts a combat value in force without the bot's own fights confirming it.
+     * Off by default; on a multiplayer server it also needs {@code spectateLearnOnServers}.
+     */
+    public final Setting<Boolean> spectateLearn = new Setting<>(false);
+
+    /** Let {@code spectateLearn} watch on multiplayer servers too, not only in single player and LAN worlds. */
+    public final Setting<Boolean> spectateLearnOnServers = new Setting<>(false);
+
+    /** Also write each watched fight to {@code pvplogs/spectate/} in the fight recorder's format. */
+    public final Setting<Boolean> spectateSaveLogs = new Setting<>(false);
+
+    /** How far away (blocks) {@code spectateLearn} watches players. */
+    public final Setting<Double> spectateRadius = new Setting<>(48.0);
+
+    /** Most processor time (milliseconds a game tick, on its own low-priority thread) spent working out keys. */
+    public final Setting<Double> spectateBudgetMs = new Setting<>(1.5);
+
+    // Ostinato: health estimator
+    /**
+     * Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health,
+     * scoreboard, boss bars) or, where the server hides or fakes it, from the hits, potions, apples, effects and totems
+     * seen. Combat and mob fighting then pick and finish targets by it. Off, they read the health the game shows.
+     */
+    public final Setting<Boolean> healthEstimator = new Setting<>(true);
+
     /** Show the Autotune Combat System card on the HUD while {@code #pvp} is fighting. Hidden while F3 is open. */
     public final Setting<Boolean> renderAcsHud = new Setting<>(true);
 

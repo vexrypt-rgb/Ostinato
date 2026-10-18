@@ -62,7 +62,7 @@ final class CombatExplosives {
         this.target = target;
         // a ray the foe's body blocks never clicks, and a stall here froze the whole fight: no swing for a while, let melee have it
         // a swing is not progress (a refused click swings too): the foe losing health is
-        float tgHp = target.getHealth() + target.getAbsorptionAmount();
+        float tgHp = baritone.health.Hp.total(target); // Ostinato: estimated health
         if (tgHp < crystalTgHp - 0.1f) crystalIdle = 0;
         else if (crystalIdle < 400) crystalIdle++;
         crystalTgHp = tgHp;
@@ -283,13 +283,14 @@ final class CombatExplosives {
     private float worth(Player me, Vec3 at, float myHp, double size) {
         float dmg = blast(target, at, size), self = blast(me, at, size);
         boolean totem = me.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING;
-        if (self >= myHp - (totem ? 0 : 2) && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0;
+        // Ostinato: target health below is the estimator's
+        if (self >= myHp - (totem ? 0 : 2) && dmg < baritone.health.Hp.total(target)) return 0;
         // once they're low an even trade wins the race
-        if (dmg < 3 || dmg < self * (size == 10 ? (target.getHealth() + target.getAbsorptionAmount() > 10 ? 1.5f : 1) : (target.getHealth() + target.getAbsorptionAmount() <= 10 ? 0.8f : 1))) return 0;
-        if (size == 10 && self >= myHp - 4 && dmg < target.getHealth() + target.getAbsorptionAmount()) return 0; // don't pop our own totem
+        if (dmg < 3 || dmg < self * (size == 10 ? (baritone.health.Hp.total(target) > 10 ? 1.5f : 1) : (baritone.health.Hp.total(target) <= 10 ? 0.8f : 1))) return 0;
+        if (size == 10 && self >= myHp - 4 && dmg < baritone.health.Hp.total(target)) return 0; // don't pop our own totem
         // our own blasts were landing 7-16 on us right after a place or a boom: unless it kills them, keep our share small
         // and weigh it heavier than the foe's (self 1.4 weight, small safe self-damage)
-        boolean kills = dmg >= target.getHealth() + target.getAbsorptionAmount();
+        boolean kills = dmg >= baritone.health.Hp.upper(target); // Ostinato: estimated health, only when sure
         if (!kills && self > (totem ? 3f : 4f)) return 0;
         return Math.max(0, dmg - self * 1.4f);
     }

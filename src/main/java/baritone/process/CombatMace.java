@@ -62,7 +62,7 @@ final class CombatMace {
         // Spear kit starts the smash from spearTools, and only from just outside the jab.
         // The bot stands inside 2.5 for half the fight. The hop goes straight up, so it starts there too.
         // 002307 t1527: it stood at 6 health eating 3.6 away and the next 40 ticks went to a hop; two sword hits end it.
-        boolean finish = target.getHealth() + target.getAbsorptionAmount() <= 7 && dist < 5;
+        boolean finish = baritone.health.Hp.upper(target) <= 7 && dist < 5; // Ostinato: estimated health, only when sure
         if (!spearKit && phase.macePhase == 0 && canJump && phase.maceCool == 0 && !overhead && !finish && dist > 1.0 && dist < 24 && los && wind >= 0) {
             if (!hands.select(me, wind)) return hands.decide("swap");
             aimer.aim(new Rotation(me.getYRot(), 90f), true);

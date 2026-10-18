@@ -521,7 +521,9 @@ final class CombatFightTuner {
             if (down < t.min) s.downTried[k] = true;
             if (up > t.max) s.upTried[k] = true;
             if (used && (!s.downTried[k] || !s.upTried[k])) {
-                s.candidate = !s.downTried[k] ? down : up;
+                // Ostinato: down first, unless watched fights (spectateLearn) point up and up is still untried
+                boolean upFirst = !s.upTried[k] && baritone.spectate.SpectatePriors.get().startSteps(t.name, t.base, t.step) > 0.25;
+                s.candidate = upFirst ? up : !s.downTried[k] ? down : up;
                 s.cKey = s.key(s.candidate);
                 turn(s);
                 return;
