@@ -84,7 +84,8 @@ public class MovementTraverse extends Movement {
         if (MovementHelper.isLava(pb0) || MovementHelper.isLava(pb1)) return COST_INF;
         BlockState destOn = context.get(destX, y - 1, destZ);
         BlockState srcDown = context.get(x, y - 1, z);
-        if (MovementHelper.isTallTop(destOn) != MovementHelper.isTallTop(srcDown)) {
+        if (MovementHelper.isTallTop(destOn) != MovementHelper.isTallTop(srcDown)
+                && !MovementHelper.stepsToTallTop(context, MovementHelper.isTallTop(destOn) ? srcDown : destOn, x, z, destX, y, destZ)) {
             return COST_INF; // Ostinato: half a block up or down onto a fence/wall top is a jump or a drop, not a step
         }
         Block srcDownBlock = srcDown.getBlock();

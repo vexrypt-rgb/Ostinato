@@ -118,8 +118,12 @@ public class MovementJump extends Movement {
         /** Ostinato: head-hitter sims spent this calculation (each ~30 ms; they dominated A* under floating courses). */
         Object simContext;
         int sims, simsFull;
-        /** Ostinato: partial-block sims spent this calculation, and how many of those ran the whole plan grid. */
-        int partialSims, partialFull;
+        /**
+         * Ostinato: partial-block sims spent this calculation, and how many of those ran the whole plan grid. Jumps
+         * past a fence/wall cell (ceiling or partial) have a full-grid budget of their own: a fenced map spent the
+         * others' on them and lost its real jumps.
+         */
+        int partialSims, partialFull, tallSims, tallFull;
         final List<Option> options = new ArrayList<>();
         /** Ledge stand-ins already tried for this node. Cleared each call so the set is not allocated per node. */
         final java.util.Set<Long> ledgeTried = new java.util.HashSet<>();
@@ -130,7 +134,7 @@ public class MovementJump extends Movement {
         final java.util.Map<Long, Boolean> verdicts = new java.util.HashMap<>();
     }
 
-    private static final int CHECKED = 0, CEIL = 1, PARTIAL = 2;
+    private static final int CHECKED = 0, CEIL = 1, PARTIAL = 2, CEIL_TALL = 3, PARTIAL_TALL = 4;
     /** Ostinato: unchecked templates kept per landing; a costlier one is dropped. */
     private static final int MAX_ALTS = 4;
 
@@ -202,17 +206,17 @@ public class MovementJump extends Movement {
             int dx = x + t.a * f[0] + t.b * f[2], dz = z + t.a * f[1] + t.b * f[3];
             long t0 = System.nanoTime();
             boolean ok;
-            if (a.kind == CEIL) {
-                if (c.sims >= MAX_CALC_SIMS) {
+            if (a.kind == CEIL || a.kind == CEIL_TALL) {
+                if ((a.kind == CEIL_TALL ? c.tallSims : c.sims) >= MAX_CALC_SIMS) {
                     return false;
                 }
-                ok = hhCached(context, x, y, z, a.frame, f, t, dx, y + t.dy, dz, c);
+                ok = hhCached(context, x, y, z, a.frame, f, t, dx, y + t.dy, dz, c, a.kind == CEIL_TALL);
             } else {
-                if (c.partialSims >= MAX_CALC_PARTIAL) {
+                if (a.kind == PARTIAL_TALL ? c.tallSims >= MAX_CALC_PARTIAL : c.partialSims++ >= MAX_CALC_PARTIAL) {
                     return false;
                 }
-                c.partialSims++;
-                ok = partialLands(context, a.key, x, y, z, f, t, dx, y + t.dy, dz, startY, c);
+                if (a.kind == PARTIAL_TALL) c.tallSims++;
+                ok = partialLands(context, a.key, x, y, z, f, t, dx, y + t.dy, dz, startY, c, a.kind == PARTIAL_TALL);
             }
             PlanStats.hhNs.addAndGet(System.nanoTime() - t0);
             PlanStats.hhCalls.incrementAndGet();
@@ -315,10 +319,10 @@ public class MovementJump extends Movement {
         c.context = context;
         if (c.simContext != context) {
             c.simContext = context;
-            c.sims = c.simsFull = c.partialSims = c.partialFull = 0; // Ostinato: simsFull too (it was never reset)
+            c.sims = c.simsFull = c.partialSims = c.partialFull = c.tallSims = c.tallFull = 0; // Ostinato: simsFull too (it was never reset)
             c.verdicts.clear();
         }
-        int nodeSims = 0;
+        int nodeSims = 0, tallSims = 0; // Ostinato: tall: the sims of jumps past a fence/wall cell, capped apart
         c.x = x;
         c.y = y;
         c.z = z;
@@ -375,7 +379,7 @@ public class MovementJump extends Movement {
                         continue templates;
                     }
                 }
-                boolean ceiling = false, partialCell = false;
+                boolean ceiling = false, partialCell = false, tall = false;
                 int corners = 0, sideCells = 0;
                 for (int[] cell : t.cells) {
                     int cx = x + cell[0] * f[0] + cell[2] * f[2], cy = y + cell[1], cz = z + cell[0] * f[1] + cell[2] * f[3];
@@ -386,6 +390,7 @@ public class MovementJump extends Movement {
                         }
                         if (cell[3] == 0 && partialCell(context, cx, cy, cz)) {
                             partialCell = true; // Ostinato: a thin shape in the way: the sim flies past its real outline
+                            tall |= MovementHelper.isTallTop(context.get(cx, cy, cz));
                             continue;
                         }
                         if (cell[3] == 0 && takeoffSideCell(context, t, cell, cx, cy, cz) && ++sideCells <= MAX_TAKEOFF_SIDE_CELLS) {
@@ -435,16 +440,17 @@ public class MovementJump extends Movement {
                     if (known != null) {
                         if (!known) continue;
                     } else if (context.lazyJumps) {
-                        kind = CEIL; // Ostinato: simulated only if the search reaches the landing
+                        kind = tall ? CEIL_TALL : CEIL; // Ostinato: simulated only if the search reaches the landing
                         key = k;
-                    } else if (nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
+                    } else if (tall ? tallSims >= MAX_NODE_SIMS || c.tallSims >= MAX_CALC_SIMS : nodeSims >= MAX_NODE_SIMS || c.sims >= MAX_CALC_SIMS) {
                         continue;
                     }
                 }
                 long hh0 = ceiling ? System.nanoTime() : 0;
-                boolean hhOk = !ceiling || kind != CHECKED || hhCached(context, x, y, z, i, f, t, dx, y + t.dy, dz, c);
+                boolean hhOk = !ceiling || kind != CHECKED || hhCached(context, x, y, z, i, f, t, dx, y + t.dy, dz, c, tall);
                 if (ceiling && kind == CHECKED) {
-                    nodeSims++;
+                    if (tall) tallSims++;
+                    else nodeSims++;
                     PlanStats.hhNs.addAndGet(System.nanoTime() - hh0);
                     PlanStats.hhCalls.incrementAndGet();
                 }
@@ -458,16 +464,21 @@ public class MovementJump extends Movement {
                         known = HH_CACHE.get(k);
                     }
                     if (known == null && context.lazyJumps) {
-                        kind = PARTIAL; // Ostinato: simulated only if the search reaches the landing
+                        kind = tall ? PARTIAL_TALL : PARTIAL; // Ostinato: simulated only if the search reaches the landing
                         key = k;
                     } else if (known == null) {
-                        if (partialSims >= MAX_NODE_PARTIAL || c.partialSims >= MAX_CALC_PARTIAL) {
+                        if (tall ? tallSims >= MAX_NODE_PARTIAL || c.tallSims >= MAX_CALC_PARTIAL : partialSims >= MAX_NODE_PARTIAL || c.partialSims >= MAX_CALC_PARTIAL) {
                             continue;
                         }
-                        partialSims++;
-                        c.partialSims++;
+                        if (tall) {
+                            tallSims++;
+                            c.tallSims++;
+                        } else {
+                            partialSims++;
+                            c.partialSims++;
+                        }
                         long p0 = System.nanoTime();
-                        known = partialLands(context, k, x, y, z, f, t, dx, y + t.dy, dz, startY, c);
+                        known = partialLands(context, k, x, y, z, f, t, dx, y + t.dy, dz, startY, c, tall);
                         PlanStats.hhNs.addAndGet(System.nanoTime() - p0);
                         PlanStats.hhCalls.incrementAndGet();
                     }
@@ -559,7 +570,7 @@ public class MovementJump extends Movement {
 
     static final int MAX_NODE_SIMS = 8, MAX_CALC_SIMS = 1500, MAX_CALC_SIMS_FULL = 20;
     /** Ostinato: partial-block sims: a cheap local search each (~3 ms), the whole plan grid only while the calculation has budget. */
-    static final int MAX_NODE_PARTIAL = 32, MAX_CALC_PARTIAL = 4000, MAX_CALC_PARTIAL_FULL = 40;
+    static final int MAX_NODE_PARTIAL = 32, MAX_CALC_PARTIAL = 4000, MAX_CALC_PARTIAL_FULL = 40, MAX_CALC_TALL_FULL = 20;
 
     /** A collision shape short of a full cube that still holds a player (candle, chain, bed, slab, soul sand). */
     /** Walkable to the pathfinder with nothing to stand on (a vine): no take-off or landing. */
@@ -582,13 +593,17 @@ public class MovementJump extends Movement {
         return y + state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO).max(net.minecraft.core.Direction.Axis.Y) >= standY - 0.01;
     }
 
-    /** A cell the template wants empty holding a thin shape the sim can fly past (pane, chain, candle, bars). */
+    /**
+     * A cell the template wants empty holding a thin shape the sim can fly past (pane, chain, candle, bars). Ostinato:
+     * also a fence, wall or closed gate: tall, but a quarter-block rail a jump can pass beside (cubed level 11's rope
+     * bridge of fences hangs in the gap from the beehive house).
+     */
     static boolean partialCell(CalculationContext context, int x, int y, int z) {
         BlockState state = context.get(x, y, z);
         if (!state.getFluidState().isEmpty() || MovementHelper.avoidWalkingInto(state)) {
             return false;
         }
-        return partial(state);
+        return partial(state) || MovementHelper.isTallTop(state);
     }
 
     /**
@@ -630,7 +645,8 @@ public class MovementJump extends Movement {
     }
 
     /** Flies the template from the real surface: around its own plan first, the whole plan grid while budget lasts. */
-    private static boolean partialLands(CalculationContext context, long k, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY, Cache c) {
+    private static boolean partialLands(CalculationContext context, long k, int x, int y, int z, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, double startY, Cache c,
+                                        boolean tall) {
         long now = System.currentTimeMillis();
         if (now - hhCacheBorn > 30000) {
             HH_CACHE.clear();
@@ -645,9 +661,10 @@ public class MovementJump extends Movement {
         long t1 = System.nanoTime();
         PlanStats.partNs.addAndGet(t1 - t0);
         PlanStats.partSims.incrementAndGet();
-        boolean full = !ok && c.partialFull < MAX_CALC_PARTIAL_FULL;
+        boolean full = !ok && (tall ? c.tallFull < MAX_CALC_TALL_FULL : c.partialFull < MAX_CALC_PARTIAL_FULL);
         if (full) {
-            c.partialFull++;
+            if (tall) c.tallFull++;
+            else c.partialFull++;
             ok = js.search(start, false);
             PlanStats.fullNs.addAndGet(System.nanoTime() - t1);
             PlanStats.fullSims.incrementAndGet();
@@ -694,7 +711,8 @@ public class MovementJump extends Movement {
         return (((long) (x & 0xFFFFF)) << 44) ^ (((long) (y & 0x3FF)) << 34) ^ (((long) (z & 0xFFFFF)) << 14) ^ ((long) frame << 10) ^ (ti * 0x9E3779B97F4A7C15L) ^ (((long) dx) * 31 + dz) * 0x632BE59BD9B4E019L;
     }
 
-    private static boolean hhCached(CalculationContext context, int x, int y, int z, int frame, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, Cache c) {
+    private static boolean hhCached(CalculationContext context, int x, int y, int z, int frame, int[] f, JumpTemplates.Template t, int dx, int dy, int dz, Cache c,
+                                    boolean tall) {
         long now = System.currentTimeMillis();
         if (now - hhCacheBorn > 30000) { // blocks change: forget sims older than ~30 s
             HH_CACHE.clear();
@@ -703,15 +721,17 @@ public class MovementJump extends Movement {
         long k = hhKey(x, y, z, frame, t, dx, dz);
         Boolean v = HH_CACHE.get(k);
         if (v == null) {
-            c.sims++;
+            if (tall) c.tallSims++;
+            else c.sims++;
             long t0 = System.nanoTime();
-            boolean full = c.simsFull < MAX_CALC_SIMS_FULL;
+            boolean full = tall ? c.tallFull < MAX_CALC_TALL_FULL : c.simsFull < MAX_CALC_SIMS_FULL;
             v = headHitterLands(new BsiWorld(context.bsi), x, y, z, f, t, dx, dy, dz, y, context.nativeSearch, full);
             long dt = System.nanoTime() - t0;
             PlanStats.ceilNs.addAndGet(dt);
             PlanStats.ceilSims.incrementAndGet();
             if (!v && full && !JumpTemplates.MOMENTUM.contains(t)) {
-                c.simsFull++;
+                if (tall) c.tallFull++;
+                else c.simsFull++;
             }
             if (v || full) {
                 HH_CACHE.put(k, v); // a local miss without the full search may still land later: not remembered

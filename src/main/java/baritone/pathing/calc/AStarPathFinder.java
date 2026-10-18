@@ -278,8 +278,11 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         return result;
     }
 
-    /** Ostinato: max unchecked offers queued on one node; a costlier one is dropped. */
-    private static final int MAX_PENDING = 4;
+    /**
+     * Ostinato: max unchecked offers queued on one node; a costlier one is dropped, for good. Four lost cubed level 7's
+     * only route once jumps past fence rails were offered too: they filled the queue and failed their sims.
+     */
+    private static final int MAX_PENDING = 16;
 
     /** Queues an unchecked offer in cost order; false when it is dropped as one too many. */
     private static boolean offer(PathNode node, PendingOffer o) {

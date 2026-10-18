@@ -516,10 +516,20 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     /** Ostinato: a fence, wall or closed gate, whose collision top is 1.5 high. */
-    static boolean isTallTop(BlockState state) {
+    public static boolean isTallTop(BlockState state) {
         Block b = state.getBlock();
         if (b instanceof FenceGateBlock) return !state.getValue(FenceGateBlock.OPEN);
         return b instanceof FenceBlock || b instanceof WallBlock;
+    }
+
+    /**
+     * Ostinato: whether a walk between a fence/wall top (1.5 high) and the other floor {@code flat} of the same node is
+     * a step: the other floor must be within the 0.6 step height, so a full-height top (cubed level 11's rope bridges
+     * knot wool blocks between fences). Mid-step the head on the fence side reaches the third cell over both columns.
+     */
+    public static boolean stepsToTallTop(CalculationContext context, BlockState flat, int x, int z, int destX, int y, int destZ) {
+        return collisionTop(flat) >= 0.9 && collisionTop(flat) <= 1.0 && collisionWidth(flat) >= 0.99
+                && canWalkThrough(context, x, y + 2, z) && canWalkThrough(context, destX, y + 2, destZ);
     }
 
     /** Ostinato: a player standing on a top this high has feet in the cell above and head two cells above that. */
