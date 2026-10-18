@@ -29,6 +29,7 @@ import baritone.pathing.movement.MovementState;
 import baritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import java.util.Set;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FallingBlock;
@@ -167,6 +168,37 @@ public class MovementAscend extends Movement {
         return totalCost;
     }
 
+    /**
+     * Ostinato: feet in dest at the top of the hop are not on it when its top is narrow (a brewing stand's rod). Taking
+     * that as success handed the next movement a player still in the air, which steered for the next block and the
+     * hop came down beside the rod (cubed level 1). Fly onto the middle of the top first, braking with the keys.
+     */
+    private boolean steerOntoNarrow(MovementState state) {
+        BlockPos at = dest;
+        BlockState st = BlockStateInterface.get(ctx, at);
+        if (MovementHelper.collisionTop(st) <= 0) {
+            at = dest.below();
+            st = BlockStateInterface.get(ctx, at);
+        }
+        net.minecraft.world.phys.AABB top = MovementHelper.collisionTopBounds(st);
+        if (top == null || Math.min(top.maxX - top.minX, top.maxZ - top.minZ) >= 0.8) {
+            return false;
+        }
+        net.minecraft.world.phys.Vec3 p = ctx.player().position(), v = ctx.player().getDeltaMovement();
+        double dx = at.getX() + (top.minX + top.maxX) / 2 - p.x, dz = at.getZ() + (top.minZ + top.maxZ) / 2 - p.z;
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        state.setTarget(new MovementState.MovementTarget(new baritone.api.utils.Rotation(yaw, ctx.playerRotations().getPitch()), true));
+        // the drop onto the top is a few ticks; coast covers about three ticks of the speed toward the middle
+        double along = dist < 1e-4 ? 0 : (v.x * dx + v.z * dz) / dist;
+        if (dist > 0.05 && along * 3 < dist) {
+            state.setInput(Input.MOVE_FORWARD, true);
+        } else if (along * 3 > dist + 0.1) {
+            state.setInput(Input.MOVE_BACK, true);
+        }
+        return true;
+    }
+
     @Override
     public MovementState updateState(MovementState state) {
         if (ctx.player().isInWater() && ctx.playerFeet().y >= src.y - 1) {
@@ -190,6 +222,9 @@ public class MovementAscend extends Movement {
             return state;
         }
 
+        if (ctx.playerFeet().equals(dest) && !ctx.player().onGround() && steerOntoNarrow(state)) {
+            return state;
+        }
         if (ctx.playerFeet().equals(dest) || ctx.playerFeet().equals(dest.offset(getDirection().below()))) {
             return state.setStatus(MovementStatus.SUCCESS);
         }

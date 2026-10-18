@@ -242,7 +242,8 @@ public class MovementParkour extends Movement {
             // check for ascend landing position
             BlockState destInto = context.bsi.get0(destX, y, destZ);
             if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && !lowTakeoff && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z))
+                // Ostinato: a fence or wall top is 1.5 up from a full block floor, past the 1.25 a jump rises (cubed)
+                if (i <= 3 && !lowTakeoff && (!isTallTop(destInto) || isTallTop(standingOn)) && context.allowParkourAscend && context.canSprint && !lowJump(factorBlock(context, x, y, z))
                         && (i == 2 || standingOn.getBlock() != Blocks.SOUL_SAND) && MovementHelper.canWalkOn(context, destX, y, destZ, destInto) && checkOvershootSafety(context.bsi, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
@@ -477,7 +478,15 @@ public class MovementParkour extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        if (ctx.playerFeet().y < src.y) {
+        BetterBlockPos feet = ctx.playerFeet();
+        double srcTop = MovementHelper.collisionTop(ctx.world().getBlockState(src.below()));
+        if (feet.y == src.y - 1 && srcTop > 0 && srcTop < 1 && ctx.player().position().y >= src.y - 1 + srcTop - 0.01) {
+            // Ostinato: off a low top (snow layers, a slab) the feet stand inside the cell below src's node: past the
+            // take-off block's column but still level with its top is the run to the edge, not a fall. It used to give
+            // up there, a step before the jump (cubed's snow ledge, 0 of 4).
+            feet = feet.above();
+        }
+        if (feet.y < src.y) {
             // we have fallen
             logDebug("sorry");
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -563,6 +572,20 @@ public class MovementParkour extends Movement {
                 state.setInput(Input.MOVE_BACK, land > centre + 0.2);
             }
         }
+        Vec3 at = ctx.player().position(), dv = ctx.player().getDeltaMovement();
+        if (ctx.player().onGround() && Math.abs(at.y - dest.y) < 0.6 && Math.abs(at.x - (dest.x + 0.5)) < 0.8 && Math.abs(at.z - (dest.z + 0.5)) < 0.8
+                && BlockStateInterface.getBlock(ctx, dest.below()).getFriction() > 0.6f && Math.abs(dv.x) + Math.abs(dv.z) > 0.03) {
+            // Ostinato: landed on ice still gliding: hold sneak (its edge guard keeps the feet on dest) and brake until
+            // stopped, before anything else. Past the centre and fast it used to only drop sprint, and a landing at the
+            // far edge of a lone ice block glided off it (cubed's ice level). The feet may already be over the next cell.
+            double off = (at.x - (dest.x + 0.5)) * direction.getStepX() + (at.z - (dest.z + 0.5)) * direction.getStepZ();
+            double v = dv.x * direction.getStepX() + dv.z * direction.getStepZ();
+            state.setInput(Input.SPRINT, false);
+            state.setInput(Input.MOVE_FORWARD, false);
+            state.setInput(Input.SNEAK, true);
+            state.setInput(Input.MOVE_BACK, v > 0.02 && off > -0.2);
+            return state;
+        }
         if (ctx.playerFeet().equals(dest)) {
             Block d = BlockStateInterface.getBlock(ctx, dest);
             if (d == Blocks.VINE || d == Blocks.LADDER) {
@@ -581,8 +604,8 @@ public class MovementParkour extends Movement {
                     || ctx.player().onGround() && isTallTop(ctx.world().getBlockState(dest.below()))) {
                 state.setStatus(MovementStatus.SUCCESS);
             }
-        } else if (!ctx.playerFeet().equals(from)) {
-            if (ctx.playerFeet().equals(from.relative(direction)) || ctx.player().position().y - src.y > 0.0001) {
+        } else if (!feet.equals(from)) {
+            if (feet.equals(from.relative(direction)) || ctx.player().position().y - src.y > 0.0001) {
                 if (Baritone.settings().allowPlace.value // see PR #3775
                         && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway()
                         && !MovementHelper.canWalkOn(ctx, dest.below())
@@ -610,9 +633,9 @@ public class MovementParkour extends Movement {
                 }
 
                 state.setInput(Input.JUMP, true);
-            } else if (!ctx.playerFeet().equals(dest.relative(direction, -1))) {
+            } else if (!feet.equals(dest.relative(direction, -1))) {
                 state.setInput(Input.SPRINT, jd == 5); // a 4 block gap needs the run-up at full sprint
-                if (ctx.playerFeet().equals(from.relative(direction, -1))) {
+                if (feet.equals(from.relative(direction, -1))) {
                     MovementHelper.moveTowards(ctx, state, from);
                 } else {
                     MovementHelper.moveTowards(ctx, state, from.relative(direction, -1));

@@ -152,7 +152,8 @@ public class CalculationContext {
     // / world.getMinY() / world.getMaxY() per call, and so a headless context (no Level) works. Same values as before.
     public final int worldMinY;
     /** Ostinato: per-context scratch caches of MovementJump / MovementSwim (were ThreadLocals). Only touched by the planning thread. */
-    public Object jumpCache, swimCache;
+    public volatile Object jumpCache;
+    public Object swimCache;
     /** Ostinato: offer simulated jumps unchecked (MutableMoveResult.check); set by the A* that runs the checks. */
     public boolean lazyJumps;
     /** dimensionType().height(), the number of block rows. */

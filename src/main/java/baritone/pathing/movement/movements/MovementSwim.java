@@ -55,7 +55,7 @@ public class MovementSwim extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
-        if (context.swimCache != null) ((Src) context.swimCache).context = null; // the world may have changed since (Ostinato: was SRC.get().context = null)
+        if (context.swimCache instanceof Src s && s.owner == Thread.currentThread()) s.context = null; // the world may have changed since (Ostinato: was SRC.get().context = null)
         return cost(context, src.x, src.y, src.z, dest.x - src.x, dest.y - src.y, dest.z - src.z);
     }
 
@@ -150,6 +150,8 @@ public class MovementSwim extends Movement {
 
     /** The last source cell asked about, and whether one can swim from it: the planner asks once per direction. */
     private static final class Src {
+        /** Ostinato: the thread that fills it: the executor's rechecks run on the plan-ahead search's context. */
+        final Thread owner = Thread.currentThread();
         Object context;
         int x, y, z;
         boolean wet;
@@ -163,6 +165,8 @@ public class MovementSwim extends Movement {
         Src s = (Src) c.swimCache; // Ostinato: was SRC.get()
         if (s == null) {
             c.swimCache = s = new Src();
+        } else if (s.owner != Thread.currentThread()) {
+            return water(c, x, y, z) || dugShaft(c, x, y, z); // another thread's: not ours to overwrite mid-read
         }
         if (s.context != c || s.x != x || s.y != y || s.z != z) {
             s.context = c;
