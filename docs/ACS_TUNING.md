@@ -94,4 +94,10 @@ Result on the box, lockstep on: two runs side by side match on every field over 
 misses. So does a run at maxFps 260 / render distance 12 against one at maxFps 30 / render distance 6. Lockstep also
 halves the drill's wall time (68 s vs 131 s). Lockstep off, the results depend on timing by design; that is the
 vanilla behaviour a real client has.
-Still to check: the real client on the PC against the box trace.
+Real client: the same drill through Gradle `runClient` on the Windows PC (OpenGL, real GPU, window on the second
+monitor, no focus) against the box's headless Vulkan/lavapipe client matched on every field over the 860 compared fight
+ticks, with 0 lockstep misses on either side. With lockstep off, two box runs of the same build already part at fight
+tick 7 (a jump one tick apart, path ready a tick early or late). That is the "same code, different results" the
+headless runs showed, so bench numbers are taken with `-Dostinato.lockstep=true`.
+The PC kit (`run-parity.ps1`: clone from a bundle, bench hooks, world copy, options.txt, trace) is in
+`MinecraftDev\acs-parity-kit`.
