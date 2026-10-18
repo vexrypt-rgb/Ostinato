@@ -216,3 +216,19 @@ that drew no hurt landed on a bot at 20 HP, fully charged, in reach and not bloc
 This bias was in every SMP and SickSheet number before 11:40 (UTC-7): our opening swings were wasted while the bot
 hit freely. The bias was the same in both arms of an A/B, but absolute held-out win rates were understated.
 Carpet PvP bots die in place and never respawn, so the tuning pool wasn't affected.
+
+### Clean SMP numbers on the fixed bench (both bench bugs fixed), 48 rounds each
+| arm | seed | wins | taken | dealt | axe/round | server hit rate |
+|---|---|---|---|---|---|---|
+| defaults | 48 | 22/48 (46%) | 27.9 | 46.5 | 3.2 | 88% |
+| visible shield only, duelCharge 0.90 | 48 | 20/48 | 31.5 | 44.7 | - | 96% |
+| visible shield only, duelCharge 1.00 | 48 | 29/48 | 25.8 | 46.0 | - | 93% |
+| visible shield only, duelCharge 1.00 | 49 | 27/48 | 30.2 | 47.9 | 0.9 | 93% |
+| visible shield only, duelCharge 0.90 | 49 | 30/48 | 25.8 | 52.5 | 1.1 | 95% |
+- duelCharge 1.00 vs 0.90: 56/96 vs 50/96 over two paired seeds. Not significant, so the default stays 0.90.
+- Axe fix (hiddenShield/raiseIsBlock off) vs defaults, seed 48: 20/48 vs 22/48. The server hit rate rises 88% -> 96%,
+  but wins don't. Stays opt-in.
+- The "85-90% losses" against SMP were mostly the bench: on the fixed bench we win about half.
+- Server-side hit rate is 88-96%, so the old 67% "hit rate" gap was mostly the spawn-immunity bug.
+- SPSA: mace kit vs Carpet skilled+expert ran 317/457 (69%) over two runs, no verdict (the one test was tied, LLR
+  0.02 after 117 pairs, and was lost on restart; fixed in cfbde690).
