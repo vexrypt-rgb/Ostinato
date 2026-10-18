@@ -825,6 +825,15 @@ public final class PvpProcess extends BaritoneProcessHelper {
      * Hard 06:45 held mace and returned swap for 1800 ticks: the hotbar key never landed,
      * so the round dealt 0. Set the slot as well as clicking the key.
      */
+    /**
+     * Ostinato: a foe that died where the client could not see it, put back at full health in place by the server
+     * (Carpet PvP's fake players do this; so do some duel plugins). The fight record counts it as the kill it was.
+     */
+    public void foeKilled(Entity foe) {
+        Player me = ctx.player();
+        if (me != null && foe instanceof LivingEntity le) outcome.foeDied(le.getId(), CombatGeometry.eyeToBox(me, le));
+    }
+
     private boolean select(Player me, int slot) {
         slot = inv.toHotbar(me, slot); // from the main inventory this takes two ticks: false until it is up
         if (slot < 0) return false;
