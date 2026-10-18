@@ -232,3 +232,7 @@ Carpet PvP bots die in place and never respawn, so the tuning pool wasn't affect
 - Server-side hit rate is 88-96%, so the old 67% "hit rate" gap was mostly the spawn-immunity bug.
 - SPSA: mace kit vs Carpet skilled+expert ran 317/457 (69%) over two runs, no verdict (the one test was tied, LLR
   0.02 after 117 pairs, and was lost on restart; fixed in cfbde690).
+- Footing v6, third pair (fixed bench, lava ring, seed 50): on 25/48, 1.23 entries/round (59), taken 27.2;
+  off 19/48, 1.44/round (69), taken 31.0. Pooled over three pairs: 125 vs 156 entries in 144 rounds each (-20%,
+  p ~0.06), wins 34 vs 27. Every pair points the same way, but it's not significant yet, so it stays opt-in.
+- SickSheet, clean baseline (defaults, seed 51): 33/48 (69%). easy 12/12, normal 11/12, hard 9/12, impossible 1/12.
