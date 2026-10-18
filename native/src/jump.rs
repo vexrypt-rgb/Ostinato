@@ -3,7 +3,7 @@
 //! `MomentumHop`, operation for operation.
 
 use crate::jmath::{floor_i, jabs, jmax, jmin, round_d, UNSUPPORTED};
-use crate::sim::{feet_cell, node_height, Box6, Sim, Snap, HALF_WIDTH};
+use crate::sim::{feet_cell, node_height, Box6, Sim, Snap, HALF_WIDTH, HEIGHT};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
 
@@ -245,7 +245,7 @@ impl<'a> JumpSearch<'a> {
                     let cx = s.x - (self.dest_x as f64 + 0.5);
                     let cz = s.z - (self.dest_z as f64 + 0.5);
                     let reach = 0.5 + HALF_WIDTH - 1e-4;
-                    if jabs(cx) > reach || jabs(cz) > reach || !s.on_ground {
+                    if jabs(cx) > reach || jabs(cz) > reach || !s.on_ground || pocketed(self.w, &mut self.buf, s.x, s.y, s.z, self.dest_x, self.dest_z) {
                         return MISS;
                     }
                     return Leg::Done(Outcome { landed: Some((t + 1, jmax(jabs(cx), jabs(cz)))), land_speed: None });
@@ -536,6 +536,45 @@ pub const HOP_MAX_TICKS: i32 = 60;
 
 /// `MomentumHop.find`: the jump pattern ('J' or '.' per tick) that ends standing on dest, or None.
 #[allow(clippy::too_many_arguments)]
+/// `JumpSearch.pocketed`: the body sits in a corner of the cell walled off from its middle on both axes (the inner
+/// quadrant of an L of fence arms), which the rest of the path cannot leave from.
+fn pocketed(w: &Snap, buf: &mut Vec<Box6>, x: f64, y: f64, z: f64, cell_x: i32, cell_z: i32) -> bool {
+    let (px, pz) = (x - cell_x as f64, z - cell_z as f64);
+    if jabs(px - 0.5) < 1e-3 || jabs(pz - 0.5) < 1e-3 {
+        return false;
+    }
+    buf.clear();
+    w.collect(cell_x as f64 + 1e-4, y + 1e-3, cell_z as f64 + 1e-4, cell_x as f64 + 1.0 - 1e-4, y + HEIGHT - 1e-3, cell_z as f64 + 1.0 - 1e-4, buf);
+    wall(buf, y, cell_x, cell_z, pz, false, px > 0.5) && wall(buf, y, cell_x, cell_z, px, true, pz > 0.5)
+}
+
+/// `JumpSearch.wall`.
+fn wall(boxes: &[Box6], y: f64, cell_x: i32, cell_z: i32, across: f64, along_z: bool, far: bool) -> bool {
+    let (lo, hi) = (jmin(across, 0.5), jmax(across, 0.5));
+    let (cx, cz) = (cell_x as f64, cell_z as f64);
+    let mut spans: Vec<(f64, f64)> = Vec::new();
+    for b in boxes {
+        if b[4] <= y + 0.6 + 1e-3 || b[1] >= y + HEIGHT - 1e-3 {
+            continue;
+        }
+        let (a0, a1) = if along_z { (b[0] - cx, b[3] - cx) } else { (b[2] - cz, b[5] - cz) };
+        let (o0, o1) = if along_z { (jmax(0.0, b[2] - cz), jmin(1.0, b[5] - cz)) } else { (jmax(0.0, b[0] - cx), jmin(1.0, b[3] - cx)) };
+        if a1 > lo && a0 < hi && o1 > o0 {
+            spans.push((o0, o1));
+        }
+    }
+    spans.sort_by(|p, q| p.0.total_cmp(&q.0));
+    let (from, to) = if far { (0.5, 1.0) } else { (0.0, 0.5) };
+    let mut reach = from;
+    for &(s0, s1) in &spans {
+        if s0 > reach + 1e-4 {
+            break;
+        }
+        reach = jmax(reach, s1);
+    }
+    reach >= to - 1e-4
+}
+
 pub fn momentum_hop(w: &Snap, start: &Sim, yaw: f32, dir_x: i32, dir_z: i32, dest_x: i32, dest_y: i32, dest_z: i32, jumped_last: bool, budget: i32) -> Option<Vec<u8>> {
     let mut s = Hop {
         w,
