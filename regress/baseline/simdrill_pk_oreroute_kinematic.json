@@ -1,0 +1,227 @@
+{
+  "stage": "simdrill:pk_oreroute:kinematic",
+  "kind": "simdrill",
+  "status": "ok",
+  "note": "",
+  "commit": "45d728f9226630abbc91b8ef50d7941b5e49de06",
+  "metrics": [
+    {
+      "name": "goals",
+      "value": 21.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_ok",
+      "value": 17.0,
+      "better": "higher",
+      "severity": "fail",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "goals_timeout",
+      "value": 4.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "cost_ok_total",
+      "value": 368.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": "ticks"
+    },
+    {
+      "name": "jumps_in_ok_plans",
+      "value": 24.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "nodes_total",
+      "value": 83.0,
+      "better": "info",
+      "severity": "warn",
+      "abs": 0.0,
+      "rel": 0.0,
+      "unit": ""
+    },
+    {
+      "name": "plan_ms_median",
+      "value": 0.3,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 20.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_p95",
+      "value": 4019.5,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 50.0,
+      "rel": 0.5,
+      "unit": "ms"
+    },
+    {
+      "name": "plan_ms_total",
+      "value": 16164.0,
+      "better": "lower",
+      "severity": "warn",
+      "abs": 500.0,
+      "rel": 0.5,
+      "unit": "ms"
+    }
+  ],
+  "cases": {
+    "jump_a5_b2_dy0_from_-148_-12_59@-150,-12,54": {
+      "outcome": "ok",
+      "cost": 18.66,
+      "nodes": 5,
+      "ms": 4.5,
+      "detail": "4 steps {gap1=1}"
+    },
+    "jump_a5_b2_dy0_from_-150_-12_54@-152,-12,49": {
+      "outcome": "ok",
+      "cost": 19.502,
+      "nodes": 4,
+      "ms": 0.3,
+      "detail": "3 steps {gap1=2}"
+    },
+    "jump_a5_b2_dy0_from_-152_-12_49@-154,-12,44": {
+      "outcome": "ok",
+      "cost": 19.502,
+      "nodes": 4,
+      "ms": 1.3,
+      "detail": "3 steps {gap1=2}"
+    },
+    "jump_a5_b2_dy0_from_-154_-12_44@-156,-12,39": {
+      "outcome": "ok",
+      "cost": 19.502,
+      "nodes": 4,
+      "ms": 0.5,
+      "detail": "3 steps {gap1=2}"
+    },
+    "jump_a5_b2_dy0_from_-156_-12_39@-158,-12,34": {
+      "outcome": "ok",
+      "cost": 19.502,
+      "nodes": 4,
+      "ms": 1.6,
+      "detail": "3 steps {gap1=2}"
+    },
+    "jump_a5_b2_dy0_from_-158_-12_34@-160,-12,29": {
+      "outcome": "ok",
+      "cost": 19.502,
+      "nodes": 4,
+      "ms": 0.5,
+      "detail": "3 steps {gap1=2}"
+    },
+    "jump_to_ladder_from_-160_-12_29@-162,-10,26": {
+      "outcome": "timeout",
+      "ms": 4015.9
+    },
+    "climb_from_-162_-10_26@-162,-9,26": {
+      "outcome": "timeout",
+      "ms": 4019.5
+    },
+    "climb_from_-162_-9_26@-162,-8,26": {
+      "outcome": "timeout",
+      "ms": 4019.5
+    },
+    "jump_off_ladder_from_-162_-8_26@-161,-7,23": {
+      "outcome": "timeout",
+      "ms": 4039.2
+    },
+    "jump_a6_b2_dy-2_from_-163_-6_21@-165,-8,15": {
+      "outcome": "ok",
+      "cost": 60.867,
+      "nodes": 38,
+      "ms": 58.9,
+      "detail": "3 steps {gap1=1, gap5=1, up=1}"
+    },
+    "jump_a3_b1_dy1_from_-165_-8_15@-168,-7,14": {
+      "outcome": "ok",
+      "cost": 21.0,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap2=1}"
+    },
+    "jump_a3_b2_dy1_from_-168_-7_14@-171,-6,16": {
+      "outcome": "ok",
+      "cost": 22.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap2=1}"
+    },
+    "jump_a2_b1_dy1_from_-171_-6_16@-169,-5,17": {
+      "outcome": "ok",
+      "cost": 23.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap1=1}"
+    },
+    "jump_a2_b2_dy1_from_-169_-5_17@-171,-4,19": {
+      "outcome": "ok",
+      "cost": 21.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap1=1}"
+    },
+    "jump_a2_b1_dy1_from_-171_-4_19@-169,-3,20": {
+      "outcome": "ok",
+      "cost": 23.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap1=1}"
+    },
+    "jump_a3_b0_dy1_from_-169_-3_20@-169,-2,23": {
+      "outcome": "ok",
+      "cost": 12.691,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap2=1}"
+    },
+    "jump_a2_b0_dy1_from_-169_-2_23@-171,-1,23": {
+      "outcome": "ok",
+      "cost": 9.128,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap1=1}"
+    },
+    "jump_a2_b0_dy1_from_-171_-1_23@-173,0,23": {
+      "outcome": "ok",
+      "cost": 9.128,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap1=1}"
+    },
+    "jump_a4_b1_dy-1_from_-173_0_23@-177,-1,22": {
+      "outcome": "ok",
+      "cost": 26.0,
+      "nodes": 2,
+      "ms": 0.3,
+      "detail": "1 steps {gap3=1}"
+    },
+    "jump_a3_b3_dy0_from_-177_-1_22@-180,-1,25": {
+      "outcome": "ok",
+      "cost": 24.0,
+      "nodes": 2,
+      "ms": 0.2,
+      "detail": "1 steps {gap2=1}"
+    }
+  }
+}
