@@ -905,13 +905,21 @@ public class MovementJump extends Movement {
         trace.commit(real, yaw, in, in > 0, jump);
     }
 
+    /** Where feet rest at this node: the top of the block under it, or the node's own y if that has no collision. */
+    private double floorY(BetterBlockPos pos) {
+        net.minecraft.core.BlockPos below = pos.below();
+        net.minecraft.world.phys.shapes.VoxelShape shape = ctx.world().getBlockState(below).getCollisionShape(ctx.world(), below);
+        return shape.isEmpty() ? pos.y : below.getY() + Math.min(1.0, shape.max(net.minecraft.core.Direction.Axis.Y));
+    }
+
     private MovementState update0(MovementState state) {
         super.updateState(state);
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
         Vec3 p = ctx.player().position();
-        if (p.y < Math.min(src.y, dest.y) - 0.6) {
+        // Ostinato: measured from the real floor: off a daylight sensor (top at 0.375) the feet stand 0.625 under src.y
+        if (p.y < Math.min(floorY(src), floorY(dest)) - 0.6) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
         if (js == null) {

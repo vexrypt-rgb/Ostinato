@@ -82,6 +82,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     private final java.util.Map<Goal, Long> overlongGoalLastDiscardMs = new java.util.HashMap<>();
     private static final long OVERLONG_GOAL_COOLDOWN_MS = 5000;
 
+    // Ostinato: where each search for this goal started. A second search from the same block means the last short
+    // one led round in a loop (a best-so-far path into a dead end), so it gets the failure timeout as its primary.
+    // Read and written with pathCalcLock held.
+    private Goal plannedStartsGoal;
+    private final java.util.Set<BlockPos> plannedStarts = new java.util.HashSet<>();
+
     private final Object pathPlanLock = new Object();
     /** Last time a moving goal replaced the in-progress search. */
     private long lastMovingRetargetMs;
@@ -632,6 +638,15 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             primaryTimeout = Baritone.settings().planAheadPrimaryTimeoutMS.value;
             failureTimeout = Baritone.settings().planAheadFailureTimeoutMS.value;
         }
+        if (!Objects.equals(plannedStartsGoal, goal) || plannedStarts.size() > 512) {
+            plannedStartsGoal = goal;
+            plannedStarts.clear();
+        }
+        if (!plannedStarts.add(start) && primaryTimeout < failureTimeout) {
+            logDebug("Searching again from " + start + ", allowing the full " + failureTimeout + "ms");
+            primaryTimeout = failureTimeout;
+        }
+        final long primary = primaryTimeout;
         AbstractNodeCostSearch pathfinder = createPathfinder(start, goal, current == null ? null : current.getPath(), context);
         if (!Objects.equals(pathfinder.getGoal(), goal)) { // will return the exact same object if simplification didn't happen
             logDebug("Simplifying " + goal.getClass() + " to GoalXZ due to distance");
@@ -642,7 +657,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                 logDebug("Starting to search for path from " + start + " to " + goal);
             }
 
-            PathCalculationResult calcResult = pathfinder.calculate(primaryTimeout, failureTimeout);
+            PathCalculationResult calcResult = pathfinder.calculate(primary, failureTimeout);
             synchronized (pathPlanLock) {
                 Optional<PathExecutor> executor = calcResult.getPath().map(p -> new PathExecutor(PathingBehavior.this, p));
                 // An over-long route is not walked: from here on it is a calculation that found nothing.
