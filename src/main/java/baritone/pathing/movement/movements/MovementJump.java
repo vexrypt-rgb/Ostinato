@@ -628,6 +628,7 @@ public class MovementJump extends Movement {
         start.y = startY;
         start.z = z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3];
         start.onGround = true;
+        start.vy = -0.0784000015258789; // Ostinato: vanilla's resting value, as the templates: at 0 the first tick counts as airborne
         return start;
     }
     private static final java.util.Map<Long, Boolean> HH_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
