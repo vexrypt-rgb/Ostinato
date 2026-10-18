@@ -23,6 +23,10 @@ final class CombatMovement {
     int wtap;
 
     private int strafeDir = 1, strafeLeft, dodgeLeft, dodgeDir = 1;
+    /** Ostinato: the strafe side that lines a hit up to knock the foe into a hazard, 0 for none (CombatFooting.pushSide). */
+    java.util.function.ToIntBiFunction<Player, LivingEntity> push;
+    /** Ticks the last steer spent on a push side (for the fight log). */
+    int pushTicks;
     private baritone.pathing.kinematic.KinematicController kin;
 
     private final IPlayerContext ctx;
@@ -59,6 +63,12 @@ final class CombatMovement {
             // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
             if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) hands.key(Input.JUMP);
             return;
+        }
+        int side = push == null ? 0 : push.applyAsInt(me, target);
+        if (side != 0) {
+            strafeDir = side;
+            strafeLeft = Math.max(strafeLeft, 3);
+            pushTicks++;
         }
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
     }

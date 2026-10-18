@@ -163,6 +163,54 @@ final class CombatFooting {
         return r;
     }
 
+    /** Ostinato: -Dostinato.pushFoe=true strafes to the side from which our next hit knocks the foe into a hazard. */
+    static final boolean PUSH = Boolean.getBoolean("ostinato.pushFoe");
+    private PlayerSim foeSim;
+
+    /**
+     * +1 (right) or -1 (left): the strafe side that, after {@link #MOVE} ticks, lines our hit up so its knockback
+     * carries the foe into lava or off a drop soonest; 0 when neither side gets it there (the strafe stays random).
+     * The foe is played forward on PlayerSim from where it stands, pushed by a plain hit, keys let go.
+     */
+    int pushSide(Player me, LivingEntity foe, double groundY) {
+        if (!PUSH || Double.isNaN(groundY) || me.distanceTo(foe) > 4) return 0;
+        prep(me);
+        if (foeSim == null) foeSim = new PlayerSim(world);
+        double foeGround = foe.onGround() ? foe.getY() : groundY;
+        int best = 0, bestT = HORIZON + 1;
+        float yaw = me.getYRot();
+        for (int side = -1; side <= 1; side += 2) {
+            sim.copyFrom(start);
+            boolean dry = true;
+            for (int t = 0; t < MOVE && dry; t++) {
+                sim.tick(yaw, 0, -side, false, false); // PlayerSim: +1 strafe is A (left)
+                if (hazard(groundY)) dry = false;
+            }
+            if (!dry) continue;
+            double dx = foe.getX() - sim.x, dz = foe.getZ() - sim.z, len = Math.sqrt(dx * dx + dz * dz);
+            if (len < 1e-4) continue;
+            foeSim.x = foe.getX();
+            foeSim.y = foe.getY();
+            foeSim.z = foe.getZ();
+            var v = foe.getDeltaMovement();
+            foeSim.vx = v.x;
+            foeSim.vy = v.y;
+            foeSim.vz = v.z;
+            foeSim.onGround = foe.onGround();
+            foeSim.sprinting = false;
+            foeSim.collidedH = false;
+            PlayerSim keep = start;
+            start = foeSim;
+            int t = run(yaw, 0, 0, false, false, dx / len * 0.4, dz / len * 0.4, foeGround, 0);
+            start = keep;
+            if (t < bestT) {
+                bestT = t;
+                best = side;
+            }
+        }
+        return bestT <= HORIZON ? best : 0;
+    }
+
     static final int MOVE = 6;
     private PlayerSim start2;
 

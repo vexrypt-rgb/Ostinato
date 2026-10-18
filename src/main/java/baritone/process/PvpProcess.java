@@ -758,6 +758,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private double groundY = Double.NaN;
     private final CombatFooting footing = new CombatFooting(ctx); // Ostinato
+    { if (CombatFooting.PUSH) movement.push = (me, t) -> footing.pushSide(me, t, groundY); } // Ostinato: knock the foe into a hazard
 
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
