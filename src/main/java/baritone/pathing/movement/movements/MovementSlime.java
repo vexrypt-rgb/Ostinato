@@ -171,6 +171,7 @@ public class MovementSlime extends Movement {
         start.y = MovementParkour.standingY(context, x, y, z);
         start.z = z + 0.5;
         start.onGround = true;
+        start.vy = -0.0784000015258789; // Ostinato: vanilla's resting value, as the templates: at 0 the first tick counts as airborne
         int[] p = new int[JumpSearch.DIMS];
         // a pad straight ahead keeps the straight plans (O0 = O1 = 0); one off to the side turns towards it, the
         // yaw offsets mirrored to the side it is on
@@ -278,6 +279,7 @@ public class MovementSlime extends Movement {
         start.y = MovementParkour.standingY(context, src.x, src.y, src.z);
         start.z = src.z + 0.5;
         start.onGround = true;
+        start.vy = -0.0784000015258789;
         js.run(start, op.plan, false, 0, (bx, by, bz) -> {
             swept.add(new BetterBlockPos(PlayerSim.floor(bx), PlayerSim.floor(by), PlayerSim.floor(bz)));
             swept.add(new BetterBlockPos(PlayerSim.floor(bx), PlayerSim.floor(by) + 1, PlayerSim.floor(bz)));
@@ -372,7 +374,7 @@ public class MovementSlime extends Movement {
                 return state;
             }
             if (!js.run(real, js.plan, false, 0, null) && !js.search(real, true) && !js.searchStraight(real)) {
-                logDebug("no bounce from here");
+                logDebug("no bounce from here (" + String.format(java.util.Locale.ROOT, "%.3f, %.3f", p.x, p.z) + ")");
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
             running = true;
