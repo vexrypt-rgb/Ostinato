@@ -177,6 +177,9 @@ public final class JumpTemplates {
         for (int wall = 1; wall <= 2; wall++) for (int b = 0; b >= -1; b--) dests.add(new int[]{wall + 1, 1, b, wall});
         // Ostinato: a gap before the wall (wall from a=2), and a gap after it too
         for (int post = 0; post <= 1; post++) for (int b = 0; b >= -1; b--) for (int dy = 1 - post; dy >= -1; dy--) dests.add(new int[]{3 + post, dy, b, 1, 0, 2});
+        // Ostinato: a wall straight ahead ending at the take-off column, the landing diagonally past its end: take off
+        // from the side edge and clear its corner (the centre-line template is blocked by the wall's first cell)
+        for (int a = 2; a <= 3; a++) for (int b = 1; b <= 2; b++) for (int dy = 1; dy >= -1; dy--) dests.add(new int[]{a, dy, b, 1});
         List<String> out = new ArrayList<>();
         for (int[] d : dests) {
             search:
