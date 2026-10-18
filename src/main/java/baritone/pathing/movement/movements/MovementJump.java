@@ -827,7 +827,7 @@ public class MovementJump extends Movement {
         double lat = Math.min(t.lateral, 0.75);
         double a = t.startA(), b = 0.5 + lat;
         PlayerSim start = new PlayerSim(world);
-        double[] at = clearStance(world, x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2], startY, z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3]);
+        double[] at = clearStance(world, x + 0.5 + (a - 0.5) * f[0] + (b - 0.5) * f[2], startY, z + 0.5 + (a - 0.5) * f[1] + (b - 0.5) * f[3], x, z);
         start.x = at[0];
         start.y = startY;
         start.z = at[1];
@@ -840,19 +840,21 @@ public class MovementJump extends Movement {
      * under the box, or (x, z) itself when it is clear (or nothing within half a block is). A node beside a pane's L
      * corner (landed on purpose, see {@link #inBody}) has the post in its middle: the run-up start there was inside it,
      * the sim flew the jump from a place the player can never be, and the walk to it pushed into the post (cubed level 2).
+     * Nor a spot in a corner of the take-off cell (cellX, cellZ) its own walls close off ({@link JumpSearch#pocketed}):
+     * the path arrives in the open part, and the walk to the run-up pushed into the fence (cubed level 12).
      */
-    static double[] clearStance(PlayerSim.World world, double x, double y, double z) {
+    static double[] clearStance(PlayerSim.World world, double x, double y, double z, int cellX, int cellZ) {
         java.util.List<double[]> boxes = new java.util.ArrayList<>();
         double r = PlayerSim.HALF_WIDTH;
         world.collect(x - r - 0.5, y - 0.1, z - r - 0.5, x + r + 0.5, y + PlayerSim.HEIGHT, z + r + 0.5, boxes);
-        if (stands(boxes, x, y, z)) {
+        if (stands(boxes, x, y, z) && !JumpSearch.pocketed(world, x, y, z, cellX, cellZ)) {
             return new double[]{x, z};
         }
         double best = Double.MAX_VALUE, bx = x, bz = z;
         for (int i = -16; i <= 16; i++) {
             for (int j = -16; j <= 16; j++) {
                 double ox = i / 32.0, oz = j / 32.0, d = ox * ox + oz * oz;
-                if (d < best && d <= 0.25 && stands(boxes, x + ox, y, z + oz)) {
+                if (d < best && d <= 0.25 && stands(boxes, x + ox, y, z + oz) && !JumpSearch.pocketed(world, x + ox, y, z + oz, cellX, cellZ)) {
                     best = d;
                     bx = x + ox;
                     bz = z + oz;
@@ -1441,7 +1443,7 @@ public class MovementJump extends Movement {
                 state.setInput(Input.SNEAK, real.onGround && slip(real) > 0.6 && glidesOff(real));
                 // walk to the run-up start, standing clear of the edge so the box stays on the block
                 double lat = Math.min(t.lateral, 0.75);
-                double[] spot = clearStance(hopWorld, wx(t.startA(), 0.5 + lat), floorY(src), wz(t.startA(), 0.5 + lat));
+                double[] spot = clearStance(hopWorld, wx(t.startA(), 0.5 + lat), floorY(src), wz(t.startA(), 0.5 + lat), src.x, src.z);
                 double tx = spot[0], tz = spot[1];
                 double dx = tx - p.x, dz = tz - p.z;
                 boolean edge = t.runUp == 0 && t.lateral >= 0.5 && !JumpTemplates.MOMENTUM.contains(t);

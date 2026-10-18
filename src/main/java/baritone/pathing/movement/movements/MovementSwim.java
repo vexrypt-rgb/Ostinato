@@ -76,10 +76,15 @@ public class MovementSwim extends Movement {
         return MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock);
     }
 
-    /** Water, or (at the surface) something the head can pass through. */
+    /**
+     * Water, or (at the surface) something the head can pass through. A lily pad is walk-through for land
+     * moves but its sliver of a hitbox stops a swimmer's head dead, and updateState mines anything with a
+     * collision box: planned as free, it clicked at one forever with breaking off (cubed level 12).
+     */
     private static boolean headroom(CalculationContext c, int x, int y, int z) {
         BlockState s = c.get(x, y, z);
-        return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock)) || MovementHelper.canWalkThrough(c.bsi, x, y, z, s);
+        return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock))
+                || (MovementHelper.canWalkThrough(c.bsi, x, y, z, s) && s.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty());
     }
 
     /** Ticks to clear a cell for swimming: 0 if already open, COST_INF if it can't/shouldn't be mined. */
@@ -219,6 +224,8 @@ public class MovementSwim extends Movement {
             if (dy < 0 && !water(c, x, ty, z)) return COST_INF;
             if (dy > 0 && !headroom(c, x, ty, z)) return COST_INF;
             if (dx != 0 && dz != 0 && (!water(c, x + dx, y, z) || !water(c, x, y, z + dz))) return COST_INF;
+            // The head sweeps those corners too (a lily pad there snags it).
+            if (dx != 0 && dz != 0 && (!headroom(c, x + dx, y + 1, z) || !headroom(c, x, y + 1, z + dz))) return COST_INF;
         }
         double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         return SWIM_ONE_BLOCK_COST * dist;

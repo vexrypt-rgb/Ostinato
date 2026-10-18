@@ -1,5 +1,8 @@
 package baritone.pathing.kinematic;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Open-loop search for one parkour jump onto a single block: sprint along the approach direction (optionally
  * hopping on the run-up), jump at a chosen point relative to the take-off block's front edge, turn in the air and
@@ -228,7 +231,7 @@ public final class JumpSearch {
                 double cx = sim.x - (destX + 0.5), cz = sim.z - (destZ + 0.5);
                 // still on the block, by as little as a sliver of the box; the mover steps to its centre after
                 double reach = 0.5 + PlayerSim.HALF_WIDTH - 1e-4;
-                if (Math.abs(cx) > reach || Math.abs(cz) > reach || !sim.onGround) {
+                if (Math.abs(cx) > reach || Math.abs(cz) > reach || !sim.onGround || pocketed(sim.world(), sim.x, sim.y, sim.z, destX, destZ)) {
                     return false;
                 }
                 ticks = t + 1;
@@ -237,6 +240,49 @@ public final class JumpSearch {
             }
         }
         return false;
+    }
+
+    /**
+     * True when the body at (x, y, z) sits in a corner of cell (cellX, cellZ) walled off from the cell's middle on both
+     * axes, like the inner quadrant of an L of fence arms: only the outer part of such a cell is the node the rest of
+     * the path leaves from, so a landing in the pocket strands the next move (cubed level 12). Walls are boxes too
+     * tall to step over that span from the cell's centre line out to the pocket's edge.
+     */
+    public static boolean pocketed(PlayerSim.World w, double x, double y, double z, int cellX, int cellZ) {
+        double px = x - cellX, pz = z - cellZ;
+        if (Math.abs(px - 0.5) < 1e-3 || Math.abs(pz - 0.5) < 1e-3) {
+            return false;
+        }
+        List<double[]> boxes = new ArrayList<>();
+        w.collect(cellX + 1e-4, y + 1e-3, cellZ + 1e-4, cellX + 1 - 1e-4, y + PlayerSim.HEIGHT - 1e-3, cellZ + 1 - 1e-4, boxes);
+        return wall(boxes, y, cellX, cellZ, pz, false, px > 0.5) && wall(boxes, y, cellX, cellZ, px, true, pz > 0.5);
+    }
+
+    /**
+     * Whether boxes standing between {@code across} and the centre line (on the z axis, or x when {@code alongZ}) cover
+     * the other axis from the centre line to the cell edge on the {@code far} side.
+     */
+    private static boolean wall(List<double[]> boxes, double y, int cellX, int cellZ, double across, boolean alongZ, boolean far) {
+        double lo = Math.min(across, 0.5), hi = Math.max(across, 0.5);
+        double[][] spans = new double[boxes.size()][];
+        int n = 0;
+        for (double[] b : boxes) {
+            if (b[4] <= y + 0.6 + 1e-3 || b[1] >= y + PlayerSim.HEIGHT - 1e-3) {
+                continue; // stepped over, or above the head
+            }
+            double a0 = (alongZ ? b[0] - cellX : b[2] - cellZ), a1 = (alongZ ? b[3] - cellX : b[5] - cellZ);
+            double o0 = Math.max(0, alongZ ? b[2] - cellZ : b[0] - cellX), o1 = Math.min(1, alongZ ? b[5] - cellZ : b[3] - cellX);
+            if (a1 > lo && a0 < hi && o1 > o0) {
+                spans[n++] = new double[]{o0, o1};
+            }
+        }
+        java.util.Arrays.sort(spans, 0, n, (p, q) -> Double.compare(p[0], q[0]));
+        // union of the spans, which has to run unbroken over [0.5, 1] (or [0, 0.5])
+        double from = far ? 0.5 : 0, to = far ? 1 : 0.5, reach = from;
+        for (int i = 0; i < n && spans[i][0] <= reach + 1e-4; i++) {
+            reach = Math.max(reach, spans[i][1]);
+        }
+        return reach >= to - 1e-4;
     }
 
     /** The hang on to a ladder has to last: let go of everything and check the cell still holds us for a few ticks. */
