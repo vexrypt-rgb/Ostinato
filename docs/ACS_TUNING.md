@@ -236,3 +236,27 @@ Carpet PvP bots die in place and never respawn, so the tuning pool wasn't affect
   off 19/48, 1.44/round (69), taken 31.0. Pooled over three pairs: 125 vs 156 entries in 144 rounds each (-20%,
   p ~0.06), wins 34 vs 27. Every pair points the same way, but it's not significant yet, so it stays opt-in.
 - SickSheet, clean baseline (defaults, seed 51): 33/48 (69%). easy 12/12, normal 11/12, hard 9/12, impossible 1/12.
+
+## Ostinato: 2026-10-18 afternoon (fixed bench, SMP PvP Bots unless noted)
+
+- **footing guard: default on** (1a36c0fd). 4 paired lava-ring runs, 192 rounds per arm: damage taken 27.9 vs 31.5 (p≈0.0005,
+  lower in every pair); wins 59 vs 48 (n.s.); dealt 31.2 vs 30.6. Lava entries lower (pair 4: 2.02 vs 2.54/round, p≈0.09; with
+  the earlier pooled p≈0.06 the combined test is ≈0.01–0.03). `-Dostinato.footing=false` turns it off.
+- **hiddenShield: default off** (f1bc1800). SMP: 65/96 visible-only vs 44/96 (seeds 48/49 and 52, p=0.0035). SickSheet:
+  60/96 vs 64/96 (p=0.65), damage taken 34.6 vs 32.9 (z=0.6): no significant regression.
+- **pushFoe (opt-in, `-Dostinato.pushFoe`)**: strafe so our hit knocks the foe into a hazard (PlayerSim on the foe). v1 raised
+  our own lava entries (2.02→2.76/round, 34 rounds); v2 refuses spots a foe hit would knock us off. v2 vs control on the lava
+  ring, seeds 53+56: wins 45/96 vs 49/96 (p=0.67); foe lava entries up (2.81 vs 2.15, 5.35 vs 3.73/round) but ours too
+  (2.69 vs 2.02, 5.25 vs 3.94). Not kept. No-op on flat (no hazard).
+- **dodge (opt-in, `-Dostinato.dodge`)**: step out of reach when the foe's swing is due and ours is not, on 2-tick predicted
+  distance. Flat seed 55: 24/48 vs 26/48, taken 27.2 vs 31.2, dealt 24.1 vs 26.0. Lava seed 56: 22/48 vs 24/48, taken
+  26.1 vs 26.0. Pooled 46/96 vs 50/96 (p=0.67). Not kept.
+- **aim**: in reach with the sword charged, the crosshair is off the foe's hitbox on 3.2% of ticks (median yaw error 1.2°).
+  Aim is not where SMP rounds are lost.
+- **flicks**: from vex's capture (41 mcturn flicks), reaction is 230 ms median (fastest decile 140–150 ms) and peak speed is
+  20–25°/tick median (p90 29/33/57 for 20–60°/60–120°/120°+). The default hand reaches 54°/tick on a 90° flick with no
+  reaction delay, so it is already faster than that hand. `-Dostinato.flick=user` (6c6cf3ab, opt-in, untested) caps turn
+  speed at that p90 and adds a 150 ms reaction to a jumped aim point. Not A/B'd yet.
+- **mace SPSA** (carpetpvp skilled+expert, resumes across restarts since cfbde690): round 240/300, second GSPRT test at 194
+  pairs, LLR 0.00: no verdict, nothing kept.
+- Bench: opp.sh `pkill` matched w4b/w4c when launching w4 (prefix); fixed to the exact dir. Runs are archived in acs-farm/archive.
