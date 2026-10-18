@@ -201,6 +201,26 @@ public final class RegressReport {
             }
         }
         if (changed > 25) fs.add(new Finding(Level.INFO, s, (changed - 25) + " more cost/node changes"));
+        // path quality over the cases solved in both runs: the solved set itself can move (a search near its timeout),
+        // so a mean over each run's own solved set is not comparable
+        double cNow = 0, cBase = 0, nNow = 0, nBase = 0;
+        int common = 0;
+        for (Map.Entry<String, StageResult.Case> e : c.cases.entrySet()) {
+            StageResult.Case cc = e.getValue(), bc = b.cases.get(e.getKey());
+            if (bc == null || !cc.outcome.equals("ok") || !bc.outcome.equals("ok") || cc.cost == null || bc.cost == null) continue;
+            common++;
+            cNow += cc.cost;
+            cBase += bc.cost;
+            if (cc.nodes != null && bc.nodes != null) {
+                nNow += cc.nodes;
+                nBase += bc.nodes;
+            }
+        }
+        if (common > 0) {
+            if (cNow > cBase * 1.005 + 1e-3) fs.add(new Finding(Level.FAIL, s, String.format(Locale.ROOT, "path cost over the %d cases ok in both %s -> %s (+%.2f%%)", common, num(cBase), num(cNow), 100 * (cNow / cBase - 1))));
+            else if (cNow < cBase * 0.995 - 1e-3) fs.add(new Finding(Level.IMPROVED, s, String.format(Locale.ROOT, "path cost over the %d cases ok in both %s -> %s (%.2f%%)", common, num(cBase), num(cNow), 100 * (cNow / cBase - 1))));
+            if (nBase > 0 && nNow > nBase * 1.10 + 50) fs.add(new Finding(Level.WARN, s, String.format(Locale.ROOT, "nodes expanded over the %d cases ok in both %s -> %s", common, num(nBase), num(nNow))));
+        }
         for (String k : b.cases.keySet()) if (!c.cases.containsKey(k)) fs.add(new Finding(Level.INFO, s, k + ": gone (was " + b.cases.get(k).outcome + ")"));
         return verdict(fs, before, "PASS");
     }

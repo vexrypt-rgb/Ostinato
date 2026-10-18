@@ -18,7 +18,7 @@ import java.util.*;
  * and medium queries the golden-cost test runs (the long ones, and the few over 300k expansions, stay with the full
  * benchmark) for each {@code engine:finder} in {@code -Dostinato.regress.engines} (default
  * {@code BARITONE:astar,KINEMATIC:game}; {@code game} is the far-segment weighted A* PathingBehavior uses with the current
- * pathingFarSegmentWeight). Failures and mean path cost are exact and gate; plan times are reported and only warn.
+ * pathingFarSegmentWeight). Failures and path cost (compared over the queries solved in both runs) gate; plan times only warn.
  */
 public class PathBenchStage {
 
@@ -80,11 +80,11 @@ public class PathBenchStage {
                 r.metric("queries", first.size(), "info", "warn", 0, 0, "");
                 r.metric("failures", fails, "lower", "fail", 0, 0, ""); // searches that ended without the goal, before the timeout
                 r.metric("timeouts", timeouts, "lower", "warn", 0, 0, "");
-                r.metric("mean_cost", okN == 0 ? 0 : Math.round(cost / okN * 1e4) / 1e4, "lower", "fail", 1e-3, 0.005, "ticks");
-                r.metric("nodes_total", nodes, "lower", "warn", 0, 0.10, "");
+                r.metric("mean_cost", okN == 0 ? 0 : Math.round(cost / okN * 1e4) / 1e4, "info", "warn", 0, 0, "ticks"); // gated per query set in RegressReport
+                r.metric("nodes_total", nodes, "info", "warn", 0, 0, "");
                 r.metric("plan_ms_median", Math.round(Regress.median(allMs) * 10) / 10.0, "lower", "warn", 5, 0.5, "ms");
                 r.metric("plan_ms_p95", Math.round(Regress.pct(allMs, 0.95) * 10) / 10.0, "lower", "warn", 20, 0.5, "ms");
-                r.metric("time_to_arrive", Math.round(arrive * 10) / 10.0, "lower", "warn", 1, 0.02, "ticks");
+                r.metric("time_to_arrive", Math.round(arrive * 10) / 10.0, "info", "warn", 0, 0, "ticks");
                 r.note = reps + " timed rep(s) after a warm-up; per-query ms is the median";
             } catch (Throwable t) {
                 r.status = "error";

@@ -41,8 +41,8 @@ a table in `build/regress-runs/summary.md`, and overlays the suite onto commits 
 | stage | what | gates on |
 |---|---|---|
 | `unit:junit` | every JUnit test of the normal `test` task (read from its XML; a red test no longer stops the other stages) | any failing test |
-| `pathbench:<engine>:<finder>` | PathBench's seeded synthetic terrains (flat, hills, caves, water...), the short and medium queries the golden-cost test uses | failures (searches that ended without the goal), mean path cost (+0.5%); nodes, plan ms, time-to-arrive warn only |
-| `simdrill:<course>:<mode>` | the PkTest course scripts (`src/test/resources/regress/courses/`, copied from pk/goals) built headlessly from their `fill`/`setblock` commands or read from the map save's region files, every goal planned by the real A* with PkTest's settings for that mode. The jump movers' costs run PlayerSim against the course's real collision boxes | goals planned to the goal; a goal that was planned and now is not |
+| `pathbench:<engine>:<finder>` | PathBench's seeded synthetic terrains (flat, hills, caves, water...), the short and medium queries the golden-cost test uses | failures (searches that ended without the goal before the timeout), path cost over the queries solved in both runs (+0.5%); nodes (+10%), plan ms warn |
+| `simdrill:<course>:<mode>` | the PkTest course scripts (`src/test/resources/regress/courses/`, copied from pk/goals) built headlessly from their `fill`/`setblock` commands or read from the map save's region files, every goal planned by the real A* with PkTest's settings for that mode. The jump movers' costs run PlayerSim against the course's real collision boxes | goals planned to the goal; a goal that was planned and now is not; path cost over the goals planned in both (+0.5%) |
 | `combat:vexbench` | slot for the combat bench; records itself skipped until VexBench is on main or a live runner writes it | |
 | `live:*` | live-client stages, see below | per their metrics |
 
@@ -57,7 +57,11 @@ types), `pk_drill_hh` (17 head hitters), `pk_oreroute`, `pk_ore` (ore parkour of
 Per stage: an error fails. A metric past its tolerance (`abs + rel x baseline`) in its bad direction fails or warns by
 its severity. A case that was `ok` and is not now fails; one that turns into `timeout` only warns (machine speed). A
 case now `fail`/`error` that was not fails. A case that becomes `ok` is listed as IMPROVED. Cost or node changes on
-cases that stayed `ok` are listed as INFO. A stage in the baseline that was skipped or not run warns. Timing metrics
+cases that stayed `ok` are listed as INFO; their summed cost gates (+0.5% fails, -0.5% is an improvement) and their
+summed node count warns past +10%. Means over each run's own solved set are shown but do not gate: a search that ends
+near its timeout can drop in or out of the set. Some jump movers keep wall-clock budgets and retry windows
+(MovementTas, MovementChainJump), so node counts can move by a few between identical runs; in three runs on the box
+costs and outcomes (other than searches cut off by their timeout) did not. A stage in the baseline that was skipped or not run warns. Timing metrics
 never fail: the box is shared.
 
 ## Metrics file (how any stage plugs in)
