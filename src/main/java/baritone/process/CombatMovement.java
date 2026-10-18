@@ -25,7 +25,7 @@ final class CombatMovement {
     private int strafeDir = 1, strafeLeft, dodgeLeft, dodgeDir = 1;
     /** Ostinato: the strafe side that lines a hit up to knock the foe into a hazard, 0 for none (CombatFooting.pushSide). */
     java.util.function.ToIntBiFunction<Player, LivingEntity> push;
-    /** Ticks the last steer spent on a push side (for the fight log). */
+    /** Ostinato: ticks spent on a push side so far (for the fight log). */
     int pushTicks;
     private baritone.pathing.kinematic.KinematicController kin;
 
@@ -64,7 +64,7 @@ final class CombatMovement {
             if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) hands.key(Input.JUMP);
             return;
         }
-        int side = push == null ? 0 : push.applyAsInt(me, target);
+        int side = push == null ? 0 : push.applyAsInt(me, target); // Ostinato: a hazard behind the foe picks the side
         if (side != 0) {
             strafeDir = side;
             strafeLeft = Math.max(strafeLeft, 3);

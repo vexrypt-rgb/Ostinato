@@ -1,3 +1,6 @@
+/*
+ * Ostinato: combat footing (knockback, edge and lava safety). New file, replaces no Baritone code.
+ */
 package baritone.process;
 
 import baritone.api.utils.IPlayerContext;
@@ -20,7 +23,7 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 final class CombatFooting {
 
-    static final boolean ON = !"false".equals(System.getProperty("ostinato.footing")); // default since 4 pairs (192 rounds each, SMP lava ring): taken 27.9 vs 31.5 p≈0.0005, fewer lava entries, wins 59 vs 48
+    static final boolean ON = !"false".equals(System.getProperty("ostinato.footing")); // Ostinato: default since 4 pairs (192 rounds each, SMP lava ring): taken 27.9 vs 31.5 p≈0.0005, fewer lava entries, wins 59 vs 48
     static final int HORIZON = 12;
     static final double MAX_DROP = 3.5;
     /** Knockback of a sprint hit: 0.4 base plus 0.5 for sprinting (LivingEntity.knockback, Player.attack). */
@@ -168,7 +171,7 @@ final class CombatFooting {
     private PlayerSim foeSim, selfSim;
 
     /**
-     * +1 (right) or -1 (left): the strafe side that, after {@link #MOVE} ticks, lines our hit up so its knockback
+     * Ostinato: +1 (right) or -1 (left): the strafe side that, after {@link #MOVE} ticks, lines our hit up so its knockback
      * carries the foe into lava or off a drop soonest; 0 when neither side gets it there (the strafe stays random).
      * The foe is played forward on PlayerSim from where it stands, pushed by a plain hit, keys let go.
      */
@@ -189,7 +192,7 @@ final class CombatFooting {
             if (!dry) continue;
             double dx = foe.getX() - sim.x, dz = foe.getZ() - sim.z, len = Math.sqrt(dx * dx + dz * dz);
             if (len < 1e-4) continue;
-            // the spot we strafe to must itself survive the foe's hit (pushing from a rim gets us knocked in first)
+            // Ostinato: the spot we strafe to must itself survive the foe's hit (pushing from a rim gets us knocked in first)
             if (selfSim == null) selfSim = new PlayerSim(world);
             selfSim.copyFrom(sim);
             PlayerSim mine = start;

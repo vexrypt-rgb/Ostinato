@@ -847,7 +847,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      */
     public void foeKilled(Entity foe) {
         Player me = ctx.player();
-        if (me == null || !(foe instanceof LivingEntity le)) return;
+        if (me == null || !(foe instanceof LivingEntity le)) return; // Ostinato
         outcome.foeDied(le.getId(), CombatGeometry.eyeToBox(me, le));
         // close it now: next tick the same foe reads full health again and the record would take the kill back
         outcome.interrupt("kill");

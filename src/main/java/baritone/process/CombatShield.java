@@ -128,7 +128,7 @@ final class CombatShield {
         // 221131 expert: VexBot's sword put our shield on cooldown with the first blocked swing, and the
         // next 60 ticks were spent standing behind a shield that was not there.
         if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) return false;
-        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > AXE_GAP) return false;
+        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > AXE_GAP) return false; // Ostinato
         if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
                 || isSpear(target.getMainHandItem())
                 || target.getMainHandItem().getItem() == Items.MACE)) return false;

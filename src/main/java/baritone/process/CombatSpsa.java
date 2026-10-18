@@ -384,7 +384,7 @@ final class CombatSpsa {
                         case "kept" -> s.kept = Integer.parseInt(v);
                         case "dropped" -> s.dropped = Integer.parseInt(v);
                         case "tests" -> s.tests = Integer.parseInt(v);
-                        case "test" -> {
+                        case "test" -> { // Ostinato: a GSPRT test under way when the file was saved
                             String[] f = v.split(":");
                             s.phase = Phase.CONFIRM;
                             s.cn = Integer.parseInt(f[0]);
@@ -402,7 +402,7 @@ final class CombatSpsa {
                             else {
                                 s.trusted[i] = tr;
                                 s.phi[i] = clamp(i, p);
-                                s.candidate[i] = f.length > 4 ? Integer.parseInt(f[4]) : tr; // older files: no candidate
+                                s.candidate[i] = f.length > 4 ? Integer.parseInt(f[4]) : tr; // Ostinato: older files carry no candidate
                             }
                         }
                         default -> {}

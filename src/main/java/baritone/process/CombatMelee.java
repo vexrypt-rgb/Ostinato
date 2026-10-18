@@ -116,7 +116,7 @@ final class CombatMelee {
     /** Ostinato: -Dostinato.dodge=true steps out of the foe's reach when its swing is due and ours is not. */
     static final boolean DODGE = Boolean.getBoolean("ostinato.dodge");
 
-    /** Horizontal distance between the two of us {@code k} ticks on, each carried by its current velocity. */
+    /** Ostinato: horizontal distance between the two of us {@code k} ticks on, each carried by its current velocity. */
     static double predictedDist(Player me, LivingEntity target, int k) {
         var a = me.getDeltaMovement();
         var b = target.getDeltaMovement();
