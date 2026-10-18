@@ -209,6 +209,22 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         return velYaw;
     }
 
+    /**
+     * Ostinato: -Dostinato.flick=user holds the hand to vex's own recorded flicks (mouse-session-1, 41 mcturn trials):
+     * the turn per tick is capped at the 90th percentile of that hand's peak speed for the flick's size (about
+     * 26 deg/tick at 40 deg, 33 at 90, 50 at 200; the default model reaches 54 at 90), and a jump of the aim point
+     * by more than 25 deg is answered after 3 ticks (150 ms, that hand's fastest decile of reaction times).
+     */
+    static final boolean FLICK_USER = "user".equals(System.getProperty("ostinato.flick"));
+
+    /** Ostinato: the user-profile cap on one tick's turn for a move of {@code d} degrees still to go. */
+    static float flickCap(float d) {
+        return 20f + 0.15f * Math.abs(d);
+    }
+
+    private Rotation heldWant; // Ostinato: the aim point the hand still goes for while it reacts to a jump
+    private int reactLeft;
+
     /** One tick of the hand's yaw (the same model as {@link #humanStep}), for rollouts: returns the new camera yaw, speed in outVel[0]. */
     public static float modelYawStep(float cam, float vel, float target, float[] outVel) {
         float dy = net.minecraft.util.Mth.wrapDegrees(target - cam);
@@ -217,6 +233,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         float out = vel + net.minecraft.util.Mth.clamp(want - vel, -acc, acc);
         if (Math.abs(dy) <= 1.5f) out = dy;
         if (Math.abs(dy) > 25f) out += vel * 0.12f;
+        if (FLICK_USER) out = net.minecraft.util.Mth.clamp(out, -flickCap(dy), flickCap(dy)); // Ostinato
         outVel[0] = out;
         return cam + out;
     }
@@ -228,6 +245,11 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * mouse count rides on top; the result is rounded to whole mouse counts as before.
      */
     private Rotation humanStep(Rotation want) {
+        if (FLICK_USER) { // Ostinato: a hand reacts to a jumped aim point a few ticks late
+            if (heldWant != null && reactLeft == 0 && Math.abs(net.minecraft.util.Mth.wrapDegrees(want.getYaw() - heldWant.getYaw())) > 25f) reactLeft = 4;
+            if (reactLeft > 0 && --reactLeft > 0) want = heldWant; // 3 ticks on the old point, then the new one
+            else heldWant = want;
+        }
         float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
         float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
@@ -240,6 +262,10 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         if (Math.abs(dp) <= 1.5f) outP = dp;
         // momentum carries a fast move slightly past; the next tick corrects it
         if (Math.abs(dy) > 25f) outY += velYaw * 0.12f;
+        if (FLICK_USER) { // Ostinato: no faster than the user's own hand
+            outY = net.minecraft.util.Mth.clamp(outY, -flickCap(dy), flickCap(dy));
+            outP = net.minecraft.util.Mth.clamp(outP, -0.75f * flickCap(dp), 0.75f * flickCap(dp));
+        }
         outP += outY * 0.06f * (float) Math.signum(dp == 0 ? 1 : dp) * (Math.abs(dy) > 10f ? 1 : 0);
         double tremor = Math.min(1.0, Math.abs(dy) / 6.0) < 1.0 ? 0.08 : 0.0;
         handDraws += 2; // Ostinato
