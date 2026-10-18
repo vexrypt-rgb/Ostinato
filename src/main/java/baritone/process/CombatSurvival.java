@@ -100,7 +100,9 @@ final class CombatSurvival {
         boolean shieldReady = me.getOffhandItem().getItem() == Items.SHIELD && !me.getCooldowns().isOnCooldown(me.getOffhandItem());
         boolean underFire = BITE_CUT && eatTicks > 0 && eatTicks < 20 && biteHits > 0 && shieldReady && me.getHealth() > 4
                 && eyeToBox(me, target) < 4 && target.getMainHandItem().getItem() != Items.MACE;
-        if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall || underFire)) {
+        // Ostinato: an apple at a fifth of the pace let hit after hit walk us back into the lava (20-35 ticks, lava ring logs)
+        boolean cornered = exposed && me.getHealth() > 4;
+        if (eatTicks > 0 && (overhead && target.getY() > me.getY() + 2.0 || longFall || underFire || cornered)) {
             hands.use(false);
             eatTicks = 0;
             biteHits = 0;
@@ -114,7 +116,8 @@ final class CombatSurvival {
                 hands.use(false);
                 hands.abortCharge();
             }
-            if (eat(me, target)) return hands.decide("eat");
+            // Ostinato: no new bite where the foe's next hit drifts us into lava or off a drop (CombatFooting.exposed)
+            if (!(eatTicks == 0 && exposed && me.getHealth() > 4) && eat(me, target)) return hands.decide("eat");
         }
         // ordinary food: a hungry bar stops regeneration and the sprint, so top it up when the foe gives room
         boolean peckish = me.getFoodData().getFoodLevel() <= 14;
@@ -127,6 +130,8 @@ final class CombatSurvival {
     }
 
     int foodTicks;
+    /** Ostinato: set each tick by PvpProcess from {@link CombatFooting#exposed}. */
+    boolean exposed;
 
     /** An ordinary edible item (not a golden apple, not one that hurts), pulled into the hotbar. Best saturation first. */
     private int foodSlot(Player me) {

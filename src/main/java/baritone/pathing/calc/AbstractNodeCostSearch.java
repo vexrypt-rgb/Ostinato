@@ -87,8 +87,27 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
 
     protected boolean cancelRequested;
 
+    /** Ostinato: the last search stopped on its time limit with nodes still open, not on an exhausted open set. */
+    protected volatile boolean timedOut;
+
+    /**
+     * Ostinato: the last search emptied its open set without reaching the goal, with every move out of every node it
+     * expanded tried: no node it expanded can reach the goal (within this search's sim budgets).
+     */
+    protected volatile boolean exhausted;
+
     /** Replay a stored route only when this search's costs were not shaped by mobs. */
     protected boolean allowReuse;
+
+    /**
+     * Ostinato: when this search runs out of time and its best partial segment opens with a drop it cannot climb back,
+     * report a failure (so a longer search follows) rather than a segment that jumps down blind. Set by the caller
+     * when such a longer search is still allowed and the goal is close enough for it to settle.
+     */
+    public boolean holdAtDrops;
+
+    /** A drop this deep cannot be climbed back without placing blocks. */
+    static final int IRREVERSIBLE_DROP = 3;
 
     /**
      * This is really complicated and hard to explain. I wrote a comment in the old version of MineBot but it was so
@@ -135,6 +154,27 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         cancelRequested = true;
     }
 
+    /** Ostinato: true when the search ran out of time rather than out of nodes, so more time could still find a path. */
+    public boolean timedOut() {
+        return timedOut;
+    }
+
+    /** Ostinato: see {@link #exhausted}. */
+    public boolean exhausted() {
+        return exhausted;
+    }
+
+    /** Ostinato: the positions this search expanded (reached and looked out of), as {@link BetterBlockPos#longHash}. */
+    public it.unimi.dsi.fastutil.longs.LongOpenHashSet expandedPositions() {
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (PathNode n : nodes()) {
+            if (n.expandedCost < baritone.api.pathing.movement.ActionCosts.COST_INF) {
+                out.add(BetterBlockPos.longHash(n.x, n.y, n.z));
+            }
+        }
+        return out;
+    }
+
     @Override
     public synchronized PathCalculationResult calculate(long primaryTimeout, long failureTimeout) {
         if (isFinished) {
@@ -170,6 +210,20 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
             if (path.length() < previousLength) {
                 Helper.HELPER.logDebug("Static cutoff " + previousLength + " to " + path.length());
             }
+            if (timedOut && !goal.isInGoal(path.getDest())) {
+                // Ostinato: a search cut short knows nothing of what lies past a drop it cannot climb back: walk up to
+                // the edge only, and let the next search (from the edge, with more time) decide whether to go down.
+                // A 400ms first search on cubed level 6 dropped four blocks into a pit sealed off from the goal; the
+                // search that proved it sealed finished after the bot had already fallen in.
+                int drop = firstIrreversibleDrop(path);
+                if (drop > 0) {
+                    Helper.HELPER.logDebug("Stopping the segment at the drop at " + path.positions().get(drop) + " until a search sees past it");
+                    path = new baritone.pathing.path.CutoffPath(path, drop);
+                } else if (drop == 0 && holdAtDrops) {
+                    Helper.HELPER.logDebug("Not dropping from " + path.getSrc() + " on a search that ran out of time");
+                    return new PathCalculationResult(PathCalculationResult.Type.FAILURE);
+                }
+            }
             if (goal.isInGoal(path.getDest())) {
                 if (allowReuse) {
                     RouteReuse.remember(path, context);
@@ -190,6 +244,17 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     }
 
     protected abstract Optional<IPath> calculate0(long primaryTimeout, long failureTimeout);
+
+    /** Ostinato: the index of the first position the path drops {@link #IRREVERSIBLE_DROP} or more blocks from, or -1. */
+    static int firstIrreversibleDrop(IPath path) {
+        java.util.List<BetterBlockPos> pos = path.positions();
+        for (int i = 0; i + 1 < pos.size(); i++) {
+            if (pos.get(i + 1).y <= pos.get(i).y - IRREVERSIBLE_DROP) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
     /**
      * Determines the distance squared from the specified node to the start

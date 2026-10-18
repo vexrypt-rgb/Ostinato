@@ -133,7 +133,7 @@ final class CombatShield {
         // 221131 expert: VexBot's sword put our shield on cooldown with the first blocked swing, and the
         // next 60 ticks were spent standing behind a shield that was not there.
         if (me.getCooldowns().isOnCooldown(me.getOffhandItem())) return false;
-        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > AXE_GAP) return false;
+        if (target.isBlocking() && dist <= REACH + 0.5 && inv.best(me, AXES) >= 0 && me.tickCount - lastAxeTick > AXE_GAP) return false; // Ostinato
         if (!(target.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS) || target.getMainHandItem().is(net.minecraft.tags.ItemTags.AXES)
                 || isSpear(target.getMainHandItem())
                 || target.getMainHandItem().getItem() == Items.MACE)) return false;
@@ -175,9 +175,18 @@ final class CombatShield {
         return foeSword && since >= gap - p.dueEarly.get() && since < gap + p.dueLate.get() && dist < p.dueDist.real();
     }
 
+    /**
+     * Ostinato: off by default (fixed bench, vs SMP PvP Bots: wins 65/96 visible-only vs 44/96, p 0.0035; SickSheet
+     * 60/96 vs 64/96, p 0.65); -Dostinato.hiddenShield=true brings the guess back. Off trusts only a shield the client sees. The window below only grows (any
+     * click that drew no blood, reach rejections included), so against SMP bots (swing gap ~14) it covered nearly
+     * every tick: 233 of 599 swings went to the axe, 120 of them at low charge, ~90% against no block.
+     */
+    static final boolean HIDDEN = Boolean.parseBoolean(System.getProperty("ostinato.hiddenShield", "false"));
+
     /** A blockhitting opponent is behind its shield right after its own swing, and the use flag does not always reach the client. */
     boolean hiddenShield(Player me, LivingEntity target) {
         this.target = target;
+        if (!HIDDEN) return false;
         int since = me.tickCount - targetSwingTick;
         return since >= 0 && since < unseenBlock && !(axeHeld && me.tickCount - lastAxeTick < 100);
     }

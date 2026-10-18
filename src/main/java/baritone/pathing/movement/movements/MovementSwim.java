@@ -55,7 +55,7 @@ public class MovementSwim extends Movement {
 
     @Override
     public double calculateCost(CalculationContext context) {
-        if (context.swimCache != null) ((Src) context.swimCache).context = null; // the world may have changed since (Ostinato: was SRC.get().context = null)
+        if (context.swimCache instanceof Src s && s.owner == Thread.currentThread()) s.context = null; // the world may have changed since (Ostinato: was SRC.get().context = null)
         return cost(context, src.x, src.y, src.z, dest.x - src.x, dest.y - src.y, dest.z - src.z);
     }
 
@@ -76,10 +76,15 @@ public class MovementSwim extends Movement {
         return MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock);
     }
 
-    /** Water, or (at the surface) something the head can pass through. */
+    /**
+     * Water, or (at the surface) something the head can pass through. A lily pad is walk-through for land
+     * moves but its sliver of a hitbox stops a swimmer's head dead, and updateState mines anything with a
+     * collision box: planned as free, it clicked at one forever with breaking off (cubed level 12).
+     */
     private static boolean headroom(CalculationContext c, int x, int y, int z) {
         BlockState s = c.get(x, y, z);
-        return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock)) || MovementHelper.canWalkThrough(c.bsi, x, y, z, s);
+        return (MovementHelper.isWater(s) && !(s.getBlock() instanceof net.minecraft.world.level.block.SimpleWaterloggedBlock))
+                || (MovementHelper.canWalkThrough(c.bsi, x, y, z, s) && s.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty());
     }
 
     /** Ticks to clear a cell for swimming: 0 if already open, COST_INF if it can't/shouldn't be mined. */
@@ -150,6 +155,8 @@ public class MovementSwim extends Movement {
 
     /** The last source cell asked about, and whether one can swim from it: the planner asks once per direction. */
     private static final class Src {
+        /** Ostinato: the thread that fills it: the executor's rechecks run on the plan-ahead search's context. */
+        final Thread owner = Thread.currentThread();
         Object context;
         int x, y, z;
         boolean wet;
@@ -163,6 +170,8 @@ public class MovementSwim extends Movement {
         Src s = (Src) c.swimCache; // Ostinato: was SRC.get()
         if (s == null) {
             c.swimCache = s = new Src();
+        } else if (s.owner != Thread.currentThread()) {
+            return water(c, x, y, z) || dugShaft(c, x, y, z); // another thread's: not ours to overwrite mid-read
         }
         if (s.context != c || s.x != x || s.y != y || s.z != z) {
             s.context = c;
@@ -215,6 +224,8 @@ public class MovementSwim extends Movement {
             if (dy < 0 && !water(c, x, ty, z)) return COST_INF;
             if (dy > 0 && !headroom(c, x, ty, z)) return COST_INF;
             if (dx != 0 && dz != 0 && (!water(c, x + dx, y, z) || !water(c, x, y, z + dz))) return COST_INF;
+            // The head sweeps those corners too (a lily pad there snags it).
+            if (dx != 0 && dz != 0 && (!headroom(c, x + dx, y + 1, z) || !headroom(c, x, y + 1, z + dz))) return COST_INF;
         }
         double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         return SWIM_ONE_BLOCK_COST * dist;

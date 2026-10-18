@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Ostinato: live PkTest stage for scripts/regress.sh --live (template; copy to pktest.sh and fill in LAUNCH).
+# Runs one course in a headless client and converts its pk-results into a metrics file.
+set -euo pipefail
+: "${OSTINATO_REGRESS_METRICS_DIR:?}" "${OSTINATO_REGRESS_COMMIT:?}" "${OSTINATO_REGRESS_TREE:?}"
+COURSE="${PK_COURSE:-pk_drill}"                       # name in src/test/resources/regress/courses.txt
+SAVE="${PK_SAVE:-pk_hh}"                              # save folder in the client's saves/
+MODE="${PK_MODE:-kinematic}"
+RUN_DIR="${PK_RUN_DIR:?set PK_RUN_DIR to the client game directory}"
+GOALS="$OSTINATO_REGRESS_TREE/src/test/resources/regress/courses/$COURSE.txt"
+# LAUNCH must start the client built from $OSTINATO_REGRESS_TREE and block until it exits. The JVM args it needs:
+JVM="-Dostinato.testHarness=true -Dostinato.pktest=$SAVE -Dostinato.pktest.goals=$GOALS -Dostinato.pktest.mode=$MODE"
+: "${LAUNCH:?set LAUNCH to a command that takes the JVM args as \$JVM (e.g. the ACS farm launcher)}"
+start=$(date +%s)
+JVM="$JVM" bash -c "$LAUNCH"
+txt=$(ls -t "$RUN_DIR"/pk-results/*-"$MODE"-*.txt 2>/dev/null | head -1)
+if [ -z "$txt" ] || [ "$(stat -c %Y "$txt")" -lt "$start" ]; then
+  printf '{"stage":"live:pktest:%s:%s","kind":"live","status":"skipped","note":"no pk-results written","metrics":[],"cases":{}}\n' "$COURSE" "$MODE" \
+    > "$OSTINATO_REGRESS_METRICS_DIR/live_pktest_${COURSE}_${MODE}.json"
+  exit 0
+fi
+python3 "$(dirname "$0")/../../scripts/regress/pk_results_to_metrics.py" --txt "$txt" --log "$RUN_DIR/logs/latest.log" \
+  --out "$OSTINATO_REGRESS_METRICS_DIR" --name "$COURSE" --commit "$OSTINATO_REGRESS_COMMIT"

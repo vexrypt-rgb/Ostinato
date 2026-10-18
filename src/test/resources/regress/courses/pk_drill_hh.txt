@@ -1,0 +1,180 @@
+tag headhitter_gap2
+cmd forceload add 3280 -8 3296 24
+wait 20
+cmd fill 3281 100 -4 3295 170 20 air
+cmd fill 3281 147 -4 3295 147 20 barrier
+cmd fill 3287 150 0 3289 150 2 stone
+cmd setblock 3288 150 5 stone
+cmd setblock 3288 153 2 stone
+tp 3288.5 151 0.5
+wait 20
+goal 3288 151 5
+tag headhitter_gap3
+cmd forceload add 3296 -8 3312 24
+wait 20
+cmd fill 3297 100 -4 3311 170 20 air
+cmd fill 3297 147 -4 3311 147 20 barrier
+cmd fill 3303 150 0 3305 150 2 stone
+cmd setblock 3304 150 6 stone
+cmd fill 3303 153 1 3305 153 2 stone
+tp 3304.5 151 0.5
+wait 20
+goal 3304 151 6
+tag blind_roof_landing_gap2
+cmd forceload add 3312 -8 3328 24
+wait 20
+cmd fill 3313 100 -4 3327 170 20 air
+cmd fill 3313 147 -4 3327 147 20 barrier
+cmd fill 3319 150 0 3321 150 2 stone
+cmd setblock 3320 150 5 stone
+cmd setblock 3320 153 5 stone
+tp 3320.5 151 0.5
+wait 20
+goal 3320 151 5
+tag neo_1wall
+cmd forceload add 3328 -8 3344 24
+wait 20
+cmd fill 3329 100 -4 3343 170 20 air
+cmd fill 3329 147 -4 3343 147 20 barrier
+cmd fill 3335 150 0 3337 150 2 stone
+cmd fill 3333 150 3 3336 152 3 stone
+cmd setblock 3336 150 4 stone
+tp 3336.5 151 1.5
+wait 20
+goal 3336 151 4
+tag neo_2wall
+cmd forceload add 3344 -8 3360 24
+wait 20
+cmd fill 3345 100 -4 3359 170 20 air
+cmd fill 3345 147 -4 3359 147 20 barrier
+cmd fill 3351 150 0 3353 150 2 stone
+cmd fill 3349 150 3 3352 152 4 stone
+cmd setblock 3352 150 5 stone
+tp 3352.5 151 1.5
+wait 20
+goal 3352 151 5
+tag neo_3wall
+cmd forceload add 3360 -8 3376 24
+wait 20
+cmd fill 3361 100 -4 3375 170 20 air
+cmd fill 3361 147 -4 3375 147 20 barrier
+cmd fill 3367 150 0 3369 150 2 stone
+cmd fill 3365 150 3 3368 152 5 stone
+cmd setblock 3368 150 6 stone
+tp 3368.5 151 1.5
+wait 20
+goal 3368 151 6
+tag land_oak_fence_gap2
+cmd forceload add 3440 -8 3456 24
+wait 20
+cmd fill 3441 100 -4 3455 170 20 air
+cmd fill 3441 147 -4 3455 147 20 barrier
+cmd fill 3447 150 0 3449 150 2 stone
+cmd setblock 3448 150 5 oak_fence
+tp 3448.5 151 0.5
+wait 20
+goal 3448 151 5
+tag land_anvil
+cmd forceload add 3664 -8 3680 24
+wait 20
+cmd fill 3665 100 -4 3679 170 20 air
+cmd fill 3665 147 -4 3679 147 20 barrier
+cmd fill 3671 150 0 3673 150 2 stone
+cmd setblock 3672 149 5 stone
+cmd setblock 3672 150 5 anvil
+tp 3672.5 151 0.5
+wait 20
+goal 3672 151 5
+tag land_lantern
+cmd forceload add 3680 -8 3696 24
+wait 20
+cmd fill 3681 100 -4 3695 170 20 air
+cmd fill 3681 147 -4 3695 147 20 barrier
+cmd fill 3687 150 0 3689 150 2 stone
+cmd setblock 3688 150 5 lantern
+tp 3688.5 151 0.5
+wait 20
+goal 3688 151 5
+tag land_candle
+cmd forceload add 3696 -8 3712 24
+wait 20
+cmd fill 3697 100 -4 3711 170 20 air
+cmd fill 3697 147 -4 3711 147 20 barrier
+cmd fill 3703 150 0 3705 150 2 stone
+cmd setblock 3704 150 5 candle[candles=1]
+tp 3704.5 151 0.5
+wait 20
+goal 3704 151 5
+tag land_candle4
+cmd forceload add 3712 -8 3728 24
+wait 20
+cmd fill 3713 100 -4 3727 170 20 air
+cmd fill 3713 147 -4 3727 147 20 barrier
+cmd fill 3719 150 0 3721 150 2 stone
+cmd setblock 3720 150 5 candle[candles=4]
+tp 3720.5 151 0.5
+wait 20
+goal 3720 151 5
+tag land_snow4_gap1_down1
+cmd forceload add 3824 -8 3840 24
+wait 20
+cmd fill 3825 100 -4 3839 170 20 air
+cmd fill 3825 147 -4 3839 147 20 barrier
+cmd fill 3831 150 0 3833 150 2 stone
+cmd setblock 3832 150 4 snow[layers=4]
+tp 3832.5 151 0.5
+wait 20
+goal 3832 150 4
+tag takeoff_soul_sand_gap2
+cmd forceload add 3888 -8 3904 24
+wait 20
+cmd fill 3889 100 -4 3903 170 20 air
+cmd fill 3889 147 -4 3903 147 20 barrier
+cmd fill 3895 150 0 3897 150 2 soul_sand
+cmd setblock 3896 150 5 stone
+tp 3896.5 151 0.5
+wait 20
+goal 3896 151 5
+tag takeoff_honey_gap1
+cmd forceload add 3904 -8 3920 24
+wait 20
+cmd fill 3905 100 -4 3919 170 20 air
+cmd fill 3905 147 -4 3919 147 20 barrier
+cmd fill 3911 150 0 3913 150 2 honey_block
+cmd setblock 3912 150 4 stone
+tp 3912.5 151 0.5
+wait 20
+goal 3912 151 4
+tag honey_slab_up_slab_impossible_check
+cmd forceload add 4032 -8 4048 24
+wait 20
+cmd fill 4033 100 -4 4047 170 20 air
+cmd fill 4033 147 -4 4047 147 20 barrier
+cmd fill 4039 149 0 4041 149 2 honey_block
+cmd fill 4039 150 0 4041 150 2 stone_slab[type=bottom]
+cmd fill 4039 151 3 4041 151 5 stone_slab[type=bottom]
+tp 4040.5 151 1.5
+wait 20
+goal 4040 152 4
+tag stone_slab_up_slab
+cmd forceload add 4048 -8 4064 24
+wait 20
+cmd fill 4049 100 -4 4063 170 20 air
+cmd fill 4049 147 -4 4063 147 20 barrier
+cmd fill 4055 149 0 4057 149 2 stone
+cmd fill 4055 150 0 4057 150 2 stone_slab[type=bottom]
+cmd fill 4055 151 3 4057 151 5 stone_slab[type=bottom]
+tp 4056.5 151 1.5
+wait 20
+goal 4056 152 4
+tag honey_carpet_gap1
+cmd forceload add 4064 -8 4080 24
+wait 20
+cmd fill 4065 100 -4 4079 170 20 air
+cmd fill 4065 147 -4 4079 147 20 barrier
+cmd fill 4071 149 0 4073 149 2 honey_block
+cmd fill 4071 150 0 4073 150 2 white_carpet
+cmd fill 4071 150 4 4073 150 6 stone
+tp 4072.5 150 1.5
+wait 20
+goal 4072 151 4

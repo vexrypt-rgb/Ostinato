@@ -17,6 +17,8 @@
 
 package baritone.pathing.calc;
 
+import baritone.pathing.movement.JumpFailures;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.goals.Goal;
@@ -49,6 +51,19 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
     }
 
     NodeFilter nodeFilter;
+
+    /**
+     * Ostinato: positions an earlier exhausted search toward the same goal proved cannot reach it; never expanded into.
+     * Null = stock.
+     */
+    private it.unimi.dsi.fastutil.longs.LongSet dead;
+
+    /** Ostinato: an unchecked offer was dropped as one too many, so an empty open set proves nothing. */
+    private boolean lossy;
+
+    public void avoidDead(it.unimi.dsi.fastutil.longs.LongSet dead) {
+        this.dead = dead;
+    }
     private final CalculationContext calcContext;
 
     /**
@@ -115,6 +130,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // only call this once every 64 nodes (about half a millisecond)
                 long now = System.currentTimeMillis(); // since nanoTime is slow on windows (takes many microseconds)
                 if (now - failureTimeoutTime >= 0 || (!failing && now - primaryTimeoutTime >= 0)) {
+                    timedOut = true;
                     break;
                 }
             }
@@ -183,6 +199,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     continue;
                 }
                 actionCost *= moveScale[moves.ordinal()];
+                actionCost *= JumpFailures.multiplier(JumpFailures.moveKey(currentNode.x, currentNode.y, currentNode.z, res.x, res.y, res.z), startTime);
                 if (actionCost <= 0 || Double.isNaN(actionCost)) {
                     throw new IllegalStateException(String.format(
                             "%s from %s %s %s calculated implausible cost %s",
@@ -222,6 +239,9 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     continue;
                 }
                 long hashCode = BetterBlockPos.longHash(res.x, res.y, res.z);
+                if (dead != null && dead.contains(hashCode)) {
+                    continue;
+                }
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 if (isFavoring) {
                     // see issue #18
@@ -265,6 +285,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         if (cancelRequested) {
             return Optional.empty();
         }
+        exhausted = openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && nodeFilter == null && !lossy;
         System.out.println(numMovementsConsidered + " movements considered");
         System.out.println("Open set size: " + openSet.size());
         System.out.println("PathNode map size: " + mapSize());
@@ -285,7 +306,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
     private static final int MAX_PENDING = 16;
 
     /** Queues an unchecked offer in cost order; false when it is dropped as one too many. */
-    private static boolean offer(PathNode node, PendingOffer o) {
+    private boolean offer(PathNode node, PendingOffer o) {
         PendingOffer prev = null, at = node.pending;
         int n = 0;
         while (at != null && at.cost <= o.cost) {
@@ -294,6 +315,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             n++;
         }
         if (n >= MAX_PENDING) {
+            lossy = true;
             return false;
         }
         o.next = at;
@@ -304,6 +326,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         }
         for (PendingOffer e = o; e.next != null; e = e.next) {
             if (++n >= MAX_PENDING) {
+                lossy = true;
                 e.next = null;
                 break;
             }

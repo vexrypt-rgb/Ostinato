@@ -291,6 +291,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             if (potted != null) return potted;
             PathingCommand wet = buckets.water(me, survival.eatTicks, phase.macePhase == 0 && !me.isFallFlying());
             if (wet != null) return wet;
+            survival.exposed = CombatFooting.ON && footing.exposed(me, target, groundY); // Ostinato
             PathingCommand ate = survival.tend(me, target, targetEating, overhead, safe, charging, me.tickCount - shield.targetSwingTick, shield.swingGap);
             if (ate != null) return ate;
 
@@ -758,6 +759,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
 
     private double groundY = Double.NaN;
     private final CombatFooting footing = new CombatFooting(ctx); // Ostinato
+    { if (CombatFooting.PUSH) movement.push = (me, t) -> footing.pushSide(me, t, groundY); } // Ostinato: knock the foe into a hazard
 
     private PathingCommand pause() {
         return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
@@ -803,7 +805,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
             in.setInputForceState(Input.MOVE_LEFT, k[1] > 0);
             in.setInputForceState(Input.MOVE_RIGHT, k[1] < 0);
             in.setInputForceState(Input.JUMP, k[2] == 1);
-            tickDec = tickDec + "+foot";
+            tickDec = tickDec + "+foot" + k[3] + ">" + k[4] + (k[0] == (int) f && k[1] == (int) s ? "=" : "*");
             return;
         }
         if (me.isFallFlying() || me.isInWater() || target.getY() < groundY - 3) return;
@@ -846,7 +848,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
      */
     public void foeKilled(Entity foe) {
         Player me = ctx.player();
-        if (me == null || !(foe instanceof LivingEntity le)) return;
+        if (me == null || !(foe instanceof LivingEntity le)) return; // Ostinato
         outcome.foeDied(le.getId(), CombatGeometry.eyeToBox(me, le));
         // close it now: next tick the same foe reads full health again and the record would take the kill back
         outcome.interrupt("kill");

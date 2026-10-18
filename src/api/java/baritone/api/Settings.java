@@ -843,6 +843,12 @@ public final class Settings {
     public final Setting<Long> failureTimeoutMS = new Setting<>(2000L);
 
     /**
+     * When a search runs out of time with no usable path but nodes still open, it is tried again from the same spot
+     * with double the failure timeout, up to this; only then does the calculation count as failed
+     */
+    public final Setting<Long> failureTimeoutMaxMS = new Setting<>(16000L);
+
+    /**
      * Planning ahead while executing a segment ends after this amount of time, but only if a path has been found
      * <p>
      * If no valid path (length above the minimum) has been found, pathing continues up until the failure timeout
@@ -2291,6 +2297,13 @@ public final class Settings {
      * runs. {@code -Dostinato.native=false} keeps the library from loading at all.
      */
     public final Setting<Boolean> nativeAcceleration = new Setting<>(true);
+
+    /**
+     * Ostinato: let the in-client test harnesses run (the parkour course runner PkTest and BastTest). Each still needs
+     * its own launch property to say what to run ({@code -Dostinato.pktest=<save>}, {@code -Dostinato.basttest=true});
+     * {@code -Dostinato.testHarness=true} turns this on for one launch. Off, those properties do nothing.
+     */
+    public final Setting<Boolean> testHarness = new Setting<>(false);
 
     // here be dragons
 

@@ -140,8 +140,7 @@ public class Baritone implements IBaritone {
             this.pvpProcess              = this.registerProcess(PvpProcess::new);
             this.structureBehavior       = this.registerBehavior(baritone.structure.StructureBehavior::new);
             this.pveProcess              = this.registerProcess(PveProcess::new);
-            baritone.structure.BastTest.install(this); // TEMP (not committed)
-            baritone.structure.PkTest.install(this); // TEMP (not committed)
+            baritone.harness.TestHarness.install(this); // Ostinato: PkTest/BastTest, gated by the testHarness setting
             this.bastionProcess          = this.registerProcess(baritone.process.BastionProcess::new);
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);

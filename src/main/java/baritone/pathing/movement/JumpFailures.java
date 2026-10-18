@@ -1,5 +1,7 @@
 package baritone.pathing.movement;
 
+import baritone.api.utils.BetterBlockPos;
+
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -15,6 +17,15 @@ public final class JumpFailures {
     private static final ConcurrentHashMap<Long, long[]> FAILED = new ConcurrentHashMap<>();
 
     private JumpFailures() {}
+
+    /**
+     * Key for a failed movement other than a kinematic jump (those mark their own key and fold it into their cost):
+     * the search multiplies any move from src to dest by its fade, so a step that keeps failing in the world (a
+     * diagonal up beside a wall over water) yields to another route instead of being repeated until stuck.
+     */
+    public static long moveKey(int x, int y, int z, int dx, int dy, int dz) {
+        return (BetterBlockPos.longHash(x, y, z) * 31 + BetterBlockPos.longHash(dx, dy, dz)) ^ 0x5DEECE66DL;
+    }
 
     public static void forget() {
         FAILED.clear();

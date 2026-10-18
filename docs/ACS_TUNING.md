@@ -153,3 +153,110 @@ to the axe (the swap resets the charge) on every tap. Only 31 of 334 axe swaps m
 `-Dostinato.raiseIsBlock=false` makes the warm-up count as no block: 3/24 vs 2/24 on paired seeds, axe swaps
 6.8 -> 4.0 per round, damage taken 46.3 -> 43.2. Directionally better but not significant, so it stays opt-in.
 The SMP bots out-trade us: they land 272 hits to our 194, at about the same swing count and distance.
+
+### Footing guard (movement-combat item 1) vs SMP bots in a lava ring (`-Dostinato.vex.arena=lava`, bench-only)
+A 19x11 pad ringed by lava at floor level. `-Dostinato.footing=true` (CombatFooting) plays our keys forward on PlayerSim,
+with and without the foe's knockback. On the ground it picks keys that leave us where the next hit can't push us in,
+and it won't start a bite (or cancels one) while a hit would put us in the lava.
+48 rounds each, paired seed 41: off 4/48, 0.90 lava entries/round; on 3/48, 0.75 entries/round (36 vs 43, not
+significant). Not kept: it stays opt-in.
+What the logs showed:
+- A hit carries us 2.5-4 blocks through the air, and no key steers there. We jump-strafe most of the time, so a hit
+  near the rim is too late to correct.
+- Most early entries came from eating at the rim: at a fifth of the pace, hit after hit walked us in.
+- The old floor scan (ledgeGuard) never saw the lava, because the dirt under it counts as floor.
+SMP bots win almost every round in this arena either way, so a safety gain shows in the entries count before the
+win rate. Next: no crit-jumps toward a rim within knockback range.
+
+### Wider tuning pool (Carpet PvP, harder levels and other kits, no autotune unless noted)
+- mace kit, all five levels: 14/20 (expert 0/4).
+- smp kit, all five levels: 12/19 (expert 0/3); the run stopped at 19 rounds.
+- SPSA, mace kit vs skilled+expert (c0=1, a=0.5): running, 61/90 at 91 pairs (expert 21/44, skilled 40/46).
+This is the new tuning pool: plenty of headroom, where the sword pool sat at 92-97%.
+- Shield-tap fix, larger A/B (SMP bots, flat, paired seed 42, 48 rounds each): raiseIsBlock=false 7/48 (dealt 34.7, taken 42.5)
+  vs default 8/48 (dealt 32.2, taken 40.4). Over both runs it's 10/72 for each. Mechanically correct, but it doesn't change
+  results, so the default is kept.
+
+### Why we lose to SMP bots (flat, sword kit, 48-round logs plus server-side counters)
+| per side, 48 rounds | SMP bot | us |
+|---|---|---|
+| swings | 577 | 607 |
+| hits that drew health | 487 (84%) | 407 (67%) |
+| avg health per hit | 4.12 | 3.54 |
+| crits | 0% | ~35% (falling at the swing) |
+| gapples | 63 | 54, 53 of them begun within 4 blocks |
+- Shield: server-side the bot blocks only 5-6% of ticks, and 0.6-1.2 of our attacks per round hit a block.
+  Not the gap.
+- The axe was a leak: 233 of 607 swings, 120 of them at low charge, about 90% into no block. They were triggered by
+  shield taps and by `hiddenShield`, whose window only grows. `-Dostinato.hiddenShield=false -Dostinato.raiseIsBlock=false`
+  (axe only on a visible block), 48 paired rounds: 11/48 vs 10/48, axe swings 6.4 -> 0.8 a round, damage taken
+  43.4 -> 36.7, dealt 32.8 -> 29.1, damage per hit 3.54 -> 3.91. Fewer wasted swings, but the trade ratio barely
+  moved, so it stays opt-in.
+- Server truth: about 72% of our attacks hurt the bot (9.4 of 13.1 a round), at about 2.3-2.8 health per hurt by the
+  damage_dealt stat. It deals ~3.7 per hit back with the same kit. The bot always swings full (gaps of 13-15 ticks).
+  Half our sword swings are at 0.80-0.95 charge (`melee.duelCharge` 0.90), which loses damage and the crit.
+  Next A/B: duelCharge 1.00.
+
+### Footing v6 (adds: no crit-jump that a hit would carry off the rim), lava ring vs SMP, 48 paired rounds, seed 46
+on: 6/48, 0.62 lava entries/round (30), taken 28.4. off: 4/48, 0.92/round (44), taken 32.4.
+Pooled with v5: 66 vs 87 entries over 96 rounds each (-24%, p ~0.1). Consistently fewer, not yet significant. Opt-in
+for now; one more 48-round pair would settle it.
+
+### Bench artifact fixed: round-start saturation
+The heal after the kits gave `saturation 1 20` (20 s, longer than a round), so both sides regenerated at full speed
+all round. It's now 1 s. SMP numbers before 11:10 (UTC-7) used the 20 s version. A/Bs within one run stay comparable;
+absolute win rates do not (an early fixed-bench arm runs ~46% vs SMP, where it was 10-20% before).
+
+### Bench bug: respawned fake players were immune for ~40 ticks of every round
+26.3 treats a player as invulnerable until its client reports loaded (`ServerGamePacketListenerImpl.hasClientLoaded`,
+60-tick timeout). Carpet fake players have no client, so after each round's respawn the bot ignored our hits until
+the timeout. The bench waits only 20 ticks, so about 40 ticks were left. Server-side miss logging: 96 of 166 attacks
+that drew no hurt landed on a bot at 20 HP, fully charged, in reach and not blocking, at round ticks 12-42, with
+`loaded=false`. The bench now marks the fake connection loaded at round start, after which there are no such misses.
+This bias was in every SMP and SickSheet number before 11:40 (UTC-7): our opening swings were wasted while the bot
+hit freely. The bias was the same in both arms of an A/B, but absolute held-out win rates were understated.
+Carpet PvP bots die in place and never respawn, so the tuning pool wasn't affected.
+
+### Clean SMP numbers on the fixed bench (both bench bugs fixed), 48 rounds each
+| arm | seed | wins | taken | dealt | axe/round | server hit rate |
+|---|---|---|---|---|---|---|
+| defaults | 48 | 22/48 (46%) | 27.9 | 46.5 | 3.2 | 88% |
+| visible shield only, duelCharge 0.90 | 48 | 20/48 | 31.5 | 44.7 | - | 96% |
+| visible shield only, duelCharge 1.00 | 48 | 29/48 | 25.8 | 46.0 | - | 93% |
+| visible shield only, duelCharge 1.00 | 49 | 27/48 | 30.2 | 47.9 | 0.9 | 93% |
+| visible shield only, duelCharge 0.90 | 49 | 30/48 | 25.8 | 52.5 | 1.1 | 95% |
+- duelCharge 1.00 vs 0.90: 56/96 vs 50/96 over two paired seeds. Not significant, so the default stays 0.90.
+- Axe fix (hiddenShield/raiseIsBlock off) vs defaults, seed 48: 20/48 vs 22/48. The server hit rate rises 88% -> 96%,
+  but wins don't. Stays opt-in.
+- The "85-90% losses" against SMP were mostly the bench: on the fixed bench we win about half.
+- Server-side hit rate is 88-96%, so the old 67% "hit rate" gap was mostly the spawn-immunity bug.
+- SPSA: mace kit vs Carpet skilled+expert ran 317/457 (69%) over two runs, no verdict (the one test was tied, LLR
+  0.02 after 117 pairs, and was lost on restart; fixed in cfbde690).
+- Footing v6, third pair (fixed bench, lava ring, seed 50): on 25/48, 1.23 entries/round (59), taken 27.2;
+  off 19/48, 1.44/round (69), taken 31.0. Pooled over three pairs: 125 vs 156 entries in 144 rounds each (-20%,
+  p ~0.06), wins 34 vs 27. Every pair points the same way, but it's not significant yet, so it stays opt-in.
+- SickSheet, clean baseline (defaults, seed 51): 33/48 (69%). easy 12/12, normal 11/12, hard 9/12, impossible 1/12.
+
+## Ostinato: 2026-10-18 afternoon (fixed bench, SMP PvP Bots unless noted)
+
+- **footing guard: default on** (1a36c0fd). 4 paired lava-ring runs, 192 rounds per arm: damage taken 27.9 vs 31.5 (p≈0.0005,
+  lower in every pair); wins 59 vs 48 (n.s.); dealt 31.2 vs 30.6. Lava entries lower (pair 4: 2.02 vs 2.54/round, p≈0.09; with
+  the earlier pooled p≈0.06 the combined test is ≈0.01–0.03). `-Dostinato.footing=false` turns it off.
+- **hiddenShield: default off** (f1bc1800). SMP: 65/96 visible-only vs 44/96 (seeds 48/49 and 52, p=0.0035). SickSheet:
+  60/96 vs 64/96 (p=0.65), damage taken 34.6 vs 32.9 (z=0.6): no significant regression.
+- **pushFoe (opt-in, `-Dostinato.pushFoe`)**: strafe so our hit knocks the foe into a hazard (PlayerSim on the foe). v1 raised
+  our own lava entries (2.02→2.76/round, 34 rounds); v2 refuses spots a foe hit would knock us off. v2 vs control on the lava
+  ring, seeds 53+56: wins 45/96 vs 49/96 (p=0.67); foe lava entries up (2.81 vs 2.15, 5.35 vs 3.73/round) but ours too
+  (2.69 vs 2.02, 5.25 vs 3.94). Not kept. No-op on flat (no hazard).
+- **dodge (opt-in, `-Dostinato.dodge`)**: step out of reach when the foe's swing is due and ours is not, on 2-tick predicted
+  distance. Flat seed 55: 24/48 vs 26/48, taken 27.2 vs 31.2, dealt 24.1 vs 26.0. Lava seed 56: 22/48 vs 24/48, taken
+  26.1 vs 26.0. Pooled 46/96 vs 50/96 (p=0.67). Not kept.
+- **aim**: in reach with the sword charged, the crosshair is off the foe's hitbox on 3.2% of ticks (median yaw error 1.2°).
+  Aim is not where SMP rounds are lost.
+- **flicks**: from vex's capture (41 mcturn flicks), reaction is 230 ms median (fastest decile 140–150 ms) and peak speed is
+  20–25°/tick median (p90 29/33/57 for 20–60°/60–120°/120°+). The default hand reaches 54°/tick on a 90° flick with no
+  reaction delay, so it is already faster than that hand. `-Dostinato.flick=user` (6c6cf3ab, opt-in, untested) caps turn
+  speed at that p90 and adds a 150 ms reaction to a jumped aim point. Not A/B'd yet.
+- **mace SPSA** (carpetpvp skilled+expert, resumes across restarts since cfbde690): round 240/300, second GSPRT test at 194
+  pairs, LLR 0.00: no verdict, nothing kept.
+- Bench: opp.sh `pkill` matched w4b/w4c when launching w4 (prefix); fixed to the exact dir. Runs are archived in acs-farm/archive.

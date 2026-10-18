@@ -340,17 +340,21 @@ final class CombatSpsa {
 
     static final String VERSION = "spsa 1";
 
-    /** What is learned: point, trusted values, counts; a test under way is not kept (it starts again). */
+    /**
+     * What is learned: point, trusted values, counts, and a test under way with its pairs so far (Ostinato: a restart
+     * used to drop it back to tuning, and the next test came 150 pairs later; a 117-pair mace test was lost so).
+     */
     List<String> save() {
         List<String> lines = new ArrayList<>();
         lines.add(VERSION);
         contexts.forEach((name, s) -> {
             StringBuilder sb = new StringBuilder("sctx=").append(name).append(" k=").append(s.k).append(" since=").append(s.sincePair)
                     .append(" kept=").append(s.kept).append(" dropped=").append(s.dropped).append(" tests=").append(s.tests);
+            if (s.phase == Phase.CONFIRM) sb.append(" test=").append(s.cn).append(':').append(String.format(Locale.ROOT, "%.6f:%.6f", s.cs, s.cs2));
             for (int i = 0; i < knobs.size(); i++) {
                 CombatPolicy.Tuned t = knobs.get(i);
                 sb.append(" sk=").append(t.name).append(':').append(t.base).append(':').append(s.trusted[i]).append(':')
-                        .append(String.format(Locale.ROOT, "%.4f", s.phi[i]));
+                        .append(String.format(Locale.ROOT, "%.4f", s.phi[i])).append(':').append(s.candidate[i]);
             }
             lines.add(sb.toString());
         });
@@ -387,6 +391,13 @@ final class CombatSpsa {
                         case "kept" -> s.kept = Integer.parseInt(v);
                         case "dropped" -> s.dropped = Integer.parseInt(v);
                         case "tests" -> s.tests = Integer.parseInt(v);
+                        case "test" -> { // Ostinato: a GSPRT test under way when the file was saved
+                            String[] f = v.split(":");
+                            s.phase = Phase.CONFIRM;
+                            s.cn = Integer.parseInt(f[0]);
+                            s.cs = Double.parseDouble(f[1]);
+                            s.cs2 = Double.parseDouble(f[2]);
+                        }
                         case "sk" -> {
                             String[] f = v.split(":");
                             int i = index(f[0]);
@@ -398,12 +409,27 @@ final class CombatSpsa {
                             else {
                                 s.trusted[i] = tr;
                                 s.phi[i] = clamp(i, p);
+                                s.candidate[i] = f.length > 4 ? Integer.parseInt(f[4]) : tr; // Ostinato: older files carry no candidate
                             }
                         }
                         default -> {}
                     }
                 }
                 if (!ok || s == null) continue;
+                if (s.phase == Phase.CONFIRM) {
+                    boolean differs = false;
+                    for (int i = 0; i < knobs.size(); i++) {
+                        CombatPolicy.Tuned t = knobs.get(i);
+                        if (s.candidate[i] < t.min || s.candidate[i] > t.max) ok = false;
+                        differs |= s.candidate[i] != s.trusted[i];
+                    }
+                    if (!ok || !differs) { // a test that does not fit the numbers as they are now starts from tuning
+                        s.phase = Phase.TUNE;
+                        s.cn = 0;
+                        s.cs = s.cs2 = 0;
+                        ok = true;
+                    } else s.last = "testing " + describe(s.candidate, s.trusted) + " (resumed)";
+                }
                 s.newPair();
                 contexts.put(name, s);
                 taken++;

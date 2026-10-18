@@ -87,6 +87,27 @@ public class CombatSpsaTest {
         assertEquals(saved, t.save());
     }
 
+    /** Ostinato: a test under way survives a save and load with its pairs, instead of falling back to tuning. */
+    @Test
+    public void saveAndLoadKeepATestUnderWay() {
+        CombatPolicy p = new CombatPolicy();
+        List<CombatPolicy.Tuned> k = all(p);
+        CombatSpsa s = new CombatSpsa(k, l -> {}, new Random(5));
+        s.on(true);
+        Random r = new Random(6);
+        int n = 0;
+        while ((s.report().isEmpty() || !s.report().get(0).contains("testing (")) && n++ < 5000) s.fight(fight(CTX, r.nextBoolean(), r.nextGaussian(), "apple"));
+        assertTrue("a test began", s.report().get(0).contains("testing ("));
+        for (int i = 0; i < 10; i++) s.fight(fight(CTX, i % 2 == 0, 0, "apple")); // five pairs, too few for a verdict
+        List<String> saved = s.save();
+        assertTrue(saved.get(1).contains(" test="));
+        CombatSpsa t = new CombatSpsa(k, l -> {}, new Random(5));
+        assertEquals(1, t.load(saved));
+        assertEquals(saved, t.save());
+        String before = s.report().get(0), after = t.report().get(0);
+        assertEquals(before.substring(0, before.indexOf(')')), after.substring(0, after.indexOf(')')));
+    }
+
     /** Win chance of a fight under the values: a hill whose top is {@code off} steps from the baselines on a few numbers. */
     private static final class World {
         final List<CombatPolicy.Tuned> k;

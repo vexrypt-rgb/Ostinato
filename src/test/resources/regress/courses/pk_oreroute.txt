@@ -1,0 +1,44 @@
+cmd setblock -157 -9 54 minecraft:air
+tp -148.5 -12 59.5
+tag jump_a5_b2_dy0_from_-148_-12_59
+goal -150 -12 54
+tag jump_a5_b2_dy0_from_-150_-12_54
+goal -152 -12 49
+tag jump_a5_b2_dy0_from_-152_-12_49
+goal -154 -12 44
+tag jump_a5_b2_dy0_from_-154_-12_44
+goal -156 -12 39
+tag jump_a5_b2_dy0_from_-156_-12_39
+goal -158 -12 34
+tag jump_a5_b2_dy0_from_-158_-12_34
+goal -160 -12 29
+tag jump_to_ladder_from_-160_-12_29
+goal -162 -10 26
+tag climb_from_-162_-10_26
+goal -162 -9 26
+tag climb_from_-162_-9_26
+goal -162 -8 26
+tag jump_off_ladder_from_-162_-8_26
+goal -161 -7 23
+tag jump_a6_b2_dy-2_from_-163_-6_21
+goal -165 -8 15
+tag jump_a3_b1_dy1_from_-165_-8_15
+goal -168 -7 14
+tag jump_a3_b2_dy1_from_-168_-7_14
+goal -171 -6 16
+tag jump_a2_b1_dy1_from_-171_-6_16
+goal -169 -5 17
+tag jump_a2_b2_dy1_from_-169_-5_17
+goal -171 -4 19
+tag jump_a2_b1_dy1_from_-171_-4_19
+goal -169 -3 20
+tag jump_a3_b0_dy1_from_-169_-3_20
+goal -169 -2 23
+tag jump_a2_b0_dy1_from_-169_-2_23
+goal -171 -1 23
+tag jump_a2_b0_dy1_from_-171_-1_23
+goal -173 0 23
+tag jump_a4_b1_dy-1_from_-173_0_23
+goal -177 -1 22
+tag jump_a3_b3_dy0_from_-177_-1_22
+goal -180 -1 25

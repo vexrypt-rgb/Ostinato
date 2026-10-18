@@ -23,6 +23,10 @@ final class CombatMovement {
     int wtap;
 
     private int strafeDir = 1, strafeLeft, dodgeLeft, dodgeDir = 1;
+    /** Ostinato: the strafe side that lines a hit up to knock the foe into a hazard, 0 for none (CombatFooting.pushSide). */
+    java.util.function.ToIntBiFunction<Player, LivingEntity> push;
+    /** Ostinato: ticks spent on a push side so far (for the fight log). */
+    int pushTicks;
     private baritone.pathing.kinematic.KinematicController kin;
 
     private final IPlayerContext ctx;
@@ -60,7 +64,24 @@ final class CombatMovement {
             if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) hands.key(Input.JUMP);
             return;
         }
+        int side = push == null ? 0 : push.applyAsInt(me, target); // Ostinato: a hazard behind the foe picks the side
+        if (side != 0) {
+            strafeDir = side;
+            strafeLeft = Math.max(strafeLeft, 3);
+            pushTicks++;
+        }
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
+    }
+
+    /** Ostinato: in reach, strafe to the side whose hit knocks the foe into a hazard, if there is one; true if a key went down. */
+    boolean pushStrafe(Player me, LivingEntity target) {
+        int side = push == null ? 0 : push.applyAsInt(me, target);
+        if (side == 0) return false;
+        strafeDir = side;
+        strafeLeft = Math.max(strafeLeft, 3);
+        pushTicks++;
+        hands.key(side > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
+        return true;
     }
 
     /** Close in on an aimed shooter, reversing sideways often enough that its lead on our velocity is wrong. */

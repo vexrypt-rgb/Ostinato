@@ -539,4 +539,21 @@ public final class PathViz {
         double dx = actual[i * 3] - planned[i * 3], dy = actual[i * 3 + 1] - planned[i * 3 + 1], dz = actual[i * 3 + 2] - planned[i * 3 + 2];
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
+
+    /** The path is over (at the goal, or cancelled): drop every mark of it so nothing lingers until it fades. */
+    public void clear() {
+        lineCount = 0;
+        rolloutCount = 0;
+        jumps.clear();
+        stuck.clear();
+        handbacks.clear();
+        trail.clear();
+        ghosts.clear();
+        replans.clear();
+        plannedCount = 0;
+        actualCount = 0;
+        if (!treeOpen) {
+            treeCount = 0;
+        }
+    }
 }
