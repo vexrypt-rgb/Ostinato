@@ -93,6 +93,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         final Player p;
         Map<String, Double> gear;
         int gearTick = -1000, clueTick = -1000;
+        long fp;
         FightGroup.Clue clue;
         int useStart = -1;
         ItemStack useItem = ItemStack.EMPTY;
@@ -158,6 +159,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         book.onGroup(this::groupEnded);
         PacketTap.add(this);
         SpectateBench.install(baritone); // -Dostinato.spectbench only
+        KitBench.install(baritone); // Ostinato: -Dostinato.kitbench only
     }
 
     private static Settings s() {
@@ -260,6 +262,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             int t = tick;
             boolean apart = s().spectateFightTypes.value;
             post(l -> l.book.multiApart(apart));
+            boolean learnKits = s().spectateLearnKits.value;
+            post(l -> l.book.learnKits(learnKits));
             post(l -> l.book.track(t, where));
             post(l -> l.book.tick(t, (a, b) -> {
                 Vec3 pa = pos.get(a), pb = pos.get(b);
@@ -510,13 +514,18 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             Look lk = looks.get(p.getId());
             if (lk == null || lk.p != p) looks.put(p.getId(), lk = new Look(p));
             int id = p.getId();
+            // the full read only when the fingerprint moved, and every five seconds regardless
             if (kits && (tick + id) % 4 == 0) {
-                Map<String, Double> g = GearReader.tokens(p);
-                if (!g.equals(lk.gear) || tick - lk.gearTick >= 100) {
-                    lk.gear = g;
-                    lk.gearTick = tick;
-                    int t = tick;
-                    post(l -> l.book.gear(t, id, g));
+                long fp = GearReader.fingerprint(p);
+                if (fp != lk.fp || tick - lk.gearTick >= 100) {
+                    lk.fp = fp;
+                    Map<String, Double> g = GearReader.tokens(p);
+                    if (!g.equals(lk.gear) || tick - lk.gearTick >= 100) {
+                        lk.gear = g;
+                        lk.gearTick = tick;
+                        int t = tick;
+                        post(l -> l.book.gear(t, id, g));
+                    }
                 }
             }
             if ((tick + id) % 20 == 0) {

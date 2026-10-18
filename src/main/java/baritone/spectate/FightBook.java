@@ -103,6 +103,8 @@ public final class FightBook {
     private boolean multiApart = true;
     private java.util.function.Consumer<FightGroup> onGroup;
     private KitSignatures signatures;
+    private LearnedKits learned; // null: the game folder's
+    private boolean learnKits = true;
     /** A label below this confidence counts as unknown for the per-kit tallies. */
     public static final double KIT_SURE = 0.45;
 
@@ -213,15 +215,48 @@ public final class FightBook {
         signatures = k;
     }
 
+    /** Whether loadouts no kit fits become learned kits ({@code spectateLearnKits}). */
+    public void learnKits(boolean on) {
+        learnKits = on;
+    }
+
+    public void learned(LearnedKits l) {
+        learned = l;
+    }
+
+    private LearnedKits learnedKits() {
+        return learned != null ? learned : LearnedKits.get();
+    }
+
     private KitSignatures sig() {
         return signatures != null ? signatures : KitSignatures.get();
     }
 
     /** This player's kit as seen so far. */
     public KitSignatures.Result kit(int tick, int id) {
+        return kit(tick, id, false);
+    }
+
+    /**
+     * This player's kit as seen so far. One no built-in kit fits is looked up among the learned kits; with
+     * {@code learn} (once a fighter, when their group closes or they die) it may join one or become a new one.
+     */
+    KitSignatures.Result kit(int tick, int id, boolean learn) {
         KitEvidence ev = kits.get(id);
         if (ev == null) return new KitSignatures.Result(KitSignatures.UNKNOWN, 0, KitSignatures.UNKNOWN, 0);
-        return sig().classify(ev, tick);
+        KitSignatures.Result r = sig().classify(ev, tick);
+        if (!learnKits || !r.label.equals(KitSignatures.UNKNOWN)) return r; // a known kit, even an unsure one, is not new
+        double seen = ev.observed(tick);
+        Map<String, Double> f = ev.features(tick);
+        Object[] m = learnedKits().match(f);
+        if (m == null && learn && seen >= LearnedKits.MIN_OBSERVED) {
+            LearnedKits.Kit k = learnedKits().learn(f);
+            if (k != null) return new KitSignatures.Result(k.label, Math.min(1, seen / KitSignatures.FULL_TICKS) * 0.9, k.label, 0);
+        }
+        if (m == null) return r;
+        LearnedKits.Kit k = (LearnedKits.Kit) m[0];
+        if (learn && seen >= LearnedKits.MIN_OBSERVED) learnedKits().learn(f); // seen again: the kit's mean moves
+        return new KitSignatures.Result(k.label, (Double) m[1] * Math.min(1, seen / KitSignatures.FULL_TICKS), k.label, 0);
     }
 
     public KitEvidence evidence(int id) {
@@ -249,7 +284,7 @@ public final class FightBook {
         // Ostinato: their kit is read before the evidence goes (they may come back with another)
         FightGroup g = groupOf.get(id);
         if (g != null) {
-            g.kits.put(id, kit(tick, id));
+            g.kits.put(id, kit(tick, id, true));
             g.dead.add(id);
         }
         for (Fight f : fightsOf(id)) finish(f, f.other(id), "death", tick);
@@ -293,7 +328,7 @@ public final class FightBook {
     private void closeGroup(FightGroup g, int tick) {
         Map<Integer, FightGroup.Clue> cl = new HashMap<>();
         for (int m : g.members.keySet()) {
-            KitSignatures.Result k = g.kits.containsKey(m) ? g.kits.get(m) : kit(tick, m);
+            KitSignatures.Result k = g.kits.containsKey(m) ? g.kits.get(m) : kit(tick, m, true);
             g.kits.put(m, k);
             FightGroup.Clue c = clues.getOrDefault(m, FightGroup.Clue.NONE);
             cl.put(m, c.withKit(k.confidence >= KIT_SURE ? k.label : ""));
@@ -304,7 +339,13 @@ public final class FightBook {
             multi.merge(g.type, 1, Integer::sum);
             for (Map<String, Integer> sk : g.skills.values()) for (Map.Entry<String, Integer> e : sk.entrySet()) multiSkills.merge(g.type + "." + e.getKey(), e.getValue(), Integer::sum);
         }
-        for (Object[] d : g.done) settle((Fight) d[0], (Integer) d[1], (String) d[2], (Integer) d[3]);
+        for (Object[] d : g.done) {
+            Fight f = (Fight) d[0];
+            // the group's labels, which may have learned a kit since the fight ended
+            if (g.kits.containsKey(f.a)) f.kitA = g.kits.get(f.a);
+            if (g.kits.containsKey(f.b)) f.kitB = g.kits.get(f.b);
+            settle(f, (Integer) d[1], (String) d[2], (Integer) d[3]);
+        }
         g.done.clear();
         if (onGroup != null) onGroup.accept(g);
     }

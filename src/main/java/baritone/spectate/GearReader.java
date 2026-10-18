@@ -3,6 +3,7 @@
  */
 package baritone.spectate;
 
+import baritone.api.BaritoneAPI;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
@@ -50,6 +51,25 @@ public final class GearReader {
     static String material(String path) {
         for (String m : MATERIALS) if (path.startsWith(m + "_")) return m;
         return null;
+    }
+
+    /**
+     * A cheap fingerprint of what {@link #tokens} reads: the six stacks' items, counts aside, and the particle list
+     * (the synced list is replaced, not changed, when effects change). Equal fingerprints mean equal tokens nearly
+     * always; the caller still re-reads now and then.
+     */
+    public static long fingerprint(Player p) {
+        long h = 17;
+        h = h * 31 + System.identityHashCode(p.getMainHandItem().getItem());
+        h = h * 31 + System.identityHashCode(p.getOffhandItem().getItem());
+        for (EquipmentSlot s : ARMOR) h = h * 31 + System.identityHashCode(p.getItemBySlot(s).getItem());
+        EntityDataAccessor<List<ParticleOptions>> acc = particleAccessor();
+        if (acc != null) {
+            try {
+                h = h * 31 + System.identityHashCode(p.getEntityData().get(acc));
+            } catch (RuntimeException ignored) {}
+        }
+        return h;
     }
 
     /** Everything the player wears and holds, as weighted tokens. */
@@ -193,7 +213,12 @@ public final class GearReader {
 
     /** Our own kit's label (null when unsure), for the priors to match. */
     public static String ownLabel(Player p) {
-        KitSignatures.Result r = KitSignatures.get().classify(own(p).features(1000), 1000);
+        Map<String, Double> f = own(p).features(1000);
+        KitSignatures.Result r = KitSignatures.get().classify(f, 1000);
+        if (r.label.equals(KitSignatures.UNKNOWN) && BaritoneAPI.getSettings().spectateLearnKits.value) {
+            Object[] m = LearnedKits.get().match(f); // a kit learned from watching others
+            if (m != null) return ((LearnedKits.Kit) m[0]).label;
+        }
         return r.confidence >= FightBook.KIT_SURE ? r.label : null;
     }
 }

@@ -2270,6 +2270,13 @@ public final class Settings {
     public final Setting<Boolean> spectateKitDetect = new Setting<>(true);
 
     /**
+     * When a watched fighter's loadout fits none of the kits, make it a new kit ({@code learned-1}, ...) in
+     * {@code baritone/spectate-kits-learned.txt}, with a short description; loadouts seen again that are close join
+     * it. A learned kit is kept apart and gets its own priors like any other once it has the fights.
+     */
+    public final Setting<Boolean> spectateLearnKits = new Setting<>(true);
+
+    /**
      * While {@code spectateLearn} watches, tag every fight 1v1, FFA or team (from scoreboard teams, name colours, dyed
      * armor, kits and who never hits whom), and keep FFA and team fights out of 1v1 learning. Their hits are kept with
      * attacker and victim, for multi-opponent skills later.
