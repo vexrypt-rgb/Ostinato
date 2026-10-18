@@ -137,3 +137,5 @@ adds the harder Carpet modes and kits.
 
 Rule A/Bs on the held-out bots (kept only if they win):
 - Cut a bite under fire (`-Dostinato.biteCut=true`): 12/32 on vs 14/26 off. Not kept (opt-in only).
+- Shield-break sooner against a blocking foe (`-Dostinato.axeGap=8` vs 25), first run: SickSheet 9/12 vs 8/12, SMP 3/12 vs 1/12.
+  Paired confirmation (SMP, same seed, 24 rounds each): 2/24 vs 4/24. Combined on SMP it's 5/36 for each, so the default stays 25.
