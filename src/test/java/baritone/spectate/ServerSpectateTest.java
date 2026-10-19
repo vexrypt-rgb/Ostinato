@@ -51,4 +51,11 @@ public class ServerSpectateTest {
         assertEquals(-1, ServerSpectate.pickChoice(Arrays.asList("[Join now]", "No"), Arrays.asList(true, false), "no"));
         assertEquals(0, ServerSpectate.pickChoice(Arrays.asList("\u00a7c[\u00a7lNO\u00a7c]"), Arrays.asList(true), "no"));
     }
+
+    @Test
+    public void readsRegisterReminders() { // Ostinato: action-bar reminders count as a prompt
+        assertTrue(ServerSpectate.REMINDER.matcher("you have 89 seconds to register.").find());
+        assertTrue(ServerSpectate.REMINDER.matcher("you have 1 second to login").find());
+        assertFalse(ServerSpectate.REMINDER.matcher("[lobby] playing: music_disc.precipice").find());
+    }
 }
