@@ -1641,6 +1641,48 @@ public final class Settings {
     /**
      * A map of lowercase setting field names to their respective setting
      */
+    // Ostinato: spectate learning (recorder, kits, FFA/team, joined-late, cheat detection), ported to 1.16.1
+
+    /**
+     * Watch nearby players' fights and record them: kits, FFA/team shape, joined-late fights and suspected cheaters (1.16.1: recorder only, no key decoding).
+     */
+    public final Setting<Boolean> spectateLearn = new Setting<>(false);
+
+    /**
+     * Also record while on a multiplayer server (watch-only: nothing is ever sent).
+     */
+    public final Setting<Boolean> spectateLearnOnServers = new Setting<>(false);
+
+    /**
+     * Write each recorded fight's summary to baritone/spectate/fights.log.
+     */
+    public final Setting<Boolean> spectateSaveLogs = new Setting<>(true);
+
+    /**
+     * How far away (blocks) players are watched for spectate learning.
+     */
+    public final Setting<Double> spectateRadius = new Setting<>(32D);
+
+    /**
+     * Learn new kit labels from fights whose gear matches no known kit.
+     */
+    public final Setting<Boolean> spectateLearnKits = new Setting<>(true);
+
+    /**
+     * Tell 1v1, FFA and team fights apart and tag them in the fight log.
+     */
+    public final Setting<Boolean> spectateFightTypes = new Setting<>(true);
+
+    /**
+     * Also count fights that were joined late (someone already hurt, mid-combo or just arrived) in the kit tallies.
+     */
+    public final Setting<Boolean> spectateLearnLateFights = new Setting<>(false);
+
+    /**
+     * Also count fights of suspected cheaters (reach, aim, click rate, speed, no knockback) in the tallies. They are always logged; nothing is ever reported.
+     */
+    public final Setting<Boolean> spectateLearnSuspectedCheats = new Setting<>(false);
+
     public final Map<String, Setting<?>> byLowerName;
 
     /**

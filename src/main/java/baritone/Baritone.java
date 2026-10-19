@@ -70,6 +70,7 @@ public class Baritone implements IBaritone {
     private final InventoryBehavior inventoryBehavior;
     private final SwarmBehavior swarmBehavior;
     private final FreecamBehavior freecamBehavior;
+    private final baritone.spectate.SpectateLearner spectateLearner; // Ostinato: spectate learning
     private final InputOverrideHandler inputOverrideHandler;
 
     private final FollowProcess followProcess;
@@ -114,6 +115,7 @@ public class Baritone implements IBaritone {
             this.registerBehavior(WaypointBehavior::new);
             this.swarmBehavior        = this.registerBehavior(SwarmBehavior::new);
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
+            this.spectateLearner      = this.registerBehavior(baritone.spectate.SpectateLearner::new); // Ostinato
         }
 
         this.pathingControlManager = new PathingControlManager(this);
@@ -280,5 +282,10 @@ public class Baritone implements IBaritone {
 
     public static Executor getExecutor() {
         return threadPool;
+    }
+
+    // Ostinato: spectate learning
+    public baritone.spectate.SpectateLearner getSpectateLearner() {
+        return this.spectateLearner;
     }
 }
