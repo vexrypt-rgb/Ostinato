@@ -186,6 +186,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (level != lastLevel) {
             seen.clear();
             looks.clear(); // Ostinato
+            pendingSplash.clear(); // Ostinato
             closeRecorders();
             post(l -> {
                 l.minds.clear();
@@ -199,6 +200,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (!on) {
             if (!seen.isEmpty()) seen.clear();
             looks.clear(); // Ostinato
+            pendingSplash.clear(); // Ostinato
             closeRecorders();
             return;
         }
@@ -230,13 +232,15 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         for (Player p : near) if (keep.contains(p.getId())) seen.computeIfAbsent(p.getId(), k -> new Seen(p));
         for (Seen sn : seen.values()) use(sn);
         lookAll(near); // Ostinato: kits and team clues of everyone in range
+        if (!pendingSplash.isEmpty()) resolveSplashes(); // Ostinato
         // hits wait a tick for the crit packet that follows them
         for (Object[] h : pendingHits) {
             int att = (Integer) h[0], vic = (Integer) h[1];
-            boolean crit = critVictims.contains(vic);
+            boolean ranged = (Boolean) h[5]; // Ostinato
+            boolean crit = !ranged && critVictims.contains(vic);
             String an = (String) h[2], vn = (String) h[3];
             int t = (Integer) h[4];
-            post(l -> l.hitW(t, att, an, vic, vn, crit));
+            post(l -> l.hitW(t, att, an, vic, vn, crit, ranged));
         }
         pendingHits.clear();
         critVictims.clear();
@@ -444,11 +448,12 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         net.minecraft.world.damagesource.DamageSource src = p.getSource(Minecraft.getInstance().level);
         Entity att = src.getEntity();
         if (!(e instanceof Player victim) || !(att instanceof Player attacker) || att == e) return;
-        if (!src.is(DamageTypeTags.IS_PLAYER_ATTACK)) return;
+        boolean ranged = src.is(DamageTypeTags.IS_PROJECTILE); // Ostinato: bow, crossbow and trident hits count too
+        if (!src.is(DamageTypeTags.IS_PLAYER_ATTACK) && !ranged) return;
         if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId()) && !looks.containsKey(victim.getId()) && !looks.containsKey(attacker.getId())) return; // Ostinato: or looked at
         Seen as = seen.get(attacker.getId());
         if (as != null) as.hits++;
-        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick});
+        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick, ranged});
     }
 
     @Override
@@ -473,26 +478,18 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     public void added(Entity e) {
         addedKit(e); // Ostinato
         if (!(e instanceof ThrownEnderpearl) && !(e instanceof ThrownSplashPotion)) return;
+        if (e instanceof ThrownSplashPotion sp0) { // Ostinato: its potion is only known a tick or two later
+            Entity o = sp0.getOwner();
+            if (o != null && seen.containsKey(o.getId()) && !looks.containsKey(o.getId())) pendingSplash.add(new Object[]{sp0, o.getId(), tick});
+            return;
+        }
         Entity owner = ((net.minecraft.world.entity.projectile.Projectile) e).getOwner();
         if (owner == null || !seen.containsKey(owner.getId())) return;
         int id = owner.getId(), t = tick;
         float hp = hp((LivingEntity) owner);
-        boolean pearl = e instanceof ThrownEnderpearl;
-        if (!pearl) {
-            ItemStack st = ((ThrownSplashPotion) e).getItem();
-            var pc = st.getOrDefault(net.minecraft.core.component.DataComponents.POTION_CONTENTS, net.minecraft.world.item.alchemy.PotionContents.EMPTY);
-            boolean heals = false;
-            for (var mi : pc.getAllEffects()) heals |= mi.getEffect().is(net.minecraft.world.effect.MobEffects.INSTANT_HEALTH) || mi.getEffect().is(net.minecraft.world.effect.MobEffects.REGENERATION);
-            if (!heals) return;
-        }
-        post(l -> {
-            Habits life = l.mind(id, null).life;
-            if (pearl) life.pearl(t, hp);
-            else life.pot(t, hp);
-            for (FightBook.Fight f : l.book.fightsOf(id)) {
-                if (pearl) f.of(id).pearl(t, hp);
-                else f.of(id).pot(t, hp);
-            }
+        post(l -> { // Ostinato: pearls only; splash potions are read later, in resolveSplashes
+            l.mind(id, null).life.pearl(t, hp);
+            for (FightBook.Fight f : l.book.fightsOf(id)) f.of(id).pearl(t, hp);
         });
     }
 
@@ -580,7 +577,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
      * arrows, tridents, fireworks; an end crystal counts for the nearest fighter within five blocks.
      */
     private void addedKit(Entity e) {
-        if (!s().spectateKitDetect.value || looks.isEmpty()) return;
+        if (looks.isEmpty()) return; // Ostinato: also for fight types (arrows shot at someone); kitEvent checks kit detection
         if (e instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal) {
             Look best = null;
             double bd = 25;
@@ -599,12 +596,71 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (owner == null || !looks.containsKey(owner.getId())) return;
         String tok = null;
         if (e instanceof ThrownEnderpearl) tok = "threw:ender_pearl";
-        else if (e instanceof ThrownSplashPotion sp) tok = GearReader.splash(sp.getItem());
+        else if (e instanceof ThrownSplashPotion sp) {
+            // Ostinato: the potion's item comes in an entity-data packet after the spawn, so read it a few ticks on
+            pendingSplash.add(new Object[]{sp, owner.getId(), tick});
+            return;
+        }
         else if (e instanceof net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge) tok = "threw:wind_charge";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.ThrownTrident) tok = "shot:trident";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) tok = "shot:arrow";
+        if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) shotAt(owner, e); // Ostinato: engagement
         else if (e instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity) tok = "firework";
         if (tok != null) kitEvent(owner.getId(), tok);
+    }
+
+    // Ostinato: thrown splash potions waiting for their item: {potion, thrower id, tick thrown}
+    private final List<Object[]> pendingSplash = new ArrayList<>();
+
+    /** Ostinato: reads each pending splash once it shows its potion (or at the latest when it breaks, or 5 ticks on). */
+    private void resolveSplashes() {
+        for (Iterator<Object[]> it = pendingSplash.iterator(); it.hasNext(); ) {
+            Object[] ps = it.next();
+            ThrownSplashPotion sp = (ThrownSplashPotion) ps[0];
+            String tok = GearReader.splash(sp.getItem());
+            boolean known = !tok.equals("threw:splash_other") || sp.isRemoved() || tick - (Integer) ps[2] >= 5;
+            if (!known) continue;
+            it.remove();
+            int id = (Integer) ps[1], t = tick;
+            if (s().spectateKitDetect.value && looks.containsKey(id)) kitEvent(id, tok);
+            if (tok.equals("threw:splash_heal") && seen.get(id) != null) { // Ostinato: the pot habit, moved here from added()
+                float hp = hp(seen.get(id).p);
+                post(l -> {
+                    l.mind(id, null).life.pot(t, hp);
+                    for (FightBook.Fight f : l.book.fightsOf(id)) f.of(id).pot(t, hp);
+                });
+            }
+        }
+    }
+
+    /**
+     * Ostinato: whom an arrow or trident was shot at: the player within 40 blocks closest to its line of flight (within
+     * 20 degrees). Keeps their fight on, see {@link FightBook#shotAt}.
+     */
+    private void shotAt(Entity shooter, Entity arrow) {
+        Vec3 v = arrow.getDeltaMovement();
+        if (v.lengthSqr() < 1e-4) return;
+        Vec3 dir = v.normalize();
+        Player best = null;
+        double bestCos = Math.cos(Math.toRadians(20));
+        for (Look lk : looks.values()) {
+            Player p = lk.p;
+            if (p == shooter) continue;
+            Vec3 to = p.position().add(0, 1, 0).subtract(arrow.position());
+            double d = to.length();
+            if (d > 40 || d < 1e-3) continue;
+            // a dropping arc: compare on the level plane, so a lob still points at its target
+            Vec3 flat = new Vec3(to.x, 0, to.z), fdir = new Vec3(dir.x, 0, dir.z);
+            if (flat.lengthSqr() < 1e-6 || fdir.lengthSqr() < 1e-6) continue;
+            double cos = flat.normalize().dot(fdir.normalize());
+            if (cos > bestCos) {
+                bestCos = cos;
+                best = p;
+            }
+        }
+        if (best == null) return;
+        int a = shooter.getId(), b = best.getId(), t = tick;
+        post(l -> l.book.shotAt(t, a, b));
     }
 
     /** Eating: the use flag held 30 ticks or more with food in hand. */
@@ -739,8 +795,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         logDecode(id, name, o, d, t);
     }
 
-    private void hitW(int t, int att, String an, int vic, String vn, boolean crit) {
-        FightBook.Fight f = book.hit(t, att, an, vic, vn, crit); // Ostinato: crit kept on the group's hit list
+    private void hitW(int t, int att, String an, int vic, String vn, boolean crit, boolean ranged) {
+        // Ostinato: crit kept on the group's hit list; ranged hits let the fight drift further
+        FightBook.Fight f = ranged ? book.rangedHit(t, att, an, vic, vn) : book.hit(t, att, an, vic, vn, crit);
         synchronized (activeFights) {
             long key = f.serial; // Ostinato: the fight's serial, as the same pair may fight again while a log waits
             boolean have = false;

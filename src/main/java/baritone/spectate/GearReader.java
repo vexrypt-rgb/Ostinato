@@ -77,6 +77,8 @@ public final class GearReader {
         Map<String, Double> t = new HashMap<>();
         hand(t, p.getMainHandItem(), true);
         hand(t, p.getOffhandItem(), false);
+        String first = null;
+        boolean mixed = false;
         for (EquipmentSlot s : ARMOR) {
             ItemStack st = p.getItemBySlot(s);
             if (st.isEmpty()) continue;
@@ -84,10 +86,14 @@ public final class GearReader {
             if (st.is(Items.ELYTRA)) t.merge("elytra", 1.0, Double::sum);
             String m = material(path);
             if (m != null) t.merge("armor:" + m, 0.25, Double::sum);
+            // Ostinato: pieces of two materials (diamond with iron, as UHC players wear)
+            if (m != null && first == null) first = m;
+            else if (m != null && !m.equals(first)) mixed = true;
             if (st.hasFoil()) t.merge("glint:armor", 0.25, Double::sum);
             if (st.has(DataComponents.TRIM)) t.merge("trim", 0.25, Double::sum);
             if (st.has(DataComponents.DYED_COLOR)) t.merge("dyed", 0.25, Double::sum);
         }
+        if (mixed) t.put("armor:mixed", 1.0); // Ostinato
         effects(t, p);
         return t;
     }

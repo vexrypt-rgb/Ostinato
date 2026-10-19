@@ -174,4 +174,87 @@ public class FightTypeTest {
         assertEquals("sword", r.groups.get(0).kits.get(1).label);
         assertTrue(r.book.kitsSeen().contains("sword"));
     }
+
+
+    /** Ostinato: a 2v2 with no colours whose second pair never stands together (bench, v1.24.0: split into 2v1v1). */
+    @Test
+    public void twoVersusTwoApartFromTheWholeFight() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 1.5, 0);
+        r.at(3, 0, 5);
+        r.at(4, 12, 5);
+        int[][] hits = {{1, 3}, {3, 1}, {2, 4}, {4, 2}, {1, 4}, {3, 2}, {4, 1}, {2, 3}};
+        for (int t = 0, i = 0; t < 600; t += 6, i++) {
+            int[] h = hits[i % hits.length];
+            r.book.hit(t, h[0], "p" + h[0], h[1], "p" + h[1]);
+            if (t % 20 == 0) r.second(t);
+        }
+        r.end(600 + FightBook.QUIET + 21);
+        assertEquals(1, r.groups.size());
+        FightGroup g = r.groups.get(0);
+        assertEquals(g.describe(), "2v2", g.shape);
+        assertTrue(g.teamsLine(), g.teamsLine().equals("p1,p2|p3,p4") || g.teamsLine().equals("p3,p4|p1,p2"));
+    }
+
+    /** Ostinato: a chain of duels 1-2, 2-3, 3-4 also splits into two sides, but not every pair across traded hits. */
+    @Test
+    public void chainOfDuelsIsNotTwoTeams() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 3, 0);
+        r.at(3, 6, 0);
+        r.at(4, 9, 0);
+        int[][] hits = {{1, 2}, {2, 1}, {2, 3}, {3, 2}, {3, 4}, {4, 3}};
+        for (int t = 0, i = 0; t < 600; t += 6, i++) {
+            int[] h = hits[i % hits.length];
+            r.book.hit(t, h[0], "p" + h[0], h[1], "p" + h[1]);
+            if (t % 20 == 0) r.second(t);
+        }
+        r.end(600 + FightBook.QUIET + 21);
+        assertEquals(1, r.groups.size());
+        // the whole-fight sides rule stays out of it (what the other clues make of it is their call)
+        assertEquals(null, r.groups.get(0).foeSides());
+    }
+
+
+    /** Ostinato: a bow duel (bench, v1.24.0: never seen as a fight) is a fight, fought from 35 blocks apart. */
+    @Test
+    public void bowDuelIsAFight() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 35, 0);
+        for (int t = 0; t < 400; t += 20) {
+            if (t % 40 == 0) r.book.rangedHit(t, 1, "a", 2, "b");
+            else r.book.rangedHit(t, 2, "b", 1, "a");
+            r.second(t);
+        }
+        // 35 blocks is past APART, which ends a melee fight
+        assertEquals(1, r.book.active().size());
+        assertTrue(r.book.active().iterator().next().ranged);
+        r.book.died(410, 2);
+        assertEquals(1, r.groups.size());
+        assertEquals("1v1", r.groups.get(0).type);
+        assertEquals(1, r.book.decided());
+    }
+
+    /** Ostinato: arrows shot that miss keep a ranged fight from going quiet, and start none on their own. */
+    @Test
+    public void arrowsShotKeepItOn() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 30, 0);
+        r.book.shotAt(0, 1, 2);
+        assertEquals(0, r.book.active().size());
+        for (int t = 0; t < 60; t += 20) {
+            r.book.rangedHit(t, 1, "a", 2, "b");
+            r.book.rangedHit(t + 10, 2, "b", 1, "a");
+        }
+        // then only misses, for longer than QUIET
+        for (int t = 100; t < 100 + 2 * FightBook.QUIET; t += 20) {
+            r.book.shotAt(t, t % 40 == 0 ? 1 : 2, t % 40 == 0 ? 2 : 1);
+            r.second(t);
+        }
+        assertEquals(1, r.book.active().size());
+    }
 }
