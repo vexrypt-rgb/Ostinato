@@ -301,6 +301,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             Files.createDirectories(dir());
             Files.write(dir().resolve("session-" + host + ".log"), sessionLog, StandardCharsets.UTF_8,
                     java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            sessionLog.clear();
         } catch (IOException ignored) {
         }
     }
@@ -327,11 +328,43 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
 
     // ------------------------------------------------------------------ game thread
 
+    // Ostinato: headless test hook: -Dostinato.autospectate=<host> starts one session from the title screen,
+    // -Dostinato.autospectate.exit=true closes the game when it ends.
+    private static final String AUTO = System.getProperty("ostinato.autospectate");
+    private static final boolean AUTO_EXIT = Boolean.getBoolean("ostinato.autospectate.exit");
+    private boolean autoFired;
+    private long autoSeen, idleSince;
+
+    private void autoHook(Minecraft mc, long now) {
+        if (AUTO == null || AUTO.isBlank()) return;
+        if (!autoFired) {
+            if (mc.gui.screen() instanceof TitleScreen) {
+                if (autoSeen == 0) autoSeen = now;
+                if (now - autoSeen > 5000) {
+                    autoFired = true;
+                    start(AUTO);
+                    if (phase == Phase.IDLE && AUTO_EXIT) mc.stop();
+                }
+            }
+            return;
+        }
+        if (phase == Phase.IDLE && AUTO_EXIT) {
+            if (idleSince == 0) idleSince = now;
+            if (now - idleSince > 4000) {
+                note("exit: " + summary());
+                flushLog();
+                mc.stop();
+            }
+        }
+    }
+
     @Override
     public void onTick(TickEvent event) {
-        if (event.getState() != EventState.PRE || phase == Phase.IDLE) return;
+        if (event.getState() != EventState.PRE) return;
         Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
+        autoHook(mc, now);
+        if (phase == Phase.IDLE) return;
         for (String[] m; (m = inbox.poll()) != null; ) {
             if (handleText(m[0], m[1], now)) return;
         }
