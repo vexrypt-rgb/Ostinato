@@ -6,19 +6,19 @@ package baritone.launch.mixins;
 import baritone.utils.accessor.IOstinatoScreens;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.Shadow;
 
-/** Ostinato: where a menu's slots are drawn. */
+/** Ostinato: menu origin, to turn a slot into a screen point for humanized clicks. */
 @Mixin(AbstractContainerScreen.class)
-public interface MixinOstinatoContainerScreen extends IOstinatoScreens {
-    @Accessor("leftPos")
-    int ostinato$left();
+public abstract class MixinOstinatoContainerScreen implements IOstinatoScreens {
+    @Shadow
+    protected int leftPos;
 
-    @Accessor("topPos")
-    int ostinato$top();
+    @Shadow
+    protected int topPos;
 
     @Override
-    default int[] ostinato$pos() {
-        return new int[]{ostinato$left(), ostinato$top()};
+    public int[] ostinato$pos() {
+        return new int[]{leftPos, topPos};
     }
 }

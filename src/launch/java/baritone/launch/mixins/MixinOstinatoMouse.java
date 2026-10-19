@@ -7,24 +7,24 @@ import baritone.utils.accessor.IOstinatoInput;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.input.MouseButtonInfo;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Invoker;
+import org.spongepowered.asm.mixin.Shadow;
 
-/** Ostinato: MouseHandler.onButton and onMove, for menu clicks that move the real cursor. */
+/** Ostinato: MouseHandler.onButton/onMove, for menu clicks that go through the real mouse path. */
 @Mixin(MouseHandler.class)
-public interface MixinOstinatoMouse extends IOstinatoInput {
-    @Invoker("onButton")
-    void ostinato$invokeOnButton(long window, MouseButtonInfo b, int action);
+public abstract class MixinOstinatoMouse implements IOstinatoInput {
+    @Shadow
+    private void onButton(long window, MouseButtonInfo b, int action) {}
 
-    @Invoker("onMove")
-    void ostinato$invokeOnMove(long window, double x, double y);
+    @Shadow
+    private void onMove(long window, double x, double y) {}
 
     @Override
-    default void ostinato$onButton(long window, MouseButtonInfo b, int action) {
-        ostinato$invokeOnButton(window, b, action);
+    public void ostinato$onButton(long window, MouseButtonInfo b, int action) {
+        onButton(window, b, action);
     }
 
     @Override
-    default void ostinato$onMove(long window, double x, double y) {
-        ostinato$invokeOnMove(window, x, y);
+    public void ostinato$onMove(long window, double x, double y) {
+        onMove(window, x, y);
     }
 }

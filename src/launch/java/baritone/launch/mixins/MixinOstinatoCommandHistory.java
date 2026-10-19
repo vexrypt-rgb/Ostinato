@@ -6,23 +6,24 @@ package baritone.launch.mixins;
 import baritone.utils.accessor.IOstinatoScreens;
 import net.minecraft.client.CommandHistory;
 import net.minecraft.util.ArrayListDeque;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
-import org.spongepowered.asm.mixin.gen.Invoker;
+import org.spongepowered.asm.mixin.Shadow;
 
 import java.util.function.Predicate;
 
-/** Ostinato: keeps /register and /login out of command_history.txt. */
+/** Ostinato: drop /register and /login from the saved command history. */
 @Mixin(CommandHistory.class)
-public interface MixinOstinatoCommandHistory extends IOstinatoScreens {
-    @Accessor("lastCommands")
-    ArrayListDeque<String> ostinato$lastCommands();
+public abstract class MixinOstinatoCommandHistory implements IOstinatoScreens {
+    @Shadow
+    @Final
+    private ArrayListDeque<String> lastCommands;
 
-    @Invoker("save")
-    void ostinato$save();
+    @Shadow
+    private void save() {}
 
     @Override
-    default void ostinato$scrub(Predicate<String> drop) {
-        if (ostinato$lastCommands().removeIf(drop)) ostinato$save();
+    public void ostinato$scrub(Predicate<String> drop) {
+        if (lastCommands.removeIf(drop)) save();
     }
 }

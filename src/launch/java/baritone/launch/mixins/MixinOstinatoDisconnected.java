@@ -7,18 +7,19 @@ import baritone.utils.accessor.IOstinatoScreens;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.Shadow;
 
-/** Ostinato: the reason a server gave for a kick. */
+/** Ostinato: the kick reason on the disconnect screen. */
 @Mixin(DisconnectedScreen.class)
-public interface MixinOstinatoDisconnected extends IOstinatoScreens {
-    @Accessor("details")
-    DisconnectionDetails ostinato$details();
+public abstract class MixinOstinatoDisconnected implements IOstinatoScreens {
+    @Shadow
+    @Final
+    private DisconnectionDetails details;
 
     @Override
-    default Component ostinato$reason() {
-        DisconnectionDetails d = ostinato$details();
-        return d == null ? null : d.reason();
+    public Component ostinato$reason() {
+        return details == null ? null : details.reason();
     }
 }

@@ -5,26 +5,27 @@ package baritone.launch.mixins;
 
 import baritone.utils.accessor.IOstinatoInput;
 import net.minecraft.client.KeyboardHandler;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Invoker;
+import org.spongepowered.asm.mixin.Shadow;
 
-/** Ostinato: KeyboardHandler.keyPress, for typed chat that goes through the real key path. */
+/** Ostinato: KeyboardHandler.keyPress/charTyped, for typed chat that goes through the real key path. A class mixin, since accessor interfaces can't carry default methods. */
 @Mixin(KeyboardHandler.class)
-public interface MixinOstinatoKeyboard extends IOstinatoInput {
-    @Invoker("keyPress")
-    void ostinato$invokeKeyPress(long window, int action, KeyEvent e);
+public abstract class MixinOstinatoKeyboard implements IOstinatoInput {
+    @Shadow
+    private void keyPress(long window, int action, KeyEvent e) {}
 
-    @Invoker("charTyped")
-    void ostinato$invokeCharTyped(long window, net.minecraft.client.input.CharacterEvent e);
+    @Shadow
+    private void charTyped(long window, CharacterEvent e) {}
 
     @Override
-    default void ostinato$charTyped(long window, net.minecraft.client.input.CharacterEvent e) {
-        ostinato$invokeCharTyped(window, e);
+    public void ostinato$keyPress(long window, int action, KeyEvent e) {
+        keyPress(window, action, e);
     }
 
     @Override
-    default void ostinato$keyPress(long window, int action, KeyEvent e) {
-        ostinato$invokeKeyPress(window, action, e);
+    public void ostinato$charTyped(long window, CharacterEvent e) {
+        charTyped(window, e);
     }
 }
