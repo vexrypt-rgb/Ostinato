@@ -100,5 +100,8 @@ public class ServerSpectateTest {
         assertTrue(ServerSpectate.matchOver("match results (click to view)"));
         assertTrue(ServerSpectate.matchOver("winner: strl331"));
         assertFalse(ServerSpectate.matchOver("opponent: strl331"));
+        assertTrue(ServerSpectate.waitingOnSameMenu("Gamemodes Menu", "Gamemodes Menu"));
+        assertFalse(ServerSpectate.waitingOnSameMenu("Select Kit", "Gamemodes Menu"));
+        assertFalse(ServerSpectate.waitingOnSameMenu("Gamemodes Menu", ""));
     }
 }

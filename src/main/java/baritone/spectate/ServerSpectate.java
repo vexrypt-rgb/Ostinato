@@ -164,6 +164,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         if (want.equals("crystal") && id.contains("crystal")) return 50;
         return 0;
     }
+
+    /** Ostinato: a refreshed item list in the same menu is not the next menu. */
+    static boolean waitingOnSameMenu(String openTitle, String clickedTitle) {
+        return clickedTitle != null && !clickedTitle.isEmpty() && clickedTitle.equals(openTitle);
+    }
     private static final Pattern UNCONFIRMED = Pattern.compile("unconfirmed message");
     private static final Pattern CONFIRM_YES = Pattern.compile("^(yes|run|run command|proceed|confirm|send|send command|continue)\\b");
     private static final int PATH_SCREEN = -2; // the cursor targets a point on a non-container screen (chat, confirm)
@@ -188,9 +193,12 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private boolean queueRoute, queued, hotbarMissLogged, queueNoted, joinNoted;
     private long hotbarMissingSince;
     private String opponentName;
-    /** Ostinato: the menu a click step already used, so the next click waits for the next menu. */
+    /** Ostinato: the menu a click step already used. The next click waits for a different title, not a flicker of the same menu. */
     private int clickedMenuId = Integer.MIN_VALUE;
     private String clickedMenuKey = "";
+    private String clickedMenuTitle = "";
+    private long clickedMenuAt;
+    private boolean awaitingNextMenu;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
@@ -375,6 +383,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         opponentName = null;
         clickedMenuId = Integer.MIN_VALUE;
         clickedMenuKey = "";
+        clickedMenuTitle = "";
+        clickedMenuAt = 0;
+        awaitingNextMenu = false;
         swordSlotUsed = -1;
         spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
@@ -877,6 +888,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                     opponentName = null;
                     clickedMenuId = Integer.MIN_VALUE;
                     clickedMenuKey = "";
+                    clickedMenuTitle = "";
+                    clickedMenuAt = 0;
+                    awaitingNextMenu = false;
                     clicks = 0;
                     baritone.getPvpProcess().stopAttack();
                     nextActionMs = now + 2500;
@@ -1167,6 +1181,19 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private void menu(AbstractContainerScreen<?> cs, long now) {
         AbstractContainerMenu m = cs.getMenu();
         String title = COLOR.matcher(cs.getTitle().getString()).replaceAll("");
+        if (awaitingNextMenu && waitingOnSameMenu(title, clickedMenuTitle)) {
+            // Ostinato: the practice crystal refreshes this menu. Do not click it again, and do not close it.
+            if (now - clickedMenuAt > 10_000) {
+                awaitingNextMenu = false;
+                note("still in \"" + title + "\"; trying again");
+            } else {
+                return;
+            }
+        } else if (awaitingNextMenu) {
+            awaitingNextMenu = false;
+            if (routeStep < route.size()) routeStep++;
+            note("next menu \"" + title + "\"");
+        }
         List<String> names = new ArrayList<>();
         Slot best = null;
         int bestScore = 0;
@@ -1201,11 +1228,6 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         }
         String key = title + " | " + String.join(", ", names);
         if (menusSeen.add(key)) note("menu \"" + title + "\": " + String.join(", ", names));
-        if (want != null && m.containerId == clickedMenuId && key.equals(clickedMenuKey)) {
-            // Ostinato: this click step is for the next menu. Leave this one if it does not change.
-            if (now - menuOpenedMs(now) > 8000) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
-            return;
-        }
         if (m.containerId != lastMenuId) { // Ostinato: a person reads a menu before clicking in it
             lastMenuId = m.containerId;
             nextActionMs = Math.max(nextActionMs, now + HumanInput.between(rnd, s().autoSpectateReadMinMs.value, s().autoSpectateReadMaxMs.value));
@@ -1225,10 +1247,15 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             boolean last = routeStep + 1 >= route.size();
             clickedMenuId = m.containerId;
             clickedMenuKey = key;
-            routeStep++;
+            clickedMenuTitle = title;
+            clickedMenuAt = now;
             if (last && queueRoute) { // Ostinato: the last click is the mode, whose item is named the mode
                 queued = true;
+                awaitingNextMenu = false;
+                routeStep++;
                 note("queued " + want);
+            } else {
+                awaitingNextMenu = true; // Ostinato: count this click only when the next menu opens
             }
         }
         if (n.toLowerCase(Locale.ROOT).matches(".*\\b(spectate|spectator|spec|watch)\\b.*")) spectateTried = true;
@@ -1278,6 +1305,15 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         if (pendingUse != 0 && now >= pendingUse) {
             pendingUse = 0;
             net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.getKey(mc.options.keyUse.saveString()));
+        }
+        if (awaitingNextMenu && now - clickedMenuAt > 800) { // Ostinato: the menu closed, so the click is done
+            awaitingNextMenu = false;
+            if (routeStep < route.size()) {
+                routeStep++;
+                hotbarMissingSince = 0;
+                hotbarMissLogged = false;
+                note("left menu \"" + clickedMenuTitle + "\"");
+            }
         }
         // Ostinato: the hub Enable PvP sword is not a fight. The route opens the clock, two crystals, then the mode sword.
         if (now < nextActionMs || !pending.isEmpty() || busy()) return;
