@@ -403,10 +403,20 @@ public final class FreecamBehavior extends Behavior implements Helper {
         } else if (left) {
             select();
         } else if (right) {
+            if (fighting()) { // Ostinato: a path calc during a fight is the lag, and it keeps the sword from swinging
+                logDirect("In a fight, not pathing");
+                return;
+            }
             BetterBlockPos pos = new BetterBlockPos(camera.getX(), camera.getY(), camera.getZ());
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
             logDirect("Going to " + pos);
         }
+    }
+
+    /** A live fight. Pathfinding on top of it is what froze the client and stole the swing. */
+    private boolean fighting() {
+        Baritone b = (Baritone) baritone;
+        return b.getPvpProcess().isActive() || b.getPveProcess().isActive();
     }
 
     /** Players always; other living things only with the enemyMobs setting. */
@@ -468,12 +478,20 @@ public final class FreecamBehavior extends Behavior implements Helper {
             }
         }
         if (hit != null) {
+            if (fighting()) { // Ostinato: follow would path instead of swinging
+                logDirect("In a fight, not pathing");
+                return;
+            }
             Entity target = hit;
             baritone.getFollowProcess().follow(target::equals);
             logDirect("Following " + target.getName().getString());
             return;
         }
         if (block.getType() == HitResult.Type.BLOCK) {
+            if (fighting()) { // Ostinato: a path calc during a fight is the lag
+                logDirect("In a fight, not pathing");
+                return;
+            }
             BlockPos pos = ((BlockHitResult) block).getBlockPos();
             if (horizontalDistSq(pos, p) > renderRadius() * renderRadius()) {
                 logDirect("That block is outside render distance");

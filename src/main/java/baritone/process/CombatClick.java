@@ -43,9 +43,32 @@ final class CombatClick {
 
     /** Left-click only if the crosshair is on the entity, as the mouse button would. */
     boolean clickOn(Player me, Entity e) {
+        if (mc.getCameraEntity() != me) { // Ostinato: freecam's hit result is the camera, so the player never swings
+            if (!playerAimed(me, e)) return false;
+            return deliver(me, e);
+        }
         if (!(mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != e) return false;
+        return deliver(me, e);
+    }
+
+    /** Freecam leaves the attack key on the camera. Hit the entity from the player instead. */
+    private boolean deliver(Player me, Entity e) {
+        if (mc.getCameraEntity() != me) {
+            mc.gameMode.attack(me, e);
+            return true;
+        }
         press(mc.options.keyAttack);
         return true;
+    }
+
+    /** The player's own look, not the freecam camera, within melee reach. */
+    private static boolean playerAimed(Player me, Entity e) {
+        double reach = 3.0;
+        var attr = me.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ENTITY_INTERACTION_RANGE);
+        if (attr != null) reach = attr.getValue();
+        if (exactReach(me, e) > reach + 0.5) return false;
+        Vec3 eye = me.getEyePosition();
+        return e.getBoundingBox().inflate(0.1).clip(eye, eye.add(me.getLookAngle().scale(reach + 0.5))).isPresent();
     }
 
     boolean hit(Player me, LivingEntity target) {
@@ -58,7 +81,7 @@ final class CombatClick {
             // Piercing jab raycasts along the look vector. A click that is merely near the eyes misses
             // and, below full charge, is rejected. Do not press attack unless this ray connects.
             if (!swing.spearRayHits(me, target)) return false;
-            press(mc.options.keyAttack);
+            deliver(me, target);
             hands.attacked();
             return true;
         }
