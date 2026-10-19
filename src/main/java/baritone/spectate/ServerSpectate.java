@@ -36,6 +36,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
@@ -65,7 +66,7 @@ import java.util.regex.Pattern;
  */
 public final class ServerSpectate extends Behavior implements baritone.api.utils.Helper {
 
-    public enum Phase { IDLE, CONNECTING, AUTH, ROUTE, WATCH, LEAVING }
+    public enum Phase { IDLE, CONNECTING, AUTH, ROUTE, WATCH, FIGHT, LEAVING }
 
     private static final Pattern COLOR = Pattern.compile("§.");
     private static final Pattern CAPTCHA = Pattern.compile("captcha|verify you are human|are you a robot|type the code|enter the code");
@@ -81,7 +82,6 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private static final Pattern NEVER = Pattern.compile("\\b(ranked|unranked|queue|join queue|1v1 me|duel request|send duel|buy|purchase|store|shop|confirm purchase|kit editor|edit kit|party|casual|competitive)\\b");
     private static final String[] DEFAULT_WORDS = {"spectate", "spectator", "spec", "watch"}; // Ostinato: ffa, practice and duel join as a fighter
     private static final Pattern SELECTOR = Pattern.compile("spectate|spectator|\\bspec\\b|watch"); // Ostinato: play, menu and modes open join buttons
-    private static final Pattern SKIP_USE = Pattern.compile("\\benable pvp\\b"); // Ostinato: holding this turns on hub fighting
 
     // Ostinato: clickable chat prompts in the login flow ("Are you using a premium account? [Yes] [No]" -> No), answered
     // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
@@ -125,7 +125,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private final List<String[]> authClicks = new ArrayList<>();
     private final java.util.concurrent.ConcurrentLinkedDeque<Object[]> recentSys = new java.util.concurrent.ConcurrentLinkedDeque<>(); // {ms, Component}
     private String authClickChoice;
-    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs, spectateSentMs, survivalSince, hotbarDoneMs;
+    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs, spectateSentMs, survivalSince, hotbarDoneMs, swordHeldSince;
+    private int swordSlotUsed = -1;
     private ClickEvent chatTarget;
     private String chatTargetShown;
     private int chatStage, chatClicks;
@@ -137,7 +138,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private String host;
     private long startMs, nextActionMs, lastAuthMs;
     private int commandsSent, clicks, hotbarUses, hotbarProbe, registerTries, loginTries;
-    private boolean authed, sawAuthPrompt, spectateTried, spectateRejected, hotbarDumped;
+    private boolean authed, sawAuthPrompt, sawLoggedIn, spectateTried, spectateRejected, hotbarDumped, fighting;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
@@ -312,12 +313,13 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         startMs = System.currentTimeMillis();
         nextActionMs = startMs + 3000;
         commandsSent = clicks = hotbarUses = hotbarProbe = registerTries = loginTries = 0;
-        authed = sawAuthPrompt = spectateTried = spectateRejected = hotbarDumped = false;
+        authed = sawAuthPrompt = sawLoggedIn = spectateTried = spectateRejected = hotbarDumped = fighting = false;
+        swordSlotUsed = -1;
         spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
         chatTarget = null;
         chatStage = chatClicks = 0;
-        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = playerGoneMs = spectateSentMs = survivalSince = hotbarDoneMs = 0;
+        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = playerGoneMs = spectateSentMs = survivalSince = hotbarDoneMs = swordHeldSince = 0;
         deferredPrompt = null;
         recentSys.clear();
         menusSeen.clear();
@@ -408,6 +410,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                 recentSys.add(new Object[]{System.currentTimeMillis(), c.content()});
                 while (recentSys.size() > 8) recentSys.pollFirst();
             }
+        } else if (p instanceof ClientboundDisguisedChatPacket c) { // Ostinato: "/login" is often a system line shown in chat
+            inbox.add(new String[]{"sys", c.message().getString()});
         } else if (p instanceof ClientboundPlayerChatPacket c) {
             String t = c.unsignedContent() != null ? c.unsignedContent().getString() : c.body().content(); // Ostinato: nullable on 1.21.11
             inbox.add(new String[]{"chat", t});
@@ -493,7 +497,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             return;
         }
         playerGoneMs = 0;
-        if (fighterByMistake(mc, now)) { // Ostinato: /spectate must not leave us playing a match
+        if (!fighting && phase != Phase.FIGHT && fighterByMistake(mc, now)) { // Ostinato: /spectate must not leave us playing a match
             stop("joined a match; watch only");
             return;
         }
@@ -503,6 +507,10 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             note("joined world, gamemode " + mc.gameMode.getPlayerMode() + " at " + mc.player.blockPosition());
         }
         if (mc.screen instanceof AbstractContainerScreen<?> cs && !(cs.getMenu() instanceof net.minecraft.world.inventory.InventoryMenu)) {
+            if (fighting || phase == Phase.FIGHT || swordHeldSince != 0) { // Ostinato: a menu must not steal the sword hold or the fight
+                key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+                return;
+            }
             menu(cs, now);
             return;
         }
@@ -510,6 +518,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             case AUTH -> auth(mc, now);
             case ROUTE -> route(mc, now);
             case WATCH -> watch(mc, now);
+            case FIGHT -> {
+                if (!baritone.getPvpProcess().isActive()) baritone.getPvpProcess().attackPlayers(); // Ostinato: keep looking for players
+            }
             default -> {
             }
         }
@@ -720,11 +731,28 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             leaveAndBlock("ban/kick message: " + shown);
             return true;
         }
-        if (kind.equals("chat")) return false; // other players talking: never answered
         if (loggedInText(l)) { // Ostinato: a bare "welcome back" is the lobby title, not a finished login
             authed = true;
+            sawLoggedIn = true;
             deferredPrompt = null;
             return false;
+        }
+        if (kind.equals("chat") && !(REMINDER.matcher(l).find() || LOGIN.matcher(l).find() || REGISTER.matcher(l).find())) return false;
+        // Ostinato: the login timer can arrive after the 12 s "no prompt" gate. That is not a finished login.
+        if (!sawLoggedIn && (kind.equals("bar") || kind.equals("sys") || kind.equals("title") || kind.equals("chat")) && REMINDER.matcher(l).find()) {
+            authed = false;
+            sawAuthPrompt = true;
+            lastPromptMs = now;
+            if (phase == Phase.ROUTE || phase == Phase.WATCH) {
+                phase = Phase.AUTH;
+                note("login timer is still running");
+            }
+            boolean reg = l.contains("register");
+            if (now - lastAuthSentMs < 4000 || chatStage != 0 || authClickChoice != null || typing != null) {
+                deferredPrompt = l;
+                return false;
+            }
+            return answerPrompt(l, reg, !reg, now);
         }
         if (WRONG_PW.matcher(l).find()) {
             stop("wrong password");
@@ -765,7 +793,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return answerPrompt(l, reg, log, now);
         }
-        if (authed && (kind.equals("bar") || kind.equals("sys") || kind.equals("title"))) {
+        if (!fighting && phase != Phase.FIGHT && authed && (kind.equals("bar") || kind.equals("sys") || kind.equals("title"))) {
             if (seekSpectate(l, now)) return true; // Ostinato: queue bars name fights in other arenas
         }
         return false;
@@ -1102,6 +1130,27 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             pendingUse = 0;
             net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.getKey(mc.options.keyUse.saveString()));
         }
+        // Ostinato: there is no spectate command here. Hold the sword for 5 s (that turns on hub PvP), then fight.
+        if (!fighting) {
+            int slot = swordSlot(mc.player);
+            if (slot >= 0) {
+                if (swordHeldSince == 0) {
+                    if (now < nextActionMs || !pending.isEmpty() || busy()) return;
+                    swordSlotUsed = slot;
+                    key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + slot, (char) ('1' + slot));
+                    pendingUse = now + HumanInput.between(rnd, 250, 500);
+                    swordHeldSince = now;
+                    note("holding sword slot " + slot);
+                    return;
+                }
+                if (now - swordHeldSince < 6000 || busy()) return;
+                baritone.getPvpProcess().attackPlayers();
+                fighting = true;
+                phase = Phase.FIGHT;
+                note("pvp on; fighting players");
+                return;
+            }
+        }
         if (now < nextActionMs || !pending.isEmpty() || busy()) return;
         menuSeenAt = 0;
         if (routeStep < route.size()) {
@@ -1148,6 +1197,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         }
         if (hotbarProbe < 9) {
             int slot = hotbarProbe++;
+            if (slot == swordSlotUsed) return;
             if (useHotbarSlot(mc, now, slot)) return;
             return; // empty or skipped: the next tick tries the next slot
         }
@@ -1171,13 +1221,29 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         return sb.toString();
     }
 
-    /** Ostinato: right-click one hotbar slot. Enable-PvP is skipped so the bot does not start fighting. */
+    /** Ostinato: a sword, or the hub item named like one. Enable PvP is an iron sword. */
+    private static boolean isSword(ItemStack st) {
+        if (st.isEmpty()) return false;
+        if (st.is(net.minecraft.tags.ItemTags.SWORDS)) return true; // Ostinato: 1.21.11 has no SwordItem class
+        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+        if (id.contains("sword")) return true;
+        String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("").toLowerCase(Locale.ROOT);
+        return n.contains("sword") || n.contains("enable pvp");
+    }
+
+    private static int swordSlot(Player pl) {
+        if (pl == null) return -1;
+        for (int i = 0; i < 9; i++) if (isSword(pl.getInventory().getItem(i))) return i;
+        return -1;
+    }
+
+    /** Ostinato: right-click one hotbar slot. One click, then the hand leaves a sword so it is not held for 5 s. */
     private boolean useHotbarSlot(Minecraft mc, long now, int i) {
         ItemStack st = mc.player.getInventory().getItem(i);
         if (st.isEmpty()) return false;
         String n = itemText(st);
         String l = n.toLowerCase(Locale.ROOT);
-        if (NEVER.matcher(l).find() || SKIP_USE.matcher(l).find()) {
+        if (NEVER.matcher(l).find() && !isSword(st)) {
             note("hotbar " + i + " \"" + n + "\" (skip)");
             return false;
         }
@@ -1196,7 +1262,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 9; i++) {
             ItemStack st = pl.getInventory().getItem(i);
-            sb.append(i).append('=').append(st.isEmpty() ? "-" : COLOR.matcher(st.getHoverName().getString()).replaceAll("")).append("; ");
+            String id = st.isEmpty() ? "" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            sb.append(i).append('=').append(st.isEmpty() ? "-" : id + " " + COLOR.matcher(st.getHoverName().getString()).replaceAll("")).append("; ");
         }
         note("hotbar: " + sb);
     }
