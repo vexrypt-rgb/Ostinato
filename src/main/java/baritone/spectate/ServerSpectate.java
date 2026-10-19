@@ -81,6 +81,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private static final Pattern NEVER = Pattern.compile("\\b(ranked|unranked|queue|join queue|1v1 me|duel request|send duel|buy|purchase|store|shop|confirm purchase|kit editor|edit kit|party|casual|competitive)\\b");
     private static final String[] DEFAULT_WORDS = {"spectate", "spectator", "spec", "watch"}; // Ostinato: ffa, practice and duel join as a fighter
     private static final Pattern SELECTOR = Pattern.compile("spectate|spectator|\\bspec\\b|watch"); // Ostinato: play, menu and modes open join buttons
+    private static final Pattern SKIP_USE = Pattern.compile("\\benable pvp\\b"); // Ostinato: holding this turns on hub fighting
 
     // Ostinato: clickable chat prompts in the login flow ("Are you using a premium account? [Yes] [No]" -> No), answered
     // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
@@ -102,7 +103,12 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private static final Pattern QUEUEING = Pattern.compile("([a-z0-9_]{2,16}) is queueing");
     /** A line that means this account joined a match. Leaving uses stop(), so the server is not blocked. */
     private static final Pattern JOINED_FIGHT = Pattern.compile("\\byou (have )?joined (the )?queue\\b|\\byou are (now )?(queueing|fighting)\\b|\\byou are now in a (match|fight|game)\\b|\\byou have been matched\\b");
-    private static final Pattern UNKNOWN_CMD = Pattern.compile("unknown( or incomplete)? command|not (a |an )?(valid )?command|do not have permission|(does not|doesn't) exist|unrecognized command");
+    private static final Pattern UNKNOWN_CMD = Pattern.compile("unknown( or incomplete)? command|no such command|not (a |an )?(valid )?command|do not have permission|(does not|doesn't) exist|unrecognized command");
+
+    /** Ostinato: the server rejected a command, including crackedpvp's "No such command." */
+    static boolean unknownCommand(String lower) {
+        return lower != null && UNKNOWN_CMD.matcher(lower).find();
+    }
 
     /** Ostinato: the player in "name is queueing for ...", or null. */
     static String queueingPlayer(String lower) {
@@ -119,7 +125,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private final List<String[]> authClicks = new ArrayList<>();
     private final java.util.concurrent.ConcurrentLinkedDeque<Object[]> recentSys = new java.util.concurrent.ConcurrentLinkedDeque<>(); // {ms, Component}
     private String authClickChoice;
-    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs, spectateSentMs, survivalSince;
+    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs, spectateSentMs, survivalSince, hotbarDoneMs;
     private ClickEvent chatTarget;
     private String chatTargetShown;
     private int chatStage, chatClicks;
@@ -130,7 +136,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private Phase phase = Phase.IDLE;
     private String host;
     private long startMs, nextActionMs, lastAuthMs;
-    private int commandsSent, clicks, hotbarUses, registerTries, loginTries;
+    private int commandsSent, clicks, hotbarUses, hotbarProbe, registerTries, loginTries;
     private boolean authed, sawAuthPrompt, spectateTried, spectateRejected, hotbarDumped;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
@@ -305,13 +311,13 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         loadRoute();
         startMs = System.currentTimeMillis();
         nextActionMs = startMs + 3000;
-        commandsSent = clicks = hotbarUses = registerTries = loginTries = 0;
+        commandsSent = clicks = hotbarUses = hotbarProbe = registerTries = loginTries = 0;
         authed = sawAuthPrompt = spectateTried = spectateRejected = hotbarDumped = false;
         spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
         chatTarget = null;
         chatStage = chatClicks = 0;
-        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = playerGoneMs = spectateSentMs = survivalSince = 0;
+        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = playerGoneMs = spectateSentMs = survivalSince = hotbarDoneMs = 0;
         deferredPrompt = null;
         recentSys.clear();
         menusSeen.clear();
@@ -770,7 +776,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
      * attempts. Joining a queue or a match ends the session without blocking the server. Returns true when it ended.
      */
     private boolean seekSpectate(String lower, long now) {
-        boolean unknown = UNKNOWN_CMD.matcher(lower).find();
+        boolean unknown = unknownCommand(lower);
         if (unknown && (lower.contains("spectate") || (spectateSentMs > 0 && now - spectateSentMs < 8000))) {
             spectateRejected = true;
             pending.removeIf(p -> String.valueOf(p[2]).startsWith("spectate"));
@@ -1039,7 +1045,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             if (sl.container instanceof net.minecraft.world.entity.player.Inventory) continue;
             ItemStack st = sl.getItem();
             if (st.isEmpty()) continue;
-            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            String n = itemText(st); // Ostinato: lore can say spectate while the title is only a star
             names.add(n);
             int sc = want != null ? (n.toLowerCase(Locale.ROOT).contains(want) && !NEVER.matcher(n.toLowerCase(Locale.ROOT)).find() ? 100 : 0) : score(n, words);
             if (sc > bestScore) {
@@ -1060,7 +1066,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             if (now - menuOpenedMs(now) > 3000) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27); // Ostinato: Esc, like a person
             return;
         }
-        String n = COLOR.matcher(best.getItem().getHoverName().getString()).replaceAll("");
+        String n = itemText(best.getItem()); // Ostinato: same text that was scored, including lore
         note("move to \"" + n + "\" in \"" + title + "\"");
         startClick(Minecraft.getInstance(), cs, best, n, now); // Ostinato: the cursor travels there, rests, then clicks
         if (want != null) routeStep++;
@@ -1109,9 +1115,14 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return;
         }
-        // Ostinato: lobby menus here are join buttons. Ask to spectate, then watch. Do not keep opening Play.
+        // Ostinato: right-click each hub item once. Menus are logged, and only a spectate item is clicked.
         if (mc.gameMode.getPlayerMode() == net.minecraft.world.level.GameType.SPECTATOR) {
             enterWatch(now);
+            return;
+        }
+        if (mc.screen != null) {
+            key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+            nextActionMs = now + 700;
             return;
         }
         dumpHotbar(mc.player);
@@ -1121,8 +1132,47 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             sendLater("spectate", "spectate", now);
             return; // a menu this opens can still be scored on the next ticks
         }
-        if (hotbarUses < 1 && useHotbar(mc, now, SELECTOR)) return;
-        enterWatch(now);
+        if (hotbarProbe < 9) {
+            int slot = hotbarProbe++;
+            if (useHotbarSlot(mc, now, slot)) return;
+            return; // empty or skipped: the next tick tries the next slot
+        }
+        if (hotbarDoneMs == 0) hotbarDoneMs = now;
+        if (now - hotbarDoneMs < 6000) return; // a spectate click may still be moving us
+        stop("no spectate item in the hotbar menus");
+    }
+
+    /** Ostinato: name plus lore, so a menu line that says spectate is visible and scorable. */
+    private static String itemText(ItemStack st) {
+        String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("").trim();
+        var lore = st.get(net.minecraft.core.component.DataComponents.LORE);
+        if (lore == null) return n;
+        StringBuilder sb = new StringBuilder(n);
+        for (var line : lore.lines()) {
+            String t = COLOR.matcher(line.getString()).replaceAll("").trim();
+            if (t.isEmpty()) continue;
+            if (sb.length() > 140) break;
+            sb.append(" | ").append(t);
+        }
+        return sb.toString();
+    }
+
+    /** Ostinato: right-click one hotbar slot. Enable-PvP is skipped so the bot does not start fighting. */
+    private boolean useHotbarSlot(Minecraft mc, long now, int i) {
+        ItemStack st = mc.player.getInventory().getItem(i);
+        if (st.isEmpty()) return false;
+        String n = itemText(st);
+        String l = n.toLowerCase(Locale.ROOT);
+        if (NEVER.matcher(l).find() || SKIP_USE.matcher(l).find()) {
+            note("hotbar " + i + " \"" + n + "\" (skip)");
+            return false;
+        }
+        hotbarUses++;
+        note("hotbar " + i + " \"" + n + "\" (use)");
+        key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + i, '1' + i);
+        pendingUse = now + HumanInput.between(rnd, 250, 600);
+        nextActionMs = now + 4000 + rnd.nextInt(1200);
+        return true;
     }
 
     /** Ostinato: log every hotbar slot once, so a missed spectate item shows up in the session log. */

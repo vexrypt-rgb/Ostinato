@@ -78,5 +78,7 @@ public class ServerSpectateTest {
         assertEquals(-1, ServerSpectate.score("Competitive Match", w));
         assertEquals(0, ServerSpectate.score("Practice", w));
         assertTrue(ServerSpectate.score("Spectate", w) > 0);
+        assertTrue(ServerSpectate.unknownCommand("crackedpvp | no such command."));
+        assertFalse(ServerSpectate.unknownCommand("you have successfully logged."));
     }
 }
