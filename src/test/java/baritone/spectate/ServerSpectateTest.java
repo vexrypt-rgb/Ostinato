@@ -58,4 +58,12 @@ public class ServerSpectateTest {
         assertTrue(ServerSpectate.REMINDER.matcher("you have 1 second to login").find());
         assertFalse(ServerSpectate.REMINDER.matcher("[lobby] playing: music_disc.precipice").find());
     }
+
+    @Test
+    public void welcomeBackIsNotLoggedIn() { // Ostinato: crackedpvp greets before the login timer finishes
+        assertFalse(ServerSpectate.loggedInText("we missed you, welcome back!"));
+        assertFalse(ServerSpectate.loggedInText("you have 89 seconds to login."));
+        assertTrue(ServerSpectate.loggedInText("you have successfully logged in."));
+        assertTrue(ServerSpectate.loggedInText("welcome back, you are now logged in"));
+    }
 }

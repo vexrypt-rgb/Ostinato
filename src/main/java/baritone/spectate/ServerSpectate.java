@@ -86,6 +86,17 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
     private static final String[][] DEFAULT_AUTH_CLICKS = {{"premium account", "no"}};
     static final Pattern REMINDER = Pattern.compile("seconds? to (register|log ?in)|time to (register|log ?in)");
+
+    /**
+     * Ostinato: true when this lowercased line means the account is actually logged in.
+     * crackedpvp.club shows "We missed you, welcome back!" before /login, while the action bar
+     * is still counting down. That greeting must not cancel the deferred /login.
+     */
+    static boolean loggedInText(String lower) {
+        if (lower == null || REMINDER.matcher(lower).find() || !AUTH_OK.matcher(lower).find()) return false;
+        boolean greeting = lower.contains("welcome back") && !lower.contains("logged") && !lower.contains("registered");
+        return !greeting;
+    }
     private static final Pattern UNCONFIRMED = Pattern.compile("unconfirmed message");
     private static final Pattern CONFIRM_YES = Pattern.compile("^(yes|run|run command|proceed|confirm|send|send command|continue)\\b");
     private static final int PATH_SCREEN = -2; // the cursor targets a point on a non-container screen (chat, confirm)
@@ -678,8 +689,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             return true;
         }
         if (kind.equals("chat")) return false; // other players talking: never answered
-        if (AUTH_OK.matcher(l).find()) {
+        if (loggedInText(l)) { // Ostinato: a bare "welcome back" is the lobby title, not a finished login
             authed = true;
+            deferredPrompt = null;
             return false;
         }
         if (WRONG_PW.matcher(l).find()) {
