@@ -2283,6 +2283,46 @@ public final class Settings {
      */
     public final Setting<Boolean> spectateFightTypes = new Setting<>(true);
 
+    /**
+     * Ostinato: also count fights joined late (already under way when first seen: a fighter hurt, on absorption,
+     * mid-combo or on a gapple, or the spectator just arrived) toward what winners and losers did. Off, they still teach
+     * movement and hit timing, but their results are left out, since the start of the fight was missed.
+     */
+    public final Setting<Boolean> spectateLearnLateFights = new Setting<>(false);
+
+    // Ostinato: auto-spectate (watch-only server join)
+    /**
+     * The server the Auto-spectate button and {@code #autospectate} join to watch fights. Watch only: the bot answers
+     * /register or /login, walks the lobby menus to a spectator spot and follows fights; it never attacks or chats.
+     * Its password is kept in {@code baritone/servers/<host>.secret}; a server that kicks it is never joined again.
+     */
+    public final Setting<String> autoSpectateServer = new Setting<>("crackedpvp.club");
+
+    /** Longest auto-spectate session, in minutes. */
+    public final Setting<Integer> autoSpectateMinutes = new Setting<>(20);
+
+    // Ostinato: auto-spectate human timings (milliseconds). Menus are clicked with the cursor, chat is typed key by key.
+    /** Ostinato: auto-spectate, shortest how long the cursor rests on a menu slot before the click (ms). */
+    public final Setting<Integer> autoSpectateHoverMinMs = new Setting<>(80);
+    /** Ostinato: auto-spectate, longest how long the cursor rests on a menu slot before the click (ms). */
+    public final Setting<Integer> autoSpectateHoverMaxMs = new Setting<>(250);
+    /** Ostinato: auto-spectate, shortest the pause between two menu clicks (ms). */
+    public final Setting<Integer> autoSpectateClickGapMinMs = new Setting<>(250);
+    /** Ostinato: auto-spectate, longest the pause between two menu clicks (ms). */
+    public final Setting<Integer> autoSpectateClickGapMaxMs = new Setting<>(900);
+    /** Ostinato: auto-spectate, shortest the reading pause after a menu opens (ms). */
+    public final Setting<Integer> autoSpectateReadMinMs = new Setting<>(400);
+    /** Ostinato: auto-spectate, longest the reading pause after a menu opens (ms). */
+    public final Setting<Integer> autoSpectateReadMaxMs = new Setting<>(1200);
+    /** Ostinato: auto-spectate, shortest the time between two typed keys in chat (with a longer pause now and then) (ms). */
+    public final Setting<Integer> autoSpectateKeyMinMs = new Setting<>(60);
+    /** Ostinato: auto-spectate, longest the time between two typed keys in chat (with a longer pause now and then) (ms). */
+    public final Setting<Integer> autoSpectateKeyMaxMs = new Setting<>(180);
+    /** Ostinato: auto-spectate, shortest the think pause before chat opens to type a command (ms). */
+    public final Setting<Integer> autoSpectateThinkMinMs = new Setting<>(600);
+    /** Ostinato: auto-spectate, longest the think pause before chat opens to type a command (ms). */
+    public final Setting<Integer> autoSpectateThinkMaxMs = new Setting<>(1800);
+
     // Ostinato: health estimator
     /**
      * Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health,
