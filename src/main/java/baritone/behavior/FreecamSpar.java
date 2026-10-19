@@ -77,6 +77,7 @@ final class FreecamSpar {
     private Baritone baritone;
     /** Ostinato: packets that would have touched the server while sparring (attack, use, hotbar, container); should stay 0. */
     static int leaks;
+    static int landedYou, landedGhost; // Ostinato: hits that registered, for the headless check
 
     boolean active() {
         return ghost != null || respawn > 0;
@@ -98,6 +99,7 @@ final class FreecamSpar {
         scoreYou = scoreGhost = round = 0;
         banner = "";
         leaks = 0;
+        landedYou = landedGhost = 0;
         spawn(owner, camera);
         return true;
     }
@@ -133,6 +135,7 @@ final class FreecamSpar {
             ghost.hurtTime = ghost.hurtDuration = 10;
             push(sim, camera.position(), ghost.position(), h, kit.knockbackResist);
             roundHits.add(new int[]{tick, 0, h.crit ? 1 : 0});
+            landedYou++;
         }
         note("you " + describe(h, scale));
         return true;
@@ -161,6 +164,7 @@ final class FreecamSpar {
         }
         if (ghost == null || camera == null) return;
         if (ghost.isRemoved() || ghost.level() != camera.level()) {
+            if (Boolean.getBoolean("ostinato.spar.log")) System.out.println("[SPAR] ghost gone: " + ghost.getRemovalReason()); // Ostinato
             ghost = null;
             return;
         }
@@ -172,12 +176,16 @@ final class FreecamSpar {
         if (crystalGap > 0) crystalGap--;
         g.tick();
         you.tick();
+        // Ostinato: the freecam body is never ticked by the level, so its hurt flash would never run out (and the brain
+        // would wait forever for the hurt cooldown it reads from it)
+        if (camera instanceof LivingEntity le && le.hurtTime > 0) le.hurtTime--;
         sync(camera);
 
         // the bot's own melee decides for the ghost
         brain.eatTicks = g.eating;
         SparBrain.Keys k = brain.tick(ghost, (LivingEntity) camera);
         dec = k.dec;
+        lastKeys = (k.forward ? "W" : "") + (k.back ? "S" : "") + (k.left ? "A" : "") + (k.right ? "D" : "") + (k.jump ? "J" : "") + (k.sprint ? "R" : "") + (k.attack ? "X" : "") + (k.use ? "U" : "");
         if (k.select >= 0 && k.select < kit.weapons.size() && k.select != weapon) {
             weapon = k.select;
             equip();
@@ -224,16 +232,22 @@ final class FreecamSpar {
             ghostSince = 0;
             Vec3 eye = ghost.getEyePosition();
             AABB box = camera.getBoundingBox();
-            if (box.clip(eye, eye.add(ghost.getLookAngle().scale(REACH))).isPresent()) {
+            if (box.clip(eye, eye.add(Vec3.directionFromRotation(gPitch, gYaw).scale(REACH))).isPresent()) {
                 boolean critOk = !sim.onGround && sim.vy < 0 && fallDist > 0 && !sim.sprinting;
                 SparRules.Hit h = SparRules.melee(w, scale, critOk, sim.sprinting, sim.onGround, fallDist, you, false);
                 if (!h.ignored) {
                     ((LivingEntity) camera).hurtTime = 10;
                     knockCamera(camera, h);
                     roundHits.add(new int[]{tick, 1, h.crit ? 1 : 0});
+                    landedGhost++;
                 }
                 note("spar " + describe(h, scale));
                 if (h.crit) dec = "crit";
+            } else if (Boolean.getBoolean("ostinato.spar.log")) {
+                Vec3 to = camera.getBoundingBox().getCenter().subtract(eye);
+                double err = Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, to.normalize().dot(Vec3.directionFromRotation(gPitch, gYaw))))));
+                System.out.println(String.format(Locale.ROOT, "[SPAR] ghost miss: aim off %.1f deg, eye to box %.2f, box %s", err,
+                        Math.sqrt(box.distanceToSqr(eye)), box)); // Ostinato
             }
         } else if (kit.crystals > 0 && g.crystals > 0 && crystalGap == 0 && !eating && dist > 2.0 && dist < 5.0) {
             // crystal kit: a crystal popped at the foe's feet every second it stands in range (simplified: no blocks are placed)
@@ -255,14 +269,19 @@ final class FreecamSpar {
         float yaw = (float) Math.toDegrees(Mth.atan2(-d.x, d.z));
         float pitch = (float) -Math.toDegrees(Math.atan2(d.y, Math.max(0.05, Math.hypot(d.x, d.z))));
         float[] vel = {yawVel};
-        float ny = LookBehavior.modelYawStep(ghost.getYRot(), yawVel, yaw, vel); // the bot's own hand model
+        float ny = LookBehavior.modelYawStep(gYaw, yawVel, yaw, vel); // the bot's own hand model
         yawVel = vel[0];
-        float np = ghost.getXRot() + Mth.clamp(pitch - ghost.getXRot(), -20, 20);
+        float np = gPitch + Mth.clamp(pitch - gPitch, -20, 20);
         ghost.setYRot(ny);
         ghost.setYHeadRot(ny);
         ghost.setYBodyRot(ny);
         ghost.setXRot(Mth.clamp(np, -90, 90));
+        gYaw = ny;
+        gPitch = Mth.clamp(np, -90, 90);
     }
+
+    // Ostinato: the ghost's own aim; a RemotePlayer's tick may pull its rotation back toward the last network value
+    private float gYaw, gPitch;
 
     private float yawVel;
 
@@ -300,6 +319,20 @@ final class FreecamSpar {
     private void note(String s) {
         if (recorder != null) recorder.note(s);
         if (Boolean.getBoolean("ostinato.spar.log")) System.out.println("[SPAR] " + s);
+    }
+
+    private String lastKeys = "";
+
+    /** Ostinato: one line for the headless check. */
+    String debug(Entity camera) {
+        if (ghost == null) return "no ghost";
+        return String.format(Locale.ROOT, "ghost %.2f %.2f %.2f cam %.2f %.2f %.2f dist %.2f dec=%s keys=%s cd=%.2f tc=%d camHurt=%d", ghost.getX(), ghost.getY(), ghost.getZ(),
+                camera.getX(), camera.getY(), camera.getZ(), Math.sqrt(ghost.distanceToSqr(camera)), dec, lastKeys, ghost.getAttackStrengthScale(0.5f), ghost.tickCount,
+                camera instanceof LivingEntity le ? le.hurtTime : -1);
+    }
+
+    Entity ghost() {
+        return ghost;
     }
 
     String hudLine() {
@@ -355,19 +388,38 @@ final class FreecamSpar {
 
     private void spawn(Player owner, Entity camera) {
         if (!(owner.level() instanceof ClientLevel level)) return;
-        RemotePlayer born = new RemotePlayer(level, new GameProfile(UUID.randomUUID(), "Spar"));
+        RemotePlayer born = new RemotePlayer(level, new GameProfile(UUID.randomUUID(), "Spar")) {
+            @Override
+            public boolean isPushable() {
+                return false; // Ostinato: the real player must never be shoved by the ghost
+            }
+
+            @Override
+            protected void pushEntities() {
+                // Ostinato: nor does the ghost shove anyone it walks through
+            }
+
+            @Override
+            public void push(Entity e) {
+            }
+        };
         Vec3 look = camera.getLookAngle();
         double x = camera.getX() + look.x * 4, z = camera.getZ() + look.z * 4;
         born.snapTo(x, camera.getY(), z, camera.getYRot() + 180, 0);
         born.setCustomName(Component.literal("Spar [" + kit.name + "]"));
         born.setCustomNameVisible(true);
+        born.setId(-2_000_000 - round); // Ostinato: 26.3 leaves client-made entities without an id; a negative one never meets the server's
         try {
             level.addEntity(born);
         } catch (RuntimeException ex) {
+            System.out.println("Ostinato spar: could not add the ghost: " + ex); // Ostinato
             born.discard();
             return;
         }
         ghost = born;
+        gYaw = born.getYRot();
+        gPitch = 0;
+        if (Boolean.getBoolean("ostinato.spar.log")) System.out.println("[SPAR] ghost " + born.getId() + " at " + born.position()); // Ostinato
         weapon = 0;
         equip();
         brain = new SparBrain(baritone);

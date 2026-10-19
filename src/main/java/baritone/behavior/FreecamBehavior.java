@@ -125,6 +125,39 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
     }
 
+    // Ostinato: headless check, -Dostinato.spar.test=<kit>: starts a spar, swings at the ghost, reports, and quits
+    private int sparTestTicks;
+    private double[] sparTestStart;
+
+    private void sparTest(TickEvent event) {
+        String kit = System.getProperty("ostinato.spar.test");
+        LocalPlayer p = ctx.player();
+        if (kit == null || event.getType() != TickEvent.Type.IN || p == null) return;
+        sparTestTicks++;
+        if (sparTestTicks == 100) {
+            sparTestStart = new double[]{p.getX(), p.getY(), p.getZ(), p.getHealth()};
+            toggleSpar(kit);
+        }
+        if (sparTestTicks < 100 || camera == null) return;
+        Entity gh = spar.ghost();
+        if (gh != null) {
+            Vec3 d = gh.getEyePosition().subtract(camera.getEyePosition());
+            camera.setYRot((float) (Mth.atan2(d.z, d.x) * Mth.RAD_TO_DEG) - 90f);
+            camera.setXRot((float) -(Mth.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)) * Mth.RAD_TO_DEG));
+            if (sparTestTicks % 13 == 0 && camera.distanceTo(gh) < 3.0) spar.attack(camera);
+        }
+        if (sparTestTicks % 20 == 0) {
+            System.out.println("[SPARTEST] t=" + sparTestTicks + " " + spar.hudLine() + " landedYou=" + FreecamSpar.landedYou
+                    + " landedGhost=" + FreecamSpar.landedGhost + " leaks=" + FreecamSpar.leaks + " | " + spar.debug(camera) + String.format(java.util.Locale.ROOT, " | bot %.2f %.2f %.2f", p.getX(), p.getY(), p.getZ()));
+        }
+        if (sparTestTicks == 1500) {
+            System.out.println(String.format(java.util.Locale.ROOT, "[SPARTEST] done kit=%s landedYou=%d landedGhost=%d leaks=%d bot moved %.3f hp %.1f -> %.1f",
+                    kit, FreecamSpar.landedYou, FreecamSpar.landedGhost, FreecamSpar.leaks,
+                    Math.sqrt(p.distanceToSqr(sparTestStart[0], sparTestStart[1], sparTestStart[2])), sparTestStart[3], p.getHealth()));
+            mc.stop();
+        }
+    }
+
     /** Spar score line, or null when no spar is running. */
     public static String sparHud() {
         return sparLine;
@@ -327,6 +360,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     @Override
     public void onTick(TickEvent event) {
+        sparTest(event);
         pollToggleKey();
         if (camera == null) {
             return;
