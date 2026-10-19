@@ -38,10 +38,8 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
@@ -500,36 +498,218 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
 
     private final List<Object[]> pending = new ArrayList<>(); // {dueMs, command, shownAs}
 
-    /** Sends a command after a human-like pause, at most one every 4 s. Shown in the log only as {@code shown}. */
+    /**
+     * Queues a command, typed into chat key by key after a think pause, at most one every 4 s. Shown in the log only
+     * as {@code shown}.
+     */
     private void sendLater(String cmd, String shown, long now) {
-        long due = Math.max(now + 1500 + rnd.nextInt(2000), nextActionMs);
+        long due = Math.max(now + HumanInput.between(rnd, s().autoSpectateThinkMinMs.value, s().autoSpectateThinkMaxMs.value), nextActionMs);
         nextActionMs = due + 4000;
         pending.add(new Object[]{due, cmd, shown});
     }
 
-    private boolean flushPending(Minecraft mc, long now) {
+    // Ostinato: human typing state
+    private String typing, typingShown;
+    private long[] typeDelays;
+    private int typeIdx;
+    private long typeNext;
+
+    private boolean busy() {
+        return typing != null || path != null || hoverUntil != 0 || releaseAt != 0;
+    }
+
+    private void flushPending(Minecraft mc, long now) {
+        if (typing != null) {
+            type(mc, now);
+            return;
+        }
+        if (busy() || mc.gui.screen() != null) return; // chat opens only over the world
         for (Iterator<Object[]> it = pending.iterator(); it.hasNext(); ) {
             Object[] p = it.next();
-            if ((long) p[0] <= now) {
-                it.remove();
-                if (commandsSent >= 10) {
-                    note("command cap reached; not sending " + p[2]);
-                    return true;
+            if ((long) p[0] > now) continue;
+            it.remove();
+            if (commandsSent >= 10) {
+                note("command cap reached; not sending " + p[2]);
+                return;
+            }
+            typing = "/" + p[1];
+            typingShown = (String) p[2];
+            typeDelays = HumanInput.keyDelays(typing, rnd, s().autoSpectateKeyMinMs.value, s().autoSpectateKeyMaxMs.value);
+            typeIdx = 0;
+            // the chat key, then a beat before the first key
+            mc.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false));
+            typeNext = now + HumanInput.between(rnd, 150, 400);
+            note("typing /" + typingShown);
+            return;
+        }
+    }
+
+    /** One step of typing: each key at its own time, then enter, then the password is taken out of the chat history. */
+    private void type(Minecraft mc, long now) {
+        if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen)) {
+            note("chat closed while typing /" + typingShown + "; dropped");
+            typing = null;
+            return;
+        }
+        long handle = mc.getWindow().handle();
+        while (typeIdx < typing.length() && now >= typeNext) {
+            mc.keyboardHandler.charTyped(handle, new net.minecraft.client.input.CharacterEvent(typing.charAt(typeIdx)));
+            typeNext += typeDelays[typeIdx];
+            typeIdx++;
+        }
+        if (typeIdx < typing.length() || now < typeNext) return;
+        var enter = new net.minecraft.client.input.KeyEvent(com.mojang.blaze3d.platform.InputConstants.KEY_RETURN, 13, 0);
+        mc.keyboardHandler.keyPress(handle, 1, enter);
+        mc.keyboardHandler.keyPress(handle, 0, enter);
+        commandsSent++;
+        note("sent /" + typingShown);
+        scrubHistory(mc);
+        typing = null;
+        if (mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen) mc.gui.setScreen(null);
+    }
+
+    /** The chat box, wherever 26.3 keeps it under the gui (a field or a field of a field). */
+    private static Object findChat(Object o, int depth) {
+        if (o == null || depth < 0) return null;
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType().isPrimitive() || java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(o);
+                    if (v instanceof net.minecraft.client.gui.components.ChatComponent) return v;
+                    if (v != null && v.getClass().getName().startsWith("net.minecraft.client.gui") && depth > 0) {
+                        Object r = findChat(v, depth - 1);
+                        if (r != null) return r;
+                    }
+                } catch (Throwable ignored) {
                 }
-                commandsSent++;
-                note("send /" + p[2]);
-                mc.player.connection.sendCommand((String) p[1]);
-                return true;
             }
         }
-        return false;
+        return null;
+    }
+
+    /** The typed /register and /login stay out of the chat history and command_history.txt. */
+    private void scrubHistory(Minecraft mc) {
+        String pw = peekPassword();
+        if (pw == null || pw.isEmpty()) return;
+        try {
+            Object chat = findChat(mc.gui, 2);
+            if (chat instanceof net.minecraft.client.gui.components.ChatComponent cc) cc.getRecentChat().removeIf(x -> x.contains(pw));
+        } catch (Throwable ignored) {
+        }
+        try {
+            java.lang.reflect.Field f = Minecraft.class.getDeclaredField("commandHistory");
+            f.setAccessible(true);
+            Object h = f.get(mc);
+            java.lang.reflect.Field l = h.getClass().getDeclaredField("lastCommands");
+            l.setAccessible(true);
+            ((java.util.Collection<String>) l.get(h)).removeIf(x -> x.contains(pw));
+            java.lang.reflect.Method save = h.getClass().getDeclaredMethod("save");
+            save.setAccessible(true);
+            save.invoke(h);
+        } catch (Throwable t) {
+            note("could not scrub command history: " + t);
+        }
     }
 
     @Override
     public void onPostTick(TickEvent event) {
         if (phase == Phase.IDLE || event.getType() != TickEvent.Type.IN) return;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) flushPending(mc, System.currentTimeMillis());
+        if (mc.player != null) {
+            long now = System.currentTimeMillis();
+            flushPending(mc, now);
+            cursor(mc, now);
+        }
+    }
+
+    @Override
+    public void onRenderPass(baritone.api.event.events.RenderEvent event) {
+        if (phase == Phase.IDLE) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        long now = System.currentTimeMillis();
+        if (typing != null) type(mc, now);
+        cursor(mc, now); // smoother than ticks
+    }
+
+    // ------------------------------------------------------------------ human cursor
+
+    private List<double[]> path;
+    private long pathStart, hoverUntil, releaseAt;
+    private int pathContainer = -1, lastMenuId = -1, pathSlot = -1;
+    private String pathName;
+
+    /** Window pixels of a slot's middle, a few gui pixels off centre. */
+    private double[] slotPx(Minecraft mc, AbstractContainerScreen<?> cs, Slot sl) {
+        int left = 0, top = 0;
+        try {
+            java.lang.reflect.Field lf = AbstractContainerScreen.class.getDeclaredField("leftPos"), tf = AbstractContainerScreen.class.getDeclaredField("topPos");
+            lf.setAccessible(true);
+            tf.setAccessible(true);
+            left = lf.getInt(cs);
+            top = tf.getInt(cs);
+        } catch (Throwable ignored) {
+        }
+        double gx = left + sl.x + 8 + (rnd.nextDouble() * 2 - 1) * 4, gy = top + sl.y + 8 + (rnd.nextDouble() * 2 - 1) * 4;
+        var w = mc.getWindow();
+        double sx = (double) w.getScreenWidth() / w.getGuiScaledWidth(), sy = (double) w.getScreenHeight() / w.getGuiScaledHeight();
+        return new double[]{gx * sx, gy * sy};
+    }
+
+    private void startClick(Minecraft mc, AbstractContainerScreen<?> cs, Slot sl, String name, long now) {
+        double[] to = slotPx(mc, cs, sl);
+        path = HumanInput.cursorPath(mc.mouseHandler.xpos(), mc.mouseHandler.ypos(), to[0], to[1], rnd);
+        pathStart = now;
+        pathContainer = cs.getMenu().containerId;
+        pathSlot = sl.index;
+        pathName = name;
+    }
+
+    /** Moves the cursor along its path, rests on the slot, then presses and releases the left button. */
+    private void cursor(Minecraft mc, long now) {
+        long handle = mc.getWindow().handle();
+        if (releaseAt != 0 && now >= releaseAt) {
+            mc.mouseHandler.onButton(handle, new net.minecraft.client.input.MouseButtonInfo(0, 0), 0);
+            releaseAt = 0;
+            nextActionMs = now + HumanInput.between(rnd, s().autoSpectateClickGapMinMs.value, s().autoSpectateClickGapMaxMs.value);
+        }
+        if (path == null && hoverUntil == 0) return;
+        if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> cs) || cs.getMenu().containerId != pathContainer) {
+            path = null; // the menu went away under the cursor
+            hoverUntil = 0;
+            return;
+        }
+        if (path != null) {
+            long el = now - pathStart;
+            double[] at = path.get(path.size() - 1);
+            for (double[] p : path) if (p[0] >= el) {
+                at = p;
+                break;
+            }
+            double ox = mc.mouseHandler.xpos(), oy = mc.mouseHandler.ypos();
+            mc.mouseHandler.onMove(handle, at[1], at[2], at[1] - ox, at[2] - oy);
+            if (el >= path.get(path.size() - 1)[0]) {
+                path = null;
+                hoverUntil = now + HumanInput.between(rnd, s().autoSpectateHoverMinMs.value, s().autoSpectateHoverMaxMs.value);
+            }
+            return;
+        }
+        if (now < hoverUntil) return;
+        hoverUntil = 0;
+        clicks++;
+        note("click \"" + pathName + "\" (slot " + pathSlot + ")");
+        mc.mouseHandler.onButton(handle, new net.minecraft.client.input.MouseButtonInfo(0, 0), 1);
+        releaseAt = now + HumanInput.between(rnd, 50, 110);
+        nextActionMs = Long.MAX_VALUE; // set on release
+    }
+
+    private static void key(Minecraft mc, int key, int keycode) {
+        long h = mc.getWindow().handle();
+        var ev = new net.minecraft.client.input.KeyEvent(key, keycode, 0);
+        mc.keyboardHandler.keyPress(h, 1, ev);
+        mc.keyboardHandler.keyPress(h, 0, ev);
     }
 
     // ------------------------------------------------------------------ menus
@@ -563,18 +743,20 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         }
         String key = title + " | " + String.join(", ", names);
         if (menusSeen.add(key)) note("menu \"" + title + "\": " + String.join(", ", names));
-        if (now < nextActionMs) return;
+        if (m.containerId != lastMenuId) { // Ostinato: a person reads a menu before clicking in it
+            lastMenuId = m.containerId;
+            nextActionMs = Math.max(nextActionMs, now + HumanInput.between(rnd, s().autoSpectateReadMinMs.value, s().autoSpectateReadMaxMs.value));
+        }
+        if (busy() || now < nextActionMs) return;
         if (best == null || clicks >= 12 || phase == Phase.WATCH) {
             // nothing to do here (or already watching): close it like a person would
             nextActionMs = now + 2000 + rnd.nextInt(1500);
-            if (now - menuOpenedMs(now) > 3000) cs.onClose();
+            if (now - menuOpenedMs(now) > 3000) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27); // Ostinato: Esc, like a person
             return;
         }
-        clicks++;
         String n = COLOR.matcher(best.getItem().getHoverName().getString()).replaceAll("");
-        note("click \"" + n + "\" in \"" + title + "\"");
-        Minecraft.getInstance().gameMode.handleContainerInput(m.containerId, best.index, 0, ContainerInput.PICKUP, Minecraft.getInstance().player);
-        nextActionMs = now + 3000 + rnd.nextInt(3000);
+        note("move to \"" + n + "\" in \"" + title + "\"");
+        startClick(Minecraft.getInstance(), cs, best, n, now); // Ostinato: the cursor travels there, rests, then clicks
         if (want != null) routeStep++;
         if (n.toLowerCase(Locale.ROOT).matches(".*\\b(spectate|spectator|spec|watch)\\b.*")) spectateTried = true;
         menuSeenAt = 0;
@@ -590,7 +772,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     // ------------------------------------------------------------------ route and fallback
 
     private void route(Minecraft mc, long now) {
-        if (now < nextActionMs || !pending.isEmpty()) return;
+        if (pendingUse != 0 && now >= pendingUse) {
+            pendingUse = 0;
+            net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.getKey(mc.options.keyUse.saveString()));
+        }
+        if (now < nextActionMs || !pending.isEmpty() || busy()) return;
         menuSeenAt = 0;
         if (routeStep < route.size()) {
             String[] st = route.get(routeStep);
@@ -626,6 +812,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         enterWatch(now);
     }
 
+    private long pendingUse;
+
     private boolean useHotbar(Minecraft mc, long now, Pattern p) {
         Player pl = mc.player;
         for (int i = 0; i < 9; i++) {
@@ -636,8 +824,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             if (p.matcher(l).find() && !NEVER.matcher(l).find()) {
                 hotbarUses++;
                 note("hotbar " + i + " \"" + n + "\" (use)");
-                pl.getInventory().setSelectedSlot(i);
-                mc.gameMode.useItem(pl, InteractionHand.MAIN_HAND);
+                key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + i, '1' + i); // Ostinato: the number key, then the use button a moment later
+                long useAt = now + HumanInput.between(rnd, 250, 600);
+                pendingUse = useAt;
                 nextActionMs = now + 3000 + rnd.nextInt(2000);
                 return true;
             }

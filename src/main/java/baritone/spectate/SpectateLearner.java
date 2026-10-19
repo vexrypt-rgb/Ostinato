@@ -187,6 +187,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             seen.clear();
             looks.clear(); // Ostinato
             pendingSplash.clear(); // Ostinato
+            firstSeenTick.clear(); // Ostinato: joined late; arriving in a world starts every clock over
+            lastHurtTick.clear();
+            hpBefore.clear();
             closeRecorders();
             post(l -> {
                 l.minds.clear();
@@ -201,6 +204,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             if (!seen.isEmpty()) seen.clear();
             looks.clear(); // Ostinato
             pendingSplash.clear(); // Ostinato
+            firstSeenTick.clear(); // Ostinato: joined late: turning watching on is an arrival
             closeRecorders();
             return;
         }
@@ -230,6 +234,15 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             }
         }
         for (Player p : near) if (keep.contains(p.getId())) seen.computeIfAbsent(p.getId(), k -> new Seen(p));
+        // Ostinato: joined late: who came into range when (leaving range starts it over), and their health this tick
+        Set<Integer> nearIds = new HashSet<>();
+        for (Player p : near) {
+            nearIds.add(p.getId());
+            firstSeenTick.putIfAbsent(p.getId(), tick);
+        }
+        firstSeenTick.keySet().retainAll(nearIds);
+        hpBefore.keySet().retainAll(nearIds);
+        for (Player p : near) hpBefore.put(p.getId(), p.getHealth());
         for (Seen sn : seen.values()) use(sn);
         lookAll(near); // Ostinato: kits and team clues of everyone in range
         if (!pendingSplash.isEmpty()) resolveSplashes(); // Ostinato
@@ -238,9 +251,10 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             int att = (Integer) h[0], vic = (Integer) h[1];
             boolean ranged = (Boolean) h[5]; // Ostinato
             boolean crit = !ranged && critVictims.contains(vic);
+            String late = (String) h[6]; // Ostinato: joined late
             String an = (String) h[2], vn = (String) h[3];
             int t = (Integer) h[4];
-            post(l -> l.hitW(t, att, an, vic, vn, crit, ranged));
+            post(l -> l.hitW(t, att, an, vic, vn, crit, ranged, late));
         }
         pendingHits.clear();
         critVictims.clear();
@@ -266,6 +280,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             int t = tick;
             boolean apart = s().spectateFightTypes.value;
             post(l -> l.book.multiApart(apart));
+            boolean late = s().spectateLearnLateFights.value; // Ostinato
+            post(l -> l.book.includeLate(late));
             boolean learnKits = s().spectateLearnKits.value;
             post(l -> l.book.learnKits(learnKits));
             post(l -> l.book.track(t, where));
@@ -445,6 +461,14 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     @Override
     public void damage(Entity e, ClientboundDamageEventPacket p) {
         if (!active()) return;
+        try {
+            damage0(e, p);
+        } finally {
+            if (e instanceof Player) lastHurtTick.put(e.getId(), tick); // Ostinato: joined late (mid-combo), after this hit's own check
+        }
+    }
+
+    private void damage0(Entity e, ClientboundDamageEventPacket p) {
         net.minecraft.world.damagesource.DamageSource src = p.getSource(Minecraft.getInstance().level);
         Entity att = src.getEntity();
         if (!(e instanceof Player victim) || !(att instanceof Player attacker) || att == e) return;
@@ -453,7 +477,37 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId()) && !looks.containsKey(victim.getId()) && !looks.containsKey(attacker.getId())) return; // Ostinato: or looked at
         Seen as = seen.get(attacker.getId());
         if (as != null) as.hits++;
-        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick, ranged});
+        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick, ranged,
+                lateSigns(attacker, true) != null ? lateSigns(attacker, true) : lateSigns(victim, false)}); // Ostinato: joined late
+    }
+
+    // Ostinato: joined-late detection. Main thread: when each player came in sight, their health the tick before, their last hurt.
+    static final int LATE_ARRIVAL = 100, LATE_COMBO = 10;
+    private final Map<Integer, Integer> firstSeenTick = new HashMap<>(), lastHurtTick = new HashMap<>();
+    private final Map<Integer, Float> hpBefore = new HashMap<>();
+
+    /**
+     * Why a fight whose first seen hit involves {@code p} would have begun before we saw it, or null. The victim's own
+     * health and hurt time already carry this hit, so for it the health of the tick before and earlier hurts are used.
+     */
+    private String lateSigns(Player p, boolean attacker) {
+        int id = p.getId();
+        Integer first = firstSeenTick.get(id);
+        float hp = attacker ? p.getHealth() : hpBefore.getOrDefault(id, p.getHealth());
+        return lateReason(p.getName().getString(), hp, p.getMaxHealth(), p.getAbsorptionAmount(),
+                attacker ? p.hurtTime > 0 : false, lastHurtTick.containsKey(id) ? tick - lastHurtTick.get(id) : Integer.MAX_VALUE,
+                p.hasEffect(net.minecraft.world.effect.MobEffects.ABSORPTION) || p.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION),
+                first == null ? 0 : tick - first);
+    }
+
+    /** Ostinato: the joined-late rule on its own (unit tested). Null when nothing says the fight was under way. */
+    static String lateReason(String name, float hp, float maxHp, float absorption, boolean hurtNow, int sinceHurt, boolean gapple, int sinceSeen) {
+        if (sinceSeen < LATE_ARRIVAL) return "arrived:" + name;
+        if (hp < maxHp - 0.5f) return "hurt:" + name;
+        if (absorption > 0) return "absorption:" + name;
+        if (hurtNow || sinceHurt <= LATE_COMBO) return "combo:" + name;
+        if (gapple) return "gapple:" + name;
+        return null;
     }
 
     @Override
@@ -795,9 +849,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         logDecode(id, name, o, d, t);
     }
 
-    private void hitW(int t, int att, String an, int vic, String vn, boolean crit, boolean ranged) {
-        // Ostinato: crit kept on the group's hit list; ranged hits let the fight drift further
-        FightBook.Fight f = ranged ? book.rangedHit(t, att, an, vic, vn) : book.hit(t, att, an, vic, vn, crit);
+    private void hitW(int t, int att, String an, int vic, String vn, boolean crit, boolean ranged, String late) {
+        // Ostinato: crit kept on the group's hit list; ranged hits let the fight drift further; late only marks a new fight
+        FightBook.Fight f = ranged ? book.rangedHit(t, att, an, vic, vn, late) : book.hit(t, att, an, vic, vn, crit, late);
         synchronized (activeFights) {
             long key = f.serial; // Ostinato: the fight's serial, as the same pair may fight again while a log waits
             boolean have = false;
@@ -839,7 +893,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         FightGroup g = f.group;
         List<String> lines = new ArrayList<>();
         lines.add(String.format(Locale.ROOT, "#type %s shape=%s players=%d group=%d%s%s", f.type(), g == null ? "1v1" : g.shape, g == null ? 2 : g.members.size(),
-                g == null ? 0 : g.id, counts ? "" : " short", f.type().equals("1v1") || !s().spectateFightTypes.value ? "" : " multi"));
+                g == null ? 0 : g.id, counts ? "" : " short", f.type().equals("1v1") || !s().spectateFightTypes.value ? "" : " multi")
+                + (f.late == null ? "" : " late=" + f.late)); // Ostinato: joined late
         if (g != null && !g.type.equals("1v1")) lines.add("#teams " + g.teamsLine());
         lines.add(kitLine("me", f.nameA, f.kitA, f.a));
         lines.add(kitLine("tg", f.nameB, f.kitB, f.b));

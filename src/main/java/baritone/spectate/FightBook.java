@@ -41,6 +41,12 @@ public final class FightBook {
         // Ostinato: kit detection and fight type, set when the fight's group closes
         public FightGroup group;
         public KitSignatures.Result kitA, kitB;
+        /**
+         * Ostinato: joined late: when the spectator first saw it, it was already under way (a fighter hurt, on
+         * absorption, mid-combo, on a gapple, or the spectator had just arrived). Null for a fight seen from its start.
+         * Its habits are still learned; its result stays out of the winner and loser tallies unless {@link #includeLate}.
+         */
+        public String late;
 
         /** {@code 1v1}, {@code ffa} or {@code team}; 1v1 until the group closes. */
         public String type() {
@@ -109,6 +115,8 @@ public final class FightBook {
     private java.util.function.Consumer<Fight> onPairEnd;
     private java.util.function.BiConsumer<Fight, Boolean> onSettled;
     private boolean multiApart = true;
+    private boolean includeLate; // Ostinato: joined-late fights
+    int lateSkipped;
     private java.util.function.Consumer<FightGroup> onGroup;
     private KitSignatures signatures;
     private LearnedKits learned; // null: the game folder's
@@ -137,6 +145,11 @@ public final class FightBook {
 
     /** Ostinato: {@code crit} kept on the group's hit list. */
     public Fight hit(int tick, int attacker, String attackerName, int victim, String victimName, boolean crit) {
+        return hit(tick, attacker, attackerName, victim, victimName, crit, null);
+    }
+
+    /** Ostinato: {@code late}, if not null, says why a fight this hit starts had begun before it was seen. */
+    public Fight hit(int tick, int attacker, String attackerName, int victim, String victimName, boolean crit, String late) {
         long k = key(attacker, victim);
         Fight f = active.get(k);
         // Ostinato: the hit ties both into one group, merging two groups it crosses
@@ -151,6 +164,7 @@ public final class FightBook {
             f = attacker < victim ? new Fight(attacker, attackerName, victim, victimName, tick) : new Fight(victim, victimName, attacker, attackerName, tick);
             active.put(k, f);
             f.group = g;
+            f.late = late; // Ostinato: joined late
             g.open++;
             if (onStart != null) onStart.accept(f);
         }
@@ -162,7 +176,11 @@ public final class FightBook {
 
     /** Ostinato: a ranged hit (arrow, trident): a hit like any other, and the fight may be fought from further. */
     public Fight rangedHit(int tick, int attacker, String attackerName, int victim, String victimName) {
-        Fight f = hit(tick, attacker, attackerName, victim, victimName, false);
+        return rangedHit(tick, attacker, attackerName, victim, victimName, null);
+    }
+
+    public Fight rangedHit(int tick, int attacker, String attackerName, int victim, String victimName, String late) {
+        Fight f = hit(tick, attacker, attackerName, victim, victimName, false, late);
         f.ranged = true;
         return f;
     }
@@ -237,6 +255,16 @@ public final class FightBook {
     /** Whether FFA and team fights are kept out of the 1v1 tallies ({@code spectateFightTypes}); on by default. */
     public void multiApart(boolean on) {
         multiApart = on;
+    }
+
+    /** Ostinato: let fights joined late count toward winners and losers too ({@code spectateLearnLateFights}). */
+    public void includeLate(boolean on) {
+        includeLate = on;
+    }
+
+    /** Ostinato: decided fights kept out of the tallies because they were joined late. */
+    public int lateSkipped() {
+        return lateSkipped;
     }
 
     /** Forgets everyone's kit and team clues (another world: entity ids start over). */
@@ -413,6 +441,12 @@ public final class FightBook {
         }
         // Ostinato: FFA and team fights stay out of the 1v1 tallies (kept in the group for multi-opponent skills)
         if (multiApart && !f.type().equals("1v1")) {
+            if (onEnd != null) onEnd.ended(f, winner, why);
+            return;
+        }
+        // Ostinato: a fight joined late is missing its start; its result would bias what winners and losers did
+        if (f.late != null && !includeLate) {
+            lateSkipped++;
             if (onEnd != null) onEnd.ended(f, winner, why);
             return;
         }
