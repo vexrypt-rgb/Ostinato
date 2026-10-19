@@ -8,6 +8,8 @@
 #   authclick prompt words | choice   during login, click the [choice] button of the chat message with these words
 #                (a humanized click in chat, before /register or /login; menus wait until login is done)
 # The login plugin first asks "Are you using a premium account? [✔ Yes] [✖ No]": this throwaway is cracked.
+# Practice, FFA, Casual, and Competitive join as a fighter. This route only asks to spectate.
 authclick premium account | no
-words spectate,spectator,spec,watch,ffa,arena,practice,duel
+cmd spectate
 wait 3
+words spectate,spectator,spec,watch

@@ -66,4 +66,17 @@ public class ServerSpectateTest {
         assertTrue(ServerSpectate.loggedInText("you have successfully logged in."));
         assertTrue(ServerSpectate.loggedInText("welcome back, you are now logged in"));
     }
+
+    @Test
+    public void readsQueueBarsAndRefusesJoinButtons() { // Ostinato: fights are named on the queue bar, not in the lobby
+        assertEquals("itskrtk", ServerSpectate.queueingPlayer("itskrtk is queueing for crystal"));
+        assertEquals("itskrtk", ServerSpectate.queueingPlayer("sword itskrtk is queueing for spearmace"));
+        assertNull(ServerSpectate.queueingPlayer("you have 89 seconds to login."));
+        assertNull(ServerSpectate.queueingPlayer("you have successfully logged."));
+        String[] w = {"spectate", "spectator", "spec", "watch"};
+        assertEquals(-1, ServerSpectate.score("Casual Match", w));
+        assertEquals(-1, ServerSpectate.score("Competitive Match", w));
+        assertEquals(0, ServerSpectate.score("Practice", w));
+        assertTrue(ServerSpectate.score("Spectate", w) > 0);
+    }
 }
