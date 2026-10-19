@@ -25,6 +25,8 @@ import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.api.utils.input.Input;
 import baritone.behavior.Behavior;
+
+import java.io.File;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -163,7 +165,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     static int menuScore(String titleOnly, String itemId, String want) {
         if (want == null || want.isEmpty()) return 0;
         String title = titleOnly == null ? "" : titleOnly.toLowerCase(Locale.ROOT);
-        if (title.contains(want)) return 100; // Ostinato: an explicit mode name wins, even when the old spectate list blocks "casual"
+        // Ostinato: "Mace" must beat "SpearMace", and "SMP" must beat "DiamondSMP".
+        if (title.equals(want) || title.startsWith(want + " ") || title.startsWith(want + "|")) return 100;
+        if (title.contains(want)) return 40; // an explicit mode name still wins over the old spectate never-list
         if (NEVER.matcher(title).find()) return -1;
         String id = itemId == null ? "" : itemId.toLowerCase(Locale.ROOT);
         if (want.equals("crystal") && id.contains("crystal")) return 50;
@@ -206,6 +210,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private boolean awaitingNextMenu;
     /** Ostinato: walk and punch the ready gate until this time. The round teleports anyone still behind it. */
     private long gateUntil;
+    /** Ostinato: Casual kits, in menu order. Crystal already won one fight, so the next queue starts at Sword. */
+    private static final String[] KITS = {
+            "crystal", "sword", "mace", "axe", "uhc", "spearmace", "nethpot", "pot", "cart", "smp", "diamondsmp"
+    };
+    private int kitIndex = 1;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
@@ -394,6 +403,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         clickedMenuAt = 0;
         awaitingNextMenu = false;
         gateUntil = 0;
+        loadKit();
         swordSlotUsed = -1;
         spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
@@ -1213,7 +1223,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         Slot best = null;
         int bestScore = 0;
         String want = null;
-        if (phase == Phase.ROUTE && routeStep < route.size() && route.get(routeStep)[0].equals("click")) want = route.get(routeStep)[1].toLowerCase(Locale.ROOT);
+        if (phase == Phase.ROUTE && routeStep < route.size() && route.get(routeStep)[0].equals("click")) {
+            boolean last = routeStep + 1 >= route.size();
+            want = route.get(routeStep)[1].toLowerCase(Locale.ROOT);
+            if (last && queueRoute) want = KITS[Math.floorMod(kitIndex, KITS.length)]; // Ostinato: rotate kits, each item is named the kit
+        }
         for (Slot sl : m.slots) {
             if (sl.container instanceof net.minecraft.world.entity.player.Inventory) continue;
             ItemStack st = sl.getItem();
@@ -1269,6 +1283,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                 awaitingNextMenu = false;
                 routeStep++;
                 note("queued " + want);
+                advanceKit();
             } else {
                 awaitingNextMenu = true; // Ostinato: count this click only when the next menu opens
             }
@@ -1303,6 +1318,53 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         in.setInputForceState(Input.MOVE_FORWARD, false);
         in.setInputForceState(Input.SPRINT, false);
         in.setInputForceState(Input.CLICK_LEFT, false);
+    }
+
+    /** Ostinato: the hotbar sword step in the route, or 0 when the route has none. */
+    private int swordStep() {
+        for (int i = 0; i < route.size(); i++) {
+            if (route.get(i)[0].equals("hotbar") && route.get(i)[1].equalsIgnoreCase("sword")) return i;
+        }
+        return 0;
+    }
+
+    private boolean hotbarHas(Minecraft mc, String want) {
+        if (mc.player == null) return false;
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = mc.player.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (hotbarHit(n, id, want)) return true;
+        }
+        return false;
+    }
+
+    private File kitFile() {
+        return new File(Minecraft.getInstance().gameDirectory, "baritone/servers/crackedpvp.club.kit");
+    }
+
+    private void loadKit() {
+        try {
+            File f = kitFile();
+            if (!f.isFile()) return;
+            String w = java.nio.file.Files.readString(f.toPath()).trim().toLowerCase(Locale.ROOT);
+            for (int i = 0; i < KITS.length; i++) if (KITS[i].equals(w)) kitIndex = i;
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Ostinato: the next queue uses the next kit. The name is stored beside the server route. */
+    private void advanceKit() {
+        kitIndex = Math.floorMod(kitIndex + 1, KITS.length);
+        try {
+            File f = kitFile();
+            File parent = f.getParentFile();
+            if (parent != null) parent.mkdirs();
+            java.nio.file.Files.writeString(f.toPath(), KITS[kitIndex]);
+        } catch (Exception ignored) {
+        }
+        note("next kit " + KITS[kitIndex]);
     }
 
     /** Ostinato: after a match, queue again from the Play Menu sword when it is already in the hotbar. */
@@ -1396,6 +1458,12 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                         routeStep++;
                         hotbarMissingSince = 0;
                         hotbarMissLogged = false;
+                    } else if (want.equals("clock") && swordStep() > 0 && hotbarHas(mc, "sword")) {
+                        // Ostinato: a finished match leaves us in the practice lobby. The clock is back at the hub.
+                        routeStep = swordStep();
+                        hotbarMissingSince = 0;
+                        hotbarMissLogged = false;
+                        note("lobby sword, skipping the clock");
                     } else {
                         if (hotbarMissingSince == 0) hotbarMissingSince = now;
                         if (!hotbarMissLogged && now - hotbarMissingSince > 4000) {

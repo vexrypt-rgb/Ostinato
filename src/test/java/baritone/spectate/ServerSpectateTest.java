@@ -93,6 +93,10 @@ public class ServerSpectateTest {
         assertEquals(50, ServerSpectate.menuScore("Practice", "end_crystal", "crystal"));
         assertEquals(-1, ServerSpectate.menuScore("Ranked Queue", "end_crystal", "crystal"));
         assertEquals(100, ServerSpectate.menuScore("Casual Match", "iron_sword", "casual"));
+        assertTrue(ServerSpectate.menuScore("SMP | info", "diamond_sword", "smp")
+                > ServerSpectate.menuScore("DiamondSMP | info", "diamond_sword", "smp"));
+        assertTrue(ServerSpectate.menuScore("Mace | info", "mace", "mace")
+                > ServerSpectate.menuScore("SpearMace | info", "mace", "mace"));
         assertEquals(-1, ServerSpectate.menuScore("Casual Match", "iron_sword", "crystal"));
         assertEquals(0, ServerSpectate.menuScore("Sword", "diamond_sword", "crystal"));
         assertTrue(ServerSpectate.hitTheGate("hit the gate to ready up!"));
