@@ -217,7 +217,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         // whom to watch: the nearest players, as many as the budget allows
         List<Player> near = new ArrayList<>();
         for (Player p : level.players()) {
-            if (p != me && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
+            // Ostinato: negative ids are client-made (the freecam spar ghost), never a real player to learn from
+            if (p != me && p.getId() >= 0 && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
         }
         near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(me)));
         Set<Integer> keep = new HashSet<>();
@@ -432,7 +433,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         LivingEntity best = null;
         double bd = 6;
         for (Player o : Minecraft.getInstance().level.players()) {
-            if (o == p || o.isSpectator()) continue;
+            if (o == p || o.isSpectator() || o.getId() < 0) continue; // Ostinato: not the spar ghost
             double d = o.distanceTo(p);
             if (d < bd) {
                 bd = d;

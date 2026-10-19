@@ -89,7 +89,7 @@ public final class PvpProcess extends BaritoneProcessHelper {
     }
 
     public void attack(Predicate<LivingEntity> filter, String label) {
-        this.filter = filter;
+        this.filter = filter == null ? null : filter.and(e -> e.getId() >= 0); // Ostinato: never the client-made spar ghost
         this.label = label;
         target = null;
         lastHealth = -1;
