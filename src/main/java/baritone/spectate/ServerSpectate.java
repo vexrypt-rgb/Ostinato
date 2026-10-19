@@ -242,13 +242,15 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         note("start " + host + " route steps " + route.size() + " words " + String.join(",", words));
         Minecraft mc = Minecraft.getInstance();
         ServerData cur = mc.getCurrentServer();
-        if (mc.level != null && cur != null && cur.ip.equalsIgnoreCase(host)) {
+        if (mc.level != null && cur != null && (cur.ip.equalsIgnoreCase(host) || cur.name.equalsIgnoreCase(host))) {
             phase = Phase.AUTH;
         } else {
             phase = Phase.CONNECTING;
             mc.execute(() -> {
                 if (mc.level != null) mc.disconnectFromWorld(Component.literal("Ostinato: auto-spectate"));
-                ConnectScreen.startConnecting(new TitleScreen(), mc, ServerAddress.parseString(host), new ServerData(host, host, ServerData.Type.OTHER), false, null);
+                // Ostinato: -Dostinato.autospectate.addr=ip:port dials that address instead (a box whose DNS hides the real one)
+                String addr = System.getProperty("ostinato.autospectate.addr", host);
+                ConnectScreen.startConnecting(new TitleScreen(), mc, ServerAddress.parseString(addr), new ServerData(host, addr, ServerData.Type.OTHER), false, null);
             });
         }
         logDirect("Auto-spectate: joining " + host + " to watch only (" + s().autoSpectateMinutes.value + " min cap)");
