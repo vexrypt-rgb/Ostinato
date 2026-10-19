@@ -99,6 +99,18 @@ public final class PveProcess extends BaritoneProcessHelper {
         return true;
     }
 
+    public boolean hasEnemy(LivingEntity e) {
+        return e != null && marked.contains(e.getUUID());
+    }
+
+    /** Drop one marked mob. A list that was only marked mobs ends the fight. */
+    public boolean removeEnemy(LivingEntity e) {
+        if (e == null) return false;
+        boolean removed = marked.remove(e.getUUID());
+        if (removed && marked.isEmpty() && "marked".equals(label)) clearEnemies();
+        return removed;
+    }
+
     /** Set by a process that calls {@link #onTick} itself; keeps the filter alive while the path manager hands control elsewhere. */
     public boolean driven;
     /** Fight from where we stand: swing at what is in reach but never walk, back off or path (set while perched on a pillar). */

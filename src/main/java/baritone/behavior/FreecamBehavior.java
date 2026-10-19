@@ -126,7 +126,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         active = camera;
         mc.setCameraEntity(camera);
         p.input = new ClientInput();
-        logDirect("Freecam on. Left click: go to block / follow entity. Right click: go to camera. #freecam to exit.");
+        logDirect("Freecam on. Middle-click a player to attack, middle-click them again to stop. #freecam to exit.");
     }
 
     public void disable() {
@@ -214,6 +214,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     /** While freecam is on, whoever just hurt the bot becomes an enemy. */
     private void markAttackers(LocalPlayer p) {
+        if (!fighting()) return; // Ostinato: middle-click starts and stops a fight. A hit must not start one.
         net.minecraft.world.entity.LivingEntity by = p.getLastHurtByMob();
         if (by != null && by != p && markable(by) && p.tickCount - p.getLastHurtByMobTimestamp() < 5
                 && (by instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(by) : ((Baritone) baritone).getPveProcess().addEnemy(by))) {
@@ -247,6 +248,10 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         boolean sprint = held(gs.keySprint) && fwd > 0;
         double speed = Baritone.settings().freecamSpeed.value;
+        if (fighting()) { // Ostinato: the walking camera's block collision stalled the game during a fight
+            glide(fwd, strafe, jump, sneak, sprint, speed);
+            return;
+        }
         // currents push the camera like a player (and tell us whether it is in the fluid)
         boolean water = !flying && camera.updateFluidHeightAndDoFluidPushing(FluidTags.WATER, 0.014);
         boolean lava = !flying && !water && camera.updateFluidHeightAndDoFluidPushing(FluidTags.LAVA, 0.0023333333333333335);
@@ -328,6 +333,19 @@ public final class FreecamBehavior extends Behavior implements Helper {
             double friction = camera.onGround() ? slip * 0.91 : 0.91;
             camera.setDeltaMovement(mx * friction, (my - 0.08) * 0.98, mz * friction);
         }
+    }
+
+    /** No block collision. Used while the bot is fighting so the camera does not stall the tick. */
+    private void glide(double fwd, double strafe, boolean jump, boolean sneak, boolean sprint, double speed) {
+        float yaw = camera.getYRot() * ((float) Math.PI / 180F);
+        double sin = Mth.sin(yaw);
+        double cos = Mth.cos(yaw);
+        double sp = 0.45 * speed * (sprint ? 1.6 : 1);
+        double mx = (strafe * cos - fwd * sin) * sp;
+        double mz = (fwd * cos + strafe * sin) * sp;
+        double my = ((jump ? 1 : 0) - (sneak ? 1 : 0)) * 0.4 * speed;
+        camera.setDeltaMovement(mx, my, mz);
+        camera.setPos(camera.getX() + mx, camera.getY() + my, camera.getZ() + mz);
     }
 
     /** Cobwebs and sweet berry bushes slow the camera down, as Block#entityInside does for a ticked entity. */
@@ -430,15 +448,26 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     private void markEnemy() {
         Entity hit = entityUnderCrosshair();
+        Baritone b = (Baritone) baritone;
         if (hit instanceof net.minecraft.world.entity.LivingEntity pl && markable(pl)) {
-            if ((pl instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(pl) : ((Baritone) baritone).getPveProcess().addEnemy(pl))) {
-                logDirect("Enemy added: " + pl.getName().getString());
-            } else {
-                logDirect(pl.getName().getString() + " is already an enemy");
+            boolean player = pl instanceof net.minecraft.world.entity.player.Player;
+            boolean already = player ? b.getPvpProcess().hasEnemy(pl) : b.getPveProcess().hasEnemy(pl);
+            if (already) {
+                if (player) b.getPvpProcess().removeEnemy(pl);
+                else b.getPveProcess().removeEnemy(pl);
+                logDirect("Stopped attacking " + pl.getName().getString());
+            } else if (player ? b.getPvpProcess().addEnemy(pl) : b.getPveProcess().addEnemy(pl)) {
+                logDirect("Attacking " + pl.getName().getString());
             }
-        } else {
-            logDirect("Middle-click a player to mark an enemy" + (Baritone.settings().enemyMobs.value ? " or mob" : ""));
+            return;
         }
+        if (fighting()) { // Ostinato: a second middle-click that misses still stops the fight
+            b.getPvpProcess().stopAttack();
+            b.getPveProcess().clearEnemies();
+            logDirect("Stopped attacking");
+            return;
+        }
+        logDirect("Middle-click a player to attack. Middle-click them again to stop.");
     }
 
     private Entity entityUnderCrosshair() {
