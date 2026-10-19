@@ -98,4 +98,25 @@ public class KitSignaturesTest {
         Map<String, Double> f = with(armor("iron"), "spear", 1.0);
         assertEquals("spear", k.classify(f, 200).label);
     }
+
+    /** Ostinato: the kit bench's misses (v1.24.0): pot as sword, uhc as axe+shield, smp as netherite-pot. */
+    @Test
+    public void benchMisses() {
+        Map<String, Double> dia = armor("diamond"), neth = armor("netherite");
+        // pot: diamond and a sword almost all the time, a splash potion in hand now and then, two heals thrown
+        is("pot", watch(new Object[][]{{0.95, with(dia, "diamond_sword", 1)}, {0.05, with(dia, "splash_potion", 1)}},
+                "threw:splash_heal", "threw:splash_heal"));
+        // uhc: diamond with iron leggings, sword mostly, the axe a fifth of the time, a shield always in the offhand
+        Map<String, Double> uhcArmor = with(new HashMap<>(), "armor:diamond", 0.75, "armor:iron", 0.25, "armor:mixed", 1);
+        is("uhc", watch(new Object[][]{{0.7, with(uhcArmor, "diamond_sword", 1, "shield", 1)}, {0.2, with(uhcArmor, "diamond_axe", 1, "shield", 1)},
+                {0.1, with(uhcArmor, "golden_apple", 1, "shield", 1)}}, "ate:golden_apple"));
+        // the axe kit itself stays axe+shield
+        is("axe+shield", watch(new Object[][]{{0.8, with(dia, "diamond_axe", 1, "shield", 1)}, {0.2, with(dia, "golden_apple", 1, "shield", 1)}}, "ate:golden_apple"));
+        // smp: netherite, sword and shield, and it throws heals too
+        is("smp", watch(new Object[][]{{0.9, with(neth, "netherite_sword", 1, "shield", 1)}, {0.1, with(neth, "splash_potion", 1, "shield", 1)}},
+                "threw:splash_heal", "threw:splash_heal", "ate:golden_apple"));
+        // smp with a totem in the offhand instead of a shield
+        is("smp", watch(new Object[][]{{0.9, with(neth, "netherite_sword", 1, "totem_of_undying", 1)}, {0.1, with(neth, "splash_potion", 1, "totem_of_undying", 1)}},
+                "threw:splash_heal", "threw:splash_heal"));
+    }
 }

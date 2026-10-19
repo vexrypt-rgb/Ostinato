@@ -186,6 +186,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (level != lastLevel) {
             seen.clear();
             looks.clear(); // Ostinato
+            pendingSplash.clear(); // Ostinato
             closeRecorders();
             post(l -> {
                 l.minds.clear();
@@ -199,6 +200,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (!on) {
             if (!seen.isEmpty()) seen.clear();
             looks.clear(); // Ostinato
+            pendingSplash.clear(); // Ostinato
             closeRecorders();
             return;
         }
@@ -230,6 +232,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         for (Player p : near) if (keep.contains(p.getId())) seen.computeIfAbsent(p.getId(), k -> new Seen(p));
         for (Seen sn : seen.values()) use(sn);
         lookAll(near); // Ostinato: kits and team clues of everyone in range
+        if (!pendingSplash.isEmpty()) resolveSplashes(); // Ostinato
         // hits wait a tick for the crit packet that follows them
         for (Object[] h : pendingHits) {
             int att = (Integer) h[0], vic = (Integer) h[1];
@@ -473,26 +476,18 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     public void added(Entity e) {
         addedKit(e); // Ostinato
         if (!(e instanceof ThrownEnderpearl) && !(e instanceof ThrownSplashPotion)) return;
+        if (e instanceof ThrownSplashPotion sp0) { // Ostinato: its potion is only known a tick or two later
+            Entity o = sp0.getOwner();
+            if (o != null && seen.containsKey(o.getId()) && !(s().spectateKitDetect.value && looks.containsKey(o.getId()))) pendingSplash.add(new Object[]{sp0, o.getId(), tick});
+            return;
+        }
         Entity owner = ((net.minecraft.world.entity.projectile.Projectile) e).getOwner();
         if (owner == null || !seen.containsKey(owner.getId())) return;
         int id = owner.getId(), t = tick;
         float hp = hp((LivingEntity) owner);
-        boolean pearl = e instanceof ThrownEnderpearl;
-        if (!pearl) {
-            ItemStack st = ((ThrownSplashPotion) e).getItem();
-            var pc = st.getOrDefault(net.minecraft.core.component.DataComponents.POTION_CONTENTS, net.minecraft.world.item.alchemy.PotionContents.EMPTY);
-            boolean heals = false;
-            for (var mi : pc.getAllEffects()) heals |= mi.getEffect().is(net.minecraft.world.effect.MobEffects.INSTANT_HEALTH) || mi.getEffect().is(net.minecraft.world.effect.MobEffects.REGENERATION);
-            if (!heals) return;
-        }
-        post(l -> {
-            Habits life = l.mind(id, null).life;
-            if (pearl) life.pearl(t, hp);
-            else life.pot(t, hp);
-            for (FightBook.Fight f : l.book.fightsOf(id)) {
-                if (pearl) f.of(id).pearl(t, hp);
-                else f.of(id).pot(t, hp);
-            }
+        post(l -> { // Ostinato: pearls only; splash potions are read later, in resolveSplashes
+            l.mind(id, null).life.pearl(t, hp);
+            for (FightBook.Fight f : l.book.fightsOf(id)) f.of(id).pearl(t, hp);
         });
     }
 
@@ -599,12 +594,40 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (owner == null || !looks.containsKey(owner.getId())) return;
         String tok = null;
         if (e instanceof ThrownEnderpearl) tok = "threw:ender_pearl";
-        else if (e instanceof ThrownSplashPotion sp) tok = GearReader.splash(sp.getItem());
+        else if (e instanceof ThrownSplashPotion sp) {
+            // Ostinato: the potion's item comes in an entity-data packet after the spawn, so read it a few ticks on
+            pendingSplash.add(new Object[]{sp, owner.getId(), tick});
+            return;
+        }
         else if (e instanceof net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge) tok = "threw:wind_charge";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.ThrownTrident) tok = "shot:trident";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) tok = "shot:arrow";
         else if (e instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity) tok = "firework";
         if (tok != null) kitEvent(owner.getId(), tok);
+    }
+
+    // Ostinato: thrown splash potions waiting for their item: {potion, thrower id, tick thrown}
+    private final List<Object[]> pendingSplash = new ArrayList<>();
+
+    /** Ostinato: reads each pending splash once it shows its potion (or at the latest when it breaks, or 5 ticks on). */
+    private void resolveSplashes() {
+        for (Iterator<Object[]> it = pendingSplash.iterator(); it.hasNext(); ) {
+            Object[] ps = it.next();
+            ThrownSplashPotion sp = (ThrownSplashPotion) ps[0];
+            String tok = GearReader.splash(sp.getItem());
+            boolean known = !tok.equals("threw:splash_other") || sp.isRemoved() || tick - (Integer) ps[2] >= 5;
+            if (!known) continue;
+            it.remove();
+            int id = (Integer) ps[1], t = tick;
+            if (s().spectateKitDetect.value && looks.containsKey(id)) kitEvent(id, tok);
+            if (tok.equals("threw:splash_heal") && seen.get(id) != null) { // Ostinato: the pot habit, moved here from added()
+                float hp = hp(seen.get(id).p);
+                post(l -> {
+                    l.mind(id, null).life.pot(t, hp);
+                    for (FightBook.Fight f : l.book.fightsOf(id)) f.of(id).pot(t, hp);
+                });
+            }
+        }
     }
 
     /** Eating: the use flag held 30 ticks or more with food in hand. */
