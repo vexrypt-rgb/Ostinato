@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 /** Ostinato: fights start and end as they should, and what winners did reaches the priors only after enough fights. */
 public class FightBookTest {
@@ -78,5 +79,35 @@ public class FightBookTest {
         assertEquals("combo:A", SpectateLearner.lateReason("A", 20, 20, 0, true, Integer.MAX_VALUE, false, 400));
         assertEquals("gapple:A", SpectateLearner.lateReason("A", 20, 20, 0, false, 40, true, 400));
         assertEquals(null, SpectateLearner.lateReason("A", 20, 20, 0, false, 40, false, 400));
+    }
+
+    @Test
+    public void suspectedCheatsStayOutOfTallies() { // Ostinato
+        FightBook book = new FightBook(null, null);
+        book.suspect(1, "Hax", "reach5x3.60");
+        for (int i = 0; i < 6; i++) book.hit(i * 15, 1, "Hax", 2, "Leg", false, null);
+        FightBook.Fight f = book.fightsOf(1).get(0);
+        assertEquals("Hax:reach5x3.60", f.cheat);
+        assertTrue(book.suspected(1));
+        assertFalse(book.suspected(2));
+        f.of(1).ate(50, true, 7);
+        book.died(100, 2);
+        assertEquals(0, book.winnerCount("eatHp"));
+        assertEquals(1, book.cheatSkipped());
+        // flagged mid-fight: the open fight carries it too
+        for (int i = 0; i < 3; i++) book.hit(1000 + i * 15, 3, "C", 4, "D", false, null);
+        book.suspect(4, "D", "fly2x");
+        for (int i = 3; i < 6; i++) book.hit(1000 + i * 15, 3, "C", 4, "D", false, null);
+        assertEquals("D:fly2x", book.fightsOf(3).get(0).cheat);
+        book.fightsOf(3).get(0).of(3).ate(1050, true, 7);
+        book.died(1100, 4);
+        assertEquals(0, book.winnerCount("eatHp"));
+        // the setting lets them in
+        book.includeCheats(true);
+        assertFalse(book.suspected(1));
+        for (int i = 0; i < 6; i++) book.hit(2000 + i * 15, 1, "Hax", 6, "F", false, null);
+        book.fightsOf(1).get(0).of(1).ate(2050, true, 7);
+        book.died(2100, 6);
+        assertEquals(1, book.winnerCount("eatHp"));
     }
 }

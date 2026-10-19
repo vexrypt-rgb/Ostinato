@@ -47,6 +47,8 @@ public final class FightBook {
          * Its habits are still learned; its result stays out of the winner and loser tallies unless {@link #includeLate}.
          */
         public String late;
+        /** Ostinato: why one of its fighters looks like a cheater ({@link CheatWatch}), or null. Kept out of the tallies unless {@link #includeCheats}. */
+        public String cheat;
 
         /** {@code 1v1}, {@code ffa} or {@code team}; 1v1 until the group closes. */
         public String type() {
@@ -116,6 +118,9 @@ public final class FightBook {
     private java.util.function.BiConsumer<Fight, Boolean> onSettled;
     private boolean multiApart = true;
     private boolean includeLate; // Ostinato: joined-late fights
+    private boolean includeCheats; // Ostinato: fights with a suspected cheater
+    private final Map<Integer, String> suspects = new HashMap<>(); // Ostinato: id -> reason
+    int cheatSkipped;
     int lateSkipped;
     private java.util.function.Consumer<FightGroup> onGroup;
     private KitSignatures signatures;
@@ -165,6 +170,7 @@ public final class FightBook {
             active.put(k, f);
             f.group = g;
             f.late = late; // Ostinato: joined late
+            f.cheat = suspectOf(attacker, victim); // Ostinato: suspected cheat
             g.open++;
             if (onStart != null) onStart.accept(f);
         }
@@ -262,6 +268,33 @@ public final class FightBook {
         includeLate = on;
     }
 
+    /** Ostinato: let fights with a suspected cheater count toward winners and losers too ({@code spectateLearnSuspectedCheats}). */
+    public void includeCheats(boolean on) {
+        includeCheats = on;
+    }
+
+    /** Ostinato: mark a player suspected; every fight of theirs, open now or later, carries the reason. */
+    public void suspect(int id, String name, String reason) {
+        String r = name + ":" + reason;
+        suspects.put(id, r);
+        for (Fight f : fightsOf(id)) f.cheat = r;
+    }
+
+    /** Ostinato: whether a player is suspected (their style is not learned either, unless included). */
+    public boolean suspected(int id) {
+        return !includeCheats && suspects.containsKey(id);
+    }
+
+    private String suspectOf(int a, int b) {
+        String r = suspects.get(a);
+        return r != null ? r : suspects.get(b);
+    }
+
+    /** Ostinato: decided fights kept out of the tallies because a fighter was a suspected cheat. */
+    public int cheatSkipped() {
+        return cheatSkipped;
+    }
+
     /** Ostinato: decided fights kept out of the tallies because they were joined late. */
     public int lateSkipped() {
         return lateSkipped;
@@ -269,6 +302,7 @@ public final class FightBook {
 
     /** Forgets everyone's kit and team clues (another world: entity ids start over). */
     public void resetPlayers() {
+        suspects.clear(); // Ostinato: ids start over
         kits.clear();
         clues.clear();
     }
@@ -441,6 +475,12 @@ public final class FightBook {
         }
         // Ostinato: FFA and team fights stay out of the 1v1 tallies (kept in the group for multi-opponent skills)
         if (multiApart && !f.type().equals("1v1")) {
+            if (onEnd != null) onEnd.ended(f, winner, why);
+            return;
+        }
+        // Ostinato: a suspected cheater's wins and losses would teach what the hack did, not what a player did
+        if (f.cheat != null && !includeCheats) {
+            cheatSkipped++;
             if (onEnd != null) onEnd.ended(f, winner, why);
             return;
         }
