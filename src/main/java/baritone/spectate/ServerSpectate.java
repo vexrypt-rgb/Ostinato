@@ -158,8 +158,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     static int menuScore(String titleOnly, String itemId, String want) {
         if (want == null || want.isEmpty()) return 0;
         String title = titleOnly == null ? "" : titleOnly.toLowerCase(Locale.ROOT);
+        if (title.contains(want)) return 100; // Ostinato: an explicit mode name wins, even when the old spectate list blocks "casual"
         if (NEVER.matcher(title).find()) return -1;
-        if (title.contains(want)) return 100;
         String id = itemId == null ? "" : itemId.toLowerCase(Locale.ROOT);
         if (want.equals("crystal") && id.contains("crystal")) return 50;
         return 0;

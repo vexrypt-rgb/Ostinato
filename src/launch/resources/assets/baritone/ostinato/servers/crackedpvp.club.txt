@@ -4,12 +4,12 @@
 #   click word   in the open menu, click the item whose name is this word (the next click waits for the next menu)
 #   authclick prompt words | choice   during login, click the [choice] button
 # The login plugin asks "Are you using a premium account? [Yes] [No]": this throwaway is cracked.
-# Right-click the clock, click the crystal, click the crystal in the next menu, right-click the sword.
-# That sword is not the hub Enable PvP item. Its menu lists modes, and each mode is an item named the mode.
-# The last click is the mode. Crystal is the one queued here.
+# Right-click the clock. The crystal in that menu is Practice. That click leaves the menu.
+# The lobby sword is Play Menu, not hub Enable PvP. It opens Casual Match and Competitive Match.
+# Casual opens the kits. Each kit is an item named the mode. The last click queues Crystal.
 authclick premium account | no
 hotbar clock
 click crystal
-click crystal
 hotbar sword
+click casual
 click crystal
