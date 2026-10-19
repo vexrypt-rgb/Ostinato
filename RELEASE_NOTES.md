@@ -7,19 +7,67 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.23.0 adds the freecam rework, the freecam flat canvas and edit mode, and the Studio's full block list,
-real textures, and edit tools on 26.3 (`main`, Java 25). The other lines are rebuilt from the same branches as
-v1.22.0 and have no changes.
+v1.24.0 adds spectator learning with kit and fight-type detection, the health estimator, new combat tuning
+defaults, the regression suite, the singularity theme and the Rust jump search on 26.3 (`main`, Java 25). The other
+lines are rebuilt from the same branches as v1.23.0 and have no changes.
 
 | Minecraft | Branch | Java | This tag |
 | --- | --- | --- | --- |
-| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.23.0.jar` |
+| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.24.0.jar` |
 | 1.21.11 | `1.21.11` | 21 | Unchanged since v1.22.0. `*-fabric-1.21.0.jar` |
 | 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | Unchanged since v1.22.0 |
 | 1.21.4 | `1.21.4` | 21 | Unchanged since v1.20.0 |
 | 1.16.1 | `1.16.1` | 8 | Unchanged since v1.20.0 |
 
-## Since v1.23.0 (unreleased, 26.3 only)
+## New in v1.24.0
+
+Everything in this section is 26.3 only.
+
+- **Combat tuning defaults.** The footing guard is on by default: in fights it picks keys that keep the next hit from
+  knocking the bot into lava (on the lava-ring bench, damage taken 27.9 vs 31.5 per round over 192
+  rounds). `hiddenShield` is off by default (65/96 wins vs 44/96 against the SMP bots with it off). Details in
+  `docs/ACS_TUNING.md`.
+- **Spectator learning** (`spectateLearn`, off by default). The bot watches fights between other players near it and
+  works out which keys they press, how fast they click, and when they eat, pearl or back off. Then it compares what
+  winners do with what losers do. It runs on its own low-priority thread with a time budget (`spectateBudgetMs`).
+- **Watched fights only seed priors.** What the bot learns from watching only gives the Autotune Combat System a place
+  to start and tells it how an opponent fights. It never puts a combat value in force: the bot's own fights decide
+  what is kept.
+- **Kit detection.** Each watched fighter gets a kit label with a confidence: sword, axe+shield, mace, crystal, pot,
+  netherite-pot, smp, uhc, ranged, or unknown. The label comes from what can be seen: armor and its material, glint,
+  trims and dye, the items in each hand and how they swap, what they eat, drink, throw and pop, and their potion
+  particles. The label goes into each fight log, and learning is kept apart per kit, so the bot uses the priors for
+  the kit it is wearing. The kits are a plain table (`assets/baritone/ostinato/spectate-kits.txt` in the jar); a copy at
+  `baritone/spectate-kits.txt` in the game folder replaces it.
+- **Learned kits.** A loadout that fits none of the kits becomes a new kit (`learned-1`, `learned-2`, ...) with a short
+  description such as "chainmail + iron sword". It is kept in `baritone/spectate-kits-learned.txt`. Loadouts seen
+  later that are close to it join it, and a learned kit gets its own priors once it has the fights.
+- **Fight types.** Every watched fight is tagged 1v1, FFA or team, from scoreboard teams, name colours, dyed armor,
+  kits, and who never hits whom. Every hit is kept with its attacker and victim. FFA and team fights are kept out of
+  1v1 learning and stored for multi-opponent skills.
+- **Health estimator** (`healthEstimator`, on). Keeps an estimate of every nearby player's and mob's health. It uses
+  what the server shows (synced health, scoreboard, boss bars) or, where the server hides it, the hits, potions,
+  apples, effects and totems it sees. Combat and mob fighting pick and finish targets by it.
+- **Regression suite.** `./gradlew regress` (or `scripts/regress.sh` over a range of commits) runs the unit tests and
+  the headless parkour and pathfinding stages and compares them with a stored baseline. See `docs/REGRESSION.md`.
+
+### How to gather fight data
+
+1. `#spectateLearn true`
+2. On a multiplayer server, also `#spectateLearnOnServers true`.
+3. To keep the fights on disk, `#spectateSaveLogs true`.
+4. Watch fights, in spectator mode or standing nearby (within `spectateRadius`, 48 blocks by default).
+
+`#spectateKitDetect`, `#spectateLearnKits` and `#spectateFightTypes` are on by default. They only act while
+`spectateLearn` is on.
+
+Logs are saved in the game folder (for example `.minecraft`):
+- `pvplogs/spectate/fight-*.log.gz`: one per watched pair fight, in the fight recorder's format (read with
+  `tools/pvplog.py`), with its type and both kits at the end.
+- `pvplogs/spectate/group-*.log.gz`: one per FFA or team fight, with every hit.
+- `baritone/spectate-kits-learned.txt`: the learned kits.
+
+### Also new since v1.23.0
 
 - **Singularity theme.** A new `guiTheme` setting (Interface page): `classic` (default, unchanged) or
   `singularity`. In singularity mode the menu's pages orbit a black hole, with lensing on hover, a spiral on open

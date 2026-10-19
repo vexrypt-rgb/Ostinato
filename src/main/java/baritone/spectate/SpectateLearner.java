@@ -88,6 +88,48 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     }
 
     private final Map<Integer, Seen> seen = new HashMap<>();
+    // Ostinato: kit detection and fight types watch every player in range, not only those decoded (cheap reads)
+    private static final class Look {
+        final Player p;
+        Map<String, Double> gear;
+        int gearTick = -1000, clueTick = -1000;
+        long fp;
+        FightGroup.Clue clue;
+        int useStart = -1;
+        ItemStack useItem = ItemStack.EMPTY;
+
+        Look(Player p) {
+            this.p = p;
+        }
+    }
+
+    private final Map<Integer, Look> looks = new HashMap<>(); // main only
+    private long kitNanos, kitTicks;
+    private final Map<Integer, List<String>> meta = new java.util.concurrent.ConcurrentHashMap<>(); // fight serial -> lines, worker to main
+    private final List<String> kitReport = Collections.synchronizedList(new ArrayList<>());
+    /** What the closed groups were: one entry per group, for the bench and {@link #results()}. */
+    private final List<GroupResult> results = Collections.synchronizedList(new ArrayList<>());
+
+    /** Ostinato: one closed fight group as the spectator saw it. */
+    public static final class GroupResult {
+        public final String type, shape, teams;
+        public final Map<String, KitSignatures.Result> kits;
+        public final int hits;
+
+        GroupResult(FightGroup g) {
+            type = g.type;
+            shape = g.shape;
+            teams = g.teamsLine();
+            kits = new java.util.LinkedHashMap<>();
+            for (Map.Entry<Integer, String> e : g.members.entrySet()) kits.put(e.getValue(), g.kits.get(e.getKey()));
+            hits = g.hits.size();
+        }
+
+        @Override
+        public String toString() {
+            return type + " " + shape + " " + teams + " kits " + kits;
+        }
+    }
     private final BlockingQueue<Job> queue = new ArrayBlockingQueue<>(512);
     private final Map<Integer, Mind> minds = new HashMap<>(); // worker only
     private final FightBook book; // worker only
@@ -111,8 +153,13 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     public SpectateLearner(Baritone baritone) {
         super(baritone);
         book = new FightBook(f -> {}, this::fightEnded);
+        // Ostinato: kit detection and fight types
+        book.onPairEnd(this::pairEnded);
+        book.onSettled(this::settled);
+        book.onGroup(this::groupEnded);
         PacketTap.add(this);
         SpectateBench.install(baritone); // -Dostinato.spectbench only
+        KitBench.install(baritone); // Ostinato: -Dostinato.kitbench only
     }
 
     private static Settings s() {
@@ -138,8 +185,12 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         ClientLevel level = Minecraft.getInstance().level;
         if (level != lastLevel) {
             seen.clear();
+            looks.clear(); // Ostinato
             closeRecorders();
-            post(l -> l.minds.clear());
+            post(l -> {
+                l.minds.clear();
+                l.book.resetPlayers(); // Ostinato: entity ids start over
+            });
             lastLevel = level;
             clientWorld = null;
         }
@@ -147,6 +198,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         SpectatePriors.get().enabled(s().spectateLearn.value);
         if (!on) {
             if (!seen.isEmpty()) seen.clear();
+            looks.clear(); // Ostinato
             closeRecorders();
             return;
         }
@@ -177,6 +229,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         }
         for (Player p : near) if (keep.contains(p.getId())) seen.computeIfAbsent(p.getId(), k -> new Seen(p));
         for (Seen sn : seen.values()) use(sn);
+        lookAll(near); // Ostinato: kits and team clues of everyone in range
         // hits wait a tick for the crit packet that follows them
         for (Object[] h : pendingHits) {
             int att = (Integer) h[0], vic = (Integer) h[1];
@@ -194,7 +247,24 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
                 pos.put(sn.p.getId(), sn.p.position());
                 hp.put(sn.p.getId(), hp(sn.p));
             }
+            // Ostinato: everyone in range counts for fight ends and groups, decoded or not
+            Map<Integer, double[]> where = new HashMap<>();
+            for (Look lk : looks.values()) {
+                int id = lk.p.getId();
+                if (!pos.containsKey(id)) {
+                    pos.put(id, lk.p.position());
+                    hp.put(id, hp(lk.p));
+                }
+                Vec3 v = pos.get(id);
+                Float h = hp.get(id);
+                where.put(id, new double[]{v.x, v.y, v.z, h == null ? Double.NaN : h});
+            }
             int t = tick;
+            boolean apart = s().spectateFightTypes.value;
+            post(l -> l.book.multiApart(apart));
+            boolean learnKits = s().spectateLearnKits.value;
+            post(l -> l.book.learnKits(learnKits));
+            post(l -> l.book.track(t, where));
             post(l -> l.book.tick(t, (a, b) -> {
                 Vec3 pa = pos.get(a), pb = pos.get(b);
                 return pa == null || pb == null ? Double.NaN : pa.distanceTo(pb);
@@ -375,7 +445,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         Entity att = src.getEntity();
         if (!(e instanceof Player victim) || !(att instanceof Player attacker) || att == e) return;
         if (!src.is(DamageTypeTags.IS_PLAYER_ATTACK)) return;
-        if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId())) return;
+        if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId()) && !looks.containsKey(victim.getId()) && !looks.containsKey(attacker.getId())) return; // Ostinato: or looked at
         Seen as = seen.get(attacker.getId());
         if (as != null) as.hits++;
         pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick});
@@ -383,6 +453,12 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
 
     @Override
     public void entityEvent(Entity e, byte event) {
+        if (event == 35 && looks.containsKey(e.getId())) kitEvent(e.getId(), "pop:totem"); // Ostinato
+        if (event == 3 && looks.containsKey(e.getId()) && !seen.containsKey(e.getId())) { // Ostinato: deaths of those only looked at
+            int id = e.getId(), t = tick;
+            post(l -> l.book.died(t, id));
+            return;
+        }
         Seen sn = seen.get(e.getId());
         if (sn == null) return;
         int id = e.getId(), t = tick;
@@ -395,6 +471,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
 
     @Override
     public void added(Entity e) {
+        addedKit(e); // Ostinato
         if (!(e instanceof ThrownEnderpearl) && !(e instanceof ThrownSplashPotion)) return;
         Entity owner = ((net.minecraft.world.entity.projectile.Projectile) e).getOwner();
         if (owner == null || !seen.containsKey(owner.getId())) return;
@@ -417,6 +494,117 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
                 else f.of(id).pot(t, hp);
             }
         });
+    }
+
+    /**
+     * Ostinato: kit detection and team clues for everyone in range. Each player's gear is read every fourth tick (a
+     * different tick for different players) and sent to the worker only when it changed or every five seconds; the
+     * team clue once a second, when it changed. Eating and drinking are watched here for all of them too.
+     */
+    private void lookAll(List<Player> near) {
+        boolean kits = s().spectateKitDetect.value;
+        if (!kits && !s().spectateFightTypes.value) {
+            looks.clear();
+            return;
+        }
+        long k0 = System.nanoTime();
+        Set<Integer> here = new HashSet<>();
+        for (Player p : near) {
+            here.add(p.getId());
+            Look lk = looks.get(p.getId());
+            if (lk == null || lk.p != p) looks.put(p.getId(), lk = new Look(p));
+            int id = p.getId();
+            // the full read only when the fingerprint moved, and every five seconds regardless
+            if (kits && (tick + id) % 4 == 0) {
+                long fp = GearReader.fingerprint(p);
+                if (fp != lk.fp || tick - lk.gearTick >= 100) {
+                    lk.fp = fp;
+                    Map<String, Double> g = GearReader.tokens(p);
+                    if (!g.equals(lk.gear) || tick - lk.gearTick >= 100) {
+                        lk.gear = g;
+                        lk.gearTick = tick;
+                        int t = tick;
+                        post(l -> l.book.gear(t, id, g));
+                    }
+                }
+            }
+            if ((tick + id) % 20 == 0) {
+                FightGroup.Clue c = GearReader.clue(p);
+                if (lk.clue == null || !same(c, lk.clue)) {
+                    lk.clue = c;
+                    post(l -> l.book.clue(id, c));
+                }
+            }
+            if (kits) useKit(lk);
+        }
+        looks.keySet().retainAll(here);
+        kitNanos += System.nanoTime() - k0;
+        kitTicks++;
+    }
+
+    private static boolean same(FightGroup.Clue a, FightGroup.Clue b) {
+        return a.team.equals(b.team) && a.teamColor == b.teamColor && a.nameColor == b.nameColor && a.dye == b.dye;
+    }
+
+    /** Ostinato: what they ate or drank, for the kit: food held in use 30 ticks or more, a potion 25. */
+    private void useKit(Look lk) {
+        Player p = lk.p;
+        if (p.isUsingItem()) {
+            ItemStack st = p.getItemInHand(p.getUsedItemHand());
+            if (lk.useStart < 0 || !ItemStack.isSameItem(st, lk.useItem)) {
+                lk.useStart = tick;
+                lk.useItem = st.copy();
+            }
+            return;
+        }
+        if (lk.useStart < 0) return;
+        int held = tick - lk.useStart;
+        ItemStack st = lk.useItem;
+        lk.useStart = -1;
+        String tok = null;
+        if (st.is(Items.POTION) && held >= 25) tok = "drank:potion";
+        else if (held >= 30 && st.get(net.minecraft.core.component.DataComponents.FOOD) != null)
+            tok = st.is(Items.GOLDEN_APPLE) ? "ate:golden_apple" : st.is(Items.ENCHANTED_GOLDEN_APPLE) ? "ate:enchanted_golden_apple" : "ate:food";
+        if (tok == null) return;
+        kitEvent(p.getId(), tok);
+    }
+
+    private void kitEvent(int id, String token) {
+        if (!s().spectateKitDetect.value) return;
+        int t = tick;
+        post(l -> l.book.kitEvent(t, id, token));
+    }
+
+    /**
+     * Ostinato: what a new entity says of its thrower's kit: pearls, splash potions (heal, harm or other), wind charges,
+     * arrows, tridents, fireworks; an end crystal counts for the nearest fighter within five blocks.
+     */
+    private void addedKit(Entity e) {
+        if (!s().spectateKitDetect.value || looks.isEmpty()) return;
+        if (e instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal) {
+            Look best = null;
+            double bd = 25;
+            for (Look lk : looks.values()) {
+                double d = lk.p.distanceToSqr(e);
+                if (d < bd) {
+                    bd = d;
+                    best = lk;
+                }
+            }
+            if (best != null) kitEvent(best.p.getId(), "crystal");
+            return;
+        }
+        if (!(e instanceof net.minecraft.world.entity.projectile.Projectile pr)) return;
+        Entity owner = pr.getOwner();
+        if (owner == null || !looks.containsKey(owner.getId())) return;
+        String tok = null;
+        if (e instanceof ThrownEnderpearl) tok = "threw:ender_pearl";
+        else if (e instanceof ThrownSplashPotion sp) tok = GearReader.splash(sp.getItem());
+        else if (e instanceof net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge) tok = "threw:wind_charge";
+        else if (e instanceof net.minecraft.world.entity.projectile.arrow.ThrownTrident) tok = "shot:trident";
+        else if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) tok = "shot:arrow";
+        else if (e instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity) tok = "firework";
+        if (tok != null) kitEvent(owner.getId(), tok);
     }
 
     /** Eating: the use flag held 30 ticks or more with food in hand. */
@@ -467,15 +655,31 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         for (Iterator<Map.Entry<Long, PvpRecorder>> it = recorders.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<Long, PvpRecorder> e = it.next();
             if (!live.contains(e.getKey())) {
+                // Ostinato: the fight is over; the log waits (no more ticks) for its type and kits, which come once the
+                // fight's group has closed, or gives up after five minutes
+                int serial = (int) (long) e.getKey();
+                List<String> lines = meta.remove(serial);
+                int since = waiting.computeIfAbsent(e.getKey(), k -> tick);
+                if (lines == null && tick - since < 6000) continue;
+                if (lines == null) lines = List.of("#type unknown");
+                for (String l : lines) e.getValue().meta(l);
                 e.getValue().end(Minecraft.getInstance().player, "ended");
+                waiting.remove(e.getKey());
                 it.remove();
             }
         }
     }
 
+    private final Map<Long, Integer> waiting = new HashMap<>(); // Ostinato: fight serial -> tick its log began to wait
+
     private void closeRecorders() {
-        for (PvpRecorder r : recorders.values()) r.end(Minecraft.getInstance().player, "stopped");
+        for (Map.Entry<Long, PvpRecorder> e : recorders.entrySet()) {
+            List<String> lines = meta.remove((int) (long) e.getKey()); // Ostinato: what is known of it
+            if (lines != null) for (String l : lines) e.getValue().meta(l);
+            e.getValue().end(Minecraft.getInstance().player, "stopped");
+        }
         recorders.clear();
+        waiting.clear();
     }
 
     private boolean post(Job j) {
@@ -536,9 +740,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     }
 
     private void hitW(int t, int att, String an, int vic, String vn, boolean crit) {
-        FightBook.Fight f = book.hit(t, att, an, vic, vn);
+        FightBook.Fight f = book.hit(t, att, an, vic, vn, crit); // Ostinato: crit kept on the group's hit list
         synchronized (activeFights) {
-            long key = ((long) f.a << 32) | (f.b & 0xffffffffL);
+            long key = f.serial; // Ostinato: the fight's serial, as the same pair may fight again while a log waits
             boolean have = false;
             for (long[] x : activeFights) have |= x[2] == key;
             if (!have) activeFights.add(new long[]{f.a, f.b, key});
@@ -552,14 +756,105 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
 
     private void fightEnded(FightBook.Fight f, int winner, String why) {
         synchronized (activeFights) {
-            activeFights.removeIf(x -> x[0] == f.a && x[1] == f.b);
+            activeFights.removeIf(x -> x[2] == f.serial); // Ostinato: by serial
         }
         SpectatePriors.get().update(book);
         String w = winner < 0 ? "draw" : winner == f.a ? f.nameA : f.nameB;
-        String line = String.format(Locale.ROOT, "spectate: %s vs %s, %s (%s); %s: %s | %s: %s", f.nameA, f.nameB, w, why, f.nameA, f.ha.summary(), f.nameB, f.hb.summary());
+        // Ostinato: with the fight's type and each side's kit
+        String line = String.format(Locale.ROOT, "spectate: %s vs %s, %s (%s) [%s, kits %s / %s]; %s: %s | %s: %s", f.nameA, f.nameB, w, why, f.type(), f.kitA, f.kitB,
+                f.nameA, f.ha.summary(), f.nameB, f.hb.summary());
         System.out.println("Ostinato " + line);
         lastReport.clear();
         lastReport.addAll(book.report());
+    }
+
+    // ---------------------------------------------------------------- Ostinato: kit detection and fight types (worker)
+
+    /** A fight between two is over: its log stops taking ticks and waits for the group to say what kind it was. */
+    private void pairEnded(FightBook.Fight f) {
+        synchronized (activeFights) {
+            activeFights.removeIf(x -> x[2] == f.serial);
+        }
+    }
+
+    /** The fight's group has closed: its log gets the type and both kits, then is closed. */
+    private void settled(FightBook.Fight f, boolean counts) {
+        FightGroup g = f.group;
+        List<String> lines = new ArrayList<>();
+        lines.add(String.format(Locale.ROOT, "#type %s shape=%s players=%d group=%d%s%s", f.type(), g == null ? "1v1" : g.shape, g == null ? 2 : g.members.size(),
+                g == null ? 0 : g.id, counts ? "" : " short", f.type().equals("1v1") || !s().spectateFightTypes.value ? "" : " multi"));
+        if (g != null && !g.type.equals("1v1")) lines.add("#teams " + g.teamsLine());
+        lines.add(kitLine("me", f.nameA, f.kitA, f.a));
+        lines.add(kitLine("tg", f.nameB, f.kitB, f.b));
+        meta.put(f.serial, lines);
+    }
+
+    private String kitLine(String side, String name, KitSignatures.Result r, int id) {
+        KitEvidence ev = book.evidence(id);
+        return String.format(Locale.ROOT, "#kit %s name=%s label=%s conf=%.2f best=%s score=%.2f evidence=%s", side, name, r == null ? KitSignatures.UNKNOWN : r.label,
+                r == null ? 0 : r.confidence, r == null ? "-" : r.best, r == null ? 0 : r.score, ev == null ? "-" : ev.summary(tick));
+    }
+
+    /** A group closed: kept for the bench, and for FFA and team fights its own log of every hit. */
+    private void groupEnded(FightGroup g) {
+        GroupResult r = new GroupResult(g);
+        results.add(r);
+        if (results.size() > 500) results.remove(0);
+        String line = "spectate group: " + g.describe() + "; kits " + r.kits + (g.type.equals("1v1") ? "" : "; moves " + g.skillsLine());
+        System.out.println("Ostinato " + line);
+        kitReport.add(line);
+        while (kitReport.size() > 8) kitReport.remove(0);
+        if (!g.type.equals("1v1") && s().spectateSaveLogs.value) writeGroup(g);
+    }
+
+    /** {@code pvplogs/spectate/group-<time>-<shape>.log.gz}: teams, kits, every hit (attacker, victim), positions each second. */
+    private void writeGroup(FightGroup g) {
+        try {
+            Path dir = Paths.get("pvplogs", "spectate");
+            Files.createDirectories(dir);
+            Path file = dir.resolve("group-" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-" + g.id + "-" + g.shape + ".log.gz");
+            try (BufferedWriter w = new BufferedWriter(new java.io.OutputStreamWriter(new java.util.zip.GZIPOutputStream(Files.newOutputStream(file)), java.nio.charset.StandardCharsets.UTF_8))) {
+                w.write(String.format(Locale.ROOT, "#group v1 type=%s shape=%s players=%d hits=%d start=%d end=%d%n", g.type, g.shape, g.members.size(), g.hits.size(), g.start, g.last));
+                w.write("#teams " + g.teamsLine() + "\n");
+                for (Map.Entry<Integer, String> e : g.members.entrySet()) w.write(kitLine("-", e.getValue(), g.kits.get(e.getKey()), e.getKey()) + "\n");
+                // hits and positions in tick order
+                int ti = 0;
+                for (int[] h : g.hits) {
+                    while (ti < g.track.size() && (Integer) g.track.get(ti)[0] <= h[0]) writeTrack(w, g, g.track.get(ti++));
+                    w.write(String.format(Locale.ROOT, "@%d hit %s>%s%s%n", h[0] - g.start, g.members.get(h[1]), g.members.get(h[2]), h[3] != 0 ? " crit" : ""));
+                }
+                while (ti < g.track.size()) writeTrack(w, g, g.track.get(ti++));
+                w.write("#moves " + g.skillsLine() + "\n");
+                w.write("#end\n");
+            }
+            System.out.println("Ostinato spectate: " + file);
+        } catch (IOException e) {
+            System.out.println("Ostinato spectate: group log: " + e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void writeTrack(BufferedWriter w, FightGroup g, Object[] row) throws IOException {
+        StringBuilder sb = new StringBuilder().append((Integer) row[0] - g.start);
+        for (double[] m : (List<double[]>) row[1])
+            sb.append('|').append(g.members.get((int) m[0])).append(':').append(String.format(Locale.ROOT, "%.2f,%.2f,%.2f,%.1f", m[1], m[2], m[3], m[4]));
+        w.write(sb.append('\n').toString());
+    }
+
+    /** Forgets everyone's kit evidence (the bench, after it changes their kits). */
+    public void forgetKits() {
+        for (Look lk : looks.values()) {
+            lk.gearTick = -1000;
+            lk.clue = null;
+        }
+        post(l -> l.book.resetPlayers());
+    }
+
+    /** Groups closed so far, oldest first (at most 500). */
+    public List<GroupResult> results() {
+        synchronized (results) {
+            return new ArrayList<>(results);
+        }
     }
 
     private void logDecode(int id, String name, InputDecoder.Obs o, InputDecoder.Decoded d, int t) {
@@ -587,8 +882,23 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         double workUs = mainTicks == 0 ? 0 : workerNanos / 1e3 / mainTicks;
         out.add(String.format(Locale.ROOT, "spectate %s: watching %d (cap %d), main %.1f us/tick, worker %.1f us/tick, %d decodes, %.1f sim ticks each, %d dropped, queue %d",
                 active() ? "on" : "off", seen.size(), allowed, mainUs, workUs, decodes, decodes == 0 ? 0 : (double) simTicks / decodes, dropped, queue.size()));
+        // Ostinato: kit detection cost and what the last groups were
+        out.add(String.format(Locale.ROOT, "kits %s, fight types %s: looking at %d, %.1f us/tick", s().spectateKitDetect.value ? "on" : "off",
+                s().spectateFightTypes.value ? "on" : "off", looks.size(), kitTicks == 0 ? 0 : kitNanos / 1e3 / kitTicks));
+        synchronized (kitReport) {
+            out.addAll(kitReport);
+        }
         out.addAll(lastReport);
         return out;
+    }
+
+    /** Ostinato: game-thread time spent on kit detection and team clues. */
+    public long kitNanos() {
+        return kitNanos;
+    }
+
+    public long kitTicks() {
+        return kitTicks;
     }
 
     public long mainNanos() {

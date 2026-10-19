@@ -39,15 +39,33 @@ public final class SpectatePriors {
     private final Map<String, Prior> priors = new HashMap<>();
     private final Map<String, Map<String, Double>> styles = new HashMap<>(); // copies: the worker owns the live Habits
     private volatile boolean enabled;
+    // Ostinato: the kit we fight with now (KitSignatures' label), so priors come from watched fighters of that kit
+    private volatile String ownKit;
 
     public void enabled(boolean on) {
         enabled = on;
     }
 
-    /** The prior for one tuned number by its name (heal.eatNear, ...), or null. */
+    /**
+     * Ostinato: the kit our own fights are fought with now, as {@link KitSignatures} labels it ({@code null}: not
+     * known, the priors of all kits together are used).
+     */
+    public void ownKit(String kit) {
+        ownKit = kit;
+    }
+
+    public String ownKit() {
+        return ownKit;
+    }
+
+    /**
+     * The prior for one tuned number by its name (heal.eatNear, ...), or null. Ostinato: with our kit known, only
+     * fighters watched with the same kit count; a kit with too few watched fights gives none.
+     */
     public synchronized Prior prior(String knob) {
         if (!enabled) return null;
-        Prior p = priors.get(knob);
+        String kit = ownKit;
+        Prior p = priors.get(kit == null ? knob : kit + "|" + knob);
         return p == null || p.n < MIN_FIGHTS ? null : p;
     }
 
@@ -74,6 +92,15 @@ public final class SpectatePriors {
         int np = book.winnerCount("potHp");
         double pot = book.winnerMean("potHp");
         if (np > 0 && !Double.isNaN(pot)) put("pots.healAt", pot, np);
+        // Ostinato: and per kit, from 1v1 fights only
+        for (String kit : book.kitsSeen()) {
+            int nk = book.winnerCount(kit, "eatHp");
+            double ek = book.winnerMean(kit, "eatHp");
+            if (nk > 0 && !Double.isNaN(ek)) put(kit + "|heal.eatNear", ek, nk);
+            int npk = book.winnerCount(kit, "potHp");
+            double pk = book.winnerMean(kit, "potHp");
+            if (npk > 0 && !Double.isNaN(pk)) put(kit + "|pots.healAt", pk, npk);
+        }
     }
 
     /** A watched player's style, by name, for when we meet them; null if never watched long enough. */

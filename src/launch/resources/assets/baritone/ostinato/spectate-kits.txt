@@ -1,0 +1,23 @@
+# Ostinato: kit signatures for spectator kit detection (KitSignatures). One kit a line:
+#   <label> [min=<score>] <clue>=<weight> ...
+# A clue is an evidence token or a glob with * (any run of characters). What a watched fighter shows becomes tokens
+# worth 0..1 each:
+#   held in a hand (item id path, e.g. diamond_sword, shield, end_crystal): share of the watched time, times 5, at most 1
+#   armor:<material> (leather, chainmail, iron, golden, diamond, netherite, turtle): share of the four slots and time
+#   elytra, glint:armor, glint:weapon, trim, dyed: worn share of the time, the same way
+#   effect:<id> (speed, strength, fire_resistance, ...): potion particles seen, share of the time
+#   events, worth half each, 1 from the second on: ate:golden_apple, ate:enchanted_golden_apple, ate:food,
+#     drank:potion, threw:ender_pearl, threw:splash_heal, threw:splash_harm, threw:splash_other, threw:wind_charge,
+#     shot:arrow, shot:trident, pop:totem, crystal (an end crystal appears next to them), firework
+# A kit's score is the sum of weight x value over its clues; the highest score wins if it reaches min (default 2.5),
+# otherwise the fighter is "unknown". To add a kit, add a line; a copy of this file at baritone/spectate-kits.txt in
+# the game folder replaces this one.
+sword          *_sword=2 armor:diamond=1.5 armor:iron=0.5 shield=-1 *_axe=-1 mace=-5 threw:splash_heal=-3 end_crystal=-4 armor:netherite=-1 ate:golden_apple=-0.5 pop:totem=-1 bow=-1 crossbow=-1
+axe+shield     *_axe=2.5 shield=2.5 armor:diamond=1 armor:iron=0.5 ate:golden_apple=0.3 mace=-5 end_crystal=-4 threw:splash_heal=-2 pop:totem=-0.5
+mace           mace=6 wind_charge=1.5 threw:wind_charge=2 elytra=1 firework=0.5 armor:netherite=0.5 end_crystal=-3
+crystal        end_crystal=5 crystal=4 respawn_anchor=3 obsidian=2.5 glowstone=1.5 pop:totem=1 totem_of_undying=0.5 armor:netherite=1 experience_bottle=0.5 mace=-4
+pot            threw:splash_heal=4 splash_potion=1.5 armor:diamond=2 *_sword=0.5 effect:speed=0.5 armor:netherite=-2.5 shield=-1.5 ate:golden_apple=-1 pop:totem=-1 mace=-5
+netherite-pot  threw:splash_heal=4 splash_potion=1.5 armor:netherite=2 *_sword=0.5 effect:speed=0.3 effect:strength=0.3 armor:diamond=-2.5 shield=-2 ate:golden_apple=-1 cobweb=-1 mace=-5 end_crystal=-4
+smp            armor:netherite=1.5 shield=1.5 totem_of_undying=0.75 pop:totem=1 ate:golden_apple=1 threw:ender_pearl=1 ender_pearl=0.5 cobweb=1 water_bucket=0.5 experience_bottle=0.75 threw:splash_heal=0.5 *_sword=0.5 armor:diamond=-0.5 mace=-5 end_crystal=-4 respawn_anchor=-3
+uhc            lava_bucket=3 water_bucket=1 cobweb=1 bow=1 fishing_rod=2 shot:arrow=1 ate:golden_apple=1.5 golden_apple=0.5 armor:diamond=1 armor:iron=1 *_axe=0.5 shield=0.5 armor:netherite=-3 mace=-5 end_crystal=-4 threw:splash_heal=-2
+ranged         bow=3 crossbow=3 shot:arrow=2 trident=2 shot:trident=2 *_sword=-0.5

@@ -2247,7 +2247,10 @@ public final class Settings {
     /** Let {@code spectateLearn} watch on multiplayer servers too, not only in single player and LAN worlds. */
     public final Setting<Boolean> spectateLearnOnServers = new Setting<>(false);
 
-    /** Also write each watched fight to {@code pvplogs/spectate/} in the fight recorder's format. */
+    /**
+     * Also write each watched fight to {@code pvplogs/spectate/} in the fight recorder's format. Ostinato: with its type
+     * and both kits at the end, and each FFA or team fight as well as one {@code group-*.log.gz} with every hit.
+     */
     public final Setting<Boolean> spectateSaveLogs = new Setting<>(false);
 
     /** How far away (blocks) {@code spectateLearn} watches players. */
@@ -2255,6 +2258,30 @@ public final class Settings {
 
     /** Most processor time (milliseconds a game tick, on its own low-priority thread) spent working out keys. */
     public final Setting<Double> spectateBudgetMs = new Setting<>(1.5);
+
+    // Ostinato: spectator kit detection and fight types
+    /**
+     * While {@code spectateLearn} watches, tell each fighter's kit (sword, axe+shield, mace, crystal, pot, uhc,
+     * netherite-pot, smp, ranged, or unknown) from what can be seen: armor and its material, glint, trims and dye, the
+     * items in their hands and how they swap, what they eat, drink, throw and pop, and their potion particles. The
+     * label and its confidence go into each fight log and keep what is learned apart per kit. The kits are a table in
+     * {@code spectate-kits.txt}; a copy at {@code baritone/spectate-kits.txt} in the game folder replaces it.
+     */
+    public final Setting<Boolean> spectateKitDetect = new Setting<>(true);
+
+    /**
+     * When a watched fighter's loadout fits none of the kits, make it a new kit ({@code learned-1}, ...) in
+     * {@code baritone/spectate-kits-learned.txt}, with a short description; loadouts seen again that are close join
+     * it. A learned kit is kept apart and gets its own priors like any other once it has the fights.
+     */
+    public final Setting<Boolean> spectateLearnKits = new Setting<>(true);
+
+    /**
+     * While {@code spectateLearn} watches, tag every fight 1v1, FFA or team (from scoreboard teams, name colours, dyed
+     * armor, kits and who never hits whom), and keep FFA and team fights out of 1v1 learning. Their hits are kept with
+     * attacker and victim, for multi-opponent skills later.
+     */
+    public final Setting<Boolean> spectateFightTypes = new Setting<>(true);
 
     // Ostinato: health estimator
     /**
