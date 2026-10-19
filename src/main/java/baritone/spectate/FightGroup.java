@@ -163,6 +163,10 @@ public final class FightGroup {
         int ha = hitsBy(a), hb = hitsBy(b);
         if (ha >= 2 && hb >= 2) {
             s += 1.5;
+            // Ostinato: over the whole fight, the hits split everyone into two sides that only hit across, and these
+            // two are on one side
+            Integer sa = sides == null ? null : sides.get(a), sb = sides == null ? null : sides.get(b);
+            if (sa != null && sa.equals(sb)) s += SIDE;
             int together = near.getOrDefault(key(a, b), 0);
             if (together >= 3 && together >= samples / 3) s += 1.5;
             // a common enemy: someone both of them hit
@@ -180,8 +184,48 @@ public final class FightGroup {
         return p == null ? 0 : p[att < vic ? 0 : 1];
     }
 
+    /** Ostinato: ally score for two on one side of the whole fight's hits (see {@link #foeSides()}). */
+    static final double SIDE = 2;
+    private Map<Integer, Integer> sides; // Ostinato: set while partitioning
+
+    /**
+     * Ostinato: who never hits whom over the whole fight. Colours members so that every pair that traded hits is on
+     * two sides; returns the sides only when that works (no one hit someone on their own side), everyone is reached,
+     * everyone hit at least twice, each side has two or more, and more than three quarters of the pairs across the
+     * sides traded hits (so a chain of separate duels does not pass for two teams). Otherwise null.
+     */
+    Map<Integer, Integer> foeSides() {
+        List<Integer> ids = new ArrayList<>(members.keySet());
+        if (ids.size() < 4) return null;
+        for (int m : ids) if (hitsBy(m) < 2) return null;
+        Map<Integer, Integer> side = new HashMap<>();
+        java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<>();
+        side.put(ids.get(0), 0);
+        q.add(ids.get(0));
+        while (!q.isEmpty()) {
+            int x = q.poll();
+            for (int y : ids) {
+                if (y == x || between(x, y) == 0) continue;
+                Integer sy = side.get(y);
+                if (sy == null) {
+                    side.put(y, 1 - side.get(x));
+                    q.add(y);
+                } else if (sy.equals(side.get(x))) return null;
+            }
+        }
+        if (side.size() != ids.size()) return null;
+        int n0 = 0;
+        for (int v : side.values()) if (v == 0) n0++;
+        int n1 = ids.size() - n0;
+        if (n0 < 2 || n1 < 2) return null;
+        int across = 0;
+        for (int x : ids) for (int y : ids) if (x < y && !side.get(x).equals(side.get(y)) && between(x, y) > 0) across++;
+        return across > 0.75 * n0 * n1 ? side : null;
+    }
+
     /** Puts members in teams: greedy merging of the strongest ally pairs, never across two members who traded hits. */
     static List<List<Integer>> partition(FightGroup g, Map<Integer, Clue> clues) {
+        g.sides = g.foeSides(); // Ostinato
         List<Integer> ids = new ArrayList<>(g.members.keySet());
         Map<Integer, Integer> team = new HashMap<>();
         for (int i = 0; i < ids.size(); i++) team.put(ids.get(i), i);
