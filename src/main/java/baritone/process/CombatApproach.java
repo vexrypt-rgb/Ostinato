@@ -5,17 +5,15 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import baritone.api.pathing.goals.GoalNear;
 import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.input.Input;
 import static baritone.process.CombatGeometry.*;
 
 /**
- * Getting to the fight: dig through a wall the target is behind, walk off an edge after a target that fell, or path
- * toward (or shoot at) one that is out of drive range. Null once the target is close and in the open, which is when
- * the exchange itself starts.
+ * Getting to the fight: dig through a wall the target is behind, walk off an edge after a target that fell, or sprint
+ * straight at one that is out of drive range. A path search here stalled the client. Null once the target is close
+ * and in the open, which is when the exchange itself starts.
  */
 final class CombatApproach {
     /** What the process does for us: hotbar, aim, keys, the tick's decision label and the eat clock. */
@@ -81,9 +79,12 @@ final class CombatApproach {
             if (!spearRush) {
                 if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return hands.decide("bow", tools.bow(me, target));
                 hands.use(false);
-                // Spear chase stops in the jab band, not inside the 2-block dead zone.
-                int near = inv.spearSlot(me) >= 0 ? 3 : 2;
-                return hands.decide("chase", new PathingCommand(new GoalNear(target.blockPosition(), near), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
+                // Ostinato: the old chase. Hold forward toward them. A Baritone path on an arena stalled the game.
+                hands.look(target.getEyePosition());
+                hands.key(Input.MOVE_FORWARD);
+                if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
+                if (me.onGround() && !me.isInWater()) hands.key(Input.JUMP);
+                return hands.decide("chase");
             }
         }
         return null;
