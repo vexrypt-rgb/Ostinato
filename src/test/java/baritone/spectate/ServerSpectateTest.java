@@ -30,4 +30,25 @@ public class ServerSpectateTest {
         assertEquals(-1, ServerSpectate.score("Ranked Duel Queue", w)); // never clicked: it would start a fight
         assertEquals(-1, ServerSpectate.score("Shop", w));
     }
+
+    @Test
+    public void parsesAuthClick() { // Ostinato: clickable chat prompts during login
+        List<String[]> r = ServerSpectate.parseRoute(Arrays.asList("authclick premium account | no", "wait 1"), new ArrayList<>());
+        assertArrayEquals(new String[]{"authclick", "premium account | no"}, r.get(0));
+        assertArrayEquals(new String[]{"premium account", "no"}, ServerSpectate.parseAuthClick(r.get(0)[1]));
+        assertNull(ServerSpectate.parseAuthClick("no bar here"));
+        assertNull(ServerSpectate.parseAuthClick(" | no"));
+    }
+
+    @Test
+    public void picksTheNoButton() {
+        // the crackedpvp.club prompt, as its parts: only the two buttons carry a run-command click
+        List<String> texts = Arrays.asList("\n", " Are you using a premium account?\n", " (after accepting, you will need to re-join.)\n", "\n", "  ", "[\u2714 Yes]", "      ", "[\u2716 No]", "\n");
+        List<Boolean> click = Arrays.asList(false, false, false, false, false, true, false, true, false);
+        assertEquals(7, ServerSpectate.pickChoice(texts, click, "no"));
+        assertEquals(5, ServerSpectate.pickChoice(texts, click, "yes"));
+        // a word inside another word, or a part that is not clickable, never counts
+        assertEquals(-1, ServerSpectate.pickChoice(Arrays.asList("[Join now]", "No"), Arrays.asList(true, false), "no"));
+        assertEquals(0, ServerSpectate.pickChoice(Arrays.asList("\u00a7c[\u00a7lNO\u00a7c]"), Arrays.asList(true), "no"));
+    }
 }

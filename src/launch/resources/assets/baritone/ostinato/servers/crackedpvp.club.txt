@@ -5,5 +5,9 @@
 #   click word   in the open menu, click the item whose name has this word
 #   wait s       pause
 #   words a,b    menu words for the fallback, best first
+#   authclick prompt words | choice   during login, click the [choice] button of the chat message with these words
+#                (a humanized click in chat, before /register or /login; menus wait until login is done)
+# The login plugin first asks "Are you using a premium account? [✔ Yes] [✖ No]": this throwaway is cracked.
+authclick premium account | no
 words spectate,spectator,spec,watch,ffa,arena,practice,duel
 wait 3

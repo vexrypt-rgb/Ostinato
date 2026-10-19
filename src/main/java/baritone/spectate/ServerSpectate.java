@@ -32,7 +32,9 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
@@ -79,6 +81,21 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private static final Pattern NEVER = Pattern.compile("\\b(ranked|unranked|queue|join queue|1v1 me|duel request|send duel|buy|purchase|store|shop|confirm purchase|kit editor|edit kit|party)\\b");
     private static final String[] DEFAULT_WORDS = {"spectate", "spectator", "spec", "watch", "ffa", "arena", "practice", "duel"};
     private static final Pattern SELECTOR = Pattern.compile("selector|navigator|menu|games|game menu|server|compass|play|practice|ffa|spectate|modes");
+
+    // Ostinato: clickable chat prompts in the login flow ("Are you using a premium account? [Yes] [No]" -> No), answered
+    // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
+    private static final String[][] DEFAULT_AUTH_CLICKS = {{"premium account", "no"}};
+    private static final Pattern UNCONFIRMED = Pattern.compile("unconfirmed message");
+    private static final Pattern CONFIRM_YES = Pattern.compile("^(yes|run|run command|proceed|confirm|send|send command|continue)\\b");
+    private static final int PATH_SCREEN = -2; // the cursor targets a point on a non-container screen (chat, confirm)
+    private final List<String[]> authClicks = new ArrayList<>();
+    private final java.util.concurrent.ConcurrentLinkedDeque<Object[]> recentSys = new java.util.concurrent.ConcurrentLinkedDeque<>(); // {ms, Component}
+    private String authClickChoice;
+    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs;
+    private ClickEvent chatTarget;
+    private String chatTargetShown;
+    private int chatStage, chatClicks;
+    private Object pathScreen;
 
     private final ConcurrentLinkedQueue<String[]> inbox = new ConcurrentLinkedQueue<>(); // {kind, text}, network thread to game
     private final Random rnd = new Random();
@@ -172,16 +189,40 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             String k = p[0].toLowerCase(Locale.ROOT), v = p.length > 1 ? p[1].trim() : "";
             if (k.equals("words")) {
                 for (String w : v.split(",")) if (!w.isBlank()) wordsOut.add(w.trim().toLowerCase(Locale.ROOT));
-            } else if (k.equals("cmd") || k.equals("hotbar") || k.equals("click") || k.equals("wait")) {
+            } else if (k.equals("cmd") || k.equals("hotbar") || k.equals("click") || k.equals("wait") || k.equals("authclick")) {
                 out.add(new String[]{k, v});
             }
         }
         return out;
     }
 
+    /** Ostinato: "premium account | no" -> {"premium account", "no"}; null if malformed. */
+    static String[] parseAuthClick(String v) {
+        int bar = v.indexOf('|');
+        if (bar <= 0) return null;
+        String prompt = v.substring(0, bar).trim().toLowerCase(Locale.ROOT), choice = v.substring(bar + 1).trim().toLowerCase(Locale.ROOT);
+        return prompt.isEmpty() || choice.isEmpty() ? null : new String[]{prompt, choice};
+    }
+
+    /**
+     * Ostinato: which part of a chat prompt to click: the first clickable part whose text has {@code choice} as a whole
+     * word ("[✖ No]" for "no", never "now" or "account"); -1 if none.
+     */
+    static int pickChoice(List<String> texts, List<Boolean> clickable, String choice) {
+        Pattern w = Pattern.compile("(^|[^\\p{L}])" + Pattern.quote(choice.toLowerCase(Locale.ROOT)) + "([^\\p{L}]|$)");
+        for (int i = 0; i < texts.size(); i++) {
+            if (!clickable.get(i)) continue;
+            String t = COLOR.matcher(texts.get(i)).replaceAll("").toLowerCase(Locale.ROOT).trim();
+            if (w.matcher(t).find()) return i;
+        }
+        return -1;
+    }
+
     private void loadRoute() {
         route.clear();
         routeStep = 0;
+        authClicks.clear();
+        authClicks.addAll(Arrays.asList(DEFAULT_AUTH_CLICKS));
         words = DEFAULT_WORDS;
         List<String> lines = null;
         Path f = dir().resolve(host + ".txt");
@@ -199,6 +240,13 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         List<String> w = new ArrayList<>();
         route.addAll(parseRoute(lines, w));
         if (!w.isEmpty()) words = w.toArray(new String[0]);
+        for (Iterator<String[]> it = route.iterator(); it.hasNext(); ) { // Ostinato: auth clicks are not steps
+            String[] st = it.next();
+            if (!st[0].equals("authclick")) continue;
+            it.remove();
+            String[] ac = parseAuthClick(st[1]);
+            if (ac != null) authClicks.add(ac);
+        }
     }
 
     // ------------------------------------------------------------------ control
@@ -230,6 +278,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         nextActionMs = startMs + 3000;
         commandsSent = clicks = hotbarUses = registerTries = loginTries = 0;
         authed = sawAuthPrompt = spectateTried = false;
+        authClickChoice = null; // Ostinato: chat-prompt state
+        chatTarget = null;
+        chatStage = chatClicks = 0;
+        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = 0;
+        recentSys.clear();
         menusSeen.clear();
         hurtAt.clear();
         sessionLog.clear();
@@ -314,6 +367,10 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         Object p = event.getPacket();
         if (p instanceof ClientboundSystemChatPacket c) {
             inbox.add(new String[]{c.overlay() ? "bar" : "sys", c.content().getString()});
+            if (!c.overlay()) { // Ostinato: kept with its click events, for clickable auth prompts
+                recentSys.add(new Object[]{System.currentTimeMillis(), c.content()});
+                while (recentSys.size() > 8) recentSys.pollFirst();
+            }
         } else if (p instanceof ClientboundPlayerChatPacket c) {
             String t = c.unsignedContent() != null ? c.unsignedContent().getString() : c.body().content(); // Ostinato: nullable on 1.21.11
             inbox.add(new String[]{"chat", t});
@@ -405,22 +462,175 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             return;
         }
         switch (phase) {
-            case AUTH -> {
-                // no prompt within 12 s: the server needs no login (or uses a premium session)
-                if (!sawAuthPrompt && now - lastAuthMs > 12_000) {
-                    authed = true;
-                    note("no auth prompt seen; going on");
-                }
-                if (authed) {
-                    phase = Phase.ROUTE;
-                    nextActionMs = now + 2500 + rnd.nextInt(2500);
-                }
-            }
+            case AUTH -> auth(mc, now);
             case ROUTE -> route(mc, now);
             case WATCH -> watch(mc, now);
             default -> {
             }
         }
+    }
+
+    /** Ostinato: the login phase: clickable prompts first, then /register or /login, and no menus until it is done. */
+    private void auth(Minecraft mc, long now) {
+        if (authPhaseMs == 0) authPhaseMs = now;
+        if (chatStage != 0) {
+            chatClick(mc, now);
+            return;
+        }
+        if (authClickChoice != null && now - authClickPromptMs > 600 && chatClicks < 2 && pending.isEmpty() && !busy()) {
+            String choice = authClickChoice;
+            authClickChoice = null;
+            ClickEvent ce = findChoice(choice, authClickPromptMs);
+            if (ce == null) {
+                note("auth prompt: no clickable [" + choice + "] found");
+            } else {
+                chatTarget = ce;
+                chatTargetShown = choice;
+                chatStage = 1;
+                chatStageMs = now + HumanInput.between(rnd, s().autoSpectateThinkMinMs.value, s().autoSpectateThinkMaxMs.value);
+                note("auth prompt: will click [" + choice + "]");
+            }
+            return;
+        }
+        if (!authed && registerTries + loginTries > 0 && lastAuthSentMs > 0 && now - lastAuthSentMs > 10_000 && now - lastPromptMs > 8_000
+                && pending.isEmpty() && typing == null) {
+            authed = true;
+            note("no new auth prompt 10 s after the last /register or /login; going on");
+        }
+        // no prompt within 12 s: the server needs no login (or uses a premium session)
+        if (!sawAuthPrompt && now - lastAuthMs > 12_000) {
+            authed = true;
+            note("no auth prompt seen; going on");
+        }
+        if (!authed && sawAuthPrompt && now - authPhaseMs > 150_000) {
+            stop("login did not complete in 150 s");
+            return;
+        }
+        if (authed) {
+            phase = Phase.ROUTE;
+            nextActionMs = now + 2500 + rnd.nextInt(2500);
+        }
+    }
+
+    /** Ostinato: the click event of the [choice] part in a system message that came around the prompt. */
+    private ClickEvent findChoice(String choice, long promptMs) {
+        for (Object[] m : recentSys) {
+            long t = (long) m[0];
+            if (t < promptMs - 3000 || t > promptMs + 5000) continue;
+            List<String> texts = new ArrayList<>();
+            List<Boolean> clickable = new ArrayList<>();
+            List<ClickEvent> events = new ArrayList<>();
+            ((Component) m[1]).visit((style, text) -> {
+                ClickEvent ce = style.getClickEvent();
+                texts.add(text);
+                clickable.add(ce instanceof ClickEvent.RunCommand); // only a command button, never a link
+                events.add(ce);
+                return Optional.empty();
+            }, Style.EMPTY);
+            int i = pickChoice(texts, clickable, choice);
+            if (i >= 0) return events.get(i);
+        }
+        return null;
+    }
+
+    /** Ostinato: one step of clicking a chat button like a person: open chat, look, move there, rest, click, close. */
+    private void chatClick(Minecraft mc, long now) {
+        switch (chatStage) {
+            case 1 -> {
+                if (now < chatStageMs || busy() || typing != null || mc.screen != null) return;
+                mc.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)); // the chat key
+                chatStage = 2;
+                chatStageMs = now + HumanInput.between(rnd, 400, 900);
+            }
+            case 2 -> {
+                if (!(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen)) {
+                    note("chat closed before the click; dropped");
+                    chatStage = 0;
+                    return;
+                }
+                if (now < chatStageMs) return;
+                double[] px = locate(mc, chatTarget);
+                if (px == null) {
+                    note("auth prompt: [" + chatTargetShown + "] not visible in chat");
+                    mc.setScreen(null);
+                    chatStage = 0;
+                    return;
+                }
+                aimAt(mc, px, "chat [" + chatTargetShown + "]", now);
+                chatStage = 3;
+            }
+            case 3 -> {
+                if (busy()) return;
+                chatClicks++;
+                lastAuthMs = now; // a person reads what came back before typing
+                chatStage = 4;
+                chatStageMs = now + HumanInput.between(rnd, 500, 1000);
+            }
+            case 4 -> {
+                if (now < chatStageMs) return;
+                if (mc.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen cs) {
+                    // vanilla asks before running a command it can't check; confirm only this one we just clicked
+                    note("confirm screen: " + COLOR.matcher(cs.getTitle().getString()).replaceAll(""));
+                    for (var ch : cs.children()) {
+                        if (ch instanceof net.minecraft.client.gui.components.Button b
+                                && CONFIRM_YES.matcher(COLOR.matcher(b.getMessage().getString()).replaceAll("").toLowerCase(Locale.ROOT).trim()).find()) {
+                            var w = mc.getWindow();
+                            double sx = (double) w.getScreenWidth() / w.getGuiScaledWidth(), sy = (double) w.getScreenHeight() / w.getGuiScaledHeight();
+                            double gx = b.getX() + b.getWidth() / 2.0 + (rnd.nextDouble() * 2 - 1) * b.getWidth() / 5.0;
+                            double gy = b.getY() + b.getHeight() / 2.0 + (rnd.nextDouble() * 2 - 1) * 2;
+                            aimAt(mc, new double[]{gx * sx, gy * sy}, "confirm \"" + b.getMessage().getString() + "\"", now);
+                            chatStage = 5;
+                            return;
+                        }
+                    }
+                    note("confirm screen without a yes button; leaving it");
+                    key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+                    chatStage = 0;
+                    return;
+                }
+                if (mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen) key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+                chatStage = 0;
+                chatTarget = null;
+            }
+            case 5 -> {
+                if (busy()) return;
+                chatStage = 0;
+                chatTarget = null;
+            }
+            default -> chatStage = 0;
+        }
+    }
+
+    /** Ostinato: gui-scaled chat points whose clickable style runs this event; the window pixel of their middle, or null. */
+    private double[] locate(Minecraft mc, ClickEvent target) {
+        var w = mc.getWindow();
+        int gh = w.getGuiScaledHeight(), ticks = mc.gui.getGuiTicks();
+        var chat = mc.gui.getChat();
+        int top = Math.max(0, gh - 40 - net.minecraft.client.gui.components.ChatComponent.getHeight(mc.options.chatHeightFocused().get()) - 20); // Ostinato: focused chat area
+        int right = Math.min(w.getGuiScaledWidth(), net.minecraft.client.gui.components.ChatComponent.getWidth(mc.options.chatWidth().get()) + 12);
+        List<int[]> hits = new ArrayList<>();
+        for (int y = gh - 14; y >= top; y -= 2) {
+            for (int x = 1; x < right; x += 2) {
+                var f = new net.minecraft.client.gui.ActiveTextCollector.ClickableStyleFinder(mc.font, x, y);
+                chat.captureClickableText(f, gh, ticks, true);
+                Style st = f.result();
+                if (st != null && target.equals(st.getClickEvent())) hits.add(new int[]{x, y});
+            }
+        }
+        if (hits.isEmpty()) return null;
+        int[] pick = hits.get(hits.size() / 2 + (hits.size() > 4 ? rnd.nextInt(3) - 1 : 0)); // near the middle of the button
+        double sx = (double) w.getScreenWidth() / w.getGuiScaledWidth(), sy = (double) w.getScreenHeight() / w.getGuiScaledHeight();
+        return new double[]{(pick[0] + rnd.nextDouble() - 0.5) * sx, (pick[1] + rnd.nextDouble() - 0.5) * sy};
+    }
+
+    private void aimAt(Minecraft mc, double[] to, String name, long now) {
+        path = HumanInput.cursorPath(mc.mouseHandler.xpos(), mc.mouseHandler.ypos(), to[0], to[1], rnd);
+        pathStart = now;
+        pathContainer = PATH_SCREEN;
+        pathScreen = mc.screen;
+        pathSlot = -1;
+        pathName = name;
+        note("move to " + name);
     }
 
     private static String disconnectReason(DisconnectedScreen ds) {
@@ -469,8 +679,27 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             return true;
         }
         if (!authed && phase.ordinal() <= Phase.AUTH.ordinal() + 1) {
+            if (kind.equals("title") && UNCONFIRMED.matcher(l).find()) { // Ostinato: a chat prompt is still waiting
+                sawAuthPrompt = true;
+                lastPromptMs = now;
+                return false;
+            }
+            if (kind.equals("sys")) {
+                for (String[] ac : authClicks) {
+                    if (l.contains(ac[0]) && chatClicks < 2 && chatStage == 0) {
+                        sawAuthPrompt = true;
+                        lastPromptMs = now;
+                        if (authClickChoice == null) note("auth prompt \"" + ac[0] + "\": answer [" + ac[1] + "]");
+                        authClickChoice = ac[1];
+                        authClickPromptMs = now;
+                    }
+                }
+            }
             boolean reg = REGISTER.matcher(l).find(), log = LOGIN.matcher(l).find();
-            if (reg || log) sawAuthPrompt = true;
+            if (reg || log) {
+                sawAuthPrompt = true;
+                lastPromptMs = now;
+            }
             if (now - lastAuthMs < 4000) return false; // let prompts repeat without answering each
             String p = password();
             if (p == null) return false;
@@ -521,7 +750,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             type(mc, now);
             return;
         }
-        if (busy() || mc.screen != null) return; // chat opens only over the world
+        if (busy() || mc.screen != null || chatStage != 0 || authClickChoice != null) return; // chat opens only over the world; chat prompts first
         for (Iterator<Object[]> it = pending.iterator(); it.hasNext(); ) {
             Object[] p = it.next();
             if ((long) p[0] > now) continue;
@@ -560,6 +789,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         ((baritone.utils.accessor.IOstinatoInput) mc.keyboardHandler).ostinato$keyPress(handle, 1, enter);
         ((baritone.utils.accessor.IOstinatoInput) mc.keyboardHandler).ostinato$keyPress(handle, 0, enter);
         commandsSent++;
+        if (typingShown.equals("register") || typingShown.equals("login")) lastAuthSentMs = now; // Ostinato
         note("sent /" + typingShown);
         scrubHistory(mc);
         typing = null;
@@ -642,7 +872,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             nextActionMs = now + HumanInput.between(rnd, s().autoSpectateClickGapMinMs.value, s().autoSpectateClickGapMaxMs.value);
         }
         if (path == null && hoverUntil == 0) return;
-        if (!(mc.screen instanceof AbstractContainerScreen<?> cs) || cs.getMenu().containerId != pathContainer) {
+        boolean same = pathContainer == PATH_SCREEN ? mc.screen != null && mc.screen == pathScreen // Ostinato: chat or confirm screen
+                : mc.screen instanceof AbstractContainerScreen<?> cs && cs.getMenu().containerId == pathContainer;
+        if (!same) {
             path = null; // the menu went away under the cursor
             hoverUntil = 0;
             return;
@@ -665,7 +897,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         if (now < hoverUntil) return;
         hoverUntil = 0;
         clicks++;
-        note("click \"" + pathName + "\" (slot " + pathSlot + ")");
+        note(pathSlot < 0 ? "click " + pathName : "click \"" + pathName + "\" (slot " + pathSlot + ")");
         ((baritone.utils.accessor.IOstinatoInput) mc.mouseHandler).ostinato$onButton(handle, new net.minecraft.client.input.MouseButtonInfo(0, 0), 1);
         releaseAt = now + HumanInput.between(rnd, 50, 110);
         nextActionMs = Long.MAX_VALUE; // set on release
@@ -714,7 +946,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             nextActionMs = Math.max(nextActionMs, now + HumanInput.between(rnd, s().autoSpectateReadMinMs.value, s().autoSpectateReadMaxMs.value));
         }
         if (busy() || now < nextActionMs) return;
-        if (best == null || clicks >= 12 || phase == Phase.WATCH) {
+        if (best == null || clicks >= 12 || phase == Phase.WATCH || !authed) { // Ostinato: no menu clicks before login is done
             // nothing to do here (or already watching): close it like a person would
             nextActionMs = now + 2000 + rnd.nextInt(1500);
             if (now - menuOpenedMs(now) > 3000) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27); // Ostinato: Esc, like a person
