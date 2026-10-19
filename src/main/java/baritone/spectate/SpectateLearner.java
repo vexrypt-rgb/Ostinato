@@ -219,7 +219,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         List<Player> near = new ArrayList<>();
         for (Player p : level.players()) {
             // Ostinato: negative ids are client-made (the freecam spar ghost), never a real player to learn from
-            if (p != me && p.getId() >= 0 && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
+            if (p != me && p.getId() >= 0 && !npc(p) && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
         }
         near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(me)));
         Set<Integer> keep = new HashSet<>();
@@ -1127,5 +1127,15 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (d >= 180) d -= 360;
         if (d < -180) d += 360;
         return d;
+    }
+
+    /**
+     * Ostinato: lobby NPCs (server-made "players" with no tab-list entry, often with scrambled §-coded names) hover and
+     * never fight. Watching them only filled the log with false fly flags on the first live session, so skip them.
+     */
+    static boolean npc(Player p) {
+        var conn = Minecraft.getInstance().getConnection();
+        if (conn != null && conn.getPlayerInfo(p.getUUID()) == null) return true;
+        return p.getName().getString().indexOf('\u00a7') >= 0;
     }
 }
