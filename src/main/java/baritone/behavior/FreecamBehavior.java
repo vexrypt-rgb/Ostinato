@@ -198,6 +198,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private int watchTicks;
     private boolean watchSpawned;
     private boolean watchEngaged;
+    private long aimHelpAt;
 
     /** V, by default: attack the player being looked at. Press again on them to stop. Works with freecam off. */
     private void pollAttackKey() {
@@ -205,11 +206,33 @@ public final class FreecamBehavior extends Behavior implements Helper {
             return;
         }
         boolean down = keyDown(Baritone.settings().attackKey.value);
-        if (down && !attackKeyHeld && ctx.player() != null) {
-            Entity looked = mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er ? er.getEntity() : null;
-            toggleAttack(looked);
-        }
+        if (down && !attackKeyHeld && ctx.player() != null) toggleAttack(aimedPlayer());
         attackKeyHeld = down;
+    }
+
+    /** The player under the crosshair, or the one closest to where you are looking, out to 48 blocks. */
+    private Entity aimedPlayer() {
+        if (mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er && er.getEntity() instanceof net.minecraft.world.entity.player.Player) {
+            return er.getEntity();
+        }
+        net.minecraft.world.entity.player.Player me = mc.player;
+        if (me == null || mc.level == null) return null;
+        net.minecraft.world.phys.Vec3 eye = me.getEyePosition();
+        net.minecraft.world.phys.Vec3 look = me.getLookAngle();
+        Entity best = null;
+        double bestAng = Math.toRadians(14);
+        for (net.minecraft.world.entity.player.Player pl : mc.level.players()) {
+            if (pl == me || !pl.isAlive()) continue;
+            net.minecraft.world.phys.Vec3 to = pl.getEyePosition().subtract(eye);
+            double dist = to.length();
+            if (dist < 0.5 || dist > 48) continue;
+            double ang = Math.acos(Math.max(-1.0, Math.min(1.0, look.dot(to.scale(1.0 / dist)))));
+            if (ang < bestAng) {
+                bestAng = ang;
+                best = pl;
+            }
+        }
+        return best;
     }
 
     private boolean keyDown(String name) {
@@ -524,10 +547,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         } else if (left) {
             select();
         } else if (right) {
-            if (fighting()) { // Ostinato: a path calc during a fight is the lag, and it keeps the sword from swinging
-                logDirect("In a fight, not pathing");
-                return;
-            }
+            if (fighting()) return; // Ostinato: a path calc during a fight is the lag
             BetterBlockPos pos = new BetterBlockPos(camera.getX(), camera.getY(), camera.getZ());
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
             logDirect("Going to " + pos);
@@ -569,7 +589,11 @@ public final class FreecamBehavior extends Behavior implements Helper {
             logDirect("Stopped attacking");
             return;
         }
-        logDirect("Look at a player and press V, or middle-click in freecam. Press it again to stop.");
+        long now = System.currentTimeMillis();
+        if (now - aimHelpAt > 2500) {
+            aimHelpAt = now;
+            logDirect("Look toward a player and press V. Press V again to stop.");
+        }
     }
 
     private Entity entityUnderCrosshair() {
@@ -613,20 +637,14 @@ public final class FreecamBehavior extends Behavior implements Helper {
             }
         }
         if (hit != null) {
-            if (fighting()) { // Ostinato: follow would path instead of swinging
-                logDirect("In a fight, not pathing");
-                return;
-            }
+            if (fighting()) return;
             Entity target = hit;
             baritone.getFollowProcess().follow(target::equals);
             logDirect("Following " + target.getName().getString());
             return;
         }
         if (block.getType() == HitResult.Type.BLOCK) {
-            if (fighting()) { // Ostinato: a path calc during a fight is the lag
-                logDirect("In a fight, not pathing");
-                return;
-            }
+            if (fighting()) return;
             BlockPos pos = ((BlockHitResult) block).getBlockPos();
             if (horizontalDistSq(pos, p) > renderRadius() * renderRadius()) {
                 logDirect("That block is outside render distance");
