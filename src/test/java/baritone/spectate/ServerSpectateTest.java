@@ -95,6 +95,8 @@ public class ServerSpectateTest {
         assertEquals(100, ServerSpectate.menuScore("Casual Match", "iron_sword", "casual"));
         assertEquals(-1, ServerSpectate.menuScore("Casual Match", "iron_sword", "crystal"));
         assertEquals(0, ServerSpectate.menuScore("Sword", "diamond_sword", "crystal"));
+        assertTrue(ServerSpectate.hitTheGate("hit the gate to ready up!"));
+        assertFalse(ServerSpectate.hitTheGate("round started! fight!"));
         assertTrue(ServerSpectate.roundStarted("round started! fight!"));
         assertFalse(ServerSpectate.roundStarted("match starting in 5 seconds..."));
         assertEquals("strl331", ServerSpectate.matchOpponent("opponent: strl331"));

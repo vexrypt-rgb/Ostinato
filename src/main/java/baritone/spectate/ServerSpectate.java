@@ -125,6 +125,11 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         return lower != null && lower.contains("round started");
     }
 
+    /** Ostinato: the countdown title. The player has to cross the gate before the round starts. */
+    static boolean hitTheGate(String lower) {
+        return lower != null && lower.contains("hit the gate");
+    }
+
     /** Ostinato: the results chat. Either line is the round ending. */
     static boolean matchOver(String lower) {
         return lower != null && (lower.contains("match results") || lower.contains("winner:"));
@@ -199,6 +204,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private String clickedMenuTitle = "";
     private long clickedMenuAt;
     private boolean awaitingNextMenu;
+    /** Ostinato: walk and punch the ready gate until this time. The round teleports anyone still behind it. */
+    private long gateUntil;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
@@ -386,6 +393,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         clickedMenuTitle = "";
         clickedMenuAt = 0;
         awaitingNextMenu = false;
+        gateUntil = 0;
         swordSlotUsed = -1;
         spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
@@ -569,6 +577,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             return;
         }
         playerGoneMs = 0;
+        walkGate(mc, now); // Ostinato: cross the ready gate during the countdown
         if (!fighting && phase != Phase.FIGHT && fighterByMistake(mc, now)) { // Ostinato: /spectate must not leave us playing a match
             stop("joined a match; watch only");
             return;
@@ -876,10 +885,14 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                     opponentName = opp;
                     note("opponent " + opp);
                 }
+                if (hitTheGate(l)) {
+                    if (gateUntil < now) note("hitting the gate");
+                    gateUntil = now + 7000;
+                }
                 if (matchOver(l) && (fighting || phase == Phase.FIGHT)) {
                     fighting = false;
                     phase = Phase.ROUTE;
-                    routeStep = 0;
+                    routeStep = requeueStep(); // Ostinato: the practice lobby has the Play Menu sword, not the hub clock
                     queued = false;
                     queueNoted = false;
                     joinNoted = false;
@@ -891,7 +904,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                     clickedMenuTitle = "";
                     clickedMenuAt = 0;
                     awaitingNextMenu = false;
+                    gateUntil = 0;
                     clicks = 0;
+                    releaseGate();
                     baritone.getPvpProcess().stopAttack();
                     nextActionMs = now + 2500;
                     note("match over; queueing again");
@@ -1267,6 +1282,45 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private long menuOpenedMs(long now) {
         if (menuSeenAt == 0) menuSeenAt = now;
         return menuSeenAt;
+    }
+
+    /** Ostinato: hold forward and punch while the ready-gate title is up. Stop once the round starts. */
+    private void walkGate(Minecraft mc, long now) {
+        if (gateUntil == 0) return;
+        if (phase == Phase.FIGHT || now > gateUntil || mc.screen != null) {
+            if (phase == Phase.FIGHT || now > gateUntil) gateUntil = 0;
+            releaseGate();
+            return;
+        }
+        var in = baritone.getInputOverrideHandler();
+        in.setInputForceState(Input.MOVE_FORWARD, true);
+        in.setInputForceState(Input.SPRINT, true);
+        in.setInputForceState(Input.CLICK_LEFT, true);
+    }
+
+    private void releaseGate() {
+        var in = baritone.getInputOverrideHandler();
+        in.setInputForceState(Input.MOVE_FORWARD, false);
+        in.setInputForceState(Input.SPRINT, false);
+        in.setInputForceState(Input.CLICK_LEFT, false);
+    }
+
+    /** Ostinato: after a match, queue again from the Play Menu sword when it is already in the hotbar. */
+    private int requeueStep() {
+        int swordAt = 0;
+        for (int i = 0; i < route.size(); i++) {
+            if (route.get(i)[0].equals("hotbar") && route.get(i)[1].equalsIgnoreCase("sword")) swordAt = i;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = mc.player.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (hotbarHit(n, id, "sword")) return swordAt;
+        }
+        return 0;
     }
 
     /** Ostinato: the countdown is over. Fight the named opponent, or the nearest other player. */
