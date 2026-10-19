@@ -25,6 +25,8 @@ import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.api.utils.input.Input;
 import baritone.behavior.Behavior;
+
+import java.io.File;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -36,6 +38,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
@@ -65,7 +68,7 @@ import java.util.regex.Pattern;
  */
 public final class ServerSpectate extends Behavior implements baritone.api.utils.Helper {
 
-    public enum Phase { IDLE, CONNECTING, AUTH, ROUTE, WATCH, LEAVING }
+    public enum Phase { IDLE, CONNECTING, AUTH, ROUTE, WATCH, FIGHT, LEAVING }
 
     private static final Pattern COLOR = Pattern.compile("§.");
     private static final Pattern CAPTCHA = Pattern.compile("captcha|verify you are human|are you a robot|type the code|enter the code");
@@ -78,21 +81,121 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private static final Pattern WRONG_PW = Pattern.compile("wrong password|incorrect password|invalid password");
     private static final Pattern ALREADY = Pattern.compile("already registered|is registered|please login|use /login");
     /** Never clicked: these would queue us into a fight or buy something. */
-    private static final Pattern NEVER = Pattern.compile("\\b(ranked|unranked|queue|join queue|1v1 me|duel request|send duel|buy|purchase|store|shop|confirm purchase|kit editor|edit kit|party)\\b");
-    private static final String[] DEFAULT_WORDS = {"spectate", "spectator", "spec", "watch", "ffa", "arena", "practice", "duel"};
-    private static final Pattern SELECTOR = Pattern.compile("selector|navigator|menu|games|game menu|server|compass|play|practice|ffa|spectate|modes");
-
+    private static final Pattern NEVER = Pattern.compile("\\b(ranked|unranked|queue|join queue|1v1 me|duel request|send duel|buy|purchase|store|shop|confirm purchase|kit editor|edit kit|party|casual|competitive)\\b");
+    private static final String[] DEFAULT_WORDS = {"spectate", "spectator", "spec", "watch"}; // Ostinato: ffa, practice and duel join as a fighter
     // Ostinato: clickable chat prompts in the login flow ("Are you using a premium account? [Yes] [No]" -> No), answered
     // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
     private static final String[][] DEFAULT_AUTH_CLICKS = {{"premium account", "no"}};
     static final Pattern REMINDER = Pattern.compile("seconds? to (register|log ?in)|time to (register|log ?in)");
+
+    /**
+     * Ostinato: true when this lowercased line means the account is actually logged in.
+     * crackedpvp.club shows "We missed you, welcome back!" before /login, while the action bar
+     * is still counting down. That greeting must not cancel the deferred /login.
+     */
+    static boolean loggedInText(String lower) {
+        if (lower == null || REMINDER.matcher(lower).find() || !AUTH_OK.matcher(lower).find()) return false;
+        boolean greeting = lower.contains("welcome back") && !lower.contains("logged") && !lower.contains("registered");
+        return !greeting;
+    }
+
+    // Ostinato: "itskrtk is queueing for crystal" names a fight happening in another arena.
+    private static final Pattern QUEUEING = Pattern.compile("([a-z0-9_]{2,16}) is queueing");
+    /** A line that means this account joined a match. Leaving uses stop(), so the server is not blocked. */
+    private static final Pattern JOINED_FIGHT = Pattern.compile("\\byou (have )?joined (the )?queue\\b|\\byou are (now )?(queueing|fighting)\\b|\\byou are now in a (match|fight|game)\\b|\\byou have been matched\\b");
+    /** Ostinato: "Opponent: STRL331", not the following "Opponent Elo: 1000" line. */
+    private static final Pattern OPPONENT = Pattern.compile("\\bopponent:\\s*([a-z0-9_]{2,16})\\b");
+    private static final Pattern UNKNOWN_CMD = Pattern.compile("unknown( or incomplete)? command|no such command|not (a |an )?(valid )?command|do not have permission|(does not|doesn't) exist|unrecognized command");
+
+    /** Ostinato: the server rejected a command, including crackedpvp's "No such command." */
+    static boolean unknownCommand(String lower) {
+        return lower != null && UNKNOWN_CMD.matcher(lower).find();
+    }
+
+    /** Ostinato: the player in "name is queueing for ...", or null. */
+    static String queueingPlayer(String lower) {
+        if (lower == null) return null;
+        var m = QUEUEING.matcher(lower);
+        if (!m.find()) return null;
+        String name = m.group(1);
+        if (name.equals("you") || name.equals("player")) return null;
+        return name;
+    }
+
+    /** Ostinato: "Round started! Fight!" is the countdown ending. Earlier "match starting" lines are not. */
+    static boolean roundStarted(String lower) {
+        return lower != null && lower.contains("round started");
+    }
+
+    /** Ostinato: the countdown title. The player has to cross the gate before the round starts. */
+    static boolean hitTheGate(String lower) {
+        return lower != null && lower.contains("hit the gate");
+    }
+
+    /** Ostinato: a bare "Disconnected" is a drop, not a ban. Kick and ban text still blocks the server. */
+    static boolean plainDrop(String why) {
+        if (why == null) return true;
+        String l = why.toLowerCase(Locale.ROOT).trim();
+        if (l.isEmpty() || l.equals("disconnected") || l.equals("disconnected from server")) return true;
+        return l.contains("timed out") || l.contains("connection reset") || l.contains("connection refused")
+                || l.contains("unknown host") || l.contains("cannot resolve") || l.contains("no further information")
+                || l.contains("network is unreachable");
+    }
+
+    /** Ostinato: the results chat. Either line is the round ending. */
+    static boolean matchOver(String lower) {
+        return lower != null && (lower.contains("match results") || lower.contains("winner:"));
+    }
+
+    /** Ostinato: the opponent named on the match-details line, or null. */
+    static String matchOpponent(String lower) {
+        if (lower == null) return null;
+        var m = OPPONENT.matcher(lower);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Ostinato: a routed hotbar click matches the display name or the item id (a clock can be named Gamemodes).
+     * The hub sword is named Enable PvP and is not the sword that opens the mode menu.
+     */
+    static boolean hotbarHit(String hover, String itemId, String want) {
+        if (want == null || want.isEmpty()) return false;
+        String name = hover == null ? "" : hover.toLowerCase(Locale.ROOT);
+        String id = itemId == null ? "" : itemId.toLowerCase(Locale.ROOT);
+        if (want.equals("sword") && name.contains("enable pvp")) return false;
+        if (name.contains(want)) return true;
+        if (want.equals("crystal")) return id.contains("crystal");
+        return !id.isEmpty() && id.contains(want);
+    }
+
+    /**
+     * Ostinato: score for a wanted menu click. The title wins. An end crystal still counts as "crystal"
+     * when its title does not. A never-word in the title (queue, store, competitive) does not get clicked.
+     */
+    static int menuScore(String titleOnly, String itemId, String want) {
+        if (want == null || want.isEmpty()) return 0;
+        String title = titleOnly == null ? "" : titleOnly.toLowerCase(Locale.ROOT);
+        // Ostinato: "Mace" must beat "SpearMace", and "SMP" must beat "DiamondSMP".
+        if (title.equals(want) || title.startsWith(want + " ") || title.startsWith(want + "|")) return 100;
+        if (title.contains(want)) return 40; // an explicit mode name still wins over the old spectate never-list
+        if (NEVER.matcher(title).find()) return -1;
+        String id = itemId == null ? "" : itemId.toLowerCase(Locale.ROOT);
+        if (want.equals("crystal") && id.contains("crystal")) return 50;
+        return 0;
+    }
+
+    /** Ostinato: a refreshed item list in the same menu is not the next menu. */
+    static boolean waitingOnSameMenu(String openTitle, String clickedTitle) {
+        return clickedTitle != null && !clickedTitle.isEmpty() && clickedTitle.equals(openTitle);
+    }
     private static final Pattern UNCONFIRMED = Pattern.compile("unconfirmed message");
     private static final Pattern CONFIRM_YES = Pattern.compile("^(yes|run|run command|proceed|confirm|send|send command|continue)\\b");
     private static final int PATH_SCREEN = -2; // the cursor targets a point on a non-container screen (chat, confirm)
     private final List<String[]> authClicks = new ArrayList<>();
     private final java.util.concurrent.ConcurrentLinkedDeque<Object[]> recentSys = new java.util.concurrent.ConcurrentLinkedDeque<>(); // {ms, Component}
     private String authClickChoice;
-    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs;
+    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs, spectateSentMs, survivalSince, hotbarDoneMs, swordHeldSince;
+    private int swordSlotUsed = -1;
     private ClickEvent chatTarget;
     private String chatTargetShown;
     private int chatStage, chatClicks;
@@ -103,8 +206,29 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private Phase phase = Phase.IDLE;
     private String host;
     private long startMs, nextActionMs, lastAuthMs;
-    private int commandsSent, clicks, hotbarUses, registerTries, loginTries;
-    private boolean authed, sawAuthPrompt, spectateTried;
+    private int commandsSent, clicks, hotbarUses, hotbarProbe, registerTries, loginTries;
+    private boolean authed, sawAuthPrompt, sawLoggedIn, spectateTried, spectateRejected, hotbarDumped, fighting;
+    /** Ostinato: the route right-clicks the clock and queues a mode. Joining that queue is the goal, not a mistake. */
+    private boolean queueRoute, queued, hotbarMissLogged, queueNoted, joinNoted;
+    private long hotbarMissingSince;
+    private String opponentName;
+    /** Ostinato: the menu a click step already used. The next click waits for a different title, not a flicker of the same menu. */
+    private int clickedMenuId = Integer.MIN_VALUE;
+    private String clickedMenuKey = "";
+    private String clickedMenuTitle = "";
+    private long clickedMenuAt;
+    private boolean awaitingNextMenu;
+    /** Ostinato: walk and punch the ready gate until this time. The round teleports anyone still behind it. */
+    private long gateUntil;
+    /** Ostinato: Casual kits, in menu order. Crystal already won one fight, so the next queue starts at Sword. */
+    private static final String[] KITS = {
+            "crystal", "sword", "mace", "axe", "uhc", "spearmace", "nethpot", "pot", "cart", "smp", "diamondsmp"
+    };
+    private int kitIndex = 1;
+    /** Ostinato: a plain disconnect rejoins. It does not block the server. */
+    private long rejoinAt;
+    private String rejoinHost;
+    private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
     private String[] words = DEFAULT_WORDS;
@@ -248,6 +372,10 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             String[] ac = parseAuthClick(st[1]);
             if (ac != null) authClicks.add(ac);
         }
+        queueRoute = false; // Ostinato: clock in the route means we mean to queue, so a queue line must not disconnect
+        for (String[] st : route) {
+            if (st[0].equals("hotbar") && st[1].equalsIgnoreCase("clock")) queueRoute = true;
+        }
     }
 
     // ------------------------------------------------------------------ control
@@ -277,12 +405,24 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         loadRoute();
         startMs = System.currentTimeMillis();
         nextActionMs = startMs + 3000;
-        commandsSent = clicks = hotbarUses = registerTries = loginTries = 0;
-        authed = sawAuthPrompt = spectateTried = false;
+        commandsSent = clicks = hotbarUses = hotbarProbe = registerTries = loginTries = 0;
+        authed = sawAuthPrompt = sawLoggedIn = spectateTried = spectateRejected = hotbarDumped = fighting = false;
+        queued = hotbarMissLogged = queueNoted = joinNoted = false;
+        hotbarMissingSince = 0;
+        opponentName = null;
+        clickedMenuId = Integer.MIN_VALUE;
+        clickedMenuKey = "";
+        clickedMenuTitle = "";
+        clickedMenuAt = 0;
+        awaitingNextMenu = false;
+        gateUntil = 0;
+        loadKit();
+        swordSlotUsed = -1;
+        spectateNames.clear();
         authClickChoice = null; // Ostinato: chat-prompt state
         chatTarget = null;
         chatStage = chatClicks = 0;
-        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = 0;
+        authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = playerGoneMs = spectateSentMs = survivalSince = hotbarDoneMs = swordHeldSince = 0;
         deferredPrompt = null;
         recentSys.clear();
         menusSeen.clear();
@@ -373,6 +513,8 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                 recentSys.add(new Object[]{System.currentTimeMillis(), c.content()});
                 while (recentSys.size() > 8) recentSys.pollFirst();
             }
+        } else if (p instanceof ClientboundDisguisedChatPacket c) { // Ostinato: "/login" is often a system line shown in chat
+            inbox.add(new String[]{"sys", c.message().getString()});
         } else if (p instanceof ClientboundPlayerChatPacket c) {
             String t = c.unsignedContent() != null ? c.unsignedContent().getString() : c.body().content(); // Ostinato: nullable on 1.21.11
             inbox.add(new String[]{"chat", t});
@@ -407,7 +549,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return;
         }
-        if (phase == Phase.IDLE && AUTO_EXIT) {
+        if (phase == Phase.IDLE && AUTO_EXIT && rejoinAt == 0) {
             if (idleSince == 0) idleSince = now;
             if (now - idleSince > 4000) {
                 note("exit: " + summary());
@@ -423,6 +565,15 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
         autoHook(mc, now);
+        if (rejoinAt != 0) {
+            if (now >= rejoinAt && rejoinHost != null) {
+                rejoinAt = 0;
+                String h = rejoinHost;
+                rejoinHost = null;
+                start(h); // Ostinato: a bare disconnect joins again
+            }
+            return;
+        }
         if (phase == Phase.IDLE) return;
         for (String[] m; (m = inbox.poll()) != null; ) {
             if (handleText(m[0], m[1], now)) return;
@@ -436,7 +587,14 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             String why = disconnectReason(ds);
             note("disconnected: " + why);
             phase = Phase.IDLE;
-            // a kick, ban or refused login: never retry this server (a plain network failure is not a kick)
+            // Ostinato: a bare "Disconnected" is a drop. A kick or ban still blocks the server.
+            if (plainDrop(why)) {
+                rejoinHost = host;
+                rejoinAt = now + 8000;
+                endReason = "";
+                note("plain disconnect; joining again");
+                return;
+            }
             if (!why.toLowerCase(Locale.ROOT).matches(".*(connection refused|timed out|unknown host|cannot resolve|no further information|connection reset|network is unreachable).*")) {
                 block("disconnected: " + why);
             }
@@ -445,13 +603,22 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             logDirect("Auto-spectate: disconnected from " + host + " (" + why + "); marked blocked. " + summary());
             return;
         }
-        if (event.getType() == TickEvent.Type.OUT || mc.player == null) {
-            if (phase != Phase.CONNECTING && phase != Phase.LEAVING && now - startMs > 5000 && !(mc.screen instanceof ConnectScreen)) {
-                // back at a menu without a kick screen: treat as ended
+        if (event.getType() == TickEvent.Type.OUT) return;
+        if (mc.player == null) {
+            // Ostinato: a lobby world change nulls the player for a moment. Wait before calling that a disconnect.
+            if (playerGoneMs == 0) playerGoneMs = now;
+            if (phase != Phase.CONNECTING && phase != Phase.LEAVING && now - startMs > 5000
+                    && now - playerGoneMs > 8000 && !(mc.screen instanceof ConnectScreen)) {
                 phase = Phase.IDLE;
                 endReason = "left the server";
                 flushLog();
             }
+            return;
+        }
+        playerGoneMs = 0;
+        walkGate(mc, now); // Ostinato: cross the ready gate during the countdown
+        if (!fighting && phase != Phase.FIGHT && fighterByMistake(mc, now)) { // Ostinato: /spectate must not leave us playing a match
+            stop("joined a match; watch only");
             return;
         }
         if (phase == Phase.CONNECTING) {
@@ -460,6 +627,10 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             note("joined world, gamemode " + mc.gameMode.getPlayerMode() + " at " + mc.player.blockPosition());
         }
         if (mc.screen instanceof AbstractContainerScreen<?> cs && !(cs.getMenu() instanceof net.minecraft.world.inventory.InventoryMenu)) {
+            if (fighting || phase == Phase.FIGHT) { // Ostinato: a menu must not steal the fight. The queue menus stay open.
+                key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+                return;
+            }
             menu(cs, now);
             return;
         }
@@ -467,6 +638,12 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             case AUTH -> auth(mc, now);
             case ROUTE -> route(mc, now);
             case WATCH -> watch(mc, now);
+            case FIGHT -> {
+                // Ostinato: the named opponent only. attackPlayers() would swing at everyone in the hub.
+                if (!baritone.getPvpProcess().isActive() && opponentName != null) {
+                    baritone.getPvpProcess().attackPlayer(opponentName);
+                }
+            }
             default -> {
             }
         }
@@ -677,10 +854,28 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             leaveAndBlock("ban/kick message: " + shown);
             return true;
         }
-        if (kind.equals("chat")) return false; // other players talking: never answered
-        if (AUTH_OK.matcher(l).find()) {
+        if (loggedInText(l)) { // Ostinato: a bare "welcome back" is the lobby title, not a finished login
             authed = true;
+            sawLoggedIn = true;
+            deferredPrompt = null;
             return false;
+        }
+        if (kind.equals("chat") && !(REMINDER.matcher(l).find() || LOGIN.matcher(l).find() || REGISTER.matcher(l).find())) return false;
+        // Ostinato: the login timer can arrive after the 12 s "no prompt" gate. That is not a finished login.
+        if (!sawLoggedIn && (kind.equals("bar") || kind.equals("sys") || kind.equals("title") || kind.equals("chat")) && REMINDER.matcher(l).find()) {
+            authed = false;
+            sawAuthPrompt = true;
+            lastPromptMs = now;
+            if (phase == Phase.ROUTE || phase == Phase.WATCH) {
+                phase = Phase.AUTH;
+                note("login timer is still running");
+            }
+            boolean reg = l.contains("register");
+            if (now - lastAuthSentMs < 4000 || chatStage != 0 || authClickChoice != null || typing != null) {
+                deferredPrompt = l;
+                return false;
+            }
+            return answerPrompt(l, reg, !reg, now);
         }
         if (WRONG_PW.matcher(l).find()) {
             stop("wrong password");
@@ -721,7 +916,98 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return answerPrompt(l, reg, log, now);
         }
+        if (authed && (kind.equals("bar") || kind.equals("sys") || kind.equals("title"))) {
+            if (queueRoute || queued || phase == Phase.FIGHT) {
+                // Ostinato: this route joins a queue on purpose. "you joined the queue" must not disconnect.
+                String opp = matchOpponent(l);
+                if (opp != null && (opponentName == null || !opp.equalsIgnoreCase(opponentName))) {
+                    opponentName = opp;
+                    note("opponent " + opp);
+                }
+                if (hitTheGate(l)) {
+                    if (gateUntil < now) note("hitting the gate");
+                    gateUntil = now + 7000;
+                }
+                if (matchOver(l) && (fighting || phase == Phase.FIGHT)) {
+                    fighting = false;
+                    phase = Phase.ROUTE;
+                    routeStep = requeueStep(); // Ostinato: the practice lobby has the Play Menu sword, not the hub clock
+                    queued = false;
+                    queueNoted = false;
+                    joinNoted = false;
+                    hotbarMissLogged = false;
+                    hotbarMissingSince = 0;
+                    opponentName = null;
+                    clickedMenuId = Integer.MIN_VALUE;
+                    clickedMenuKey = "";
+                    clickedMenuTitle = "";
+                    clickedMenuAt = 0;
+                    awaitingNextMenu = false;
+                    gateUntil = 0;
+                    clicks = 0;
+                    releaseGate();
+                    baritone.getPvpProcess().stopAttack();
+                    nextActionMs = now + 2500;
+                    note("match over; queueing again");
+                    return false;
+                }
+                if (roundStarted(l)) {
+                    if (gateUntil != 0) gateUntil = now + 2500; // Ostinato: stay on forward until the bot is through the gate
+                    beginRound();
+                    return false;
+                }
+                if (JOINED_FIGHT.matcher(l).find()) {
+                    queued = true;
+                    if (!joinNoted) {
+                        joinNoted = true;
+                        note("in the queue");
+                    }
+                    return false;
+                }
+                return false; // Ostinato: do not /spectate once this route is queueing
+            }
+            if (!fighting && phase != Phase.FIGHT && seekSpectate(l, now)) return true; // Ostinato: queue bars name fights in other arenas
+        }
         return false;
+    }
+
+    /**
+     * Ostinato: ask to spectate a player the action bar says is queueing. An unknown /spectate stops further
+     * attempts. Joining a queue or a match ends the session without blocking the server. Returns true when it ended.
+     */
+    private boolean seekSpectate(String lower, long now) {
+        boolean unknown = unknownCommand(lower);
+        if (unknown && (lower.contains("spectate") || (spectateSentMs > 0 && now - spectateSentMs < 8000))) {
+            spectateRejected = true;
+            pending.removeIf(p -> String.valueOf(p[2]).startsWith("spectate"));
+            note("server has no /spectate");
+            return false;
+        }
+        if (JOINED_FIGHT.matcher(lower).find()) {
+            stop("joined a match; watch only");
+            return true;
+        }
+        if (spectateRejected) return false;
+        String name = queueingPlayer(lower);
+        if (name == null || spectateNames.contains(name) || spectateNames.size() >= 3) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && name.equalsIgnoreCase(mc.player.getName().getString())) return false;
+        spectateNames.add(name);
+        sendLater("spectate " + name, "spectate " + name, now);
+        note("queue bar: spectate " + name);
+        return false;
+    }
+
+    /** Ostinato: survival for a few seconds after a spectate attempt means we entered a match. The lobby is adventure. */
+    private boolean fighterByMistake(Minecraft mc, long now) {
+        if ((!spectateTried && spectateNames.isEmpty())
+                || mc.gameMode == null
+                || mc.gameMode.getPlayerMode() != net.minecraft.world.level.GameType.SURVIVAL) {
+            survivalSince = 0;
+            return false;
+        }
+        if (survivalSince == 0) survivalSince = now;
+        return now - survivalSince > 3000;
     }
 
     private String deferredPrompt; // Ostinato: a /register or /login prompt seen during the pause
@@ -817,6 +1103,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         ((baritone.utils.accessor.IOstinatoInput) mc.keyboardHandler).ostinato$keyPress(handle, 0, enter);
         commandsSent++;
         if (typingShown.equals("register") || typingShown.equals("login")) lastAuthSentMs = now; // Ostinato
+        if (typingShown.startsWith("spectate")) spectateSentMs = now; // Ostinato
         note("sent /" + typingShown);
         scrubHistory(mc);
         typing = null;
@@ -949,18 +1236,57 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private void menu(AbstractContainerScreen<?> cs, long now) {
         AbstractContainerMenu m = cs.getMenu();
         String title = COLOR.matcher(cs.getTitle().getString()).replaceAll("");
+        String titleLower = title.toLowerCase(Locale.ROOT);
+        if (queueRoute && (titleLower.contains("profile") || titleLower.contains("settings"))) {
+            // Ostinato: a finished match can open Profile Settings. That is not the kit menu.
+            note("closing \"" + title + "\"");
+            key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+            return;
+        }
+        if (awaitingNextMenu && waitingOnSameMenu(title, clickedMenuTitle)) {
+            // Ostinato: the practice crystal refreshes this menu. Do not click it again, and do not close it.
+            if (now - clickedMenuAt > 10_000) {
+                awaitingNextMenu = false;
+                note("still in \"" + title + "\"; trying again");
+            } else {
+                return;
+            }
+        } else if (awaitingNextMenu) {
+            awaitingNextMenu = false;
+            if (routeStep < route.size()) routeStep++;
+            note("next menu \"" + title + "\"");
+        }
         List<String> names = new ArrayList<>();
         Slot best = null;
         int bestScore = 0;
         String want = null;
-        if (phase == Phase.ROUTE && routeStep < route.size() && route.get(routeStep)[0].equals("click")) want = route.get(routeStep)[1].toLowerCase(Locale.ROOT);
+        if (phase == Phase.ROUTE && routeStep < route.size() && route.get(routeStep)[0].equals("click")) {
+            boolean last = routeStep + 1 >= route.size();
+            want = route.get(routeStep)[1].toLowerCase(Locale.ROOT);
+            if (last && queueRoute) want = KITS[Math.floorMod(kitIndex, KITS.length)]; // Ostinato: rotate kits, each item is named the kit
+        }
         for (Slot sl : m.slots) {
             if (sl.container instanceof net.minecraft.world.entity.player.Inventory) continue;
             ItemStack st = sl.getItem();
             if (st.isEmpty()) continue;
-            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
-            names.add(n);
-            int sc = want != null ? (n.toLowerCase(Locale.ROOT).contains(want) && !NEVER.matcher(n.toLowerCase(Locale.ROOT)).find() ? 100 : 0) : score(n, words);
+            String n = itemText(st); // Ostinato: lore can say spectate while the title is only a star
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            names.add(n + " [" + id + "]");
+            // The category line "Competitive - Combat" is on every hub card. Never-words apply to the item title.
+            String titleOnly = COLOR.matcher(st.getHoverName().getString()).replaceAll("").trim().toLowerCase(Locale.ROOT);
+            int sc;
+            if (want != null) {
+                sc = menuScore(titleOnly, id, want); // Ostinato: "crystal" is the title, or an end crystal
+            } else if (NEVER.matcher(titleOnly).find()) {
+                sc = -1;
+            } else {
+                sc = 0;
+                String ln = n.toLowerCase(Locale.ROOT);
+                for (int i = 0; i < words.length; i++) if (ln.contains(words[i])) {
+                    sc = words.length - i;
+                    break;
+                }
+            }
             if (sc > bestScore) {
                 bestScore = sc;
                 best = sl;
@@ -973,16 +1299,32 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             nextActionMs = Math.max(nextActionMs, now + HumanInput.between(rnd, s().autoSpectateReadMinMs.value, s().autoSpectateReadMaxMs.value));
         }
         if (busy() || now < nextActionMs) return;
-        if (best == null || clicks >= 12 || phase == Phase.WATCH || !authed) { // Ostinato: no menu clicks before login is done
+        if (best == null || phase == Phase.WATCH || !authed || (want == null && clicks >= 12)) { // Ostinato: no menu clicks before login is done
             // nothing to do here (or already watching): close it like a person would
             nextActionMs = now + 2000 + rnd.nextInt(1500);
-            if (now - menuOpenedMs(now) > 3000) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27); // Ostinato: Esc, like a person
+            long wait = want != null ? 12_000 : 3000; // Ostinato: a wanted item can arrive a moment after the menu opens
+            if (now - menuOpenedMs(now) > wait) key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27); // Ostinato: Esc, like a person
             return;
         }
-        String n = COLOR.matcher(best.getItem().getHoverName().getString()).replaceAll("");
+        String n = itemText(best.getItem()); // Ostinato: same text that was scored, including lore
         note("move to \"" + n + "\" in \"" + title + "\"");
         startClick(Minecraft.getInstance(), cs, best, n, now); // Ostinato: the cursor travels there, rests, then clicks
-        if (want != null) routeStep++;
+        if (want != null) {
+            boolean last = routeStep + 1 >= route.size();
+            clickedMenuId = m.containerId;
+            clickedMenuKey = key;
+            clickedMenuTitle = title;
+            clickedMenuAt = now;
+            if (last && queueRoute) { // Ostinato: the last click is the mode, whose item is named the mode
+                queued = true;
+                awaitingNextMenu = false;
+                routeStep++;
+                note("queued " + want);
+                advanceKit();
+            } else {
+                awaitingNextMenu = true; // Ostinato: count this click only when the next menu opens
+            }
+        }
         if (n.toLowerCase(Locale.ROOT).matches(".*\\b(spectate|spectator|spec|watch)\\b.*")) spectateTried = true;
         menuSeenAt = 0;
     }
@@ -994,6 +1336,123 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         return menuSeenAt;
     }
 
+    /** Ostinato: hold forward and punch while the ready-gate title is up. Stop once the round starts. */
+    private void walkGate(Minecraft mc, long now) {
+        if (gateUntil == 0) return;
+        if (now > gateUntil || mc.screen != null) {
+            if (now > gateUntil) gateUntil = 0;
+            releaseGate();
+            return;
+        }
+        var in = baritone.getInputOverrideHandler();
+        in.setInputForceState(Input.MOVE_FORWARD, true);
+        in.setInputForceState(Input.SPRINT, true);
+        // Ostinato: punch only during the countdown. After the round starts, combat owns the swing.
+        in.setInputForceState(Input.CLICK_LEFT, phase != Phase.FIGHT);
+    }
+
+    private void releaseGate() {
+        var in = baritone.getInputOverrideHandler();
+        in.setInputForceState(Input.MOVE_FORWARD, false);
+        in.setInputForceState(Input.SPRINT, false);
+        in.setInputForceState(Input.CLICK_LEFT, false);
+    }
+
+    /** Ostinato: the hotbar sword step in the route, or 0 when the route has none. */
+    private int swordStep() {
+        for (int i = 0; i < route.size(); i++) {
+            if (route.get(i)[0].equals("hotbar") && route.get(i)[1].equalsIgnoreCase("sword")) return i;
+        }
+        return 0;
+    }
+
+    private boolean hotbarHas(Minecraft mc, String want) {
+        if (mc.player == null) return false;
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = mc.player.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (hotbarHit(n, id, want)) return true;
+        }
+        return false;
+    }
+
+    private File kitFile() {
+        return new File(Minecraft.getInstance().gameDirectory, "baritone/servers/crackedpvp.club.kit");
+    }
+
+    private void loadKit() {
+        try {
+            File f = kitFile();
+            if (!f.isFile()) return;
+            String w = java.nio.file.Files.readString(f.toPath()).trim().toLowerCase(Locale.ROOT);
+            for (int i = 0; i < KITS.length; i++) if (KITS[i].equals(w)) kitIndex = i;
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Ostinato: the next queue uses the next kit. The name is stored beside the server route. */
+    private void advanceKit() {
+        kitIndex = Math.floorMod(kitIndex + 1, KITS.length);
+        try {
+            File f = kitFile();
+            File parent = f.getParentFile();
+            if (parent != null) parent.mkdirs();
+            java.nio.file.Files.writeString(f.toPath(), KITS[kitIndex]);
+        } catch (Exception ignored) {
+        }
+        note("next kit " + KITS[kitIndex]);
+    }
+
+    /** Ostinato: after a match, queue again from the Play Menu sword when it is already in the hotbar. */
+    private int requeueStep() {
+        int swordAt = 0;
+        for (int i = 0; i < route.size(); i++) {
+            if (route.get(i)[0].equals("hotbar") && route.get(i)[1].equalsIgnoreCase("sword")) swordAt = i;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = mc.player.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (hotbarHit(n, id, "sword")) return swordAt;
+        }
+        return 0;
+    }
+
+    /** Ostinato: the countdown is over. Fight the named opponent, or the nearest other player. */
+    private void beginRound() {
+        if (phase == Phase.FIGHT && baritone.getPvpProcess().isActive()) return;
+        Minecraft mc = Minecraft.getInstance();
+        String name = opponentName;
+        if ((name == null || name.isEmpty()) && mc.player != null && mc.level != null) {
+            Player nearest = null;
+            double best = Double.MAX_VALUE;
+            for (Player p : mc.level.players()) {
+                if (p == mc.player || !p.isAlive()) continue;
+                double d = p.distanceToSqr(mc.player);
+                if (d < best) {
+                    best = d;
+                    nearest = p;
+                }
+            }
+            if (nearest != null) name = nearest.getName().getString();
+        }
+        fighting = true;
+        queued = true;
+        phase = Phase.FIGHT;
+        if (name != null && !name.isEmpty()) {
+            opponentName = name;
+            baritone.getPvpProcess().attackPlayer(name);
+            note("round started; attacking " + name);
+        } else {
+            note("round started; no opponent yet");
+        }
+    }
+
     // ------------------------------------------------------------------ route and fallback
 
     private void route(Minecraft mc, long now) {
@@ -1001,6 +1460,16 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             pendingUse = 0;
             net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.getKey(mc.options.keyUse.saveString()));
         }
+        if (awaitingNextMenu && now - clickedMenuAt > 800) { // Ostinato: the menu closed, so the click is done
+            awaitingNextMenu = false;
+            if (routeStep < route.size()) {
+                routeStep++;
+                hotbarMissingSince = 0;
+                hotbarMissLogged = false;
+                note("left menu \"" + clickedMenuTitle + "\"");
+            }
+        }
+        // Ostinato: the hub Enable PvP sword is not a fight. The route opens the clock, two crystals, then the mode sword.
         if (now < nextActionMs || !pending.isEmpty() || busy()) return;
         menuSeenAt = 0;
         if (routeStep < route.size()) {
@@ -1008,61 +1477,191 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             switch (st[0]) {
                 case "wait" -> {
                     routeStep++;
+                    hotbarMissingSince = 0;
+                    hotbarMissLogged = false;
                     nextActionMs = now + (long) (Double.parseDouble(st[1]) * 1000);
                 }
                 case "cmd" -> {
                     routeStep++;
+                    hotbarMissingSince = 0;
+                    hotbarMissLogged = false;
                     String c = st[1].startsWith("/") ? st[1].substring(1) : st[1];
                     if (c.toLowerCase(Locale.ROOT).startsWith("spec")) spectateTried = true;
                     sendLater(c, c, now);
                 }
                 case "hotbar" -> {
-                    routeStep++;
-                    useHotbar(mc, now, Pattern.compile(Pattern.quote(st[1].toLowerCase(Locale.ROOT))));
+                    // Ostinato: stay on this step until the item is here. The queue sword appears only after the crystals.
+                    String want = st[1].toLowerCase(Locale.ROOT);
+                    if (useHotbar(mc, now, want)) {
+                        routeStep++;
+                        hotbarMissingSince = 0;
+                        hotbarMissLogged = false;
+                    } else if (want.equals("clock") && swordStep() > 0 && hotbarHas(mc, "sword")) {
+                        // Ostinato: a finished match leaves us in the practice lobby. The clock is back at the hub.
+                        routeStep = swordStep();
+                        hotbarMissingSince = 0;
+                        hotbarMissLogged = false;
+                        note("lobby sword, skipping the clock");
+                    } else {
+                        if (hotbarMissingSince == 0) hotbarMissingSince = now;
+                        if (!hotbarMissLogged && now - hotbarMissingSince > 4000) {
+                            hotbarMissLogged = true;
+                            note("hotbar has no \"" + want + "\": " + hotbarLine(mc.player));
+                        }
+                        nextActionMs = now + 700;
+                    }
                 }
                 case "click" -> {
-                    // waits for a menu; give up on this step after 15 s
-                    if (now - nextActionMs > 15_000) routeStep++;
+                    // Ostinato: menu() does the click. A missed menu goes back to the Play Menu sword.
+                    if (now - nextActionMs > 15_000) {
+                        note("no menu for \"" + st[1] + "\"");
+                        if (queueRoute && swordStep() > 0) {
+                            routeStep = swordStep();
+                            nextActionMs = now + 1500;
+                            note("trying the play menu again");
+                        } else {
+                            routeStep++;
+                            nextActionMs = now;
+                        }
+                        hotbarMissingSince = 0;
+                        hotbarMissLogged = false;
+                    }
                 }
                 default -> routeStep++;
             }
             return;
         }
-        // fallback: open a lobby selector from the hotbar, at most 3 times
-        if (mc.gameMode.getPlayerMode() == net.minecraft.world.level.GameType.SPECTATOR || spectateTried && hotbarUses >= 2) {
+        if (queueRoute) { // Ostinato: do not probe the hub, and do not leave, once the mode route has run
+            if (!queueNoted) {
+                queueNoted = true;
+                note(queued ? "waiting for the round" : "queue route ended before the mode click");
+            }
+            return;
+        }
+        // Ostinato: right-click each hub item once. Menus are logged, and only a spectate item is clicked.
+        if (mc.gameMode.getPlayerMode() == net.minecraft.world.level.GameType.SPECTATOR) {
             enterWatch(now);
             return;
         }
-        if (hotbarUses < 3 && useHotbar(mc, now, SELECTOR)) return;
-        enterWatch(now);
+        if (mc.screen != null) {
+            key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+            nextActionMs = now + 700;
+            return;
+        }
+        dumpHotbar(mc.player);
+        if (!spectateTried && !spectateRejected) {
+            spectateTried = true;
+            note("try /spectate");
+            sendLater("spectate", "spectate", now);
+            return; // a menu this opens can still be scored on the next ticks
+        }
+        if (hotbarProbe < 9) {
+            int slot = hotbarProbe++;
+            if (slot == swordSlotUsed) return;
+            if (useHotbarSlot(mc, now, slot)) return;
+            return; // empty or skipped: the next tick tries the next slot
+        }
+        if (hotbarDoneMs == 0) hotbarDoneMs = now;
+        if (now - hotbarDoneMs < 6000) return; // a spectate click may still be moving us
+        stop("no spectate item in the hotbar menus");
+    }
+
+    /** Ostinato: name plus lore, so a menu line that says spectate is visible and scorable. */
+    private static String itemText(ItemStack st) {
+        String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("").trim();
+        var lore = st.get(net.minecraft.core.component.DataComponents.LORE);
+        if (lore == null) return n;
+        StringBuilder sb = new StringBuilder(n);
+        for (var line : lore.lines()) {
+            String t = COLOR.matcher(line.getString()).replaceAll("").trim();
+            if (t.isEmpty()) continue;
+            if (sb.length() > 140) break;
+            sb.append(" | ").append(t);
+        }
+        return sb.toString();
+    }
+
+    /** Ostinato: a sword, or the hub item named like one. Enable PvP is an iron sword. */
+    private static boolean isSword(ItemStack st) {
+        if (st.isEmpty()) return false;
+        if (st.is(net.minecraft.tags.ItemTags.SWORDS)) return true; // Ostinato: 1.21.11 has no SwordItem class
+        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+        if (id.contains("sword")) return true;
+        String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("").toLowerCase(Locale.ROOT);
+        return n.contains("sword") || n.contains("enable pvp");
+    }
+
+    private static int swordSlot(Player pl) {
+        if (pl == null) return -1;
+        for (int i = 0; i < 9; i++) if (isSword(pl.getInventory().getItem(i))) return i;
+        return -1;
+    }
+
+    /** Ostinato: right-click one hotbar slot. One click, then the hand leaves a sword so it is not held for 5 s. */
+    private boolean useHotbarSlot(Minecraft mc, long now, int i) {
+        ItemStack st = mc.player.getInventory().getItem(i);
+        if (st.isEmpty()) return false;
+        String n = itemText(st);
+        String l = n.toLowerCase(Locale.ROOT);
+        if (NEVER.matcher(l).find() && !isSword(st)) {
+            note("hotbar " + i + " \"" + n + "\" (skip)");
+            return false;
+        }
+        hotbarUses++;
+        note("hotbar " + i + " \"" + n + "\" (use)");
+        key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + i, '1' + i);
+        pendingUse = now + HumanInput.between(rnd, 250, 600);
+        nextActionMs = now + 4000 + rnd.nextInt(1200);
+        return true;
+    }
+
+    /** Ostinato: log every hotbar slot once, so a missed spectate item shows up in the session log. */
+    private void dumpHotbar(Player pl) {
+        if (hotbarDumped || pl == null) return;
+        hotbarDumped = true;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = pl.getInventory().getItem(i);
+            String id = st.isEmpty() ? "" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            sb.append(i).append('=').append(st.isEmpty() ? "-" : id + " " + COLOR.matcher(st.getHoverName().getString()).replaceAll("")).append("; ");
+        }
+        note("hotbar: " + sb);
     }
 
     private long pendingUse;
 
-    private boolean useHotbar(Minecraft mc, long now, Pattern p) {
+    /** Ostinato: right-click the hotbar item whose name or id matches this route word. Enable PvP does not match "sword". */
+    private boolean useHotbar(Minecraft mc, long now, String want) {
         Player pl = mc.player;
+        if (pl == null || want == null || want.isEmpty()) return false;
         for (int i = 0; i < 9; i++) {
             ItemStack st = pl.getInventory().getItem(i);
             if (st.isEmpty()) continue;
             String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
-            String l = n.toLowerCase(Locale.ROOT);
-            if (p.matcher(l).find() && !NEVER.matcher(l).find()) {
-                hotbarUses++;
-                note("hotbar " + i + " \"" + n + "\" (use)");
-                key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + i, '1' + i); // Ostinato: the number key, then the use button a moment later
-                long useAt = now + HumanInput.between(rnd, 250, 600);
-                pendingUse = useAt;
-                nextActionMs = now + 3000 + rnd.nextInt(2000);
-                return true;
-            }
-        }
-        if (p == SELECTOR) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < 9; i++) if (!pl.getInventory().getItem(i).isEmpty()) sb.append(i).append('=').append(pl.getInventory().getItem(i).getHoverName().getString()).append("; ");
-            note("hotbar has no selector: " + sb);
-            hotbarUses = 3;
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (!hotbarHit(n, id, want)) continue;
+            hotbarUses++;
+            note("hotbar " + i + " \"" + n + "\" [" + id + "] (use)");
+            key(mc, com.mojang.blaze3d.platform.InputConstants.KEY_1 + i, '1' + i); // Ostinato: the number key, then the use button a moment later
+            pendingUse = now + HumanInput.between(rnd, 250, 600);
+            nextActionMs = now + 3000 + rnd.nextInt(2000);
+            return true;
         }
         return false;
+    }
+
+    /** Ostinato: slot=id name for the slots that have an item, so a missed clock or sword is visible in the log. */
+    private static String hotbarLine(Player pl) {
+        if (pl == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 9; i++) {
+            ItemStack st = pl.getInventory().getItem(i);
+            if (st.isEmpty()) continue;
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            String n = COLOR.matcher(st.getHoverName().getString()).replaceAll("");
+            sb.append(i).append('=').append(id).append(' ').append(n).append("; ");
+        }
+        return sb.toString();
     }
 
     private void enterWatch(long now) {

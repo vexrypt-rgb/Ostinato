@@ -122,6 +122,25 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return added;
     }
 
+    public boolean hasEnemy(LivingEntity p) {
+        return p != null && enemies.contains(p.getUUID());
+    }
+
+    /** Take one marked player off the list. The fight ends once nobody is marked and no filter is set. */
+    public boolean removeEnemy(LivingEntity p) {
+        if (p == null) return false;
+        boolean removed = enemies.remove(p.getUUID());
+        if (removed && enemies.isEmpty() && filter == null) target = null;
+        return removed;
+    }
+
+    /** Middle-click stop: drop every marked player and any attack-all filter. */
+    public void stopAttack() {
+        enemies.clear();
+        filter = null;
+        target = null;
+    }
+
     public void clearEnemies() {
         enemies.clear();
     }

@@ -17,13 +17,10 @@ final class CombatMovement {
         void key(Input in);
     }
 
-    private static final boolean KINEMATIC = !"false".equals(System.getProperty("ostinato.kinematic"));
-
     /** Ticks of forward to hold released so the sprint drops before a hit; the process's hit logic sets it. */
     int wtap;
 
     private int strafeDir = 1, strafeLeft, dodgeLeft, dodgeDir = 1;
-    private baritone.pathing.kinematic.KinematicController kin;
 
     private final IPlayerContext ctx;
     private final Random rng;
@@ -36,6 +33,8 @@ final class CombatMovement {
     }
 
     void steer(Player me, LivingEntity target, double dist, boolean chase, boolean critArmed) {
+        // Ostinato: after a flee the body still faces away. Holding forward then sprints out of the fight.
+        if (me.getMainHandItem().isEmpty() || !CombatGeometry.facing(me, target, 55f)) return;
         if (--strafeLeft <= 0) {
             strafeDir = rng.nextBoolean() ? 1 : -1;
             strafeLeft = 10 + rng.nextInt(20);
@@ -44,20 +43,18 @@ final class CombatMovement {
             wtap = 0;
             hands.key(Input.MOVE_FORWARD);
             if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
-            if (dist > 3.5 && me.onGround() && me.isSprinting() && !me.isInWater()) hands.key(Input.JUMP);
             return;
         }
         if (wtap > 0) {
             wtap--;
         } else if (dist > 2.4) {
             hands.key(Input.MOVE_FORWARD);
-            if (!critArmed && me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
         } else if (dist < 1.2) {
             hands.key(Input.MOVE_BACK);
         }
         if (dist > 3.5) {
-            // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
-            if (me.onGround() && me.isSprinting() && !me.isInWater() && (!KINEMATIC || (kin != null ? kin : (kin = new baritone.pathing.kinematic.KinematicController(ctx))).jumpHelps(target.getX(), target.getZ()))) hands.key(Input.JUMP);
+            // Straight chase only. Sprint plus a strafe was set back.
+            if (!critArmed && me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
             return;
         }
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
@@ -71,7 +68,5 @@ final class CombatMovement {
         }
         hands.key(Input.MOVE_FORWARD);
         hands.key(dodgeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
-        if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
-        if (me.onGround() && rng.nextInt(12) == 0) hands.key(Input.JUMP);
     }
 }

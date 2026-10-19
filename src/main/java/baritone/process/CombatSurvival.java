@@ -7,7 +7,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
@@ -176,7 +175,15 @@ final class CombatSurvival {
             else if (me.getDeltaMovement().y < 0.1 && ctx.world().getBlockState(me.blockPosition().below()).isAir()) explosives.click(me, me.blockPosition().below().below());
             return hands.decide("pillar");
         }
-        return hands.decide("flee", new PathingCommand(new baritone.api.pathing.goals.GoalRunAway(18, target.blockPosition()), PathingCommandType.REVALIDATE_GOAL_AND_PATH));
+        // Ostinato: the pathfinder jumped and the server snapped the bot back. Turn away, then sprint. No jump.
+        Vec3 away = new Vec3(me.getX() - target.getX(), 0, me.getZ() - target.getZ());
+        if (away.lengthSqr() < 1e-4) away = new Vec3(1, 0, 0);
+        hands.look(me.getEyePosition().add(away.normalize().scale(12)));
+        if (!facing(me, target, 100f)) {
+            hands.key(Input.MOVE_FORWARD);
+            if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
+        }
+        return hands.decide("flee");
     }
 
     boolean eat(Player me, LivingEntity target) {

@@ -337,5 +337,6 @@
  "renderAcsHud": "Show the Autotune Combat System card on the HUD while #pvp is fighting. Hidden while F3 is open.",
  "acsHudAnchor": "Where the Autotune card sits: TOP_LEFT, LEFT, TOP_RIGHT or RIGHT.",
  "acsHudOpacity": "How solid the Autotune card's background is, from 0 (text only) to 1.",
- "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale."
+ "acsHudScale": "How large the Autotune card is drawn, in screen pixels per unit like Minecraft's own GUI scale. 0 picks the largest size that keeps the card within about a sixth of the screen's width, and never above the GUI scale.",
+ "attackKey": "Key that toggles a fight with the player under the crosshair, without freecam. A Minecraft key name, e.g. key.keyboard.v. key.keyboard.unknown disables it."
 }

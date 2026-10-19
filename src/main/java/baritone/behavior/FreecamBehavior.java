@@ -126,7 +126,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         active = camera;
         mc.setCameraEntity(camera);
         p.input = new ClientInput();
-        logDirect("Freecam on. Left click: go to block / follow entity. Right click: go to camera. #freecam to exit.");
+        logDirect("Freecam on. Middle-click a player to attack, middle-click them again to stop. #freecam to exit.");
     }
 
     public void disable() {
@@ -156,6 +156,8 @@ public final class FreecamBehavior extends Behavior implements Helper {
     @Override
     public void onTick(TickEvent event) {
         pollToggleKey();
+        pollAttackKey();
+        watchVex();
         if (camera == null) {
             return;
         }
@@ -192,6 +194,126 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private boolean toggleKeyHeld;
+    private boolean attackKeyHeld;
+    private int watchTicks;
+    private boolean watchSpawned;
+    private boolean watchEngaged;
+    private long aimHelpAt;
+
+    /** V, by default: attack the player being looked at. Press again on them to stop. Works with freecam off. */
+    private void pollAttackKey() {
+        if (baritone != BaritoneAPI.getProvider().getPrimaryBaritone() || mc.screen != null || mc.getWindow() == null || camera != null) {
+            return;
+        }
+        boolean down = keyDown(Baritone.settings().attackKey.value);
+        if (down && !attackKeyHeld && ctx.player() != null) toggleAttack(aimedPlayer());
+        attackKeyHeld = down;
+    }
+
+    /** The player under the crosshair, or the one closest to where you are looking, out to 48 blocks. */
+    private Entity aimedPlayer() {
+        if (mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er && er.getEntity() instanceof net.minecraft.world.entity.player.Player) {
+            return er.getEntity();
+        }
+        net.minecraft.world.entity.player.Player me = mc.player;
+        if (me == null || mc.level == null) return null;
+        net.minecraft.world.phys.Vec3 eye = me.getEyePosition();
+        net.minecraft.world.phys.Vec3 look = me.getLookAngle();
+        Entity best = null;
+        double bestAng = Math.toRadians(14);
+        for (net.minecraft.world.entity.player.Player pl : mc.level.players()) {
+            if (pl == me || !pl.isAlive()) continue;
+            net.minecraft.world.phys.Vec3 to = pl.getEyePosition().subtract(eye);
+            double dist = to.length();
+            if (dist < 0.5 || dist > 48) continue;
+            double ang = Math.acos(Math.max(-1.0, Math.min(1.0, look.dot(to.scale(1.0 / dist)))));
+            if (ang < bestAng) {
+                bestAng = ang;
+                best = pl;
+            }
+        }
+        return best;
+    }
+
+    private boolean keyDown(String name) {
+        try {
+            com.mojang.blaze3d.platform.InputConstants.Key key = com.mojang.blaze3d.platform.InputConstants.getKey(name);
+            return key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM && key.getValue() > 0
+                    && com.mojang.blaze3d.platform.InputConstants.isKeyDown(mc.getWindow(), key.getValue());
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /** Local vexflat watch: gear both sides, spawn one VexBot, and start the fight. */
+    private void watchVex() {
+        if (!Boolean.getBoolean("ostinato.watchvex") || baritone != BaritoneAPI.getProvider().getPrimaryBaritone()) return;
+        if (mc.player == null || mc.getSingleplayerServer() == null) return;
+        if (!watchSpawned && ++watchTicks == 60) {
+            watchSpawned = true;
+            spawnWatchBot();
+        }
+        if (!watchEngaged && watchSpawned) {
+            for (Entity e : ctx.entities()) {
+                if (e instanceof net.minecraft.world.entity.player.Player pl && pl != mc.player && pl.isAlive()
+                        && ((Baritone) baritone).getPvpProcess().addEnemy(pl)) {
+                    watchEngaged = true;
+                    gearWatchBot(pl.getName().getString());
+                    logDirect("Attacking " + pl.getName().getString());
+                    break;
+                }
+            }
+        }
+    }
+
+    private void gearWatchBot(String name) {
+        var server = mc.getSingleplayerServer();
+        if (server == null) return;
+        String[] kit = watchKit();
+        server.execute(() -> {
+            var src = server.createCommandSourceStack();
+            server.getCommands().performPrefixedCommand(src, "tp " + name + " 6 -60 0 90 0");
+            server.getCommands().performPrefixedCommand(src, "clear " + name);
+            for (String k : kit) server.getCommands().performPrefixedCommand(src, "item replace entity " + name + " " + k);
+        });
+    }
+
+    private static String[] watchKit() {
+        return new String[]{
+                "armor.head with iron_helmet", "armor.chest with iron_chestplate", "armor.legs with iron_leggings",
+                "armor.feet with iron_boots", "weapon.offhand with shield", "hotbar.0 with diamond_sword",
+                "hotbar.1 with diamond_axe", "hotbar.2 with golden_apple 3", "hotbar.3 with cooked_beef 16"
+        };
+    }
+
+    private void spawnWatchBot() {
+        var server = mc.getSingleplayerServer();
+        String[] kit = watchKit();
+        server.execute(() -> {
+            var src = server.createCommandSourceStack();
+            java.util.List<String> cmds = new java.util.ArrayList<>();
+            cmds.add("gamerule doMobSpawning false");
+            cmds.add("gamemode survival @a");
+            cmds.add("difficulty normal");
+            cmds.add("clear @a");
+            cmds.add("effect clear @a");
+            cmds.add("tp @a 0 -60 0 -90 0");
+            cmds.add("effect give @a instant_health 1 10");
+            cmds.add("effect give @a saturation 1 10");
+            for (String k : kit) cmds.add("item replace entity @a " + k);
+            cmds.add("vexbot difficulty preset medium");
+            cmds.add("vexbot spawn vex0");
+            for (String c : cmds) server.getCommands().performPrefixedCommand(src, c);
+            server.execute(() -> {
+                var src2 = server.createCommandSourceStack();
+                java.util.List<String> gear = new java.util.ArrayList<>();
+                gear.add("tp vex0 6 -60 0 90 0");
+                gear.add("clear vex0");
+                for (String k : kit) gear.add("item replace entity vex0 " + k);
+                for (String c : gear) server.getCommands().performPrefixedCommand(src2, c);
+            });
+        });
+    }
 
     /** The freecam toggle key (setting freecamKey); only the primary bot reacts, and never while a screen is open. */
     private void pollToggleKey() {
@@ -214,6 +336,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     /** While freecam is on, whoever just hurt the bot becomes an enemy. */
     private void markAttackers(LocalPlayer p) {
+        if (!fighting()) return; // Ostinato: middle-click starts and stops a fight. A hit must not start one.
         net.minecraft.world.entity.LivingEntity by = p.getLastHurtByMob();
         if (by != null && by != p && markable(by) && p.tickCount - p.getLastHurtByMobTimestamp() < 5
                 && (by instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(by) : ((Baritone) baritone).getPveProcess().addEnemy(by))) {
@@ -247,6 +370,10 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
         boolean sprint = held(gs.keySprint) && fwd > 0;
         double speed = Baritone.settings().freecamSpeed.value;
+        if (fighting()) { // Ostinato: the walking camera's block collision stalled the game during a fight
+            glide(fwd, strafe, jump, sneak, sprint, speed);
+            return;
+        }
         // currents push the camera like a player (and tell us whether it is in the fluid)
         boolean water = !flying && camera.updateFluidHeightAndDoFluidPushing(FluidTags.WATER, 0.014);
         boolean lava = !flying && !water && camera.updateFluidHeightAndDoFluidPushing(FluidTags.LAVA, 0.0023333333333333335);
@@ -330,6 +457,19 @@ public final class FreecamBehavior extends Behavior implements Helper {
         }
     }
 
+    /** No block collision. Used while the bot is fighting so the camera does not stall the tick. */
+    private void glide(double fwd, double strafe, boolean jump, boolean sneak, boolean sprint, double speed) {
+        float yaw = camera.getYRot() * ((float) Math.PI / 180F);
+        double sin = Mth.sin(yaw);
+        double cos = Mth.cos(yaw);
+        double sp = 0.45 * speed * (sprint ? 1.6 : 1);
+        double mx = (strafe * cos - fwd * sin) * sp;
+        double mz = (fwd * cos + strafe * sin) * sp;
+        double my = ((jump ? 1 : 0) - (sneak ? 1 : 0)) * 0.4 * speed;
+        camera.setDeltaMovement(mx, my, mz);
+        camera.setPos(camera.getX() + mx, camera.getY() + my, camera.getZ() + mz);
+    }
+
     /** Cobwebs and sweet berry bushes slow the camera down, as Block#entityInside does for a ticked entity. */
     private void stuckInBlocks() {
         AABB box = camera.getBoundingBox().deflate(1.0E-7);
@@ -394,19 +534,30 @@ public final class FreecamBehavior extends Behavior implements Helper {
         while (gs.keyUse.consumeClick()) {
             right = true;
         }
-        // Never let a held click reach the bot's controller (it would dig/use at the camera's crosshair).
+        // A fight holds these itself (shield up, swing). Clearing them made the bot block forever and never hit.
+        boolean keepAttack = fighting() && gs.keyAttack.isDown();
+        boolean keepUse = fighting() && gs.keyUse.isDown();
         gs.keyAttack.setDown(false);
         gs.keyUse.setDown(false);
         gs.keyPickItem.setDown(false);
+        if (keepAttack) gs.keyAttack.setDown(true); // Ostinato: freecam was eating the swing and the shield
+        if (keepUse) gs.keyUse.setDown(true);
         if (middle) {
             markEnemy();
         } else if (left) {
             select();
         } else if (right) {
+            if (fighting()) return; // Ostinato: a path calc during a fight is the lag
             BetterBlockPos pos = new BetterBlockPos(camera.getX(), camera.getY(), camera.getZ());
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
             logDirect("Going to " + pos);
         }
+    }
+
+    /** A live fight. Pathfinding on top of it is what froze the client and stole the swing. */
+    private boolean fighting() {
+        Baritone b = (Baritone) baritone;
+        return b.getPvpProcess().isActive() || b.getPveProcess().isActive();
     }
 
     /** Players always; other living things only with the enemyMobs setting. */
@@ -415,15 +566,33 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private void markEnemy() {
-        Entity hit = entityUnderCrosshair();
+        toggleAttack(entityUnderCrosshair());
+    }
+
+    private void toggleAttack(Entity hit) {
+        Baritone b = (Baritone) baritone;
         if (hit instanceof net.minecraft.world.entity.LivingEntity pl && markable(pl)) {
-            if ((pl instanceof net.minecraft.world.entity.player.Player ? ((Baritone) baritone).getPvpProcess().addEnemy(pl) : ((Baritone) baritone).getPveProcess().addEnemy(pl))) {
-                logDirect("Enemy added: " + pl.getName().getString());
-            } else {
-                logDirect(pl.getName().getString() + " is already an enemy");
+            boolean player = pl instanceof net.minecraft.world.entity.player.Player;
+            boolean already = player ? b.getPvpProcess().hasEnemy(pl) : b.getPveProcess().hasEnemy(pl);
+            if (already) {
+                if (player) b.getPvpProcess().removeEnemy(pl);
+                else b.getPveProcess().removeEnemy(pl);
+                logDirect("Stopped attacking " + pl.getName().getString());
+            } else if (player ? b.getPvpProcess().addEnemy(pl) : b.getPveProcess().addEnemy(pl)) {
+                logDirect("Attacking " + pl.getName().getString());
             }
-        } else {
-            logDirect("Middle-click a player to mark an enemy" + (Baritone.settings().enemyMobs.value ? " or mob" : ""));
+            return;
+        }
+        if (fighting()) { // Ostinato: a second middle-click that misses still stops the fight
+            b.getPvpProcess().stopAttack();
+            b.getPveProcess().clearEnemies();
+            logDirect("Stopped attacking");
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - aimHelpAt > 2500) {
+            aimHelpAt = now;
+            logDirect("Look toward a player and press V. Press V again to stop.");
         }
     }
 
@@ -468,12 +637,14 @@ public final class FreecamBehavior extends Behavior implements Helper {
             }
         }
         if (hit != null) {
+            if (fighting()) return;
             Entity target = hit;
             baritone.getFollowProcess().follow(target::equals);
             logDirect("Following " + target.getName().getString());
             return;
         }
         if (block.getType() == HitResult.Type.BLOCK) {
+            if (fighting()) return;
             BlockPos pos = ((BlockHitResult) block).getBlockPos();
             if (horizontalDistSq(pos, p) > renderRadius() * renderRadius()) {
                 logDirect("That block is outside render distance");

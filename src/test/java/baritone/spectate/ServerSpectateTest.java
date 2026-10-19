@@ -58,4 +58,60 @@ public class ServerSpectateTest {
         assertTrue(ServerSpectate.REMINDER.matcher("you have 1 second to login").find());
         assertFalse(ServerSpectate.REMINDER.matcher("[lobby] playing: music_disc.precipice").find());
     }
+
+    @Test
+    public void welcomeBackIsNotLoggedIn() { // Ostinato: crackedpvp greets before the login timer finishes
+        assertFalse(ServerSpectate.loggedInText("we missed you, welcome back!"));
+        assertFalse(ServerSpectate.loggedInText("you have 89 seconds to login."));
+        assertTrue(ServerSpectate.loggedInText("you have successfully logged in."));
+        assertTrue(ServerSpectate.loggedInText("welcome back, you are now logged in"));
+    }
+
+    @Test
+    public void readsQueueBarsAndRefusesJoinButtons() { // Ostinato: fights are named on the queue bar, not in the lobby
+        assertEquals("itskrtk", ServerSpectate.queueingPlayer("itskrtk is queueing for crystal"));
+        assertEquals("itskrtk", ServerSpectate.queueingPlayer("sword itskrtk is queueing for spearmace"));
+        assertNull(ServerSpectate.queueingPlayer("you have 89 seconds to login."));
+        assertNull(ServerSpectate.queueingPlayer("you have successfully logged."));
+        String[] w = {"spectate", "spectator", "spec", "watch"};
+        assertEquals(-1, ServerSpectate.score("Casual Match", w));
+        assertEquals(-1, ServerSpectate.score("Competitive Match", w));
+        assertEquals(0, ServerSpectate.score("Practice", w));
+        assertTrue(ServerSpectate.score("Spectate", w) > 0);
+        assertTrue(ServerSpectate.unknownCommand("crackedpvp | no such command."));
+        assertFalse(ServerSpectate.unknownCommand("you have successfully logged."));
+    }
+
+    @Test
+    public void queuesCrystalByItemName() { // Ostinato: clock, then crystal menus, then the mode item named Crystal
+        assertTrue(ServerSpectate.hotbarHit("Gamemodes", "clock", "clock"));
+        assertTrue(ServerSpectate.hotbarHit("clock", "clock", "clock"));
+        assertFalse(ServerSpectate.hotbarHit("ENABLE PVP (Hold Item)", "iron_sword", "sword"));
+        assertTrue(ServerSpectate.hotbarHit("Sword", "iron_sword", "sword"));
+        assertTrue(ServerSpectate.hotbarHit("netherite sword", "netherite_sword", "sword"));
+        assertEquals(100, ServerSpectate.menuScore("Crystal", "nether_star", "crystal"));
+        assertEquals(50, ServerSpectate.menuScore("Practice", "end_crystal", "crystal"));
+        assertEquals(-1, ServerSpectate.menuScore("Ranked Queue", "end_crystal", "crystal"));
+        assertEquals(100, ServerSpectate.menuScore("Casual Match", "iron_sword", "casual"));
+        assertTrue(ServerSpectate.menuScore("SMP | info", "diamond_sword", "smp")
+                > ServerSpectate.menuScore("DiamondSMP | info", "diamond_sword", "smp"));
+        assertTrue(ServerSpectate.menuScore("Mace | info", "mace", "mace")
+                > ServerSpectate.menuScore("SpearMace | info", "mace", "mace"));
+        assertEquals(-1, ServerSpectate.menuScore("Casual Match", "iron_sword", "crystal"));
+        assertEquals(0, ServerSpectate.menuScore("Sword", "diamond_sword", "crystal"));
+        assertTrue(ServerSpectate.plainDrop("Disconnected"));
+        assertFalse(ServerSpectate.plainDrop("You are banned from this server"));
+        assertTrue(ServerSpectate.hitTheGate("hit the gate to ready up!"));
+        assertFalse(ServerSpectate.hitTheGate("round started! fight!"));
+        assertTrue(ServerSpectate.roundStarted("round started! fight!"));
+        assertFalse(ServerSpectate.roundStarted("match starting in 5 seconds..."));
+        assertEquals("strl331", ServerSpectate.matchOpponent("opponent: strl331"));
+        assertNull(ServerSpectate.matchOpponent("opponent elo: 1000"));
+        assertTrue(ServerSpectate.matchOver("match results (click to view)"));
+        assertTrue(ServerSpectate.matchOver("winner: strl331"));
+        assertFalse(ServerSpectate.matchOver("opponent: strl331"));
+        assertTrue(ServerSpectate.waitingOnSameMenu("Gamemodes Menu", "Gamemodes Menu"));
+        assertFalse(ServerSpectate.waitingOnSameMenu("Select Kit", "Gamemodes Menu"));
+        assertFalse(ServerSpectate.waitingOnSameMenu("Gamemodes Menu", ""));
+    }
 }
