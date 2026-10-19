@@ -1236,6 +1236,13 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private void menu(AbstractContainerScreen<?> cs, long now) {
         AbstractContainerMenu m = cs.getMenu();
         String title = COLOR.matcher(cs.getTitle().getString()).replaceAll("");
+        String titleLower = title.toLowerCase(Locale.ROOT);
+        if (queueRoute && (titleLower.contains("profile") || titleLower.contains("settings"))) {
+            // Ostinato: a finished match can open Profile Settings. That is not the kit menu.
+            note("closing \"" + title + "\"");
+            key(Minecraft.getInstance(), com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 27);
+            return;
+        }
         if (awaitingNextMenu && waitingOnSameMenu(title, clickedMenuTitle)) {
             // Ostinato: the practice crystal refreshes this menu. Do not click it again, and do not close it.
             if (now - clickedMenuAt > 10_000) {
@@ -1505,10 +1512,17 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                     }
                 }
                 case "click" -> {
-                    // Ostinato: menu() does the click. Give up on this step after 15 s with no menu.
+                    // Ostinato: menu() does the click. A missed menu goes back to the Play Menu sword.
                     if (now - nextActionMs > 15_000) {
                         note("no menu for \"" + st[1] + "\"");
-                        routeStep++;
+                        if (queueRoute && swordStep() > 0) {
+                            routeStep = swordStep();
+                            nextActionMs = now + 1500;
+                            note("trying the play menu again");
+                        } else {
+                            routeStep++;
+                            nextActionMs = now;
+                        }
                         hotbarMissingSince = 0;
                         hotbarMissLogged = false;
                     }
