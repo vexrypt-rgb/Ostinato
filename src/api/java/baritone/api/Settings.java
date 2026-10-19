@@ -2290,6 +2290,12 @@ public final class Settings {
      */
     public final Setting<Boolean> spectateLearnLateFights = new Setting<>(false);
 
+    /**
+     * Ostinato: let freecam spar rounds (the ghost against you) feed the spectate priors as a fight between two
+     * players. Off by default: spar fights never reach ACS tuning, and with this off they stay out of the priors too.
+     */
+    public final Setting<Boolean> sparSeedPriors = new Setting<>(false);
+
     // Ostinato: auto-spectate (watch-only server join)
     /**
      * The server the Auto-spectate button and {@code #autospectate} join to watch fights. Watch only: the bot answers

@@ -217,7 +217,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         // whom to watch: the nearest players, as many as the budget allows
         List<Player> near = new ArrayList<>();
         for (Player p : level.players()) {
-            if (p != me && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
+            // Ostinato: negative ids are client-made (the freecam spar ghost), never a real player to learn from
+            if (p != me && p.getId() >= 0 && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
         }
         near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(me)));
         Set<Integer> keep = new HashSet<>();
@@ -432,7 +433,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         LivingEntity best = null;
         double bd = 6;
         for (Player o : Minecraft.getInstance().level.players()) {
-            if (o == p || o.isSpectator()) continue;
+            if (o == p || o.isSpectator() || o.getId() < 0) continue; // Ostinato: not the spar ghost
             double d = o.distanceTo(p);
             if (d < bd) {
                 bd = d;
@@ -863,6 +864,24 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (hv != null) hv.hurt(t);
         mind(att, an).life.hit(t, crit);
         mind(vic, vn).life.hurt(t);
+    }
+
+    /**
+     * Ostinato: one freecam spar round as a fight between two made-up players (negative ids), when
+     * {@code sparSeedPriors} is on. {@code hits} are {tick, 1 ghost hit / 0 you hit, crit}; the loser dies at the end.
+     */
+    public void sparRound(String kit, List<int[]> hits, boolean ghostWon) {
+        if (hits.isEmpty()) return;
+        ensureWorker();
+        final int ghost = -9001, you = -9002, base = tick + 100000;
+        int t0 = hits.get(0)[0];
+        for (int[] h : hits) {
+            int t = base + h[0] - t0;
+            boolean g = h[1] == 1;
+            post(l -> l.hitW(t, g ? ghost : you, g ? "spar-ghost" : "spar-you", g ? you : ghost, g ? "spar-you" : "spar-ghost", h[2] == 1, false, null));
+        }
+        int end = base + hits.get(hits.size() - 1)[0] - t0 + 1;
+        post(l -> l.book.died(end, ghostWon ? you : ghost));
     }
 
     private void fightEnded(FightBook.Fight f, int winner, String why) {
