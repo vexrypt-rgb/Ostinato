@@ -132,6 +132,16 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         return lower != null && lower.contains("hit the gate");
     }
 
+    /** Ostinato: a bare "Disconnected" is a drop, not a ban. Kick and ban text still blocks the server. */
+    static boolean plainDrop(String why) {
+        if (why == null) return true;
+        String l = why.toLowerCase(Locale.ROOT).trim();
+        if (l.isEmpty() || l.equals("disconnected") || l.equals("disconnected from server")) return true;
+        return l.contains("timed out") || l.contains("connection reset") || l.contains("connection refused")
+                || l.contains("unknown host") || l.contains("cannot resolve") || l.contains("no further information")
+                || l.contains("network is unreachable");
+    }
+
     /** Ostinato: the results chat. Either line is the round ending. */
     static boolean matchOver(String lower) {
         return lower != null && (lower.contains("match results") || lower.contains("winner:"));
@@ -215,6 +225,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             "crystal", "sword", "mace", "axe", "uhc", "spearmace", "nethpot", "pot", "cart", "smp", "diamondsmp"
     };
     private int kitIndex = 1;
+    /** Ostinato: a plain disconnect rejoins. It does not block the server. */
+    private long rejoinAt;
+    private String rejoinHost;
     private final Set<String> spectateNames = new LinkedHashSet<>(); // Ostinato: at most 3 /spectate <name>
     private final List<String[]> route = new ArrayList<>();
     private int routeStep;
@@ -536,7 +549,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return;
         }
-        if (phase == Phase.IDLE && AUTO_EXIT) {
+        if (phase == Phase.IDLE && AUTO_EXIT && rejoinAt == 0) {
             if (idleSince == 0) idleSince = now;
             if (now - idleSince > 4000) {
                 note("exit: " + summary());
@@ -552,6 +565,15 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
         autoHook(mc, now);
+        if (rejoinAt != 0) {
+            if (now >= rejoinAt && rejoinHost != null) {
+                rejoinAt = 0;
+                String h = rejoinHost;
+                rejoinHost = null;
+                start(h); // Ostinato: a bare disconnect joins again
+            }
+            return;
+        }
         if (phase == Phase.IDLE) return;
         for (String[] m; (m = inbox.poll()) != null; ) {
             if (handleText(m[0], m[1], now)) return;
@@ -565,7 +587,14 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             String why = disconnectReason(ds);
             note("disconnected: " + why);
             phase = Phase.IDLE;
-            // a kick, ban or refused login: never retry this server (a plain network failure is not a kick)
+            // Ostinato: a bare "Disconnected" is a drop. A kick or ban still blocks the server.
+            if (plainDrop(why)) {
+                rejoinHost = host;
+                rejoinAt = now + 8000;
+                endReason = "";
+                note("plain disconnect; joining again");
+                return;
+            }
             if (!why.toLowerCase(Locale.ROOT).matches(".*(connection refused|timed out|unknown host|cannot resolve|no further information|connection reset|network is unreachable).*")) {
                 block("disconnected: " + why);
             }

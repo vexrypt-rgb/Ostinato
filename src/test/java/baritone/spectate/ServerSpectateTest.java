@@ -99,6 +99,8 @@ public class ServerSpectateTest {
                 > ServerSpectate.menuScore("SpearMace | info", "mace", "mace"));
         assertEquals(-1, ServerSpectate.menuScore("Casual Match", "iron_sword", "crystal"));
         assertEquals(0, ServerSpectate.menuScore("Sword", "diamond_sword", "crystal"));
+        assertTrue(ServerSpectate.plainDrop("Disconnected"));
+        assertFalse(ServerSpectate.plainDrop("You are banned from this server"));
         assertTrue(ServerSpectate.hitTheGate("hit the gate to ready up!"));
         assertFalse(ServerSpectate.hitTheGate("round started! fight!"));
         assertTrue(ServerSpectate.roundStarted("round started! fight!"));
