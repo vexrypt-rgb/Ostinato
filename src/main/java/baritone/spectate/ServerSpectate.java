@@ -1047,7 +1047,21 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             if (st.isEmpty()) continue;
             String n = itemText(st); // Ostinato: lore can say spectate while the title is only a star
             names.add(n);
-            int sc = want != null ? (n.toLowerCase(Locale.ROOT).contains(want) && !NEVER.matcher(n.toLowerCase(Locale.ROOT)).find() ? 100 : 0) : score(n, words);
+            // The category line "Competitive - Combat" is on every hub card. Never-words apply to the item title.
+            String titleOnly = COLOR.matcher(st.getHoverName().getString()).replaceAll("").trim().toLowerCase(Locale.ROOT);
+            int sc;
+            if (want != null) {
+                sc = titleOnly.contains(want) && !NEVER.matcher(titleOnly).find() ? 100 : 0;
+            } else if (NEVER.matcher(titleOnly).find()) {
+                sc = -1;
+            } else {
+                sc = 0;
+                String ln = n.toLowerCase(Locale.ROOT);
+                for (int i = 0; i < words.length; i++) if (ln.contains(words[i])) {
+                    sc = words.length - i;
+                    break;
+                }
+            }
             if (sc > bestScore) {
                 bestScore = sc;
                 best = sl;

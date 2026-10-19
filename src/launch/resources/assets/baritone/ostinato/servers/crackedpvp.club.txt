@@ -8,8 +8,11 @@
 #   authclick prompt words | choice   during login, click the [choice] button of the chat message with these words
 #                (a humanized click in chat, before /register or /login; menus wait until login is done)
 # The login plugin first asks "Are you using a premium account? [✔ Yes] [✖ No]": this throwaway is cracked.
-# Practice, FFA, Casual, and Competitive join as a fighter. This route only asks to spectate.
+# The hub menu is Survival, Practice, FFA, Discord, Store. None of those is spectate.
+# Practice opens a duel lobby. Casual and Competitive start a fight, so they are never clicked.
+# After that, each hotbar item is right-clicked once in case it opens a spectate menu.
 authclick premium account | no
-cmd spectate
-wait 3
+hotbar GAMEMODES
+click practice
+wait 8
 words spectate,spectator,spec,watch
