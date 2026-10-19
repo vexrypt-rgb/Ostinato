@@ -40,6 +40,23 @@ public final class PvpRecorder {
     private String targetName;
     private boolean targetDied;
     private PvpOpponent opp;
+    // Ostinato: spectated fights are written in the same format to their own directory, whatever ostinato.record says
+    private final Path dir;
+    private final boolean force;
+
+    public PvpRecorder() {
+        this(Paths.get("pvplogs"), false);
+    }
+
+    /** Ostinato: a recorder that writes to {@code dir} even with {@code -Dostinato.record=false} (spectator logs). */
+    public PvpRecorder(Path dir) {
+        this(dir, true);
+    }
+
+    private PvpRecorder(Path dir, boolean force) {
+        this.dir = dir;
+        this.force = force;
+    }
 
     public void markWin() {
         targetDied = true;
@@ -50,10 +67,9 @@ public final class PvpRecorder {
     }
 
     public void begin(Player me, LivingEntity target, String label) {
-        if (!ENABLED || out != null) return;
+        if (!ENABLED && !force || out != null) return; // Ostinato: force for spectator logs
         try {
-            Path dir = Paths.get("pvplogs");
-            Files.createDirectories(dir);
+            Files.createDirectories(dir); // Ostinato: dir set by the constructor
             targetName = target.getName().getString();
             file = dir.resolve("fight-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-" + targetName.replaceAll("[^A-Za-z0-9_]", "") + ".log.gz");
             out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(Files.newOutputStream(file), true), StandardCharsets.UTF_8));
@@ -136,6 +152,11 @@ public final class PvpRecorder {
     /** A derived-feature line (for example one spear pass), written as {@code @tick text} among the opponent events. */
     public void note(String s) {
         if (out != null) quiet("@" + ticks + " " + s);
+    }
+
+    /** Ostinato: a whole line as given (spectator logs: {@code #type} and {@code #kit} before {@code #end}). */
+    public void meta(String s) {
+        if (out != null) quiet(s);
     }
 
     private void quiet(String s) {

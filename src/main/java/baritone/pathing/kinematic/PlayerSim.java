@@ -47,6 +47,14 @@ public final class PlayerSim {
         default boolean sticky(int x, int y, int z) {
             return false;
         }
+
+        /**
+         * Ostinato: adds the boxes of one cell, in world coordinates and in the order {@link #collect} lists them, and
+         * returns true; false if this world cannot list a single cell, which keeps searches over it out of native code.
+         */
+        default boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
@@ -76,6 +84,10 @@ public final class PlayerSim {
         this.world = world;
     }
 
+    public World world() {
+        return world;
+    }
+
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
         onGround = o.onGround; sprinting = o.sprinting; swimming = o.swimming; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
@@ -97,13 +109,31 @@ public final class PlayerSim {
 
     /** With a strafe key too: +1 is A (left), -1 is D (right). Vanilla normalises a diagonal so strafing adds no speed. */
     public void tick(float yawDeg, int input, int strafe, boolean sprint, boolean jump) {
-        boolean forward = input > 0;
+        tickImpulse(yawDeg, 0.98 * strafe, 0.98 * input, input > 0, sprint, jump);
+    }
+
+    /**
+     * Ostinato: one tick from the input as vanilla's xxa/zza hold it once the keys are read (after the 0.98 input
+     * friction, item-use and sneak slow-downs, square-movement correction): {@code strafeImpulse} +left, {@code
+     * forwardImpulse} +forward. For decoding someone else's movement, where the impulse is fitted, not pressed.
+     * {@link #tick(float, int, int, boolean, boolean)} is this with {@code 0.98 * key}, bit for bit.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean sprint, boolean jump) {
+        tickImpulse(yawDeg, strafeImpulse, forwardImpulse, forwardImpulse > 1.0E-5, sprint, jump);
+    }
+
+    /**
+     * Ostinato: as above, with whether a sprint may hold this tick given by the caller instead of read off the forward
+     * impulse. A server-side bot (VexBot) sprints while it strafes; a vanilla client stops.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump) {
         if (Math.abs(vx) < 0.003) vx = 0;
         if (Math.abs(vy) < 0.003) vy = 0;
         if (Math.abs(vz) < 0.003) vz = 0;
         // Vanilla: the key starts a sprint; only losing forward input or a wall stops it.
         sprinting = forward && !collidedH && (sprint || sprinting);
         double yaw = Math.toRadians(yawDeg);
+        // Ostinato: StrictMath, whose bits the spec pins (fdlibm), so the native search gives the same answer
         double sin = Math.sin(yaw), cos = Math.cos(yaw);
         if (jumpTicks > 0) jumpTicks--;
         if (!jump) jumpTicks = 0;
@@ -124,8 +154,8 @@ public final class PlayerSim {
         } else {
             speed = sprinting ? 0.026 : 0.02;
         }
-        if (input != 0 || strafe != 0) {
-            double fz = 0.98 * input, fx = 0.98 * strafe;
+        if (forwardImpulse != 0 || strafeImpulse != 0) {
+            double fz = forwardImpulse, fx = strafeImpulse;
             double len = Math.sqrt(fx * fx + fz * fz);
             if (len > 1) {
                 fx /= len;
@@ -172,7 +202,7 @@ public final class PlayerSim {
         // vanilla: the swim pose starts with the eyes under, and lasts while sprinting in water, even with the head out
         swimming = sprinting && (swimming ? inWater() : eyesInWater());
         double yaw = Math.toRadians(yawDeg);
-        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        double sin = Math.sin(yaw), cos = Math.cos(yaw); // as tick: the native jump search flies water too
         if (swimming) {
             double look = -Math.sin(Math.toRadians(pitchDeg));
             double k = look < -0.2 ? 0.085 : 0.06;
@@ -327,6 +357,23 @@ public final class PlayerSim {
             }
         }
         return d;
+    }
+
+    /**
+     * Ostinato: the block cell the feet stand in, as {@code IPlayerContext.playerFeet} counts it. A landing on soul sand,
+     * a chest, farmland or a lantern rests a little below the cell's floor, and still belongs to that cell.
+     */
+    public static int feetCell(double y) {
+        return floor(y + 0.1251);
+    }
+
+    /**
+     * Ostinato: whether feet at {@code y} stand in the planner's node at height {@code nodeY}: its feet cell, or a low
+     * top (candle, bed, slab, 3+ layers of snow: 0.25 to 0.875 high) in the cell below, which the planner counts as
+     * the node above it.
+     */
+    public static boolean nodeHeight(double y, int nodeY) {
+        return feetCell(y) == nodeY || y < nodeY && y >= nodeY - 0.75 - 1e-9;
     }
 
     public static int floor(double v) {

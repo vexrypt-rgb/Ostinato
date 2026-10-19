@@ -1925,6 +1925,118 @@ public final class Settings {
     /**
      * A map of lowercase setting field names to their respective setting
      */
+
+
+    // ---- Ostinato: spectate learning, health estimator, auto-spectate, cheat detection (ported from the 26.3 line)
+
+    /** Ostinato: auto-spectate, longest the pause between two menu clicks (ms). */
+    public final Setting<Integer> autoSpectateClickGapMaxMs = new Setting<>(900);
+
+    /** Ostinato: auto-spectate, shortest the pause between two menu clicks (ms). */
+    public final Setting<Integer> autoSpectateClickGapMinMs = new Setting<>(250);
+
+    /** Ostinato: auto-spectate, longest how long the cursor rests on a menu slot before the click (ms). */
+    public final Setting<Integer> autoSpectateHoverMaxMs = new Setting<>(250);
+
+    /** Ostinato: auto-spectate, shortest how long the cursor rests on a menu slot before the click (ms). */
+    public final Setting<Integer> autoSpectateHoverMinMs = new Setting<>(80);
+
+    /** Ostinato: auto-spectate, longest the time between two typed keys in chat (with a longer pause now and then) (ms). */
+    public final Setting<Integer> autoSpectateKeyMaxMs = new Setting<>(180);
+
+    /** Ostinato: auto-spectate, shortest the time between two typed keys in chat (with a longer pause now and then) (ms). */
+    public final Setting<Integer> autoSpectateKeyMinMs = new Setting<>(60);
+
+    /** Longest auto-spectate session, in minutes. */
+    public final Setting<Integer> autoSpectateMinutes = new Setting<>(20);
+
+    /** Ostinato: auto-spectate, longest the reading pause after a menu opens (ms). */
+    public final Setting<Integer> autoSpectateReadMaxMs = new Setting<>(1200);
+
+    /** Ostinato: auto-spectate, shortest the reading pause after a menu opens (ms). */
+    public final Setting<Integer> autoSpectateReadMinMs = new Setting<>(400);
+
+    /**
+     * The server the Auto-spectate button and {@code #autospectate} join to watch fights. Watch only: the bot answers
+     * /register or /login, walks the lobby menus to a spectator spot and follows fights; it never attacks or chats.
+     * Its password is kept in {@code baritone/servers/<host>.secret}; a server that kicks it is never joined again.
+     */
+    public final Setting<String> autoSpectateServer = new Setting<>("crackedpvp.club");
+
+    /** Ostinato: auto-spectate, longest the think pause before chat opens to type a command (ms). */
+    public final Setting<Integer> autoSpectateThinkMaxMs = new Setting<>(1800);
+
+    /** Ostinato: auto-spectate, shortest the think pause before chat opens to type a command (ms). */
+    public final Setting<Integer> autoSpectateThinkMinMs = new Setting<>(600);
+
+    /**
+     * Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health,
+     * scoreboard, boss bars) or, where the server hides or fakes it, from the hits, potions, apples, effects and totems
+     * seen. Combat and mob fighting then pick and finish targets by it. Off, they read the health the game shows.
+     */
+    public final Setting<Boolean> healthEstimator = new Setting<>(true);
+
+    /** Most processor time (milliseconds a game tick, on its own low-priority thread) spent working out keys. */
+    public final Setting<Double> spectateBudgetMs = new Setting<>(1.5);
+
+    /**
+     * While {@code spectateLearn} watches, tag every fight 1v1, FFA or team (from scoreboard teams, name colours, dyed
+     * armor, kits and who never hits whom), and keep FFA and team fights out of 1v1 learning. Their hits are kept with
+     * attacker and victim, for multi-opponent skills later.
+     */
+    public final Setting<Boolean> spectateFightTypes = new Setting<>(true);
+
+    /**
+     * While {@code spectateLearn} watches, tell each fighter's kit (sword, axe+shield, mace, crystal, pot, uhc,
+     * netherite-pot, smp, ranged, or unknown) from what can be seen: armor and its material, glint, trims and dye, the
+     * items in their hands and how they swap, what they eat, drink, throw and pop, and their potion particles. The
+     * label and its confidence go into each fight log and keep what is learned apart per kit. The kits are a table in
+     * {@code spectate-kits.txt}; a copy at {@code baritone/spectate-kits.txt} in the game folder replaces it.
+     */
+    public final Setting<Boolean> spectateKitDetect = new Setting<>(true);
+
+    /**
+     * Watch fights between other players nearby and learn from them: which keys they press (worked out from where
+     * the server says they move), how fast they click, when they eat, pearl or back off, and what the winners do
+     * that the losers do not. What is learned only gives the Autotune Combat System a place to start and tells it how
+     * an opponent fights; it never puts a combat value in force without the bot's own fights confirming it.
+     * Off by default; on a multiplayer server it also needs {@code spectateLearnOnServers}.
+     */
+    public final Setting<Boolean> spectateLearn = new Setting<>(false);
+
+    /**
+     * When a watched fighter's loadout fits none of the kits, make it a new kit ({@code learned-1}, ...) in
+     * {@code baritone/spectate-kits-learned.txt}, with a short description; loadouts seen again that are close join
+     * it. A learned kit is kept apart and gets its own priors like any other once it has the fights.
+     */
+    public final Setting<Boolean> spectateLearnKits = new Setting<>(true);
+
+    /**
+     * Ostinato: also count fights joined late (already under way when first seen: a fighter hurt, on absorption,
+     * mid-combo or on a gapple, or the spectator just arrived) toward what winners and losers did. Off, they still teach
+     * movement and hit timing, but their results are left out, since the start of the fight was missed.
+     */
+    public final Setting<Boolean> spectateLearnLateFights = new Setting<>(false);
+
+    /** Let {@code spectateLearn} watch on multiplayer servers too, not only in single player and LAN worlds. */
+    public final Setting<Boolean> spectateLearnOnServers = new Setting<>(false);
+
+    /**
+     * Ostinato: also learn from fights with a player flagged as a suspected cheater (reach, aim snaps, click rate,
+     * movement that breaks vanilla physics, no knockback, inhuman reaction). Off: such fights are still saved, tagged
+     * suspected-cheat, but kept out of the winner/loser tallies and style learning. Detection is watch-only.
+     */
+    public final Setting<Boolean> spectateLearnSuspectedCheats = new Setting<>(false);
+
+    /** How far away (blocks) {@code spectateLearn} watches players. */
+    public final Setting<Double> spectateRadius = new Setting<>(48.0);
+
+    /**
+     * Also write each watched fight to {@code pvplogs/spectate/} in the fight recorder's format. Ostinato: with its type
+     * and both kits at the end, and each FFA or team fight as well as one {@code group-*.log.gz} with every hit.
+     */
+    public final Setting<Boolean> spectateSaveLogs = new Setting<>(false);
+
     public final Map<String, Setting<?>> byLowerName;
 
     /**

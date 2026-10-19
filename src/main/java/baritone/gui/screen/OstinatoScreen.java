@@ -976,6 +976,7 @@ public final class OstinatoScreen extends Screen {
         // buttons (right)
         float bxr = button(ms, "Done", x1 - 10, true, mx, my, accent) - 5;
         bxr = button(ms, freecamLabel(), bxr, false, mx, my, accent) - 5;
+        bxr = button(ms, autoSpecLabel(), bxr, false, mx, my, accent) - 5; // Ostinato: Auto-spectate
         boolean confirm = now < resetConfirmUntil;
         if (!tv) {
             bxr = button(ms, confirm ? "Click to confirm" : resetLabel(), bxr, false, mx, my, confirm ? Theme.DANGER : accent) - 10;
@@ -989,6 +990,13 @@ public final class OstinatoScreen extends Screen {
         GuiDraw.text(ms, GuiDraw.trim(info, Math.max(20, limit - fx - 6), 1f), fx, ty, infoCol, false);
         bxr = hint(ms, bxr, "ESC", "close");
         hint(ms, bxr, key, "toggle");
+    }
+
+    // Ostinato: Auto-spectate button (watch-only server spectating)
+    private static String autoSpecLabel() {
+        baritone.api.IBaritone b = baritone.api.BaritoneAPI.getProvider().getPrimaryBaritone();
+        boolean on = b instanceof baritone.Baritone && ((baritone.Baritone) b).getServerSpectate().running();
+        return on ? "Auto-spectate: on" : "Auto-spectate";
     }
 
     private static String freecamLabel() {
@@ -1192,6 +1200,21 @@ public final class OstinatoScreen extends Screen {
             }
             return true;
         }
+        // Ostinato: Auto-spectate button, left of Freecam
+        float asw = GuiDraw.width(autoSpecLabel()) + 16, asxr = fcxr - fcw - 5;
+        if (in(mx, my, asxr - asw, fy + 5, asxr, fy + 19)) {
+            baritone.api.IBaritone b = baritone.api.BaritoneAPI.getProvider().getPrimaryBaritone();
+            if (b instanceof baritone.Baritone) {
+                baritone.spectate.ServerSpectate ss = ((baritone.Baritone) b).getServerSpectate();
+                onClose();
+                if (ss.running()) {
+                    ss.stop("stopped by user");
+                } else {
+                    ss.start(settings.autoSpectateServer.value);
+                }
+            }
+            return true;
+        }
         if (showTasks()) {
             if (in(mx, my, x1 - 10 - doneW0, fy + 5, x1 - 10, fy + 19)) {
                 onClose();
@@ -1222,7 +1245,7 @@ public final class OstinatoScreen extends Screen {
         }
         long now = System.currentTimeMillis();
         String resetLabel = now < resetConfirmUntil ? "Click to confirm" : resetLabel();
-        float rw = GuiDraw.width(resetLabel) + 16, rxr = fcxr - fcw - 5;
+        float rw = GuiDraw.width(resetLabel) + 16, rxr = asxr - asw - 5; // Ostinato: after Auto-spectate
         if (in(mx, my, rxr - rw, fy + 5, rxr, fy + 19)) {
             if (now < resetConfirmUntil) {
                 int n = 0;
