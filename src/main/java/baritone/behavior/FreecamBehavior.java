@@ -156,6 +156,8 @@ public final class FreecamBehavior extends Behavior implements Helper {
     @Override
     public void onTick(TickEvent event) {
         pollToggleKey();
+        pollAttackKey();
+        watchVex();
         if (camera == null) {
             return;
         }
@@ -192,6 +194,103 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private boolean toggleKeyHeld;
+    private boolean attackKeyHeld;
+    private int watchTicks;
+    private boolean watchSpawned;
+    private boolean watchEngaged;
+
+    /** V, by default: attack the player being looked at. Press again on them to stop. Works with freecam off. */
+    private void pollAttackKey() {
+        if (baritone != BaritoneAPI.getProvider().getPrimaryBaritone() || mc.screen != null || mc.getWindow() == null || camera != null) {
+            return;
+        }
+        boolean down = keyDown(Baritone.settings().attackKey.value);
+        if (down && !attackKeyHeld && ctx.player() != null) {
+            Entity looked = mc.hitResult instanceof net.minecraft.world.phys.EntityHitResult er ? er.getEntity() : null;
+            toggleAttack(looked);
+        }
+        attackKeyHeld = down;
+    }
+
+    private boolean keyDown(String name) {
+        try {
+            com.mojang.blaze3d.platform.InputConstants.Key key = com.mojang.blaze3d.platform.InputConstants.getKey(name);
+            return key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM && key.getValue() > 0
+                    && com.mojang.blaze3d.platform.InputConstants.isKeyDown(mc.getWindow(), key.getValue());
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /** Local vexflat watch: gear both sides, spawn one VexBot, and start the fight. */
+    private void watchVex() {
+        if (!Boolean.getBoolean("ostinato.watchvex") || baritone != BaritoneAPI.getProvider().getPrimaryBaritone()) return;
+        if (mc.player == null || mc.getSingleplayerServer() == null) return;
+        if (!watchSpawned && ++watchTicks == 60) {
+            watchSpawned = true;
+            spawnWatchBot();
+        }
+        if (!watchEngaged && watchSpawned) {
+            for (Entity e : ctx.entities()) {
+                if (e instanceof net.minecraft.world.entity.player.Player pl && pl != mc.player && pl.isAlive()
+                        && ((Baritone) baritone).getPvpProcess().addEnemy(pl)) {
+                    watchEngaged = true;
+                    gearWatchBot(pl.getName().getString());
+                    logDirect("Attacking " + pl.getName().getString());
+                    break;
+                }
+            }
+        }
+    }
+
+    private void gearWatchBot(String name) {
+        var server = mc.getSingleplayerServer();
+        if (server == null) return;
+        String[] kit = watchKit();
+        server.execute(() -> {
+            var src = server.createCommandSourceStack();
+            server.getCommands().performPrefixedCommand(src, "tp " + name + " 6 -60 0 90 0");
+            server.getCommands().performPrefixedCommand(src, "clear " + name);
+            for (String k : kit) server.getCommands().performPrefixedCommand(src, "item replace entity " + name + " " + k);
+        });
+    }
+
+    private static String[] watchKit() {
+        return new String[]{
+                "armor.head with iron_helmet", "armor.chest with iron_chestplate", "armor.legs with iron_leggings",
+                "armor.feet with iron_boots", "weapon.offhand with shield", "hotbar.0 with diamond_sword",
+                "hotbar.1 with diamond_axe", "hotbar.2 with golden_apple 3", "hotbar.3 with cooked_beef 16"
+        };
+    }
+
+    private void spawnWatchBot() {
+        var server = mc.getSingleplayerServer();
+        String[] kit = watchKit();
+        server.execute(() -> {
+            var src = server.createCommandSourceStack();
+            java.util.List<String> cmds = new java.util.ArrayList<>();
+            cmds.add("gamerule doMobSpawning false");
+            cmds.add("gamemode survival @a");
+            cmds.add("difficulty normal");
+            cmds.add("clear @a");
+            cmds.add("effect clear @a");
+            cmds.add("tp @a 0 -60 0 -90 0");
+            cmds.add("effect give @a instant_health 1 10");
+            cmds.add("effect give @a saturation 1 10");
+            for (String k : kit) cmds.add("item replace entity @a " + k);
+            cmds.add("vexbot difficulty preset medium");
+            cmds.add("vexbot spawn vex0");
+            for (String c : cmds) server.getCommands().performPrefixedCommand(src, c);
+            server.execute(() -> {
+                var src2 = server.createCommandSourceStack();
+                java.util.List<String> gear = new java.util.ArrayList<>();
+                gear.add("tp vex0 6 -60 0 90 0");
+                gear.add("clear vex0");
+                for (String k : kit) gear.add("item replace entity vex0 " + k);
+                for (String c : gear) server.getCommands().performPrefixedCommand(src2, c);
+            });
+        });
+    }
 
     /** The freecam toggle key (setting freecamKey); only the primary bot reacts, and never while a screen is open. */
     private void pollToggleKey() {
@@ -447,7 +546,10 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private void markEnemy() {
-        Entity hit = entityUnderCrosshair();
+        toggleAttack(entityUnderCrosshair());
+    }
+
+    private void toggleAttack(Entity hit) {
         Baritone b = (Baritone) baritone;
         if (hit instanceof net.minecraft.world.entity.LivingEntity pl && markable(pl)) {
             boolean player = pl instanceof net.minecraft.world.entity.player.Player;
@@ -467,7 +569,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
             logDirect("Stopped attacking");
             return;
         }
-        logDirect("Middle-click a player to attack. Middle-click them again to stop.");
+        logDirect("Look at a player and press V, or middle-click in freecam. Press it again to stop.");
     }
 
     private Entity entityUnderCrosshair() {

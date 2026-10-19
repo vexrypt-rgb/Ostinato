@@ -49,11 +49,14 @@ final class CombatMovement {
             wtap--;
         } else if (dist > 2.4) {
             hands.key(Input.MOVE_FORWARD);
-            if (!critArmed && me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
         } else if (dist < 1.2) {
             hands.key(Input.MOVE_BACK);
         }
-        if (dist > 3.5) return; // Ostinato: a jump every step was set back by the server. Sprint on the ground.
+        if (dist > 3.5) {
+            // Straight chase only. Sprint plus a strafe was set back.
+            if (!critArmed && me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
+            return;
+        }
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
     }
 
@@ -65,6 +68,5 @@ final class CombatMovement {
         }
         hands.key(Input.MOVE_FORWARD);
         hands.key(dodgeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
-        if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
     }
 }

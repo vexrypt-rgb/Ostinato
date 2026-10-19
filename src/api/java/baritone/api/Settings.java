@@ -1393,6 +1393,12 @@ public final class Settings {
     public final Setting<String> freecamKey = new Setting<>("key.keyboard.f8");
 
     /**
+     * Key that toggles a fight with the player under the crosshair, without freecam.
+     * A Minecraft key name, e.g. key.keyboard.v. key.keyboard.unknown disables it.
+     */
+    public final Setting<String> attackKey = new Setting<>("key.keyboard.v");
+
+    /**
      * Opacity of the bot's ghost body while freecam is on (0 = invisible, 1 = solid)
      */
     public final Setting<Float> freecamGhostOpacity = new Setting<>(0.35f);
