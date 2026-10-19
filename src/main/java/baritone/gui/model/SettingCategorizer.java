@@ -62,7 +62,8 @@ public final class SettingCategorizer {
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
-        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune");
+        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune",
+                "spectateLearn", "spectateLearnOnServers", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "spectateLearnLateFights", "spectateLearnSuspectedCheats", "autoSpectateServer", "autoSpectateMinutes", "autoSpectateHoverMinMs", "autoSpectateHoverMaxMs", "autoSpectateClickGapMinMs", "autoSpectateClickGapMaxMs", "autoSpectateReadMinMs", "autoSpectateReadMaxMs", "autoSpectateKeyMinMs", "autoSpectateKeyMaxMs", "autoSpectateThinkMinMs", "autoSpectateThinkMaxMs", "healthEstimator"); // Ostinato: spectator learning, auto-spectate, cheat detection, health estimator
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 

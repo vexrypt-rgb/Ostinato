@@ -8,6 +8,15 @@
     "defaultRequire": 1
   },
   "client": [
+    "MixinOstinatoKeyboard",
+    "MixinOstinatoMouse",
+    "MixinOstinatoContainerScreen",
+    "MixinOstinatoDisconnected",
+    "MixinOstinatoCommandHistory",
+    "MixinSpectatePackets",
+    "MixinSpectateRecv",
+    "MixinLivingEntityEffects",
+    "MixinBossHealthOverlay",
     "MixinChatComponent",
     "MixinChunkArray",
     "MixinClientChunkProvider",
