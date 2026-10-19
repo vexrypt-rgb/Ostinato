@@ -42,6 +42,14 @@ public final class PlayerSim {
         default boolean sticky(int x, int y, int z) {
             return false;
         }
+
+        /**
+         * Ostinato: adds the boxes of one cell, in world coordinates and in the order {@link #collect} lists them, and
+         * returns true; false if this world cannot list a single cell, which keeps searches over it out of native code.
+         */
+        default boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+            return false;
+        }
     }
 
     public static final double HALF_WIDTH = 0.3f; // vanilla sizes are floats: the box edge lands exactly on block faces
@@ -69,6 +77,11 @@ public final class PlayerSim {
 
     public PlayerSim(World world) {
         this.world = world;
+    }
+
+    // Ostinato: the world this sim reads, for spectate decoding
+    public World world() {
+        return world;
     }
 
     public PlayerSim copyFrom(PlayerSim o) {
@@ -118,6 +131,69 @@ public final class PlayerSim {
             double f = 0.98 * speed * input;
             vx += -sin * f;
             vz += cos * f;
+        }
+        if (climbable()) { // LivingEntity.handleOnClimbableSpeed
+            vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
+            vz = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vz));
+            vy = Math.max(vy, -CLIMB_LIMIT);
+        }
+        move(vx, vy, vz);
+        if ((collidedH || jump) && climbable()) {
+            vy = CLIMB_SPEED; // pressing into the wall or holding jump climbs
+        }
+        vy = (vy - 0.08) * 0.98;
+        vx *= slip;
+        vz *= slip;
+    }
+
+    /**
+     * Ostinato: one tick from the input as vanilla's xxa/zza hold it once the keys are read (after the 0.98 input
+     * friction): {@code strafeImpulse} +left, {@code forwardImpulse} +forward. For decoding someone else's movement in
+     * spectate learning, where the impulse is fitted, not pressed. {@link #tick(float, int, boolean, boolean)} is left as is.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean sprint, boolean jump) {
+        tickImpulse(yawDeg, strafeImpulse, forwardImpulse, forwardImpulse > 1.0E-5, sprint, jump);
+    }
+
+    /** Ostinato: as above, with whether a sprint may hold given by the caller. */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump) {
+        if (Math.abs(vx) < 0.003) vx = 0;
+        if (Math.abs(vy) < 0.003) vy = 0;
+        if (Math.abs(vz) < 0.003) vz = 0;
+        // Vanilla: the key starts a sprint; only losing forward input or a wall stops it.
+        sprinting = forward && !collidedH && (sprint || sprinting);
+        double yaw = Math.toRadians(yawDeg);
+        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        if (jumpTicks > 0) jumpTicks--;
+        if (!jump) jumpTicks = 0;
+        if (jump && onGround && jumpTicks == 0) {
+            jumpTicks = 10;
+            vy = jumpStrength * jumpFactor() + jumpBoost;
+            if (sprinting) {
+                vx -= sin * 0.2;
+                vz += cos * 0.2;
+            }
+        }
+        float blockSlip = onGround ? world.slipperiness(floor(x), floor(y - 0.5000001), floor(z)) : 1.0f;
+        double slip = onGround ? blockSlip * 0.91 : 0.91;
+        double speed;
+        if (onGround) {
+            double move = (sprinting ? 0.13 : 0.1) * speedScale;
+            speed = move * (0.21600002 / (blockSlip * blockSlip * blockSlip));
+        } else {
+            speed = sprinting ? 0.026 : 0.02;
+        }
+        if (forwardImpulse != 0 || strafeImpulse != 0) { // vanilla moveRelative
+            double fz = forwardImpulse, fx = strafeImpulse;
+            double len = Math.sqrt(fx * fx + fz * fz);
+            if (len > 1) {
+                fx /= len;
+                fz /= len;
+            }
+            fx *= speed;
+            fz *= speed;
+            vx += fx * cos - fz * sin;
+            vz += fz * cos + fx * sin;
         }
         if (climbable()) { // LivingEntity.handleOnClimbableSpeed
             vx = Math.max(-CLIMB_LIMIT, Math.min(CLIMB_LIMIT, vx));
@@ -254,6 +330,23 @@ public final class PlayerSim {
             }
         }
         return d;
+    }
+
+    /**
+     * Ostinato: the block cell the feet stand in, as {@code IPlayerContext.playerFeet} counts it. A landing on soul sand,
+     * a chest, farmland or a lantern rests a little below the cell's floor, and still belongs to that cell.
+     */
+    public static int feetCell(double y) {
+        return floor(y + 0.1251);
+    }
+
+    /**
+     * Ostinato: whether feet at {@code y} stand in the planner's node at height {@code nodeY}: its feet cell, or a low
+     * top (candle, bed, slab, 3+ layers of snow: 0.25 to 0.875 high) in the cell below, which the planner counts as
+     * the node above it.
+     */
+    public static boolean nodeHeight(double y, int nodeY) {
+        return feetCell(y) == nodeY || y < nodeY && y >= nodeY - 0.75 - 1e-9;
     }
 
     public static int floor(double v) {

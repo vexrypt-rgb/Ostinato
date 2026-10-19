@@ -86,6 +86,10 @@ public class Baritone implements IBaritone {
     private final PvpProcess pvpProcess;
     private final PveProcess pveProcess;
 
+    private final baritone.health.HealthEstimator healthEstimator; // Ostinato: health estimator
+    private final baritone.spectate.SpectateLearner spectateLearner; // Ostinato: spectator learning
+    private final baritone.spectate.ServerSpectate serverSpectate; // Ostinato: auto-spectate
+
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
     private final CommandManager commandManager;
@@ -117,6 +121,9 @@ public class Baritone implements IBaritone {
             this.registerBehavior(WaypointBehavior::new);
             this.swarmBehavior        = this.registerBehavior(SwarmBehavior::new);
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
+            this.healthEstimator      = this.registerBehavior(baritone.health.HealthEstimator::new); // Ostinato
+            this.spectateLearner      = this.registerBehavior(baritone.spectate.SpectateLearner::new); // Ostinato
+            this.serverSpectate       = this.registerBehavior(baritone.spectate.ServerSpectate::new); // Ostinato: auto-spectate
         }
 
         this.pathingControlManager = new PathingControlManager(this);
@@ -264,6 +271,21 @@ public class Baritone implements IBaritone {
     @Override
     public CommandManager getCommandManager() {
         return this.commandManager;
+    }
+
+    // Ostinato: health estimator
+    @Override
+    public baritone.health.HealthEstimator getHealthEstimator() {
+        return this.healthEstimator;
+    }
+
+    // Ostinato: spectator learning
+    public baritone.spectate.ServerSpectate getServerSpectate() {
+        return serverSpectate;
+    }
+
+    public baritone.spectate.SpectateLearner getSpectateLearner() {
+        return this.spectateLearner;
     }
 
     public PortalBuildProcess getPortalBuildProcess() {
