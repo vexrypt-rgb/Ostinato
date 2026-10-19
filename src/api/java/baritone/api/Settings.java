@@ -2296,6 +2296,13 @@ public final class Settings {
      */
     public final Setting<Boolean> sparSeedPriors = new Setting<>(false);
 
+    /**
+     * Ostinato: also learn from fights with a player flagged as a suspected cheater (reach, aim snaps, click rate,
+     * movement that breaks vanilla physics, no knockback, inhuman reaction). Off: such fights are still saved, tagged
+     * suspected-cheat, but kept out of the winner/loser tallies and style learning. Detection is watch-only.
+     */
+    public final Setting<Boolean> spectateLearnSuspectedCheats = new Setting<>(false);
+
     // Ostinato: auto-spectate (watch-only server join)
     /**
      * The server the Auto-spectate button and {@code #autospectate} join to watch fights. Watch only: the bot answers

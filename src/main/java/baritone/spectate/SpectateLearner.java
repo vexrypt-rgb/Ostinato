@@ -190,6 +190,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             firstSeenTick.clear(); // Ostinato: joined late; arriving in a world starts every clock over
             lastHurtTick.clear();
             hpBefore.clear();
+            cheat.clear(); // Ostinato: cheater detection, ids start over
+            availableSince.clear();
+            flagged.clear();
             closeRecorders();
             post(l -> {
                 l.minds.clear();
@@ -243,6 +246,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         firstSeenTick.keySet().retainAll(nearIds);
         hpBefore.keySet().retainAll(nearIds);
         for (Player p : near) hpBefore.put(p.getId(), p.getHealth());
+        watchCheats(near); // Ostinato
         for (Seen sn : seen.values()) use(sn);
         lookAll(near); // Ostinato: kits and team clues of everyone in range
         if (!pendingSplash.isEmpty()) resolveSplashes(); // Ostinato
@@ -423,6 +427,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     @Override
     public void animate(Entity e, int action) {
         if (action == 4) critVictims.add(e.getId());
+        if (action == 0 && e instanceof Player && active()) cheat.swing(e.getId(), tick); // Ostinato: click rate
         Seen sn = seen.get(e.getId());
         if (sn == null || action != 0 && action != 3) return; // SWING_MAIN_HAND, SWING_OFF_HAND
         Player p = sn.p;
@@ -477,6 +482,11 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId()) && !looks.containsKey(victim.getId()) && !looks.containsKey(attacker.getId())) return; // Ostinato: or looked at
         Seen as = seen.get(attacker.getId());
         if (as != null) as.hits++;
+        if (!ranged) { // Ostinato: cheater detection on landed melee hits
+            Integer since = availableSince.get(pair(attacker.getId(), victim.getId()));
+            cheat.hit(attacker.getId(), victim.getId(), tick, Math.sqrt(victim.getBoundingBox().distanceToSqr(attacker.getEyePosition())),
+                    CheatWatch.offAngle(attacker.getYRot(), attacker.getX(), attacker.getZ(), victim.getX(), victim.getZ()), since == null ? Integer.MAX_VALUE : tick - since);
+        }
         pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick, ranged,
                 lateSigns(attacker, true) != null ? lateSigns(attacker, true) : lateSigns(victim, false)}); // Ostinato: joined late
     }
@@ -485,6 +495,58 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     static final int LATE_ARRIVAL = 100, LATE_COMBO = 10;
     private final Map<Integer, Integer> firstSeenTick = new HashMap<>(), lastHurtTick = new HashMap<>();
     private final Map<Integer, Float> hpBefore = new HashMap<>();
+
+    // Ostinato: cheater detection (watch-only: fights are labelled, nobody is reported). Main thread.
+    private final CheatWatch cheat = new CheatWatch();
+    private final Map<Long, Integer> availableSince = new HashMap<>(); // attacker<<32|victim -> tick the victim came into reach and view
+    private final Map<Integer, String> flagged = new HashMap<>();
+
+    private static long pair(int a, int b) {
+        return ((long) a << 32) | (b & 0xffffffffL);
+    }
+
+    /** Ostinato: what vanilla itself lets move oddly; such ticks never count against anyone. */
+    private static boolean exempt(Player p) {
+        return p.isFallFlying() || p.isPassenger() || p.isInWater() || p.isInLava() || p.onClimbable() || p.isSpectator() || p.isCreative()
+                || p.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION) || p.hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                || p.hasEffect(net.minecraft.world.effect.MobEffects.SPEED) || p.hasEffect(net.minecraft.world.effect.MobEffects.JUMP_BOOST)
+                || p.isAutoSpinAttack();
+    }
+
+    private void watchCheats(List<Player> near) {
+        int n = Math.min(near.size(), 24);
+        for (int i = 0; i < n; i++) {
+            Player p = near.get(i);
+            cheat.move(p.getId(), tick, p.getX(), p.getY(), p.getZ(), p.getYRot(), p.onGround(), exempt(p), p.hurtTime > 0);
+        }
+        for (int i = 0; i < n; i++) {
+            Player a = near.get(i);
+            for (int j = 0; j < n; j++) {
+                if (i == j) continue;
+                Player b = near.get(j);
+                long k = pair(a.getId(), b.getId());
+                boolean avail = a.distanceToSqr(b) < 36 && Math.sqrt(b.getBoundingBox().distanceToSqr(a.getEyePosition())) <= 3.0
+                        && CheatWatch.offAngle(a.getYRot(), a.getX(), a.getZ(), b.getX(), b.getZ()) <= CheatWatch.FOV_OFF;
+                if (avail) availableSince.putIfAbsent(k, tick);
+                else availableSince.remove(k);
+            }
+        }
+        if (tick % 20 == 0) {
+            if (availableSince.size() > 4096) availableSince.clear();
+            for (int i = 0; i < n; i++) {
+                Player p = near.get(i);
+                int id = p.getId();
+                String r = cheat.reason(id);
+                if (r == null || r.equals(flagged.get(id))) continue;
+                flagged.put(id, r);
+                String name = p.getName().getString();
+                System.out.println("Ostinato spectate: suspected cheat " + name + " " + r + " (watch-only: kept out of learning)");
+                post(l -> l.book.suspect(id, name, r));
+            }
+            boolean inc = s().spectateLearnSuspectedCheats.value;
+            post(l -> l.book.includeCheats(inc));
+        }
+    }
 
     /**
      * Why a fight whose first seen hit involves {@code p} would have begun before we saw it, or null. The victim's own
@@ -845,7 +907,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         m.life.decoded(t, d, foeDist, radial, hp);
         for (FightBook.Fight f : book.fightsOf(id)) f.of(id).decoded(t, d, foeDist, radial, hp);
         if (!d.reset) lastKeys.put(id, d.keys());
-        if (m.life.swings() >= 20 && m.life.swings() % 20 == 0) SpectatePriors.get().style(name, m.life);
+        if (m.life.swings() >= 20 && m.life.swings() % 20 == 0 && !book.suspected(id)) SpectatePriors.get().style(name, m.life); // Ostinato: not a suspect's
         logDecode(id, name, o, d, t);
     }
 
@@ -912,7 +974,8 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         List<String> lines = new ArrayList<>();
         lines.add(String.format(Locale.ROOT, "#type %s shape=%s players=%d group=%d%s%s", f.type(), g == null ? "1v1" : g.shape, g == null ? 2 : g.members.size(),
                 g == null ? 0 : g.id, counts ? "" : " short", f.type().equals("1v1") || !s().spectateFightTypes.value ? "" : " multi")
-                + (f.late == null ? "" : " late=" + f.late)); // Ostinato: joined late
+                + (f.late == null ? "" : " late=" + f.late) // Ostinato: joined late
+                + (f.cheat == null ? "" : " suspected-cheat=" + f.cheat)); // Ostinato: still saved, kept out of learning
         if (g != null && !g.type.equals("1v1")) lines.add("#teams " + g.teamsLine());
         lines.add(kitLine("me", f.nameA, f.kitA, f.a));
         lines.add(kitLine("tg", f.nameB, f.kitB, f.b));
