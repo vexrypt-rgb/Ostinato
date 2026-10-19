@@ -85,7 +85,6 @@ final class CombatApproach {
                 if (!facing(me, target, 55f)) return hands.decide("chase");
                 hands.key(Input.MOVE_FORWARD);
                 if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
-                if (me.onGround() && !me.isInWater()) hands.key(Input.JUMP);
                 return hands.decide("chase");
             }
         }

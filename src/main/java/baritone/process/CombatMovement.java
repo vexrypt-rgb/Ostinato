@@ -43,7 +43,6 @@ final class CombatMovement {
             wtap = 0;
             hands.key(Input.MOVE_FORWARD);
             if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
-            if (dist > 3.5 && me.onGround() && me.isSprinting() && !me.isInWater()) hands.key(Input.JUMP);
             return;
         }
         if (wtap > 0) {
@@ -54,11 +53,7 @@ final class CombatMovement {
         } else if (dist < 1.2) {
             hands.key(Input.MOVE_BACK);
         }
-        if (dist > 3.5) {
-            // it's backing off to heal: run it down in a straight line, sprint-jumping for speed
-            if (me.onGround() && me.isSprinting() && !me.isInWater()) hands.key(Input.JUMP);
-            return;
-        }
+        if (dist > 3.5) return; // Ostinato: a jump every step was set back by the server. Sprint on the ground.
         hands.key(strafeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
     }
 
@@ -71,6 +66,5 @@ final class CombatMovement {
         hands.key(Input.MOVE_FORWARD);
         hands.key(dodgeDir > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
         if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
-        if (me.onGround() && rng.nextInt(12) == 0) hands.key(Input.JUMP);
     }
 }
