@@ -236,10 +236,11 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         // hits wait a tick for the crit packet that follows them
         for (Object[] h : pendingHits) {
             int att = (Integer) h[0], vic = (Integer) h[1];
-            boolean crit = critVictims.contains(vic);
+            boolean ranged = (Boolean) h[5]; // Ostinato
+            boolean crit = !ranged && critVictims.contains(vic);
             String an = (String) h[2], vn = (String) h[3];
             int t = (Integer) h[4];
-            post(l -> l.hitW(t, att, an, vic, vn, crit));
+            post(l -> l.hitW(t, att, an, vic, vn, crit, ranged));
         }
         pendingHits.clear();
         critVictims.clear();
@@ -447,11 +448,12 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         net.minecraft.world.damagesource.DamageSource src = p.getSource(Minecraft.getInstance().level);
         Entity att = src.getEntity();
         if (!(e instanceof Player victim) || !(att instanceof Player attacker) || att == e) return;
-        if (!src.is(DamageTypeTags.IS_PLAYER_ATTACK)) return;
+        boolean ranged = src.is(DamageTypeTags.IS_PROJECTILE); // Ostinato: bow, crossbow and trident hits count too
+        if (!src.is(DamageTypeTags.IS_PLAYER_ATTACK) && !ranged) return;
         if (!seen.containsKey(victim.getId()) && !seen.containsKey(attacker.getId()) && !looks.containsKey(victim.getId()) && !looks.containsKey(attacker.getId())) return; // Ostinato: or looked at
         Seen as = seen.get(attacker.getId());
         if (as != null) as.hits++;
-        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick});
+        pendingHits.add(new Object[]{attacker.getId(), victim.getId(), attacker.getName().getString(), victim.getName().getString(), tick, ranged});
     }
 
     @Override
@@ -478,7 +480,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         if (!(e instanceof ThrownEnderpearl) && !(e instanceof ThrownSplashPotion)) return;
         if (e instanceof ThrownSplashPotion sp0) { // Ostinato: its potion is only known a tick or two later
             Entity o = sp0.getOwner();
-            if (o != null && seen.containsKey(o.getId()) && !(s().spectateKitDetect.value && looks.containsKey(o.getId()))) pendingSplash.add(new Object[]{sp0, o.getId(), tick});
+            if (o != null && seen.containsKey(o.getId()) && !looks.containsKey(o.getId())) pendingSplash.add(new Object[]{sp0, o.getId(), tick});
             return;
         }
         Entity owner = ((net.minecraft.world.entity.projectile.Projectile) e).getOwner();
@@ -575,7 +577,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
      * arrows, tridents, fireworks; an end crystal counts for the nearest fighter within five blocks.
      */
     private void addedKit(Entity e) {
-        if (!s().spectateKitDetect.value || looks.isEmpty()) return;
+        if (looks.isEmpty()) return; // Ostinato: also for fight types (arrows shot at someone); kitEvent checks kit detection
         if (e instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal) {
             Look best = null;
             double bd = 25;
@@ -602,6 +604,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         else if (e instanceof net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge) tok = "threw:wind_charge";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.ThrownTrident) tok = "shot:trident";
         else if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) tok = "shot:arrow";
+        if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) shotAt(owner, e); // Ostinato: engagement
         else if (e instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity) tok = "firework";
         if (tok != null) kitEvent(owner.getId(), tok);
     }
@@ -628,6 +631,36 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
                 });
             }
         }
+    }
+
+    /**
+     * Ostinato: whom an arrow or trident was shot at: the player within 40 blocks closest to its line of flight (within
+     * 20 degrees). Keeps their fight on, see {@link FightBook#shotAt}.
+     */
+    private void shotAt(Entity shooter, Entity arrow) {
+        Vec3 v = arrow.getDeltaMovement();
+        if (v.lengthSqr() < 1e-4) return;
+        Vec3 dir = v.normalize();
+        Player best = null;
+        double bestCos = Math.cos(Math.toRadians(20));
+        for (Look lk : looks.values()) {
+            Player p = lk.p;
+            if (p == shooter) continue;
+            Vec3 to = p.position().add(0, 1, 0).subtract(arrow.position());
+            double d = to.length();
+            if (d > 40 || d < 1e-3) continue;
+            // a dropping arc: compare on the level plane, so a lob still points at its target
+            Vec3 flat = new Vec3(to.x, 0, to.z), fdir = new Vec3(dir.x, 0, dir.z);
+            if (flat.lengthSqr() < 1e-6 || fdir.lengthSqr() < 1e-6) continue;
+            double cos = flat.normalize().dot(fdir.normalize());
+            if (cos > bestCos) {
+                bestCos = cos;
+                best = p;
+            }
+        }
+        if (best == null) return;
+        int a = shooter.getId(), b = best.getId(), t = tick;
+        post(l -> l.book.shotAt(t, a, b));
     }
 
     /** Eating: the use flag held 30 ticks or more with food in hand. */
@@ -762,8 +795,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         logDecode(id, name, o, d, t);
     }
 
-    private void hitW(int t, int att, String an, int vic, String vn, boolean crit) {
-        FightBook.Fight f = book.hit(t, att, an, vic, vn, crit); // Ostinato: crit kept on the group's hit list
+    private void hitW(int t, int att, String an, int vic, String vn, boolean crit, boolean ranged) {
+        // Ostinato: crit kept on the group's hit list; ranged hits let the fight drift further
+        FightBook.Fight f = ranged ? book.rangedHit(t, att, an, vic, vn) : book.hit(t, att, an, vic, vn, crit);
         synchronized (activeFights) {
             long key = f.serial; // Ostinato: the fight's serial, as the same pair may fight again while a log waits
             boolean have = false;

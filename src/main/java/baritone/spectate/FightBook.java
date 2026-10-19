@@ -22,6 +22,8 @@ import java.util.function.Consumer;
 public final class FightBook {
     public static final int QUIET = 300;
     public static final double APART = 24;
+    /** Ostinato: how far apart a fight with bow, crossbow or trident hits may drift before it counts as over. */
+    public static final double APART_RANGED = 48;
     /** Fights shorter than this (one stray hit) are thrown away. */
     public static final int MIN_TICKS = 60, MIN_HITS = 3;
 
@@ -34,6 +36,8 @@ public final class FightBook {
         public final int serial = ++serials;
         public final Habits ha = new Habits(), hb = new Habits();
         int hitsA, hitsB;
+        /** Ostinato: a hit of it came from an arrow or trident: it may be fought from further apart. */
+        public boolean ranged;
         // Ostinato: kit detection and fight type, set when the fight's group closes
         public FightGroup group;
         public KitSignatures.Result kitA, kitB;
@@ -154,6 +158,24 @@ public final class FightBook {
         if (attacker == f.a) f.hitsA++;
         else f.hitsB++;
         return f;
+    }
+
+    /** Ostinato: a ranged hit (arrow, trident): a hit like any other, and the fight may be fought from further. */
+    public Fight rangedHit(int tick, int attacker, String attackerName, int victim, String victimName) {
+        Fight f = hit(tick, attacker, attackerName, victim, victimName, false);
+        f.ranged = true;
+        return f;
+    }
+
+    /**
+     * Ostinato: an arrow or trident shot at someone, hit or not: keeps a fight between the two from going quiet and lets
+     * it drift as far as a ranged fight. Starts no fight by itself.
+     */
+    public void shotAt(int tick, int shooter, int target) {
+        Fight f = active.get(key(shooter, target));
+        if (f == null) return;
+        f.lastExchange = Math.max(f.lastExchange, tick);
+        f.ranged = true;
     }
 
     /** Ostinato: one group takes in the other (the larger keeps its id). */
@@ -333,7 +355,7 @@ public final class FightBook {
         for (Fight f : new ArrayList<>(active.values())) {
             double d = dist.applyAsDouble(f.a, f.b);
             boolean quiet = tick - f.lastExchange > QUIET;
-            if (!quiet && !(Double.isNaN(d) || d > APART)) continue;
+            if (!quiet && !(Double.isNaN(d) || d > (f.ranged ? APART_RANGED : APART))) continue; // Ostinato: ranged
             double ha = hp.applyAsDouble(f.a), hb = hp.applyAsDouble(f.b);
             int winner = Double.isNaN(ha) || Double.isNaN(hb) || Math.abs(ha - hb) <= 2 ? -1 : ha > hb ? f.a : f.b;
             finish(f, winner, quiet ? "quiet" : "apart", tick);

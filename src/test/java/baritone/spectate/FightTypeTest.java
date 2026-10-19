@@ -216,4 +216,45 @@ public class FightTypeTest {
         // the whole-fight sides rule stays out of it (what the other clues make of it is their call)
         assertEquals(null, r.groups.get(0).foeSides());
     }
+
+
+    /** Ostinato: a bow duel (bench, v1.24.0: never seen as a fight) is a fight, fought from 35 blocks apart. */
+    @Test
+    public void bowDuelIsAFight() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 35, 0);
+        for (int t = 0; t < 400; t += 20) {
+            if (t % 40 == 0) r.book.rangedHit(t, 1, "a", 2, "b");
+            else r.book.rangedHit(t, 2, "b", 1, "a");
+            r.second(t);
+        }
+        // 35 blocks is past APART, which ends a melee fight
+        assertEquals(1, r.book.active().size());
+        assertTrue(r.book.active().iterator().next().ranged);
+        r.book.died(410, 2);
+        assertEquals(1, r.groups.size());
+        assertEquals("1v1", r.groups.get(0).type);
+        assertEquals(1, r.book.decided());
+    }
+
+    /** Ostinato: arrows shot that miss keep a ranged fight from going quiet, and start none on their own. */
+    @Test
+    public void arrowsShotKeepItOn() {
+        Run r = new Run();
+        r.at(1, 0, 0);
+        r.at(2, 30, 0);
+        r.book.shotAt(0, 1, 2);
+        assertEquals(0, r.book.active().size());
+        for (int t = 0; t < 60; t += 20) {
+            r.book.rangedHit(t, 1, "a", 2, "b");
+            r.book.rangedHit(t + 10, 2, "b", 1, "a");
+        }
+        // then only misses, for longer than QUIET
+        for (int t = 100; t < 100 + 2 * FightBook.QUIET; t += 20) {
+            r.book.shotAt(t, t % 40 == 0 ? 1 : 2, t % 40 == 0 ? 2 : 1);
+            r.second(t);
+        }
+        assertEquals(1, r.book.active().size());
+    }
 }
