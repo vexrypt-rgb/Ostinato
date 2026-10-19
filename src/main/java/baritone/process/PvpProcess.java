@@ -567,6 +567,11 @@ public final class PvpProcess extends BaritoneProcessHelper {
     private final CombatPhase phase = new CombatPhase();
     private final CombatSwing swing = new CombatSwing();
     private final CombatPolicy policy = new CombatPolicy();
+
+    /** Ostinato: the tuned numbers, read by the freecam spar ghost so it fights with the bot's own policy. */
+    public CombatPolicy policy() {
+        return policy;
+    }
     private final CombatPotions potions = new CombatPotions(ctx, inv, aimer, targeting, policy.pots, new CombatPotions.Hands() {
         public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
         public void key(Input in) { PvpProcess.this.key(in); }

@@ -111,6 +111,20 @@ public final class FreecamBehavior extends Behavior implements Helper {
         return active;
     }
 
+    /** Ostinato: while a spar runs, any fight packet leaving the client would be a leak; count and log it. */
+    @Override
+    public void onSendPacket(baritone.api.event.events.PacketEvent e) {
+        if (!spar.active()) return;
+        net.minecraft.network.protocol.Packet<?> pk = e.getPacket();
+        if (pk instanceof net.minecraft.network.protocol.game.ServerboundInteractPacket
+                || pk instanceof net.minecraft.network.protocol.game.ServerboundAttackPacket
+                || pk instanceof net.minecraft.network.protocol.game.ServerboundUseItemPacket
+                || pk instanceof net.minecraft.network.protocol.game.ServerboundUseItemOnPacket) {
+            FreecamSpar.leaks++;
+            System.out.println("[SPAR] leak " + pk.getClass().getSimpleName());
+        }
+    }
+
     /** Spar score line, or null when no spar is running. */
     public static String sparHud() {
         return sparLine;
@@ -249,8 +263,8 @@ public final class FreecamBehavior extends Behavior implements Helper {
         canvasLine = canvas.hud();
     }
 
-    /** Starts a mock fight, turning freecam on if it was off. */
-    public void toggleSpar() {
+    /** Starts a mock fight, turning freecam on if it was off. Ostinato: both sides get {@code kit}. */
+    public void toggleSpar(String kit) {
         if (camera == null) {
             enable();
         }
@@ -266,8 +280,12 @@ public final class FreecamBehavior extends Behavior implements Helper {
             if (p == null) {
                 return;
             }
-            spar.start(p, camera);
-            logDirect("Spar on. Left click hits the ghost. It strafes, jumps, and crits the way the bot does. #freecam spar to stop.");
+            // Ostinato: the ghost runs the bot's own fight logic on a simulated player; nothing goes to the server
+            if (!spar.start((Baritone) baritone, p, camera, kit)) {
+                logDirect("Unknown kit " + kit + ". Kits: " + String.join(", ", SparKit.NAMES));
+                return;
+            }
+            logDirect("Spar on (" + spar.kitName() + "). Left click hits the ghost, which fights with the bot's PvP logic. Client-side only. #freecam spar to stop.");
         }
     }
 

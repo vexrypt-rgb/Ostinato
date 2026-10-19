@@ -24,6 +24,7 @@ import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.exception.CommandException;
 import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.behavior.FreecamBehavior;
+import baritone.behavior.SparKit;
 import baritone.gui.studio.BlockPalette;
 import baritone.gui.studio.EditOps;
 
@@ -52,8 +53,8 @@ public class FreecamCommand extends Command {
         String sub = args.getString().toLowerCase(Locale.ROOT);
         switch (sub) {
             case "spar" -> {
-                args.requireMax(0);
-                freecam.toggleSpar();
+                args.requireMax(1); // Ostinato: an optional kit
+                freecam.toggleSpar(args.hasAny() ? args.getString().toLowerCase(Locale.ROOT) : "sword");
             }
             case "flat" -> {
                 args.requireMax(0);
@@ -111,6 +112,9 @@ public class FreecamCommand extends Command {
             if (sub.equals("tool")) {
                 return Arrays.stream(EditOps.Tool.values()).map(tool -> tool.wire).filter(s -> s.startsWith(prefix));
             }
+            if (sub.equals("spar")) { // Ostinato
+                return Arrays.stream(SparKit.NAMES).filter(s -> s.startsWith(prefix));
+            }
             if (sub.equals("brush")) {
                 return Arrays.stream(BlockPalette.placeable()).mapToObj(BlockPalette::name).filter(s -> s.startsWith(prefix)).limit(40);
             }
@@ -145,7 +149,8 @@ public class FreecamCommand extends Command {
                 "",
                 "Usage:",
                 "> freecam - toggle freecam",
-                "> freecam spar - mock fight against a ghost that uses the bot's melee timing",
+                "> freecam spar [kit] - client-side fight against a ghost running the bot's PvP logic, vanilla damage",
+                ">   kits: sword, axe+shield, mace, crystal, pot, uhc, smp, netherite-pot (both sides; default sword)",
                 "> freecam flat - superflat canvas under the camera",
                 "> freecam edit - edit the selection, or the build you are looking at",
                 "> freecam tool <name> - brush, select, fill, replace, line, sphere, hollow, wall, copy, paste, rotate, flip",
