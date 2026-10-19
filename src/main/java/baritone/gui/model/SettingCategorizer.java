@@ -63,7 +63,7 @@ public final class SettingCategorizer {
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
         put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune", "pvpAutotuneMode",
-                "spectateLearn", "spectateLearnOnServers", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "healthEstimator",
+                "spectateLearn", "spectateLearnOnServers", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "autoSpectateServer", "autoSpectateMinutes", "healthEstimator",
                 "testHarness"); // Ostinato: pvpAutotuneMode, spectator learning (with kit detection and fight types), health estimator, testHarness
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);

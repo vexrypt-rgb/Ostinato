@@ -89,6 +89,7 @@ public class Baritone implements IBaritone {
     private final baritone.process.BastionProcess bastionProcess;
     private final baritone.health.HealthEstimator healthEstimator; // Ostinato: health estimator
     private final baritone.spectate.SpectateLearner spectateLearner; // Ostinato: spectator learning
+    private final baritone.spectate.ServerSpectate serverSpectate; // Ostinato: auto-spectate
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
@@ -123,6 +124,7 @@ public class Baritone implements IBaritone {
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
             this.healthEstimator      = this.registerBehavior(baritone.health.HealthEstimator::new); // Ostinato
             this.spectateLearner      = this.registerBehavior(baritone.spectate.SpectateLearner::new); // Ostinato
+            this.serverSpectate       = this.registerBehavior(baritone.spectate.ServerSpectate::new); // Ostinato: auto-spectate
         }
 
         this.pathingControlManager = new PathingControlManager(this);
@@ -184,6 +186,10 @@ public class Baritone implements IBaritone {
     }
 
     // Ostinato: spectator learning
+    public baritone.spectate.ServerSpectate getServerSpectate() { // Ostinato
+        return serverSpectate;
+    }
+
     public baritone.spectate.SpectateLearner getSpectateLearner() {
         return this.spectateLearner;
     }

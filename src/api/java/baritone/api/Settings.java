@@ -2283,6 +2283,17 @@ public final class Settings {
      */
     public final Setting<Boolean> spectateFightTypes = new Setting<>(true);
 
+    // Ostinato: auto-spectate (watch-only server join)
+    /**
+     * The server the Auto-spectate button and {@code #autospectate} join to watch fights. Watch only: the bot answers
+     * /register or /login, walks the lobby menus to a spectator spot and follows fights; it never attacks or chats.
+     * Its password is kept in {@code baritone/servers/<host>.secret}; a server that kicks it is never joined again.
+     */
+    public final Setting<String> autoSpectateServer = new Setting<>("crackedpvp.club");
+
+    /** Longest auto-spectate session, in minutes. */
+    public final Setting<Integer> autoSpectateMinutes = new Setting<>(20);
+
     // Ostinato: health estimator
     /**
      * Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health,
