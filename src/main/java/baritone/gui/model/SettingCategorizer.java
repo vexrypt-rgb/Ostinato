@@ -60,7 +60,8 @@ public final class SettingCategorizer {
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix");
-        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault");
+        put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault",
+                "spectateLearn", "spectateLearnOnServers", "spectateSaveLogs", "spectateRadius", "spectateLearnKits", "spectateFightTypes", "spectateLearnLateFights", "spectateLearnSuspectedCheats"); // Ostinato: spectate learning
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor");
         OVERRIDES = Collections.unmodifiableMap(m);
 

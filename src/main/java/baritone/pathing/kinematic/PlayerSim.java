@@ -58,6 +58,11 @@ public final class PlayerSim {
         this.world = world;
     }
 
+    // Ostinato: the world this sim reads, for spectate decoding
+    public World world() {
+        return world;
+    }
+
     public PlayerSim copyFrom(PlayerSim o) {
         x = o.x; y = o.y; z = o.z; vx = o.vx; vy = o.vy; vz = o.vz;
         onGround = o.onGround; sprinting = o.sprinting; collidedH = o.collidedH; jumpTicks = o.jumpTicks;
@@ -105,6 +110,61 @@ public final class PlayerSim {
             double f = 0.98 * speed * input;
             vx += -sin * f;
             vz += cos * f;
+        }
+        move(vx, vy, vz);
+        vy = (vy - 0.08) * 0.98;
+        vx *= slip;
+        vz *= slip;
+    }
+
+    /**
+     * Ostinato: one tick from the input as vanilla holds it once the keys are read (after the 0.98 input friction):
+     * {@code strafeImpulse} +left, {@code forwardImpulse} +forward. For decoding someone else's movement in spectate
+     * learning. {@link #tick(float, int, boolean, boolean)} is left as is.
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean sprint, boolean jump) {
+        tickImpulse(yawDeg, strafeImpulse, forwardImpulse, forwardImpulse > 1.0E-5, sprint, jump);
+    }
+
+    /** Ostinato: as above, with whether a sprint may hold given by the caller. */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump) {
+        if (Math.abs(vx) < 0.003) vx = 0;
+        if (Math.abs(vy) < 0.003) vy = 0;
+        if (Math.abs(vz) < 0.003) vz = 0;
+        // Vanilla: the key starts a sprint; only losing forward input or a wall stops it.
+        sprinting = forward && !collidedH && (sprint || sprinting);
+        double yaw = Math.toRadians(yawDeg);
+        double sin = Math.sin(yaw), cos = Math.cos(yaw);
+        if (jumpTicks > 0) jumpTicks--;
+        if (!jump) jumpTicks = 0;
+        if (jump && onGround && jumpTicks == 0) {
+            jumpTicks = 10;
+            vy = 0.42 * jumpFactor() + jumpBoost;
+            if (sprinting) {
+                vx -= sin * 0.2;
+                vz += cos * 0.2;
+            }
+        }
+        float blockSlip = onGround ? world.slipperiness(floor(x), floor(y - 0.5000001), floor(z)) : 1.0f;
+        double slip = onGround ? blockSlip * 0.91 : 0.91;
+        double speed;
+        if (onGround) {
+            double move = (sprinting ? 0.13 : 0.1) * speedScale;
+            speed = move * (0.21600002 / (blockSlip * blockSlip * blockSlip));
+        } else {
+            speed = sprinting ? 0.026 : 0.02;
+        }
+        if (forwardImpulse != 0 || strafeImpulse != 0) { // vanilla moveRelative
+            double fz = forwardImpulse, fx = strafeImpulse;
+            double len = Math.sqrt(fx * fx + fz * fz);
+            if (len > 1) {
+                fx /= len;
+                fz /= len;
+            }
+            fx *= speed;
+            fz *= speed;
+            vx += fx * cos - fz * sin;
+            vz += fz * cos + fx * sin;
         }
         move(vx, vy, vz);
         vy = (vy - 0.08) * 0.98;

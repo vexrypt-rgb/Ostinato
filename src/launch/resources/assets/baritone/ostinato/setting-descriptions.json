@@ -288,5 +288,13 @@
  "renderPathHud": "Show the Ostinato path status card (goal, progress, ETA, mover, process) on the HUD while pathing. Hidden while the debug screen (F3) is open.",
  "pathHudAnchor": "Where the path status card sits on screen: RIGHT, LEFT, TOP_RIGHT or TOP_LEFT.",
  "guiAccentColor": "Accent color of the Ostinato settings screen and path status card.",
- "maxPathLengthBlocks": "The longest path, in positions, that will be walked. A longer one is thrown away and counts as a failed calculation, and the same goal is left alone for five seconds. Also refuses long routes that are fine, so it is off unless set; 150 is the value it was written with. 0 = no cap."
+ "maxPathLengthBlocks": "The longest path, in positions, that will be walked. A longer one is thrown away and counts as a failed calculation, and the same goal is left alone for five seconds. Also refuses long routes that are fine, so it is off unless set; 150 is the value it was written with. 0 = no cap.",
+ "spectateLearn": "Watch nearby players' fights and record them: kits, FFA/team shape, joined-late fights and suspected cheaters (1.16.1: recorder only, no key decoding).",
+ "spectateLearnOnServers": "Also record while on a multiplayer server (watch-only: nothing is ever sent).",
+ "spectateSaveLogs": "Write each recorded fight's summary to baritone/spectate/fights.log.",
+ "spectateRadius": "How far away (blocks) players are watched for spectate learning.",
+ "spectateLearnKits": "Learn new kit labels from fights whose gear matches no known kit.",
+ "spectateFightTypes": "Tell 1v1, FFA and team fights apart and tag them in the fight log.",
+ "spectateLearnLateFights": "Also count fights that were joined late (someone already hurt, mid-combo or just arrived) in the kit tallies.",
+ "spectateLearnSuspectedCheats": "Also count fights of suspected cheaters (reach, aim, click rate, speed, no knockback) in the tallies. They are always logged; nothing is ever reported."
 }
