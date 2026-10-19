@@ -103,7 +103,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     private final List<String[]> authClicks = new ArrayList<>();
     private final java.util.concurrent.ConcurrentLinkedDeque<Object[]> recentSys = new java.util.concurrent.ConcurrentLinkedDeque<>(); // {ms, Component}
     private String authClickChoice;
-    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs;
+    private long authClickPromptMs, lastAuthSentMs, lastPromptMs, authPhaseMs, chatStageMs, playerGoneMs;
     private ClickEvent chatTarget;
     private String chatTargetShown;
     private int chatStage, chatClicks;
@@ -456,15 +456,19 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             logDirect("Auto-spectate: disconnected from " + host + " (" + why + "); marked blocked. " + summary());
             return;
         }
-        if (event.getType() == TickEvent.Type.OUT || mc.player == null) {
-            if (phase != Phase.CONNECTING && phase != Phase.LEAVING && now - startMs > 5000 && !(mc.screen instanceof ConnectScreen)) {
-                // back at a menu without a kick screen: treat as ended
+        if (event.getType() == TickEvent.Type.OUT) return;
+        if (mc.player == null) {
+            // Ostinato: a lobby world change nulls the player for a moment. Wait before calling that a disconnect.
+            if (playerGoneMs == 0) playerGoneMs = now;
+            if (phase != Phase.CONNECTING && phase != Phase.LEAVING && now - startMs > 5000
+                    && now - playerGoneMs > 8000 && !(mc.screen instanceof ConnectScreen)) {
                 phase = Phase.IDLE;
                 endReason = "left the server";
                 flushLog();
             }
             return;
         }
+        playerGoneMs = 0;
         if (phase == Phase.CONNECTING) {
             phase = Phase.AUTH;
             lastAuthMs = now;
