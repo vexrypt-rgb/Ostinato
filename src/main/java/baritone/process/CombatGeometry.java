@@ -22,6 +22,14 @@ final class CombatGeometry {
 
     private CombatGeometry() {}
 
+    /** True when the player's yaw is within {@code tol} degrees of the target. Forward is the wrong way until then. */
+    static boolean facing(Player me, LivingEntity target, float tol) {
+        double dx = target.getX() - me.getX();
+        double dz = target.getZ() - me.getZ();
+        float bearing = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        return Math.abs(Mth.wrapDegrees(me.getYRot() - bearing)) <= tol;
+    }
+
     /**
      * Point to look at so an arrow of the given launch speed (blocks/tick) meets a moving target: gravity 0.05 and
      * drag 0.99 per tick are simulated, so a far shot is lobbed over the drop instead of hitting the floor.

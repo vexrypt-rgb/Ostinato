@@ -79,8 +79,10 @@ final class CombatApproach {
             if (!spearRush) {
                 if (los && dist > BOW_MIN && inv.slotOf(me, Items.BOW) >= 0 && inv.slotOf(me, Items.ARROW) >= 0) return hands.decide("bow", tools.bow(me, target));
                 hands.use(false);
-                // Ostinato: the old chase. Hold forward toward them. A Baritone path on an arena stalled the game.
+                // Ostinato: sprint only once we face them. An empty hand means the kit is not in yet, so stand and equip.
                 hands.look(target.getEyePosition());
+                if (me.getMainHandItem().isEmpty()) return null;
+                if (!facing(me, target, 55f)) return hands.decide("chase");
                 hands.key(Input.MOVE_FORWARD);
                 if (me.getFoodData().getFoodLevel() > 6) hands.key(Input.SPRINT);
                 if (me.onGround() && !me.isInWater()) hands.key(Input.JUMP);

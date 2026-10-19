@@ -33,6 +33,8 @@ final class CombatMovement {
     }
 
     void steer(Player me, LivingEntity target, double dist, boolean chase, boolean critArmed) {
+        // Ostinato: after a flee the body still faces away. Holding forward then sprints out of the fight.
+        if (me.getMainHandItem().isEmpty() || !CombatGeometry.facing(me, target, 55f)) return;
         if (--strafeLeft <= 0) {
             strafeDir = rng.nextBoolean() ? 1 : -1;
             strafeLeft = 10 + rng.nextInt(20);

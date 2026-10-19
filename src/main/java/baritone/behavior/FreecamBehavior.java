@@ -394,10 +394,14 @@ public final class FreecamBehavior extends Behavior implements Helper {
         while (gs.keyUse.consumeClick()) {
             right = true;
         }
-        // Never let a held click reach the bot's controller (it would dig/use at the camera's crosshair).
+        // A fight holds these itself (shield up, swing). Clearing them made the bot block forever and never hit.
+        boolean keepAttack = fighting() && gs.keyAttack.isDown();
+        boolean keepUse = fighting() && gs.keyUse.isDown();
         gs.keyAttack.setDown(false);
         gs.keyUse.setDown(false);
         gs.keyPickItem.setDown(false);
+        if (keepAttack) gs.keyAttack.setDown(true); // Ostinato: freecam was eating the swing and the shield
+        if (keepUse) gs.keyUse.setDown(true);
         if (middle) {
             markEnemy();
         } else if (left) {
