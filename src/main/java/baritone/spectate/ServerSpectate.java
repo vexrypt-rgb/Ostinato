@@ -923,6 +923,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                     return false;
                 }
                 if (roundStarted(l)) {
+                    if (gateUntil != 0) gateUntil = now + 2500; // Ostinato: stay on forward until the bot is through the gate
                     beginRound();
                     return false;
                 }
@@ -1302,15 +1303,16 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     /** Ostinato: hold forward and punch while the ready-gate title is up. Stop once the round starts. */
     private void walkGate(Minecraft mc, long now) {
         if (gateUntil == 0) return;
-        if (phase == Phase.FIGHT || now > gateUntil || mc.screen != null) {
-            if (phase == Phase.FIGHT || now > gateUntil) gateUntil = 0;
+        if (now > gateUntil || mc.screen != null) {
+            if (now > gateUntil) gateUntil = 0;
             releaseGate();
             return;
         }
         var in = baritone.getInputOverrideHandler();
         in.setInputForceState(Input.MOVE_FORWARD, true);
         in.setInputForceState(Input.SPRINT, true);
-        in.setInputForceState(Input.CLICK_LEFT, true);
+        // Ostinato: punch only during the countdown. After the round starts, combat owns the swing.
+        in.setInputForceState(Input.CLICK_LEFT, phase != Phase.FIGHT);
     }
 
     private void releaseGate() {
