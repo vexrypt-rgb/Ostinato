@@ -74,7 +74,8 @@ public final class DefaultCommands {
                 new ElytraCommand(baritone),
                 new TasksCommand(baritone),
                 new SwarmCommand(baritone),
-                new PortalCommand(baritone)
+                new PortalCommand(baritone),
+                new AutoSpectateCommand(baritone) // Ostinato: watch-only server spectating
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);

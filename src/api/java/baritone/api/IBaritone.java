@@ -143,4 +143,13 @@ public interface IBaritone {
      * Open click
      */
     void openClick();
+
+    // Ostinato: health estimator
+    /**
+     * @return The estimated health of nearby living entities (see {@link baritone.api.utils.IHealthEstimator}). The
+     * default reads what the game shows.
+     */
+    default baritone.api.utils.IHealthEstimator getHealthEstimator() {
+        return e -> new baritone.api.utils.HealthEstimate(e.getHealth(), e.getAbsorptionAmount(), e.getMaxHealth(), 1, 0, "synced");
+    }
 }

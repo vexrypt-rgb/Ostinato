@@ -97,10 +97,16 @@ public final class ClientWorld implements PlayerSim.World {
         for (int x = PlayerSim.floor(minX); x <= PlayerSim.floor(maxX); x++) {
             for (int y = PlayerSim.floor(minY) - 1; y <= PlayerSim.floor(maxY); y++) { // -1: fences stick up 1.5
                 for (int z = PlayerSim.floor(minZ); z <= PlayerSim.floor(maxZ); z++) {
-                    out.addAll(boxes(x, y, z));
+                    cellBoxes(x, y, z, out);
                 }
             }
         }
+    }
+
+    @Override
+    public boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+        out.addAll(boxes(x, y, z));
+        return true;
     }
 
     private List<double[]> boxes(int x, int y, int z) {
