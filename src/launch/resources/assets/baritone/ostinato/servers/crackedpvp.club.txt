@@ -1,18 +1,15 @@
-# Ostinato: auto-spectate route for crackedpvp.club. A copy at baritone/servers/crackedpvp.club.txt in the game folder
-# replaces it. Steps run in order after /register or /login; menus are clicked by item names.
-#   cmd /x       send a command once (rate limited)
-#   hotbar word  right-click the hotbar item whose name has this word
-#   click word   in the open menu, click the item whose name has this word
-#   wait s       pause
-#   words a,b    menu words for the fallback, best first
-#   authclick prompt words | choice   during login, click the [choice] button of the chat message with these words
-#                (a humanized click in chat, before /register or /login; menus wait until login is done)
-# The login plugin first asks "Are you using a premium account? [✔ Yes] [✖ No]": this throwaway is cracked.
-# The hub menu is Survival, Practice, FFA, Discord, Store. None of those is spectate.
-# Practice opens a duel lobby. Casual and Competitive start a fight, so they are never clicked.
-# After that, each hotbar item is right-clicked once in case it opens a spectate menu.
+# Ostinato: queue a mode on crackedpvp.club. A copy at baritone/servers/crackedpvp.club.txt in the game folder
+# replaces it. Steps run in order after /register or /login.
+#   hotbar word  right-click the hotbar item whose name or item id has this word
+#   click word   in the open menu, click the item whose name is this word (the next click waits for the next menu)
+#   authclick prompt words | choice   during login, click the [choice] button
+# The login plugin asks "Are you using a premium account? [Yes] [No]": this throwaway is cracked.
+# Right-click the clock, click the crystal, click the crystal in the next menu, right-click the sword.
+# That sword is not the hub Enable PvP item. Its menu lists modes, and each mode is an item named the mode.
+# The last click is the mode. Crystal is the one queued here.
 authclick premium account | no
-hotbar GAMEMODES
-click practice
-wait 8
-words spectate,spectator,spec,watch
+hotbar clock
+click crystal
+click crystal
+hotbar sword
+click crystal

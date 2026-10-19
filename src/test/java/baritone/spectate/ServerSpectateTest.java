@@ -81,4 +81,24 @@ public class ServerSpectateTest {
         assertTrue(ServerSpectate.unknownCommand("crackedpvp | no such command."));
         assertFalse(ServerSpectate.unknownCommand("you have successfully logged."));
     }
+
+    @Test
+    public void queuesCrystalByItemName() { // Ostinato: clock, then crystal menus, then the mode item named Crystal
+        assertTrue(ServerSpectate.hotbarHit("Gamemodes", "clock", "clock"));
+        assertTrue(ServerSpectate.hotbarHit("clock", "clock", "clock"));
+        assertFalse(ServerSpectate.hotbarHit("ENABLE PVP (Hold Item)", "iron_sword", "sword"));
+        assertTrue(ServerSpectate.hotbarHit("Sword", "iron_sword", "sword"));
+        assertTrue(ServerSpectate.hotbarHit("netherite sword", "netherite_sword", "sword"));
+        assertEquals(100, ServerSpectate.menuScore("Crystal", "nether_star", "crystal"));
+        assertEquals(50, ServerSpectate.menuScore("Practice", "end_crystal", "crystal"));
+        assertEquals(-1, ServerSpectate.menuScore("Ranked Queue", "end_crystal", "crystal"));
+        assertEquals(0, ServerSpectate.menuScore("Sword", "diamond_sword", "crystal"));
+        assertTrue(ServerSpectate.roundStarted("round started! fight!"));
+        assertFalse(ServerSpectate.roundStarted("match starting in 5 seconds..."));
+        assertEquals("strl331", ServerSpectate.matchOpponent("opponent: strl331"));
+        assertNull(ServerSpectate.matchOpponent("opponent elo: 1000"));
+        assertTrue(ServerSpectate.matchOver("match results (click to view)"));
+        assertTrue(ServerSpectate.matchOver("winner: strl331"));
+        assertFalse(ServerSpectate.matchOver("opponent: strl331"));
+    }
 }
