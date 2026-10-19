@@ -85,6 +85,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     // Ostinato: clickable chat prompts in the login flow ("Are you using a premium account? [Yes] [No]" -> No), answered
     // with a humanized click before /register or /login. Route files add more with "authclick prompt words | choice".
     private static final String[][] DEFAULT_AUTH_CLICKS = {{"premium account", "no"}};
+    static final Pattern REMINDER = Pattern.compile("seconds? to (register|log ?in)|time to (register|log ?in)");
     private static final Pattern UNCONFIRMED = Pattern.compile("unconfirmed message");
     private static final Pattern CONFIRM_YES = Pattern.compile("^(yes|run|run command|proceed|confirm|send|send command|continue)\\b");
     private static final int PATH_SCREEN = -2; // the cursor targets a point on a non-container screen (chat, confirm)
@@ -282,6 +283,7 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         chatTarget = null;
         chatStage = chatClicks = 0;
         authClickPromptMs = lastAuthSentMs = lastPromptMs = authPhaseMs = 0;
+        deferredPrompt = null;
         recentSys.clear();
         menusSeen.clear();
         hurtAt.clear();
@@ -492,6 +494,12 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
             }
             return;
         }
+        if (deferredPrompt != null && !authed && now - lastAuthMs >= 4000 && authClickChoice == null && pending.isEmpty() && typing == null) {
+            String d = deferredPrompt; // Ostinato: answer the prompt that came during the pause
+            deferredPrompt = null;
+            boolean reg = REGISTER.matcher(d).find() || d.contains("to register"), log = LOGIN.matcher(d).find() || !reg;
+            answerPrompt(d, reg, log, now);
+        }
         if (!authed && registerTries + loginTries > 0 && lastAuthSentMs > 0 && now - lastAuthSentMs > 10_000 && now - lastPromptMs > 8_000
                 && pending.isEmpty() && typing == null) {
             authed = true;
@@ -696,11 +704,30 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
                 }
             }
             boolean reg = REGISTER.matcher(l).find(), log = LOGIN.matcher(l).find();
+            if (!reg && !log && REMINDER.matcher(l).find()) { // Ostinato: "You have 89 seconds to register" (no slash)
+                reg = l.contains("register");
+                log = !reg;
+            }
             if (reg || log) {
                 sawAuthPrompt = true;
                 lastPromptMs = now;
             }
-            if (now - lastAuthMs < 4000) return false; // let prompts repeat without answering each
+            if (!reg && !log) return false;
+            if (now - lastAuthMs < 4000 || chatStage != 0 || authClickChoice != null) {
+                // Ostinato: too soon (or a chat prompt is being answered): keep it and answer once the pause is over,
+                // instead of dropping a prompt the server shows only once
+                deferredPrompt = l;
+                return false;
+            }
+            return answerPrompt(l, reg, log, now);
+        }
+        return false;
+    }
+
+    private String deferredPrompt; // Ostinato: a /register or /login prompt seen during the pause
+
+    private boolean answerPrompt(String l, boolean reg, boolean log, long now) {
+        {
             String p = password();
             if (p == null) return false;
             if (log && (!reg || ALREADY.matcher(l).find() || registerTries > 0) && loginTries < 2) {
