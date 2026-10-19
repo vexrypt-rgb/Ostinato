@@ -264,7 +264,13 @@ final class FreecamSpar {
     }
 
     private void look(SparBrain.Keys k, Entity camera) {
-        Vec3 at = k.look != null ? k.look : camera.getEyePosition();
+        // Ostinato: with no aim point from the brain, the nearest part of the camera's box (a player aims at the body, not the eye)
+        Vec3 at = k.look;
+        if (at == null) {
+            Vec3 eye = ghost.getEyePosition();
+            AABB b = camera.getBoundingBox().deflate(0.1);
+            at = new Vec3(Mth.clamp(eye.x, b.minX, b.maxX), Mth.clamp(eye.y, b.minY, b.maxY), Mth.clamp(eye.z, b.minZ, b.maxZ));
+        }
         Vec3 d = at.subtract(ghost.getEyePosition());
         float yaw = (float) Math.toDegrees(Mth.atan2(-d.x, d.z));
         float pitch = (float) -Math.toDegrees(Math.atan2(d.y, Math.max(0.05, Math.hypot(d.x, d.z))));
