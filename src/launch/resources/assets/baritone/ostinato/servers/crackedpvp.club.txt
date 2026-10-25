@@ -1,9 +1,0 @@
-# Ostinato: auto-spectate route for crackedpvp.club. A copy at baritone/servers/crackedpvp.club.txt in the game folder
-# replaces it. Steps run in order after /register or /login; menus are clicked by item names.
-#   cmd /x       send a command once (rate limited)
-#   hotbar word  right-click the hotbar item whose name has this word
-#   click word   in the open menu, click the item whose name has this word
-#   wait s       pause
-#   words a,b    menu words for the fallback, best first
-words spectate,spectator,spec,watch,ffa,arena,practice,duel
-wait 3
