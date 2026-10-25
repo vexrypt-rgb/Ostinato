@@ -79,6 +79,7 @@ public final class PathBench {
     public static void apply(Engine engine) {
         var s = Baritone.settings();
         s.experimentalMovement.value = false;
+        s.fastMode.value = false; // Ostinato: the bench is the default planner. fastMode must not leak into a fingerprint.
         s.allowParkour.value = false;
         s.allowParkourAscend.value = false;
         s.allowParkourPlace.value = false;

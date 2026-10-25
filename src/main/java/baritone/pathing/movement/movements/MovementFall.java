@@ -18,6 +18,7 @@
 package baritone.pathing.movement.movements;
 
 import baritone.utils.BoatUtil;
+import baritone.utils.FastMode;
 import baritone.utils.MountUtil;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
@@ -298,7 +299,8 @@ public class MovementFall extends Movement {
 
         BlockPos playerFeet = ctx.playerFeet();
         // Ostinato: a caught ladder is slid. Forward would climb it, and sneak would freeze the slide.
-        if (MovementDescend.slideOnGrabbedLadder(Baritone.settings().allowLadderClutch.value, ctx.player().onClimbable(),
+        // Ostinato: fastMode behaves as if allowLadderClutch were on. Off, this is the setting.
+        if (MovementDescend.slideOnGrabbedLadder(FastMode.allowLadderClutch(), ctx.player().onClimbable(),
                 playerFeet.getX(), playerFeet.getY(), playerFeet.getZ(), fx, fz, src.y, dest.y)) {
             double dx = ctx.player().position().x - (fx + 0.5);
             double dz = ctx.player().position().z - (fz + 0.5);

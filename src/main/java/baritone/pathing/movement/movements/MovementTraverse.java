@@ -33,6 +33,7 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.FastMode;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -146,7 +147,7 @@ public class MovementTraverse extends Movement {
                 hardness1 *= 5;
                 hardness2 *= 5;
             }
-            if (!standingOnABlock && Baritone.settings().swimInWater.value && MovementHelper.isWater(context.get(x, y, z))) {
+            if (!standingOnABlock && FastMode.swimInWater() && MovementHelper.isWater(context.get(x, y, z))) {
                 return COST_INF; // floating: can't mine from here reliably, MovementSwim digs instead
             }
             return WC + hardness1 + hardness2;
@@ -289,7 +290,7 @@ public class MovementTraverse extends Movement {
         }
 
         // Sprint-swim when traversing water->water (cabaletta/baritone#3988).
-        boolean swim = Baritone.settings().swimInWater.value
+        boolean swim = FastMode.swimInWater()
                 && MovementHelper.isLiquid(ctx, src)
                 && MovementHelper.isLiquid(ctx, dest)
                 && (ctx.player().isSwimming()

@@ -40,7 +40,14 @@ public class PathBenchTest {
                 .filter(q -> g.lines().anyMatch(l -> l.startsWith(q.id() + " ") && !l.endsWith("timeout")
                         && Long.parseLong(l.substring(l.lastIndexOf(' ') + 1)) <= 300_000))
                 .toList();
-        List<PathBench.Result> rs = qs.stream().map(q -> PathBench.run(q, PathBench.ASTAR)).toList();
+        boolean fastMode = baritone.Baritone.settings().fastMode.value;
+        baritone.Baritone.settings().fastMode.value = false; // Ostinato: goldens are the default planner
+        List<PathBench.Result> rs;
+        try {
+            rs = qs.stream().map(q -> PathBench.run(q, PathBench.ASTAR)).toList();
+        } finally {
+            baritone.Baritone.settings().fastMode.value = fastMode;
+        }
         String got = PathBench.fingerprint(rs);
         for (String line : got.split("\n")) {
             String id = line.split(" ")[0];
@@ -63,6 +70,7 @@ public class PathBenchTest {
         }
         var s = baritone.Baritone.settings();
         boolean experimental = s.experimentalMovement.value;
+        boolean fastMode = s.fastMode.value;
         boolean parkour = s.allowParkour.value;
         boolean parkourAscend = s.allowParkourAscend.value;
         boolean parkourPlace = s.allowParkourPlace.value;
@@ -114,6 +122,7 @@ public class PathBenchTest {
             }
         } finally {
             s.experimentalMovement.value = experimental;
+            s.fastMode.value = fastMode;
             s.allowParkour.value = parkour;
             s.allowParkourAscend.value = parkourAscend;
             s.allowParkourPlace.value = parkourPlace;

@@ -58,7 +58,7 @@ public final class SettingCategorizer {
                 "travelStack", "simTravel",
                 "nativeAcceleration", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
                 "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
-                "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost");
+                "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost", "fastMode", "fastModeMinHealth");
         put(m, PATHING, "seedPlanning", "seedPlanningSeed", "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival", "blocksToAvoidStandingOn");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",

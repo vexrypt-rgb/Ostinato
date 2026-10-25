@@ -232,6 +232,12 @@ Beyond upstream Baritone, Ostinato adds:
     `experimentalJumpBias` times as much, block placement at most `experimentalBlockPlacementPenalty`,
     and falls that hurt are taken when nothing protects you and you stay above `experimentalMinHealth`.
     Turning it off hands your own settings back.
+  - **fastMode** (`fastMode`, off by default): a speedrunner preset that does not rewrite your settings.
+    Parkour (including a placed landing, neos, momentum, climb and head-hitter jumps), diagonals, sprint
+    jumping, ladder clutch, swimming, boats and an elytra takeoff from the ground behave as if on. Jumps
+    use `experimentalJumpBias`, placement is capped by `experimentalBlockPlacementPenalty`, and a hurting
+    fall stops at `fastModeMinHealth`. Straight runs aim ahead and shallow corners are cut. God bridging,
+    kinematic travel and the TAS jump search stay on their own settings. See `docs/fast-mode.md`.
 - **Checking the simulation** (`kinematicTrace`, off by default): while a jump, climb jump or chain flies,
   every tick compares the real player with `PlayerSim`'s prediction and logs `SIMTRACE` lines (per-tick
   rows in `simtrace/simtrace.csv`, one summary per movement in `simtrace/summary.csv`): the one-tick

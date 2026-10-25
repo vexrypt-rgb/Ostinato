@@ -28,6 +28,7 @@ import baritone.api.utils.input.Input;
 import baritone.pathing.movement.MovementHelper;
 import baritone.process.ElytraProcess;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.FastMode;
 import baritone.utils.IRenderer;
 import baritone.utils.PathRenderer;
 import baritone.utils.accessor.IFireworkRocketEntity;
@@ -490,7 +491,7 @@ public final class ElytraBehavior implements Helper {
     }
 
     public void pathTo() {
-        if (!Baritone.settings().elytraAutoJump.value || ctx.player().isFallFlying()) {
+        if (!FastMode.elytraGroundTakeoff() || ctx.player().isFallFlying()) {
             this.pathManager.pathToDestination();
         }
     }

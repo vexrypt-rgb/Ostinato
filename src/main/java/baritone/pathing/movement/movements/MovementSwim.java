@@ -30,6 +30,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.utils.FastMode;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -184,7 +185,7 @@ public class MovementSwim extends Movement {
     }
 
     public static double cost(CalculationContext c, int x, int y, int z, int dx, int dy, int dz) {
-        if (!Baritone.settings().swimInWater.value || !wet(c, x, y, z)) return COST_INF;
+        if (!FastMode.swimInWater() || !wet(c, x, y, z)) return COST_INF;
         int tx = x + dx, ty = y + dy, tz = z + dz;
         // never swim into lava: dig() treats a fluid cell as open, so a dug shaft next to lava was planned straight through it
         if (MovementHelper.isLava(c.get(tx, ty, tz)) || MovementHelper.isLava(c.get(tx, ty + 1, tz))) return COST_INF;

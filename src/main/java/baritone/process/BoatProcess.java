@@ -16,6 +16,7 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
+import baritone.utils.FastMode;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
@@ -68,7 +69,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        if (ctx.player() == null || ctx.world() == null || !Baritone.settings().allowBoats.value) {
+        if (ctx.player() == null || ctx.world() == null || !FastMode.allowBoats()) {
             return reset();
         }
         if (phase != Phase.IDLE) {

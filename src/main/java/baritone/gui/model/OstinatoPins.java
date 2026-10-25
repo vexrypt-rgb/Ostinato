@@ -31,7 +31,7 @@ import java.util.Set;
 public final class OstinatoPins {
 
     private static final Set<String> PINNED = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "kinematicTravel", "slowKinematic", "physicsTravel", "travelStack", "simTravel", "pitfallAvoidance", "sprintJump",
+            "kinematicTravel", "slowKinematic", "physicsTravel", "travelStack", "simTravel", "pitfallAvoidance", "sprintJump", "fastMode", "fastModeMinHealth",
             "allowBoats", "allowBoatFall", "maxFallHeightBoat", "allowDoorAirPockets", "swimInWater",
             "elytraGlideWithoutFireworks", "elytraGlideRatio", "elytraGlidePitch",
             "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme",

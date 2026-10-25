@@ -97,6 +97,36 @@ public class LadderGrabTest {
     }
 
     @Test
+    public void fastModeMissUsesItsOwnFloorAndTheHigherOneWins() {
+        boolean prevFast = Baritone.settings().fastMode.value;
+        double prevFastMin = Baritone.settings().fastModeMinHealth.value;
+        boolean prevExp = Baritone.settings().experimentalMovement.value;
+        double prevExpMin = Baritone.settings().experimentalMinHealth.value;
+        Baritone.settings().experimentalMovement.value = false;
+        Baritone.settings().fastMode.value = true;
+        Baritone.settings().fastModeMinHealth.value = 14D;
+        try {
+            CalculationContext fast = PathBench.context(new SyntheticWorld(8, 8));
+            assertTrue(fast.fastMode);
+            assertFalse(fast.experimental);
+            // 8 blocks costs 5 half-hearts (15 left). 10 blocks costs 7 (13 left). Floor is 14.
+            assertTrue(MovementDescend.clutchMissSurvivable(fast, 8));
+            assertFalse(MovementDescend.clutchMissSurvivable(fast, 10));
+            Baritone.settings().experimentalMovement.value = true;
+            Baritone.settings().experimentalMinHealth.value = 16D;
+            Baritone.settings().fastModeMinHealth.value = 10D;
+            CalculationContext both = PathBench.context(new SyntheticWorld(8, 8));
+            // Fast alone would allow 8 blocks (floor 10). The experimental floor of 16 wins.
+            assertFalse(MovementDescend.clutchMissSurvivable(both, 8));
+        } finally {
+            Baritone.settings().fastMode.value = prevFast;
+            Baritone.settings().fastModeMinHealth.value = prevFastMin;
+            Baritone.settings().experimentalMovement.value = prevExp;
+            Baritone.settings().experimentalMinHealth.value = prevExpMin;
+        }
+    }
+
+    @Test
     public void slideOnlyAfterTheSettingCatchesTheColumn() {
         assertFalse(MovementDescend.slideOnGrabbedLadder(false, true, 11, 106, 10, 11, 10, FEET, 105));
         assertFalse(MovementDescend.slideOnGrabbedLadder(true, false, 11, 106, 10, 11, 10, FEET, 105));

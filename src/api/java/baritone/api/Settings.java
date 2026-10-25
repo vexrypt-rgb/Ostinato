@@ -280,7 +280,8 @@ public final class Settings {
      * last blocks of it, like a water bucket clutch. Placing needs a ladder or vine on the hotbar. Off, an existing
      * ladder is still caught only when the drop into that cell is 11 blocks or less, so default paths do not move.
      * A place is not offered when missing it would leave you below 1 health, or below {@link #experimentalMinHealth}
-     * while {@link #experimentalMovement} is on.
+     * while {@link #experimentalMovement} is on, or below {@link #fastModeMinHealth} while {@link #fastMode} is on.
+     * If both presets are on, the higher floor wins.
      */
     public final Setting<Boolean> allowLadderClutch = new Setting<>(false);
 
@@ -324,9 +325,29 @@ public final class Settings {
     public final Setting<Double> experimentalMinHealth = new Setting<>(12D);
 
     /**
-     * Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement is on.
+     * Cost in ticks of every half heart a damaging fall takes off you, while experimentalMovement or fastMode is on.
      */
     public final Setting<Double> fallDamageCost = new Setting<>(20D);
+
+    /**
+     * Ostinato: speedrunner preset. Off by default, and while it is off path costs stay on whatever the other
+     * settings already say. On, those settings are not rewritten. Parkour, parkour ascend, parkour place, neos,
+     * momentum jumps, climb jumps, diagonal ascend and descend, sprint jumping, ladder clutch, swimming, boats
+     * and an elytra takeoff from the ground behave as if they were on. Jumps use {@link #experimentalJumpBias},
+     * placement is capped by {@link #experimentalBlockPlacementPenalty}, and a fall that hurts is allowed only
+     * while health stays at or above {@link #fastModeMinHealth} (the higher floor wins if
+     * {@link #experimentalMovement} is also on). Straight runs aim further ahead, a turn of 60 degrees or less is
+     * cut and sprinted, and a flat bend is walked straight across when the body fits. Head-hitter jumps are the
+     * parkour templates, so they are considered because parkour is on. God bridging is not part of this switch.
+     * Kinematic travel and the TAS jump search stay on their own settings.
+     */
+    public final Setting<Boolean> fastMode = new Setting<>(false);
+
+    /**
+     * Ostinato: while {@link #fastMode} is on, a fall that hurts is taken only when health afterwards is still at
+     * least this (half-hearts, plus absorption). 10 is five hearts. Ignored while fastMode is off.
+     */
+    public final Setting<Double> fastModeMinHealth = new Setting<>(10D);
 
     /**
      * Allow mining the block directly beneath its feet

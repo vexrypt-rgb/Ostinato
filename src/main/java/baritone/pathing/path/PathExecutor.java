@@ -48,6 +48,8 @@ import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.movements.*;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.FastMode;
+import baritone.utils.FastTravel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.phys.Vec3;
@@ -428,6 +430,16 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         MovementStatus movementStatus = movement.update();
+        // Ostinato: fastMode aims across a shallow corner or a clear flat bend. Off, the movement's own look stands.
+        if (movementStatus == RUNNING && FastMode.on()) {
+            FastTravel.Steer steer = fastSteer();
+            if (steer.aim) {
+                behavior.baritone.getLookBehavior().updateTarget(
+                        RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(steer.x, ctx.player().getY(), steer.z), ctx.playerRotations())
+                                .withPitch(ctx.playerRotations().getPitch()),
+                        false);
+            }
+        }
         if (movementStatus == UNREACHABLE || movementStatus == FAILED) {
             logDebug("Movement returns status " + movementStatus);
             Baritone.settings().movementFault.value.accept("M04", movement.getClass().getSimpleName() + " " + movementStatus + " at " + ctx.playerFeet());
@@ -688,7 +700,100 @@ public class PathExecutor implements IPathExecutor, Helper {
                 return true;
             }
         }
+        // Ostinato: fastMode keeps sprint through a turn of 60 degrees or less. Off, sprint still drops here.
+        if (FastMode.on() && fastSteer().keepSprint) {
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * Ostinato: where fastMode wants the camera, and whether sprint survives the corner. Called only while the
+     * setting is on, so the search and the default executor do no extra work.
+     */
+    private FastTravel.Steer fastSteer() {
+        if (pathPosition >= path.movements().size() - 1 || !ctx.player().onGround() || ctx.player().isShiftKeyDown()) {
+            return FastTravel.Steer.NONE;
+        }
+        IMovement current = path.movements().get(pathPosition);
+        IMovement next = path.movements().get(pathPosition + 1);
+        if (current.getDirection().getY() != 0 || next.getDirection().getY() != 0) {
+            return FastTravel.Steer.NONE;
+        }
+        if (!(current instanceof MovementTraverse || current instanceof MovementDiagonal)) {
+            return FastTravel.Steer.NONE;
+        }
+        if (!(next instanceof MovementTraverse || next instanceof MovementDiagonal)) {
+            return FastTravel.Steer.NONE;
+        }
+        boolean nether = ctx.world().dimension() == net.minecraft.world.level.Level.NETHER;
+        boolean busy = placesOrBreaks(current) || placesOrBreaks(next);
+        BetterBlockPos corner = current.getDest();
+        boolean lava = lavaNear(corner) || lavaNear(next.getDest());
+        boolean safe = FastTravel.sprintCutAllowed(ctx.player().getHealth(), nether, lava, busy);
+        int dx1 = current.getDirection().getX();
+        int dz1 = current.getDirection().getZ();
+        int run = 1;
+        int cap = Math.min(path.movements().size(), pathPosition + 4);
+        for (int i = pathPosition + 1; i < cap; i++) {
+            IMovement step = path.movements().get(i);
+            if (step.getDirection().getY() != 0 || step.getDirection().getX() != dx1 || step.getDirection().getZ() != dz1 || placesOrBreaks(step)) {
+                break;
+            }
+            run++;
+        }
+        BetterBlockPos straight = path.movements().get(pathPosition + run - 1).getDest();
+        double turn = FastTravel.turnDegrees(dx1, dz1, next.getDirection().getX(), next.getDirection().getZ());
+        // A shallow cut stays on the path blocks. Only a wider bend pays for the chord clearance.
+        boolean shortcut = turn > FastTravel.MAX_CORNER_DEG && turn <= 90
+                && current instanceof MovementTraverse && next instanceof MovementTraverse
+                && shortcutClear(current.getSrc(), next.getDest());
+        return FastTravel.choose(
+                dx1, dz1, next.getDirection().getX(), next.getDirection().getZ(),
+                corner.x, corner.y, corner.z,
+                next.getDest().x, next.getDest().z,
+                run, straight.x, straight.z,
+                safe, shortcut, run >= 3);
+    }
+
+    private boolean placesOrBreaks(IMovement movement) {
+        if (!(movement instanceof Movement mv)) {
+            return true;
+        }
+        if (mv.toPlaceCached != null && mv.toBreakCached != null) {
+            return !mv.toPlaceCached.isEmpty() || !mv.toBreakCached.isEmpty();
+        }
+        BlockStateInterface bsi = new BlockStateInterface(ctx);
+        return !mv.toPlace(bsi).isEmpty() || !mv.toBreak(bsi).isEmpty();
+    }
+
+    private boolean lavaNear(BlockPos pos) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                BlockPos at = pos.offset(dx, 0, dz);
+                if (MovementHelper.isLava(ctx.world().getBlockState(at)) || MovementHelper.isLava(ctx.world().getBlockState(at.below()))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean shortcutClear(BetterBlockPos from, BetterBlockPos to) {
+        if (from.y != to.y) {
+            return false;
+        }
+        return FastTravel.shortcutClear(from.x, from.z, to.x, to.z, from.y, new FastTravel.Cells() {
+            @Override
+            public boolean air(int x, int y, int z) {
+                return MovementHelper.canWalkThrough(ctx, new BetterBlockPos(x, y, z));
+            }
+
+            @Override
+            public boolean floor(int x, int y, int z) {
+                return MovementHelper.canWalkOn(ctx, new BetterBlockPos(x, y, z));
+            }
+        });
     }
 
     /**
@@ -696,7 +801,8 @@ public class PathExecutor implements IPathExecutor, Helper {
      * that many more same-direction flat moves with open air two above their floor (the jump peaks ~1.25 up).
      */
     private boolean shouldSprintJump(IMovement current) {
-        if (!Baritone.settings().sprintJump.value || !(current instanceof MovementTraverse || current instanceof MovementDiagonal)) {
+        // Ostinato: fastMode sprint-jumps the same straight runs. Off, this is sprintJump.
+        if (!FastMode.sprintJump() || !(current instanceof MovementTraverse || current instanceof MovementDiagonal)) {
             return false;
         }
         if (!ctx.player().onGround() || ctx.player().isInWater() || ctx.player().isInLava() || ctx.player().isShiftKeyDown()) {

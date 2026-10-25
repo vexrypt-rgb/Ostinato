@@ -11,6 +11,7 @@ import baritone.api.utils.input.Input;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.movements.MovementSwim;
 import baritone.utils.BaritoneProcessHelper;
+import baritone.utils.FastMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -68,7 +69,7 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        if (ctx.player() == null || ctx.world() == null || !Baritone.settings().swimInWater.value) {
+        if (ctx.player() == null || ctx.world() == null || !FastMode.swimInWater()) {
             door = null; // a pocket from the world we left must not be picked up again in the next one
             return active = false;
         }
