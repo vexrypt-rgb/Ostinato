@@ -10,7 +10,7 @@ Step 2 of the TenorClef↔Ostinato coupling plan. Everything here is in `src/api
 | Water/lava, place-against, avoid-break, plausible-to-break, tool speed, path block changes | `IBaritone.getWorldQueries()` (`IWorldQueries`) | `MovementHelper`, `ToolSet`, `BlockStateInterface`, `CalculationContext`, `MineProcess` |
 | Combat | `IBaritone.getPvpProcess()` → `IPvpProcess` (`attackPlayer`, `attackPlayers`, `attackHostiles`, `isActive`, `getTarget`, `getStats()` → `PvpStats`, `stats()`, `displayName()`) | reflection over `PvpProcess` and its public counter fields |
 | Swarm | `IBaritone.getSwarm()` → `ISwarm` (`isOnline`, `state`, `self`, `myGroups`, `group`, `send(group, to, type, body, SwarmPriority)`, `registerHandler(type, (from, group, body) -> …)`), `ISwarmGroup`, `baritone.api.swarm.SwarmPriority` | reflection over `SwarmBehavior`, `SwarmControl`, `SwarmRoster`, `SwarmEndpoint`, transport `SwarmPriority` |
-| Movement engine | `IBaritone.getMovementEngine()`, `getMovementBackendPreference()` | reflection over `baritone.movement.MovementBackends` |
+| Movement engine | `IBaritone.getMovementEngine()`, `getMovementBackendPreference()` | reflection over `baritone.movement.MovementBackends`. The preference is the `travelStack` setting: `auto` (kinematic, then physics, then the sim probe, then Baritone movement), or `kinematic`, `physics`, `sim`, `baritone`. The block route stays Baritone's search. `PathResult.getBackend()` stays `BARITONE`. |
 | Freecam ghost tag text | `IBaritone.setFreecamStatus(Supplier<String>)` | writing static `FreecamBehavior.statusSupplier` |
 | Build-finished flag | `IBuilderProcess.isExternalBuildFinished()` | `isFromAltoclefFinished()` (deprecated, still works) |
 

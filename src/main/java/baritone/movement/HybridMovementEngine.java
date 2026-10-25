@@ -107,7 +107,8 @@ public final class HybridMovementEngine implements IMovementEngine, Helper {
 
     @Override
     public String statusLine() {
-        return "HybridMovementEngine backend=" + MovementBackendKind.BARITONE
+        return "HybridMovementEngine route=" + MovementBackendKind.BARITONE
+                + " stack=" + MovementBackends.preference()
                 + " status=" + lastStatus
                 + " pathing=" + isPathing();
     }

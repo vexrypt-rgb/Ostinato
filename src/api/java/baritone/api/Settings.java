@@ -2201,8 +2201,23 @@ public final class Settings {
 
     /**
      * Experimental: drive land stretches with keys found by searching simulated player physics.
+     * Ostinato: the travel stack tries this after kinematic when {@code travelStack} is auto or physics.
+     * This switch still forces a physics attempt when the stack did not ask.
      */
     public final Setting<Boolean> physicsTravel = new Setting<>(false);
+
+    /**
+     * Ostinato: which layer drives a spot. auto is kinematic, then physics, then the sim probe, then Baritone's
+     * own movement as a temporary backup. kinematic, physics, sim, or baritone pin one layer (then the backup,
+     * except baritone, which is the backup alone).
+     */
+    public final Setting<String> travelStack = new Setting<>("auto");
+
+    /**
+     * Ostinato: when kinematic and physics leave a jump, search jump versus no-jump each tick in the player sim,
+     * cache the keys, and fly them. A miss leaves the spot to Baritone's movement. Off skips that probe.
+     */
+    public final Setting<Boolean> simTravel = new Setting<>(true);
 
     // Ostinato: in-game path visualizations for the kinematic and physics movers (baritone.pathing.viz.PathViz).
 

@@ -153,7 +153,7 @@ public interface IBaritone {
     /** Ostinato: the sealed swarm link (always non-null; check {@code isOnline()}). */
     baritone.api.swarm.ISwarm getSwarm();
 
-    /** Ostinato: the movement engine selected by the {@code movementBackend} setting. */
+    /** Ostinato: the travel stack selected by the {@code travelStack} setting (auto, kinematic, physics, sim, baritone). */
     baritone.api.movement.IMovementEngine getMovementEngine();
 
     /** Ostinato: which backend {@link #getMovementEngine()} prefers. */
