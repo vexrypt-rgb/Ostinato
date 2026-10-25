@@ -150,6 +150,7 @@ public class PathBenchTest {
             rec.start();
         }
         String spec = System.getenv("OSTINATO_BENCH_FINDER");
+        baritone.Baritone.settings().pathPredictMoves.value = System.getenv("OSTINATO_BENCH_PREDICT") != null; // Ostinato: predictor A/B
         List<PathBench.Result> rs = PathBench.bench(qs, PathBench.finder(spec), reps);
         if (rec != null) {
             rec.stop();

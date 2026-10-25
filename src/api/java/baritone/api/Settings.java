@@ -866,6 +866,11 @@ public final class Settings {
     public final Setting<Boolean> slowPath = new Setting<>(false);
 
     /**
+     * Ostinato: experimental tiny move predictor: skip a move whose local block pattern was always rejected this search
+     */
+    public final Setting<Boolean> pathPredictMoves = new Setting<>(false);
+
+    /**
      * Milliseconds between each node
      */
     public final Setting<Long> slowPathTimeDelayMS = new Setting<>(100L);

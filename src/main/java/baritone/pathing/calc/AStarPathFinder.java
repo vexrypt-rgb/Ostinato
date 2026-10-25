@@ -126,6 +126,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         for (int i = 0; i < allMoves.length; i++) {
             moveScale[i] = CostCalibration.scale(allMoves[i].family());
         }
+        MovePredictor predictor = Baritone.settings().pathPredictMoves.value ? new MovePredictor() : null; // Ostinato: off by default
         while (!openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // only call this once every 64 nodes (about half a millisecond)
                 long now = System.currentTimeMillis(); // since nanoTime is slow on windows (takes many microseconds)
@@ -190,10 +191,19 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 if (currentNode.y + moves.yOffset > height || currentNode.y + moves.yOffset < minY) {
                     continue;
                 }
+                int pkey = 0;
+                if (predictor != null) {
+                    pkey = predictor.key(calcContext, moves.ordinal(), currentNode.x, currentNode.y, currentNode.z, moves.xOffset, moves.yOffset, moves.zOffset);
+                    if (predictor.predictReject(pkey)) {
+                        numRejected++;
+                        continue;
+                    }
+                }
                 res.reset();
                 moves.apply(calcContext, currentNode.x, currentNode.y, currentNode.z, res);
                 numMovementsConsidered++;
                 double actionCost = res.cost;
+                if (predictor != null) predictor.learn(pkey, actionCost >= ActionCosts.COST_INF);
                 if (actionCost >= ActionCosts.COST_INF) {
                     numRejected++;
                     continue;

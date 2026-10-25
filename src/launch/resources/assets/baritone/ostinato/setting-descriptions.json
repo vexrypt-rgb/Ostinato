@@ -85,6 +85,7 @@
  "planAheadPrimaryTimeoutMS": "Planning ahead while executing a segment ends after this amount of time, but only if a path has been found If no valid path (length above the minimum) has been found, pathing continues up until the failure timeout",
  "planAheadFailureTimeoutMS": "Planning ahead while executing a segment can never take longer than this, even if that means failing to find any path at all",
  "slowPath": "For debugging, consider nodes much much slower",
+ "pathPredictMoves": "Experimental: skip moves whose nearby blocks were always a dead end earlier in this search. Off by default",
  "slowPathTimeDelayMS": "Milliseconds between each node",
  "slowPathTimeoutMS": "The alternative timeout number when slowPath is on",
  "doBedWaypoints": "allows baritone to save bed waypoints when interacting with beds",

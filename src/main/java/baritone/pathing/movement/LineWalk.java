@@ -2,9 +2,6 @@ package baritone.pathing.movement;
 
 import baritone.api.pathing.movement.ActionCosts;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * A straight walk across a knight offset (2 by 1). The corridor is the whole rectangle, which is
@@ -13,14 +10,15 @@ import java.util.Map;
 public final class LineWalk {
 
     /** The eight moves A* actually asks for. Built once so the hot path does not allocate a rectangle per neighbor. */
-    private static final Map<Long, int[][]> KNIGHTS;
+    // Ostinato: primitive-keyed map; the boxed Long key was ~23% of all bytes the planner allocated
+    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<int[][]> KNIGHTS;
 
     static {
-        Map<Long, int[][]> m = new HashMap<>();
+        it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<int[][]> m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
         for (int[] d : new int[][]{{2, -1}, {2, 1}, {-2, -1}, {-2, 1}, {1, -2}, {-1, -2}, {1, 2}, {-1, 2}}) {
             m.put(key(d[0], d[1]), build(d[0], d[1]));
         }
-        KNIGHTS = Collections.unmodifiableMap(m);
+        KNIGHTS = m; // never written after this point
     }
 
     private LineWalk() {}
