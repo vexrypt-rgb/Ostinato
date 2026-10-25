@@ -35,4 +35,9 @@ public class OstinatoApiSurfaceTest {
         assertEquals("attacks=3 crits=1 sprintHits=2 axeHits=0 blocks=4 gapples=1 dmgTaken=7.5",
                 new PvpStats(3, 1, 2, 0, 4, 1, 7.5f).toString().replace(',', '.'));
     }
+
+    @Test
+    public void worldQueriesImplementsApi() {
+        assertTrue(baritone.api.utils.IWorldQueries.class.isAssignableFrom(baritone.utils.WorldQueries.class));
+    }
 }
