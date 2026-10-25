@@ -866,6 +866,11 @@ public final class Settings {
     public final Setting<Boolean> slowPath = new Setting<>(false);
 
     /**
+     * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
+     */
+    public final Setting<Double> pathTieBreak = new Setting<>(0.0);
+
+    /**
      * Milliseconds between each node
      */
     public final Setting<Long> slowPathTimeDelayMS = new Setting<>(100L);
