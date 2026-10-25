@@ -44,7 +44,12 @@ import java.util.zip.ZipFile;
  * @author Brady
  * @since 10/11/2018
  */
-public class ProguardTask extends BaritoneGradleTask {
+public abstract class ProguardTask extends BaritoneGradleTask {
+
+    // Ostinato: Gradle 9 removed Project.javaexec; use the injected ExecOperations service.
+    @javax.inject.Inject
+    protected abstract org.gradle.process.ExecOperations getExecOperations();
+
 
     @Input
     private String proguardVersion;
@@ -225,7 +230,7 @@ public class ProguardTask extends BaritoneGradleTask {
 
         Path workingDirectory = getTemporaryFile("");
 
-        getProject().javaexec(spec -> {
+        getExecOperations().javaexec(spec -> {
             spec.workingDir(workingDirectory.toFile());
             spec.args("@" + workingDirectory.relativize(config));
             spec.classpath(getTemporaryFile(String.format(PROGUARD_JAR, proguardVersion)));
