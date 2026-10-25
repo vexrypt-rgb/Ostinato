@@ -64,7 +64,14 @@ public final class GameEventHandler implements IEventBus, Helper {
         } else {
             baritone.bsi = null;
         }
+        // Ostinato: physical keys. Off, neither call runs, and the listeners see the same tick they always have.
+        if (event.getType() == TickEvent.Type.IN && Baritone.settings().physicalInput.value) {
+            baritone.getInputOverrideHandler().openPhysicalTick();
+        }
         listeners.forEach(l -> l.onTick(event));
+        if (event.getType() == TickEvent.Type.IN && Baritone.settings().physicalInput.value) {
+            baritone.getInputOverrideHandler().realizePhysicalKeys();
+        }
     }
 
     @Override

@@ -10,7 +10,7 @@ only on some release lines are marked.
 | --- | --- |
 | [Getting started](getting-started.md) | Install, versions, the `#` prefix, using it with TenorClef |
 | [Command reference](commands.md) | Every `#command` |
-| [Movement and travel](movement.md) | Kinematic travel, climb/chain jumps, experimental movement, backends, boats, elytra, simulation checks |
+| [Movement and travel](movement.md) | Kinematic travel, climb/chain jumps, experimental movement, physical mouse and keys, backends, boats, elytra, simulation checks |
 | [Combat, clutch and survival](combat-and-clutch.md) | `#pvp`, food in combat, the water/ladder clutch, ladder pillar |
 | [Mining, building and farming](mining-and-building.md) | `#mine`, `#build`, `#tunnel`, `#farm`, `#explore`, schematics, selections |
 | [Swarm and region builds](swarm-and-region-builds.md) | `#swarm`, signed whispers, splitting a schematic over bots |
