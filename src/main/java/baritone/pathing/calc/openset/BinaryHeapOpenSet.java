@@ -66,14 +66,15 @@ public final class BinaryHeapOpenSet implements IOpenSet {
         return size;
     }
 
+    // Ostinato: Phase 2: 4-ary heap rooted at 0 (was binary rooted at 1). Half the levels, so siftUp (10% of planner CPU,
+    // mostly cache misses on parent heapPosition writes) moves half as many nodes; the 4 child keys share a cache line.
     @Override
     public final void insert(PathNode value) {
-        if (size >= array.length - 1) {
+        if (size >= array.length) {
             array = Arrays.copyOf(array, array.length << 1);
             keys = Arrays.copyOf(keys, keys.length << 1);
         }
-        size++;
-        siftUp(size, value, value.combinedCost);
+        siftUp(size++, value, value.combinedCost);
     }
 
     @Override
@@ -85,14 +86,17 @@ public final class BinaryHeapOpenSet implements IOpenSet {
     private void siftUp(int index, PathNode val, double cost) {
         PathNode[] array = this.array;
         double[] keys = this.keys;
-        int parentInd = index >>> 1;
-        while (index > 1 && keys[parentInd] > cost) {
+        while (index > 0) {
+            int parentInd = (index - 1) >>> 2;
+            double pk = keys[parentInd];
+            if (pk <= cost) {
+                break;
+            }
             PathNode parentNode = array[parentInd];
             array[index] = parentNode;
-            keys[index] = keys[parentInd];
+            keys[index] = pk;
             parentNode.heapPosition = index;
             index = parentInd;
-            parentInd = index >>> 1;
         }
         array[index] = val;
         keys[index] = cost;
@@ -111,32 +115,39 @@ public final class BinaryHeapOpenSet implements IOpenSet {
         }
         PathNode[] array = this.array;
         double[] keys = this.keys;
-        PathNode result = array[1];
+        PathNode result = array[0];
         result.heapPosition = -1;
-        PathNode val = array[size];
-        double cost = keys[size];
-        array[size] = null;
-        size--;
-        if (size == 0) {
+        int last = --size;
+        PathNode val = array[last];
+        double cost = keys[last];
+        array[last] = null;
+        if (last == 0) {
             return result;
         }
-        int index = 1;
-        int child = 2;
-        while (child <= size) {
-            double childCost = keys[child];
-            if (child < size && keys[child + 1] < childCost) {
-                child++;
-                childCost = keys[child];
-            }
-            if (cost <= childCost) {
+        int index = 0;
+        while (true) {
+            int first = (index << 2) + 1;
+            if (first >= last) {
                 break;
             }
-            PathNode childNode = array[child];
+            int best = first;
+            double bestCost = keys[first];
+            int end = Math.min(first + 4, last);
+            for (int c = first + 1; c < end; c++) {
+                double k = keys[c];
+                if (k < bestCost) {
+                    best = c;
+                    bestCost = k;
+                }
+            }
+            if (cost <= bestCost) {
+                break;
+            }
+            PathNode childNode = array[best];
             array[index] = childNode;
-            keys[index] = childCost;
+            keys[index] = bestCost;
             childNode.heapPosition = index;
-            index = child;
-            child = index << 1;
+            index = best;
         }
         array[index] = val;
         keys[index] = cost;
