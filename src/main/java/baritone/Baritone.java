@@ -58,7 +58,17 @@ public class Baritone implements IBaritone {
     private static final ThreadPoolExecutor threadPool;
 
     static {
-        threadPool = new ThreadPoolExecutor(4, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<>());
+        // Ostinato: pathing workers run below the render/client thread (lowest priority on 1-2 core machines such as a
+        // Raspberry Pi) as daemon threads, so a long search never starves a frame. Search results are unchanged.
+        int cpus = Runtime.getRuntime().availableProcessors();
+        int prio = cpus <= 2 ? Thread.MIN_PRIORITY : Thread.NORM_PRIORITY - 1;
+        java.util.concurrent.atomic.AtomicInteger n = new java.util.concurrent.atomic.AtomicInteger();
+        threadPool = new ThreadPoolExecutor(Math.min(4, Math.max(1, cpus)), Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
+            Thread t = new Thread(r, "Ostinato worker " + n.incrementAndGet());
+            t.setDaemon(true);
+            t.setPriority(prio);
+            return t;
+        });
     }
 
     private final Minecraft mc;
