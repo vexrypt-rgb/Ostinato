@@ -58,10 +58,22 @@ public final class PhysicsTravel {
         this.finder = new PhysicsPathfinder(world, NODE_BUDGET).viz(PathViz.get());
     }
 
-    /** @return the path position to continue from if this drove the tick, or -1 to let Baritone run it */
+    /** @return the path position to continue from if this drove the tick, or -1 to let the next layer run it */
     public int tick(Baritone baritone, IPath path, int pathPosition) {
-        if (!Baritone.settings().physicsTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
+        return tick(baritone, path, pathPosition, false);
+    }
+
+    /**
+     * Ostinato: {@code stackAsked} means the travel stack already chose physics, so {@code physicsTravel} is not
+     * required. The stack tries this only after the kinematic family declines the spot.
+     */
+    public int tick(Baritone baritone, IPath path, int pathPosition, boolean stackAsked) {
+        if (ctx.player().isInWater() || ctx.player().isInLava()
                 || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+            return drop();
+        }
+        // Ostinato: the old switch still forces physics when the stack did not ask. Auto asks on its own.
+        if (!stackAsked && !Baritone.settings().physicsTravel.value) {
             return drop();
         }
         if (cooldown > 0) {

@@ -1,9 +1,14 @@
 package baritone.api.movement;
 
 /**
- * Which backend accepted a travel request. Ostinato's own pathing (block A* with the kinematic and physics travel
- * drivers) is the only one; the enum stays so {@link PathResult#getBackend()} keeps its type for agent layers.
+ * Which travel layer a driver prefers. The block route is still Baritone's search.
+ * {@link #AUTO} is kinematic, then physics, then the sim probe, then {@link #BARITONE} as the temporary backup.
+ * {@link PathResult#getBackend()} stays {@link #BARITONE}: that value is the route engine, not the key layer.
  */
 public enum MovementBackendKind {
-    BARITONE
+    BARITONE,
+    KINEMATIC,
+    PHYSICS,
+    SIM,
+    AUTO
 }

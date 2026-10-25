@@ -38,8 +38,10 @@ import baritone.pathing.kinematic.LadderController;
 import baritone.pathing.kinematic.MineController;
 import baritone.pathing.kinematic.PillarController;
 import baritone.pathing.kinematic.SwimController;
+import baritone.pathing.kinematic.SimTravel;
 import baritone.pathing.kinematic.TakeoffController;
 import baritone.pathing.physics.PhysicsTravel;
+import baritone.pathing.travel.TravelStack;
 import baritone.pathing.viz.PathViz;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
@@ -97,9 +99,10 @@ public class PathExecutor implements IPathExecutor, Helper {
     private final TakeoffController takeoff;
     private final BoatFallController boatFall;
     private final PhysicsTravel physics;
+    private final SimTravel sim;
 
     /** Which mover drove the player on the last tick; read-only status for the HUD. */
-    public enum Driver { BARITONE, KINEMATIC, PHYSICS, SWIM, CLUTCH, LADDER, MINE, FALL, PILLAR, EXTEND, BOAT }
+    public enum Driver { BARITONE, KINEMATIC, PHYSICS, SIM, SWIM, CLUTCH, LADDER, MINE, FALL, PILLAR, EXTEND, BOAT }
 
     private volatile Driver lastDriver = Driver.BARITONE;
 
@@ -119,6 +122,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         this.takeoff = new TakeoffController(ctx);
         this.boatFall = new BoatFallController(ctx);
         this.physics = new PhysicsTravel(ctx);
+        this.sim = new SimTravel(ctx);
         this.path = path;
         this.pathPosition = 0;
     }
@@ -143,6 +147,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         this.takeoff = from.takeoff;
         this.boatFall = from.boatFall;
         this.physics = from.physics;
+        this.sim = from.sim;
         this.lastDriver = from.lastDriver;
         this.path = path;
         this.pathPosition = 0;
@@ -161,7 +166,7 @@ public class PathExecutor implements IPathExecutor, Helper {
      * 4: walls laid one block a tick along seven blocks of sprint-jumping).
      */
     public boolean pausableNow() {
-        return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS) && ctx.player().onGround();
+        return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS || lastDriver == Driver.SIM) && ctx.player().onGround();
     }
 
     public boolean onTick() {
@@ -220,6 +225,12 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         int driven = -1;
         lastDriver = Driver.BARITONE;
+        // Ostinato: kinematic family, then physics, then the cached jump/no-jump probe. Baritone movement is the backup below.
+        java.util.List<TravelStack.Layer> stack = TravelStack.order(
+                TravelStack.preference(Baritone.settings().travelStack.value),
+                baritone.utils.ExperimentalMovement.kinematicTravel(),
+                Baritone.settings().simTravel.value);
+        boolean skipLookAhead = false;
         if (takeoff.engaged()) {
             driven = takeoff.tick(behavior.baritone, path, pathPosition);
             if (driven >= 0) {
@@ -228,75 +239,36 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         if (driven >= 0) {
             // a standing takeoff keeps the controls until it hands over
+            skipLookAhead = true;
         } else if (driverRest > 0) {
             driverRest--;
-        } else {
-            long t0 = System.nanoTime(); // Ostinato: planning-time stats
-            driven = physics.tick(behavior.baritone, path, pathPosition);
+            skipLookAhead = true;
+        }
+        if (!skipLookAhead && driven < 0 && stack.contains(TravelStack.Layer.KINEMATIC)) {
             long t1 = System.nanoTime();
-            baritone.utils.PlanStats.physNs.addAndGet(t1 - t0);
+            driven = kinematic.tick(behavior.baritone, path, pathPosition);
+            baritone.utils.PlanStats.kinNs.addAndGet(System.nanoTime() - t1);
+            if (driven >= 0) {
+                lastDriver = Driver.KINEMATIC;
+            }
+        }
+        if (driven < 0 && stack.contains(TravelStack.Layer.KINEMATIC)) {
+            driven = kinematicFamily();
+        }
+        if (!skipLookAhead && driven < 0 && stack.contains(TravelStack.Layer.PHYSICS)) {
+            long t0 = System.nanoTime();
+            driven = physics.tick(behavior.baritone, path, pathPosition, true);
+            baritone.utils.PlanStats.physNs.addAndGet(System.nanoTime() - t0);
             if (driven >= 0) {
                 lastDriver = Driver.PHYSICS;
-            } else {
-                driven = kinematic.tick(behavior.baritone, path, pathPosition);
-                baritone.utils.PlanStats.kinNs.addAndGet(System.nanoTime() - t1);
-                if (driven >= 0) {
-                    lastDriver = Driver.KINEMATIC;
-                }
             }
         }
-        if (driven < 0) {
-            driven = fall.tick(behavior.baritone, path, pathPosition);
+        if (!skipLookAhead && driven < 0 && stack.contains(TravelStack.Layer.SIM)) {
+            long t0 = System.nanoTime();
+            driven = sim.tick(behavior.baritone, path, pathPosition);
+            baritone.utils.PlanStats.simNs.addAndGet(System.nanoTime() - t0);
             if (driven >= 0) {
-                lastDriver = Driver.FALL;
-            }
-        }
-        if (driven < 0) {
-            driven = swim.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.SWIM;
-            }
-        }
-        if (driven < 0) {
-            driven = clutch.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.CLUTCH;
-            }
-        }
-        if (driven < 0) {
-            driven = ladder.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.LADDER;
-            }
-        }
-        if (driven < 0) {
-            driven = mine.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.MINE;
-            }
-        }
-        if (driven < 0) {
-            driven = pillar.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.PILLAR;
-            }
-        }
-        if (driven < 0) {
-            driven = extension.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.EXTEND;
-            }
-        }
-        if (driven < 0) {
-            driven = takeoff.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.EXTEND;
-            }
-        }
-        if (driven < 0) {
-            driven = boatFall.tick(behavior.baritone, path, pathPosition);
-            if (driven >= 0) {
-                lastDriver = Driver.BOAT;
+                lastDriver = Driver.SIM;
             }
         }
         if (driven >= 0) {
@@ -304,7 +276,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 pathPosition = driven;
                 ticksOnCurrent = 0;
                 drivenOnCurrent = 0;
-            } else if ((lastDriver == Driver.PHYSICS || lastDriver == Driver.KINEMATIC) && ++drivenOnCurrent > DRIVER_PATIENCE) {
+            } else if ((lastDriver == Driver.PHYSICS || lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ++drivenOnCurrent > DRIVER_PATIENCE) {
                 // moving, yet not along the path: none of the timeouts below run while a mover drives, so it steps aside.
                 // Only the look-ahead movers: the others (mining, a long fall) hold a position for as long as the work takes.
                 Baritone.settings().movementFault.value.accept("M01", lastDriver + " held " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " for " + drivenOnCurrent + " ticks, handing back to Baritone");
@@ -323,7 +295,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             // process that asked to stop was run on down the path until the driver happened to hand back: bastion run
             // 123 asked to stop and tower, and was carried nine blocks first. On its feet the kinematic driver is no
             // worse a place to stop than a Traverse
-            return lastDriver == Driver.KINEMATIC && ctx.player().onGround();
+            return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ctx.player().onGround();
         }
         BetterBlockPos whereAmI = ctx.playerFeet();
         if (!movement.getValidPositions().contains(whereAmI)) {
@@ -988,7 +960,60 @@ public class PathExecutor implements IPathExecutor, Helper {
     }
 
     public boolean travelDriving() {
-        return lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS;
+        return lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS || lastDriver == Driver.SIM;
+    }
+
+    /**
+     * Ostinato: swim, fall, ladder, mine, pillar and the other kinematic controllers. They are how kinematic travel
+     * covers the spots the walk look-ahead does not, so they stay in that layer rather than a fourth stack.
+     */
+    private int kinematicFamily() {
+        int driven = fall.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.FALL;
+            return driven;
+        }
+        driven = swim.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.SWIM;
+            return driven;
+        }
+        driven = clutch.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.CLUTCH;
+            return driven;
+        }
+        driven = ladder.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.LADDER;
+            return driven;
+        }
+        driven = mine.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.MINE;
+            return driven;
+        }
+        driven = pillar.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.PILLAR;
+            return driven;
+        }
+        driven = extension.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.EXTEND;
+            return driven;
+        }
+        driven = takeoff.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.EXTEND;
+            return driven;
+        }
+        driven = boatFall.tick(behavior.baritone, path, pathPosition);
+        if (driven >= 0) {
+            lastDriver = Driver.BOAT;
+            return driven;
+        }
+        return -1;
     }
 
     @Override

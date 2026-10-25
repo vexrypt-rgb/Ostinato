@@ -153,10 +153,13 @@ public interface IBaritone {
     /** Ostinato: the sealed swarm link (always non-null; check {@code isOnline()}). */
     baritone.api.swarm.ISwarm getSwarm();
 
-    /** Ostinato: the movement engine selected by the {@code movementBackend} setting. */
+    /** Ostinato: travel facade. The block route stays Baritone's search. */
     baritone.api.movement.IMovementEngine getMovementEngine();
 
-    /** Ostinato: which backend {@link #getMovementEngine()} prefers. */
+    /**
+     * Ostinato: route preference TenorClef reads. Stays {@link baritone.api.movement.MovementBackendKind#BARITONE}.
+     * Key order is the {@code travelStack} setting, read by the path executor.
+     */
     baritone.api.movement.MovementBackendKind getMovementBackendPreference();
 
     /**
