@@ -228,12 +228,9 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
         List<String> lines = null;
         Path f = dir().resolve(host + ".txt");
         try {
+            // Ostinato: routes come only from the user's own baritone/servers/<host>.txt; none ship built in
             if (Files.exists(f)) {
                 lines = Files.readAllLines(f, StandardCharsets.UTF_8);
-            } else {
-                try (var in = ServerSpectate.class.getResourceAsStream("/assets/baritone/ostinato/servers/" + host + ".txt")) {
-                    if (in != null) lines = Arrays.asList(new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n"));
-                }
             }
         } catch (IOException ignored) {
         }
@@ -263,6 +260,10 @@ public final class ServerSpectate extends Behavior implements baritone.api.utils
     public void start(String h) {
         if (running()) {
             logDirect("Auto-spectate is already running (" + host + ")");
+            return;
+        }
+        if (h == null || h.isBlank()) { // Ostinato: no default server
+            logDirect("Set autoSpectateServer (or #autospectate start <host>) first");
             return;
         }
         host = h.trim().toLowerCase(Locale.ROOT);
