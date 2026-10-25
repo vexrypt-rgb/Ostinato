@@ -67,6 +67,12 @@ import static baritone.pathing.precompute.Ternary.*;
  */
 public interface MovementHelper extends ActionCosts, Helper {
 
+    // Ostinato: O(1) membership for per-node list settings (was ArrayList.contains, ~3% of search CPU)
+    baritone.utils.ListSetCache<Block> BLOCKSTODISALLOWBREAKING_SET = new baritone.utils.ListSetCache<>();
+    baritone.utils.ListSetCache<Block> BLOCKSTOAVOID_SET = new baritone.utils.ListSetCache<>();
+    baritone.utils.ListSetCache<Block> BLOCKSTOAVOIDSTANDINGON_SET = new baritone.utils.ListSetCache<>();
+
+
     static boolean avoidBreaking(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
         if (bsi.get0(x, y + 1, z).getBlock() instanceof EndPortalFrameBlock) {
             return true;
@@ -77,7 +83,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             return true;
         }
         Block b = state.getBlock();
-        return Baritone.settings().blocksToDisallowBreaking.value.contains(b)
+        return BLOCKSTODISALLOWBREAKING_SET.contains(Baritone.settings().blocksToDisallowBreaking.value, b)
                 || b instanceof EndPortalFrameBlock
                 || b == Blocks.ICE // ice becomes water, and water can mess up the path
                 // call context.get directly with x,y,z. no need to make 5 new BlockPos for no reason
@@ -172,7 +178,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (block == Blocks.POWDER_SNOW) {
             return NO;
         }
-        if (Baritone.settings().blocksToAvoid.value.contains(block)) {
+        if (BLOCKSTOAVOID_SET.contains(Baritone.settings().blocksToAvoid.value, block)) {
             return NO;
         }
         if (block instanceof DoorBlock || block instanceof FenceGateBlock) {
@@ -440,7 +446,7 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static Ternary canWalkOnBlockState(BlockState state) {
         Block block = state.getBlock();
-        if (Baritone.settings().blocksToAvoidStandingOn.value.contains(block)) {
+        if (BLOCKSTOAVOIDSTANDINGON_SET.contains(Baritone.settings().blocksToAvoidStandingOn.value, block)) {
             return NO;
         }
         // Extra blocks we may want to walk on.

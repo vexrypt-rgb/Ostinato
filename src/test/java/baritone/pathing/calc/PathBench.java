@@ -52,7 +52,13 @@ public final class PathBench {
         }
     }
 
-    public record Result(Query q, boolean ok, double cost, int nodes, double ms, long allocBytes) {}
+    public record Result(Query q, boolean ok, double cost, int nodes, double ms, long allocBytes, int len, long peakHeap) {
+        public Result(Query q, boolean ok, double cost, int nodes, double ms, long allocBytes) { this(q, ok, cost, nodes, ms, allocBytes, -1, -1); }
+    }
+
+    // Ostinato: peak heap across all pools, reset before each query (Phase 1 perf benchmark)
+    static void resetPeak() { for (var mp : ManagementFactory.getMemoryPoolMXBeans()) if (mp.getType() == java.lang.management.MemoryType.HEAP) mp.resetPeakUsage(); }
+    static long peakHeap() { long t = 0; for (var mp : ManagementFactory.getMemoryPoolMXBeans()) if (mp.getType() == java.lang.management.MemoryType.HEAP && mp.getPeakUsage() != null) t += mp.getPeakUsage().getUsed(); return t; }
 
     /** Builds a pathfinder for a query; the default is the stock A*. */
     public interface Finder {
@@ -234,6 +240,7 @@ public final class PathBench {
         long tid = Thread.currentThread().threadId();
         PrintStream out = System.out;
         System.setOut(new PrintStream(PrintStream.nullOutputStream())); // A* prints progress lines
+        resetPeak();
         long a0 = mx.getThreadAllocatedBytes(tid);
         long t0 = System.nanoTime();
         Optional<IPath> p;
@@ -248,7 +255,8 @@ public final class PathBench {
         boolean ok = p.isPresent() && q.goal.isInGoal(p.get().getDest());
         double cost = p.map(x -> ((baritone.pathing.calc.Path) x).totalCost()).orElse(Double.NaN);
         int nodes = p.map(IPath::getNumNodesConsidered).orElse(-1);
-        return new Result(q, ok, cost, nodes, (t1 - t0) / 1e6, a1 - a0);
+        int len = p.map(x -> x.positions().size()).orElse(-1);
+        return new Result(q, ok, cost, nodes, (t1 - t0) / 1e6, a1 - a0, len, peakHeap());
     }
 
     static double pct(List<Double> xs, double p) {
@@ -287,6 +295,14 @@ public final class PathBench {
             String[] k = e.getKey().split("\\|");
             sb.append(String.format(Locale.ROOT, "| %s | %s | %d | %d | %.1f | %.1f | %.0f | %.1f | %.1f |%n", k[0], k[1], l.size() / reps, f, pct(ms, .5), pct(ms, .95), pct(nodes, .5), cost, mb));
         }
+        // Ostinato: Phase 1 perf totals: nodes/sec, allocation, peak heap, path length
+        double totMs = rs.stream().mapToDouble(Result::ms).sum();
+        double totNodes = rs.stream().filter(r -> r.nodes > 0).mapToDouble(r -> r.nodes).sum();
+        double meanLen = rs.stream().filter(Result::ok).filter(r -> r.len >= 0).mapToDouble(r -> r.len).average().orElse(Double.NaN);
+        long maxPeak = rs.stream().mapToLong(Result::peakHeap).max().orElse(-1);
+        double totAlloc = rs.stream().mapToLong(Result::allocBytes).sum() / 1e6;
+        sb.append(String.format(Locale.ROOT, "%nPerf: %.0f nodes/sec, total %.0f ms, %.0f MB allocated, max peak heap %.0f MB, mean path length %.1f, heap max %d MB, cpus %d.%n",
+                totNodes / Math.max(1e-9, totMs / 1000), totMs, totAlloc, maxPeak / 1e6, meanLen, Runtime.getRuntime().maxMemory() >> 20, Runtime.getRuntime().availableProcessors()));
         sb.append(String.format(Locale.ROOT, "%nAll: median %.1f ms, p95 %.1f ms, failures %d of %d queries, %d reps.%n%n", pct(allMs, .5), pct(allMs, .95), fails, rs.size() / reps, reps));
         // Ostinato: travel-first score. Failures rank first; then estimated time-to-arrive per solved query =
         // planned travel ticks (path cost) + planning wall time in ticks (50 ms/tick), since the bot waits on the plan.

@@ -81,14 +81,18 @@ public class MovementBubbleLift extends Movement {
     }
 
     private static List<Option> options(CalculationContext context, int x, int y, int z) {
-        List<Option> out = new ArrayList<>();
+        // Ostinato: no list unless a bubble column is next to us (almost never), so the common case allocates nothing
         if (!MovementHelper.canWalkOn(context, x, y - 1, z) || upColumn(context.get(x, y, z))) {
-            return out;
+            return List.of();
         }
+        List<Option> out = null;
         for (int[] d : DIRS) {
             int cx = x + d[0], cz = z + d[1];
             if (!upColumn(context.get(cx, y, cz)) || !upColumn(context.get(cx, y + 1, cz))) {
                 continue;
+            }
+            if (out == null) {
+                out = new ArrayList<>();
             }
             int top = y + 1;
             while (top < y + MAX_RISE && upColumn(context.get(cx, top + 1, cz))) {
@@ -117,6 +121,9 @@ public class MovementBubbleLift extends Movement {
                     break; // the lowest floor of this column of the rim
                 }
             }
+        }
+        if (out == null) {
+            return List.of();
         }
         out.sort((p, q) -> Double.compare(p.cost, q.cost));
         while (out.size() > SLOTS) {

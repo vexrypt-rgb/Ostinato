@@ -91,7 +91,7 @@ public class MovementSwim extends Movement {
     private static double dig(CalculationContext c, int x, int y, int z, boolean head, boolean aboveCleared) {
         BlockState s = c.get(x, y, z);
         if (head ? headroom(c, x, y, z) : water(c, x, y, z)) return 0;
-        if (!c.allowBreak || s.getBlock() instanceof net.minecraft.world.level.block.BaseEntityBlock || Baritone.settings().blocksToDisallowBreaking.value.contains(s.getBlock())) return COST_INF;
+        if (!c.allowBreak || s.getBlock() instanceof net.minecraft.world.level.block.BaseEntityBlock || MovementHelper.BLOCKSTODISALLOWBREAKING_SET.contains(Baritone.settings().blocksToDisallowBreaking.value, s.getBlock()) /* Ostinato: O(1) */) return COST_INF;
         double str = c.toolSet.getStrVsBlock(s);
         if (str <= 0) return COST_INF;
         // Underwater digging is 5x slower without Aqua Affinity, and another 5x while not on ground.

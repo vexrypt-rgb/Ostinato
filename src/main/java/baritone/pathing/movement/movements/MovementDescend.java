@@ -192,6 +192,35 @@ public class MovementDescend extends Movement {
         return fallDown(context, x, y, z, destX, destZ, frontBreak, 3, 0, y - 1, 0, Integer.MIN_VALUE, res);
     }
 
+    /**
+     * Ostinato: per-thread scratch results for the steered-fall recursion, one slot per recursion depth, so a fall search
+     * allocates nothing (these two objects were ~40% of all bytes the planner allocated). A reset slot equals a new one.
+     */
+    private static final class FallScratch {
+        MutableMoveResult[] res = new MutableMoveResult[8];
+        boolean[][] bucket = new boolean[8][];
+        int depth;
+
+        MutableMoveResult take(boolean[][] bucketOut) {
+            int d = depth++;
+            if (d >= res.length) {
+                res = java.util.Arrays.copyOf(res, d * 2);
+                bucket = java.util.Arrays.copyOf(bucket, d * 2);
+            }
+            if (res[d] == null) {
+                res[d] = new MutableMoveResult();
+                bucket[d] = new boolean[1];
+            }
+            res[d].reset();
+            bucket[d][0] = false;
+            bucketOut[0] = bucket[d];
+            return res[d];
+        }
+    }
+
+    private static final ThreadLocal<FallScratch> SCRATCH = ThreadLocal.withInitial(FallScratch::new);
+    private static final ThreadLocal<boolean[][]> HOLDER = ThreadLocal.withInitial(() -> new boolean[1][]);
+
     /** At most this many holes threaded in one fall. */
     private static final int MAX_STEERS = 3;
     /** Each threaded hole: the steering has to be right, so a plain landing that is about as cheap wins. */
@@ -272,8 +301,12 @@ public class MovementDescend extends Movement {
             }
             if (reachedMinimum && context.allowSteeredFalls && frontBreak == 0 && steers < MAX_STEERS && newY != noSteerY
                     && effectiveStartHeight == y && !freeLanding(ontoBlock, unprotectedFallHeight, context)) {
-                MutableMoveResult through = new MutableMoveResult();
-                boolean[] throughBucket = new boolean[1];
+                FallScratch scratch = SCRATCH.get(); // Ostinato: pooled, was two allocations per steer attempt
+                boolean[][] holder = HOLDER.get();
+                MutableMoveResult through = scratch.take(holder);
+                boolean[] throughBucket = holder[0];
+                int mark = scratch.depth - 1;
+                try {
                 if (steerThrough(context, x, y, z, cx, cz, fallHeight, newY, legStart, legTop, steers, through, throughBucket)) {
                     // the plain landing on this floor (a clutch, a bucket, a mount, a hit we can take) might still be cheaper;
                     // nothing above it changed the fall (no ladder, costSoFar is 0), so pick up right at this floor
@@ -283,6 +316,9 @@ public class MovementDescend extends Movement {
                         return throughBucket[0];
                     }
                     return bucket;
+                }
+                } finally {
+                    scratch.depth = mark;
                 }
             }
             if (!MovementHelper.canWalkOn(context, cx, newY, cz, ontoBlock)) {
@@ -397,7 +433,10 @@ public class MovementDescend extends Movement {
                                         int legStart, int legTop, int steers, MutableMoveResult out, boolean[] bucketOut) {
         int toDepth = y - (newY + 1); // feet on the floor's top when we get there
         int tried = 0;
-        MutableMoveResult sub = new MutableMoveResult();
+        FallScratch scratch = SCRATCH.get(); // Ostinato: pooled, was one allocation per call
+        int mark = scratch.depth;
+        MutableMoveResult sub = scratch.take(HOLDER.get());
+        try {
         for (int[] o : DRIFT_OFFSETS) {
             int hx = cx + o[0], hz = cz + o[1];
             if (!AirDrift.reachable(o[0], o[1], legStart, toDepth)) {
@@ -429,6 +468,9 @@ public class MovementDescend extends Movement {
             if (++tried >= MAX_HOLES_TRIED) {
                 break;
             }
+        }
+        } finally {
+            scratch.depth = mark;
         }
         return out.cost < COST_INF;
     }
