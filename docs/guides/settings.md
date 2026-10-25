@@ -9,6 +9,7 @@ the [Baritone project](https://github.com/cabaletta/baritone); this page lists t
 | --- | --- | --- |
 | Kinematic travel | `kinematicTravel`, `slowKinematic`, `headSteering`, `pathWander`, `kinematicTrace` | [Movement](movement.md) |
 | Moves | `allowClimbJumps`, `allowMomentumJumps`, `allowLadderClutch`, `pickupLadders`, `allowGodBridge`, `pitfallAvoidance`, `sprintJump`, `allowBoats`, `experimental*`, `fastMode`, `fastModeMinHealth`, `physicalInput` | [Movement](movement.md) |
+| Pathfinding | `piCheapPathing` (off) | [Pi-cheap](../pathbench/PI_CHEAP.md) |
 | Backend | `movementBackend` | [Movement](movement.md) |
 | Elytra | `elytra*`, `elytraTermsAccepted` | [Movement](movement.md) |
 | Interface | `guiKeybind`, `renderPathHud`, `pathHudAnchor`, `freecamSpeed`, `freecamKey`, `freecamGhostOpacity`, `enemyMobs` | [GUI](gui-freecam-tasks.md) |
