@@ -192,8 +192,16 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         fights.voidY(level.getMinY() - 8); // Ostinato: knocked off into the void
         fights.tick(++detectTick, obs);
         swungIds.clear();
+        // Ostinato: save detected fights: sumo shoves enter FightBook as hits, void/fall/kill ends as deaths
+        int t = tick;
+        for (FightDetector.Contact c : fights.drainContacts()) {
+            if (!(level.getEntity(c.attacker()) instanceof Player a) || !(level.getEntity(c.victim()) instanceof Player v)) continue;
+            String late = lateSigns(a, true) != null ? lateSigns(a, true) : lateSigns(v, false);
+            pendingHits.add(new Object[]{a.getId(), v.getId(), a.getName().getString(), v.getName().getString(), tick, false, late});
+        }
         for (FightDetector.Outcome o : fights.drainOutcomes()) {
-            System.out.println("Ostinato fight end: " + o.loser() + " lost to " + o.winner() + " (" + o.cause() + ")");
+            int loser = o.loser();
+            post(l -> l.book.died(t, loser)); // no-op when the death packet already ended it
         }
     }
 

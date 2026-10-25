@@ -45,6 +45,18 @@ public final class FightDetector {
     private final Map<Integer, Integer> lastFoe = new HashMap<>();
     private final java.util.ArrayList<Outcome> outcomes = new java.util.ArrayList<>();
 
+    /** Ostinato: a no-damage shove (sumo hit): the victim was knocked while the attacker swung at them in reach. */
+    public record Contact(int attacker, int victim) {}
+
+    private final java.util.ArrayList<Contact> contacts = new java.util.ArrayList<>();
+
+    /** Sumo hits seen since the last call (damaging hits arrive through the normal damage path instead). */
+    public List<Contact> drainContacts() {
+        List<Contact> c = List.copyOf(contacts);
+        contacts.clear();
+        return c;
+    }
+
     public void voidY(double y) {
         voidY = y;
     }
@@ -90,6 +102,7 @@ public final class FightDetector {
                 engagedUntil.put(a.id, tick + HOLD_TICKS);
                 engagedUntil.put(best.id, tick + HOLD_TICKS);
                 lastFoe.put(a.id, best.id);
+                if (a.knocked && !a.hurt && best.swinging && dist(a, best) <= SWING_REACH + 1) contacts.add(new Contact(best.id, a.id));
                 lastFoe.put(best.id, a.id);
             }
         }
@@ -123,6 +136,7 @@ public final class FightDetector {
         engagedUntil.clear();
         lastFoe.clear();
         outcomes.clear();
+        contacts.clear();
     }
 
     private static double dist(Obs a, Obs b) {

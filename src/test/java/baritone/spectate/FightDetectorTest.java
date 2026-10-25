@@ -65,4 +65,12 @@ public class FightDetectorTest {
         d.tick(1, List.of(new FightDetector.Obs(1, 0, 64, 0, 0, false, false, true, false), p(2, 30, 0, 0, false, false)));
         assertFalse(d.anyFight());
     }
+
+    @Test
+    public void sumoShoveFromSwingerIsAContact() {
+        FightDetector d = new FightDetector();
+        d.tick(1, List.of(new FightDetector.Obs(1, 0, 64, 0, 0, false, false, true, false), p(2, 0, 2, 180, false, true)));
+        assertEquals(List.of(new FightDetector.Contact(2, 1)), d.drainContacts());
+        assertTrue(d.drainContacts().isEmpty());
+    }
 }
