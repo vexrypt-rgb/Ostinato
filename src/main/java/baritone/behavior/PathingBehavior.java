@@ -360,6 +360,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return Optional.ofNullable(inProgress);
     }
 
+    @Override // Ostinato: IPathingBehavior
     public boolean isSafeToCancel() {
         if (current == null) {
             return !baritone.getElytraProcess().isActive() || baritone.getElytraProcess().isSafeToCancel();
@@ -367,6 +368,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return safeToCancel;
     }
 
+    @Override
     public void requestPause() {
         pauseRequestedLastTick = true;
     }
