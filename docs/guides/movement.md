@@ -22,6 +22,7 @@ Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 | `allowMomentumJumps` | true | Longer jumps using run-up momentum |
 | `allowClimbJumps` | false | Jump onto/off ladders and vines across a gap. Needs `allowParkour` |
 | `allowLadderClutch` | false | Grab a ladder or vine already in a long fall, or place one on a wall beside the last blocks. Placing needs one on the hotbar. See [ladder clutch](../ladder-clutch.md) |
+| `allowGodBridge` | false | Walk backward and click the far face of the block underfoot when that is the only place to bridge against. See [god bridge](../god-bridge.md) |
 | `pickupLadders` | true | Take placed ladders back |
 | `pitfallAvoidance` | true | Never stand on sand/gravel/concrete powder resting on a block with no collision |
 | `sprintJump` | false | Sprint-jump option |

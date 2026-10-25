@@ -224,6 +224,9 @@ Beyond upstream Baritone, Ostinato adds:
     vine already in the column, or by placing one on a wall beside the last blocks, then pick the ladder
     back up (`pickupLadders`). Placing needs one on the hotbar; a water bucket is still preferred when it
     is no more expensive. Off, an existing ladder is caught only from a drop of 11 blocks or less.
+  - **God bridge** (`allowGodBridge`, off by default): when a bridge can only be placed against the block
+    underfoot, turn around and walk backward, clicking that far face instead of sneaking. The planner
+    prices it as a walk. Off, the sneak and its cost are unchanged. See `docs/god-bridge.md`.
   - **Experimental movement** (`experimentalMovement`): a preset, not a settings rewrite. Parkour,
     neos, momentum and climb jumps, diagonals and `kinematicTravel` act as if on, jumps cost
     `experimentalJumpBias` times as much, block placement at most `experimentalBlockPlacementPenalty`,
