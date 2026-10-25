@@ -44,7 +44,7 @@ import java.util.function.Predicate;
  * axe against a raised shield, shield against drawn bows and incoming arrows, a bow at range,
  * golden apples and a totem in the offhand when low.
  */
-public final class PvpProcess extends BaritoneProcessHelper {
+public final class PvpProcess extends BaritoneProcessHelper implements baritone.api.process.IPvpProcess { // Ostinato: typed API
 
     private static final double REACH = 3.0, DRIVE = 7, BOW_MIN = 10, CHASE = 48;
     private static final Item[] SWORDS = {Items.NETHERITE_SWORD, Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD};
@@ -96,6 +96,12 @@ public final class PvpProcess extends BaritoneProcessHelper {
         return target;
     }
 
+    @Override
+    public baritone.api.process.PvpStats getStats() { // Ostinato
+        return new baritone.api.process.PvpStats(attacks, crits, sprintHits, axeHits, blocks, gapples, damageTaken);
+    }
+
+    @Override
     public String stats() {
         return String.format("attacks=%d crits=%d sprintHits=%d axeHits=%d blocks=%d gapples=%d dmgTaken=%.1f",
                 attacks, crits, sprintHits, axeHits, blocks, gapples, damageTaken);
