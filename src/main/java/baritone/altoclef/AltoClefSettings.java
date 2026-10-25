@@ -29,7 +29,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
-public class AltoClefSettings {
+public class AltoClefSettings implements baritone.api.policy.IAgentPolicy { // Ostinato: driver API
 
     // woo singletons
     private static AltoClefSettings _instance = new AltoClefSettings();

@@ -112,7 +112,14 @@ public interface IBuilderProcess extends IBaritoneProcess {
 
     void popStack();
 
+    /** @deprecated Ostinato: use {@link #isExternalBuildFinished()}. */
+    @Deprecated
     boolean isFromAltoclefFinished();
+
+    /** Ostinato: true once a build started by a driving mod has finished. Neutral name for {@link #isFromAltoclefFinished()}. */
+    default boolean isExternalBuildFinished() {
+        return isFromAltoclefFinished();
+    }
 
     void resume();
 

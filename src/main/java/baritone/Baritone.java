@@ -187,6 +187,40 @@ public class Baritone implements IBaritone {
     }
 
     @Override
+    public baritone.api.process.IPvpProcess getPvpProcess() {
+        return null; // Ostinato: 1.16.1 has no combat process
+    }
+
+    // Ostinato: typed API for drivers (TenorClef); each delegates to the existing internals.
+    private baritone.swarm.SwarmApi swarmApi;
+
+    @Override
+    public baritone.api.policy.IAgentPolicy getAgentPolicy() {
+        return baritone.altoclef.AltoClefSettings.getInstance();
+    }
+
+    @Override
+    public synchronized baritone.api.swarm.ISwarm getSwarm() {
+        if (swarmApi == null) swarmApi = new baritone.swarm.SwarmApi(getSwarmBehavior());
+        return swarmApi;
+    }
+
+    @Override
+    public baritone.api.movement.IMovementEngine getMovementEngine() {
+        return baritone.movement.MovementBackends.engine(this);
+    }
+
+    @Override
+    public baritone.api.movement.MovementBackendKind getMovementBackendPreference() {
+        return baritone.movement.MovementBackends.preference();
+    }
+
+    @Override
+    public void setFreecamStatus(java.util.function.Supplier<String> status) {
+        // Ostinato: 1.16.1 freecam has no status tag; ignored.
+    }
+
+    @Override
     public FollowProcess getFollowProcess() {
         return this.followProcess;
     }
