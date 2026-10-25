@@ -58,6 +58,28 @@ public final class CostCalibration {
         return Math.min(raw, CAP);
     }
 
+    /**
+     * Ostinato: read-only view for {@code #timings}: calls {@code sink} with each movement family, its sample
+     * count and mean actual/expected tick ratio (NaN before any sample).
+     */
+    public static void forEach(StatSink sink) {
+        for (Map.Entry<String, Stat> e : STATS.entrySet()) {
+            Stat s = e.getValue();
+            int n;
+            double mean;
+            synchronized (s) {
+                n = s.n;
+                mean = n == 0 ? Double.NaN : s.sum / n;
+            }
+            sink.accept(e.getKey(), n, mean);
+        }
+    }
+
+    @FunctionalInterface
+    public interface StatSink {
+        void accept(String family, int samples, double meanRatio);
+    }
+
     private static final class Stat {
         private double sum;
         private int n;
