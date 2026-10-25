@@ -2314,7 +2314,7 @@ public final class Settings {
      * /register or /login, walks the lobby menus to a spectator spot and follows fights; it never attacks or chats.
      * Its password is kept in {@code baritone/servers/<host>.secret}; a server that kicks it is never joined again.
      */
-    public final Setting<String> autoSpectateServer = new Setting<>("crackedpvp.club");
+    public final Setting<String> autoSpectateServer = new Setting<>(""); // Ostinato: no built-in server; the user picks one
 
     /** Longest auto-spectate session, in minutes. */
     public final Setting<Integer> autoSpectateMinutes = new Setting<>(20);
