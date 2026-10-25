@@ -332,10 +332,12 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return Optional.ofNullable(inProgress);
     }
 
+    @Override // Ostinato: IPathingBehavior
     public boolean isSafeToCancel() {
         return current == null || safeToCancel;
     }
 
+    @Override
     public void requestPause() {
         pauseRequestedLastTick = true;
     }
