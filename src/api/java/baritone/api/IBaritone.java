@@ -165,6 +165,9 @@ public interface IBaritone {
      */
     void setFreecamStatus(java.util.function.Supplier<String> status);
 
+    /** Ostinato: pathfinder-consistent world questions (water/lava, place-against, avoid-break, tool speed, path block changes). */
+    baritone.api.utils.IWorldQueries getWorldQueries();
+
     // Ostinato: health estimator
     /**
      * @return The estimated health of nearby living entities (see {@link baritone.api.utils.IHealthEstimator}). The
