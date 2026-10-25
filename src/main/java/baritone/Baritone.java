@@ -215,6 +215,14 @@ public class Baritone implements IBaritone {
         return baritone.movement.MovementBackends.preference();
     }
 
+    private baritone.utils.WorldQueries worldQueries; // Ostinato: driver API
+
+    @Override
+    public synchronized baritone.api.utils.IWorldQueries getWorldQueries() {
+        if (worldQueries == null) worldQueries = new baritone.utils.WorldQueries(this);
+        return worldQueries;
+    }
+
     @Override
     public void setFreecamStatus(java.util.function.Supplier<String> status) {
         // Ostinato: 1.16.1 freecam has no status tag; ignored.
