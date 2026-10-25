@@ -105,6 +105,12 @@ public interface IPathingBehavior extends IBehavior {
     void forceCancel();
 
     /**
+     * Ostinato: ask the executor to hold still for the next tick (for example while a driver interacts
+     * with a block). Has to be called every tick the pause should last.
+     */
+    void requestPause();
+
+    /**
      * Returns the current path, from the current path executor, if there is one.
      *
      * @return The current path
