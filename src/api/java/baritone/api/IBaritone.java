@@ -164,4 +164,8 @@ public interface IBaritone {
      * default (Baritone's active process). Global, not per-instance.
      */
     void setFreecamStatus(java.util.function.Supplier<String> status);
+
+    /** Ostinato: pathfinder-consistent world questions (water/lava, place-against, avoid-break, tool speed, path block changes). */
+    baritone.api.utils.IWorldQueries getWorldQueries();
+
 }
