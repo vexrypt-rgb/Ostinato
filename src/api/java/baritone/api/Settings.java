@@ -136,6 +136,12 @@ public final class Settings {
     public final Setting<Double> jumpPenalty = new Setting<>(2D);
 
     /**
+     * Ostinato: estimate ascend and descend costs with a short tick simulation of vanilla movement (friction,
+     * acceleration, air control, gravity, drag) instead of the fixed tables. Off keeps the stock costs.
+     */
+    public final Setting<Boolean> tickAccurateCosts = new Setting<>(false);
+
+    /**
      * Walking on water uses up hunger really quick, so penalize it
      */
     public final Setting<Double> walkOnWaterOnePenalty = new Setting<>(3D);
