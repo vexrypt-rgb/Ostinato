@@ -77,7 +77,8 @@ public final class DefaultCommands {
                 new TasksCommand(baritone),
                 new SwarmCommand(baritone),
                 new PortalCommand(baritone),
-                new AutoSpectateCommand(baritone) // Ostinato: watch-only server spectating
+                new AutoSpectateCommand(baritone), // Ostinato: watch-only server spectating
+                new TrainCommand(baritone) // Ostinato: headless training circuits
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);

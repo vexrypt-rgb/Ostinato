@@ -65,7 +65,8 @@ public final class SettingCategorizer {
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
         put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune", "pvpAutotuneMode",
                 "spectateLearn", "spectateLearnOnServers", "spectateAutoDetect", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "spectateLearnLateFights", "sparSeedPriors", "spectateLearnSuspectedCheats", "autoSpectateServer", "autoSpectateMinutes", "autoSpectateHoverMinMs", "autoSpectateHoverMaxMs", "autoSpectateClickGapMinMs", "autoSpectateClickGapMaxMs", "autoSpectateReadMinMs", "autoSpectateReadMaxMs", "autoSpectateKeyMinMs", "autoSpectateKeyMaxMs", "autoSpectateThinkMinMs", "autoSpectateThinkMaxMs", "healthEstimator",
-                "testHarness"); // Ostinato: pvpAutotuneMode, spectator learning (with kit detection and fight types), health estimator, testHarness
+                "testHarness",
+                "trainingTask", "trainingLegit", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir"); // Ostinato: testHarness and the training-task harness
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
