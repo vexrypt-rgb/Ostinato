@@ -166,9 +166,49 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         return BaritoneAPI.getSettings();
     }
 
+    // Ostinato: automatic fight detection in render distance
+    private final FightDetector fights = new FightDetector();
+    private long detectTick;
+    private final Set<Integer> swungIds = new HashSet<>(); // Ostinato: arm swings from the animate packet
+    private final Map<Integer, Double> lastH2 = new HashMap<>();
+
+    private void detectFights(ClientLevel level) {
+        if (level == null || !s().spectateAutoDetect.value) {
+            fights.clear();
+            return;
+        }
+        Player me = Minecraft.getInstance().player;
+        List<FightDetector.Obs> obs = new ArrayList<>();
+        for (Player p : level.players()) {
+            if (p == me || p.getId() < 0 || p.isSpectator()) continue;
+            // Ostinato: sumo: a sudden horizontal shove (knockback) counts even with no HP lost
+            net.minecraft.world.phys.Vec3 v = p.getDeltaMovement();
+            double h2 = v.x * v.x + v.z * v.z;
+            Double prev = lastH2.put(p.getId(), h2);
+            boolean knocked = prev != null && h2 > 0.09 && h2 > prev * 2.5;
+            obs.add(new FightDetector.Obs(p.getId(), p.getX(), p.getY(), p.getZ(), p.getYRot(),
+                    p.hurtTime >= 9, swungIds.contains(p.getId()), knocked, !p.isAlive()));
+        }
+        fights.voidY(level.getMinY() - 8); // Ostinato: knocked off into the void
+        fights.tick(++detectTick, obs);
+        swungIds.clear();
+        // Ostinato: save detected fights: sumo shoves enter FightBook as hits, void/fall/kill ends as deaths
+        int t = tick;
+        for (FightDetector.Contact c : fights.drainContacts()) {
+            if (!(level.getEntity(c.attacker()) instanceof Player a) || !(level.getEntity(c.victim()) instanceof Player v)) continue;
+            String late = lateSigns(a, true) != null ? lateSigns(a, true) : lateSigns(v, false);
+            pendingHits.add(new Object[]{a.getId(), v.getId(), a.getName().getString(), v.getName().getString(), tick, false, late});
+        }
+        for (FightDetector.Outcome o : fights.drainOutcomes()) {
+            int loser = o.loser();
+            post(l -> l.book.died(t, loser)); // no-op when the death packet already ended it
+        }
+    }
+
     /** Whether to watch here: the setting, and on a multiplayer server its own setting as well. */
     public boolean active() {
-        if (!s().spectateLearn.value) return false;
+        // Ostinato: auto fight detection turns watching on by itself while a fight is seen
+        if (!s().spectateLearn.value && !(s().spectateAutoDetect.value && fights.anyFight())) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return false;
         if (mc.hasSingleplayerServer()) return true;
@@ -201,6 +241,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             lastLevel = level;
             clientWorld = null;
         }
+        detectFights(level); // Ostinato: before active(), so a fight seen this tick starts recording
         boolean on = active();
         SpectatePriors.get().enabled(s().spectateLearn.value);
         if (!on) {
@@ -221,7 +262,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         List<Player> near = new ArrayList<>();
         for (Player p : level.players()) {
             // Ostinato: negative ids are client-made (the freecam spar ghost), never a real player to learn from
-            if (p != me && p.getId() >= 0 && !p.isSpectator() && p.distanceToSqr(me) < r * r) near.add(p);
+            // Ostinato: plus anyone auto-detected fighting, at any loaded (render) distance
+            boolean inRadius = s().spectateLearn.value && p.distanceToSqr(me) < r * r;
+            if (p != me && p.getId() >= 0 && !p.isSpectator() && (inRadius || fights.engaged(p.getId()))) near.add(p);
         }
         near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(me)));
         Set<Integer> keep = new HashSet<>();
@@ -428,6 +471,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     @Override
     public void animate(Entity e, int action) {
         if (action == 4) critVictims.add(e.getId());
+        if (action == 0 && e instanceof Player) swungIds.add(e.getId()); // Ostinato: auto fight detection
         if (action == 0 && e instanceof Player && active()) cheat.swing(e.getId(), tick); // Ostinato: click rate
         Seen sn = seen.get(e.getId());
         if (sn == null || action != 0 && action != 3) return; // SWING_MAIN_HAND, SWING_OFF_HAND
