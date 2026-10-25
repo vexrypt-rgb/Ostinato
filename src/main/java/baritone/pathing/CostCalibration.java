@@ -59,8 +59,8 @@ public final class CostCalibration {
     }
 
     /**
-     * Ostinato: read-only view for a future {@code #timings} command: calls {@code sink} with each movement
-     * family, its sample count and mean actual/expected tick ratio (NaN before any sample).
+     * Ostinato: read-only view for {@code #timings}: calls {@code sink} with each movement family, its sample
+     * count and mean actual/expected tick ratio (NaN before any sample).
      */
     public static void forEach(StatSink sink) {
         for (Map.Entry<String, Stat> e : STATS.entrySet()) {
