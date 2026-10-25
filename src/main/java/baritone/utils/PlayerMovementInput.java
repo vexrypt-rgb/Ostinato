@@ -59,8 +59,8 @@ public class PlayerMovementInput extends ClientInput {
         if (analog != null) {
             // Ostinato: a controller stick, not keys. The client's own input chain (0.98, sneak, the square-to-circle
             // map) applies to it as it does to a gamepad's.
-            leftImpulse = analog[0];
-            forwardImpulse = analog[1];
+            leftImpulse = HumanInputCaps.clampAxis(analog[0]); // Ostinato: a real stick stops at full tilt
+            forwardImpulse = HumanInputCaps.clampAxis(analog[1]);
             up = forwardImpulse > 0;
             down = forwardImpulse < 0;
             left = leftImpulse > 0;

@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.utils.HumanInputCaps;
 import baritone.utils.OstinatoRandom;
 import baritone.Baritone;
 import baritone.api.Settings;
@@ -298,8 +299,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 this.processor.capOverride = this.turnCap;
                 final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 this.processor.capOverride = 0;
-                ctx.player().setYRot(actual.getYaw());
-                ctx.player().setXRot(actual.getPitch());
+                // Ostinato: the human-input gate; no single-tick turn past a fast flick, pitch kept in range
+                ctx.player().setYRot(HumanInputCaps.capYaw(this.prevRotation.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw()));
+                ctx.player().setXRot(HumanInputCaps.capPitch(this.prevRotation.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch()));
                 break;
             }
             case POST: {
@@ -365,7 +367,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     public void pig() {
         if (this.target != null) {
             final Rotation actual = this.processor.peekRotation(this.target.rotation);
-            ctx.player().setYRot(actual.getYaw());
+            ctx.player().setYRot(HumanInputCaps.capYaw(ctx.player().getYRot(), actual.getYaw(), HumanInputCaps.maxYaw())); // Ostinato: capped
         }
     }
 

@@ -866,6 +866,21 @@ public final class Settings {
     public final Setting<Boolean> slowPath = new Setting<>(false);
 
     /**
+     * Ostinato: cap every bot turn per tick to what a human can do (no teleport aim)
+     */
+    public final Setting<Boolean> humanInputCaps = new Setting<>(true);
+
+    /**
+     * Ostinato: largest yaw change per tick, degrees, when humanInputCaps is on
+     */
+    public final Setting<Double> maxYawPerTick = new Setting<>(120.0);
+
+    /**
+     * Ostinato: largest pitch change per tick, degrees, when humanInputCaps is on
+     */
+    public final Setting<Double> maxPitchPerTick = new Setting<>(90.0);
+
+    /**
      * Milliseconds between each node
      */
     public final Setting<Long> slowPathTimeDelayMS = new Setting<>(100L);
