@@ -128,6 +128,8 @@ public class CalculationContext {
     public final double ascendWalkCost;
     public final double walkOffCost;
     public final double descendLandCost;
+    /** Ostinato: momentumJumpCosts, see MovementParkour.momentumCost. */
+    public final boolean momentumJumpCosts;
     public final double walkOnWaterOnePenalty;
     public final boolean allowWalkOnMagmaBlocks;
     public final BetterWorldBorder worldBorder;
@@ -237,6 +239,7 @@ public class CalculationContext {
         this.ascendWalkCost = tickAccurate ? TickCosts.ASCEND : Math.max(ActionCosts.JUMP_ONE_BLOCK_COST, ActionCosts.WALK_ONE_BLOCK_COST);
         this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
         this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
+        this.momentumJumpCosts = Baritone.settings().momentumJumpCosts.value; // Ostinato
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         this.worldBorder = bsi.worldBorder;
@@ -353,6 +356,7 @@ public class CalculationContext {
         this.ascendWalkCost = tickAccurate ? TickCosts.ASCEND : Math.max(ActionCosts.JUMP_ONE_BLOCK_COST, ActionCosts.WALK_ONE_BLOCK_COST);
         this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
         this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
+        this.momentumJumpCosts = Baritone.settings().momentumJumpCosts.value; // Ostinato
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         // why cache these things here, why not let the movements just get directly from settings?

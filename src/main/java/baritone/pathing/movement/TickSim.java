@@ -115,4 +115,36 @@ public final class TickSim {
     public static double walkOffTicks(boolean sprint) {
         return groundTicks(0.5 + HALF_WIDTH, steadyGroundSpeed(sprint), sprint);
     }
+
+    /** Ostinato: horizontal kick vanilla adds when a sprinting player jumps (blocks/tick). */
+    public static final double SPRINT_JUMP_BOOST = 0.2;
+
+    /**
+     * Ostinato: ticks for a flat parkour jump of {@code dist} blocks (centre of the take-off block to the centre of
+     * the landing one) entered at steady sprint: run to the edge, sprint-jump (with the 0.2 kick), glide with air
+     * sprint control until the feet are back at take-off height, then sprint the rest to the centre. If the glide
+     * passes the centre the time is cut where it crosses it (the brake is free, the executor already does it).
+     */
+    public static double sprintJumpTicks(int dist) {
+        double v0 = steadyGroundSpeed(true);
+        double t = groundTicks(0.5, v0, true);
+        double target = dist - 0.5;
+        double x = 0, y = 0, vx = v0 * GROUND_DRAG + SPRINT_ACCEL + SPRINT_JUMP_BOOST, vy = JUMP_VELOCITY;
+        for (int k = 0; k < MAX_TICKS; k++) {
+            double nx = x + vx, ny = y + vy;
+            if (nx >= target) {
+                return t + k + (target - x) / vx;
+            }
+            if (ny <= 0 && vy < 0) {
+                double frac = y / (y - ny);
+                double xLand = x + vx * frac;
+                return t + k + frac + groundTicks(target - xLand, vx, true);
+            }
+            x = nx;
+            y = ny;
+            vx = vx * AIR_DRAG + AIR_SPRINT_ACCEL;
+            vy = (vy - GRAVITY) * VERTICAL_DRAG;
+        }
+        return MAX_TICKS;
+    }
 }

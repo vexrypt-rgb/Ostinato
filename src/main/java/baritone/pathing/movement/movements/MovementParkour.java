@@ -28,6 +28,7 @@ import baritone.api.utils.Rotation;
 import baritone.api.utils.RayTraceUtils;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
+import baritone.pathing.movement.TickSim;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
@@ -279,7 +280,8 @@ public class MovementParkour extends Movement {
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
-                    res.cost = costFromJumpDistance(i) + context.jumpPenalty;
+                    res.cost = (context.momentumJumpCosts && i <= 3 && context.canSprint && hasRunUp(context, x, y, z, xDiff, zDiff)
+                            ? momentumCost(i) : costFromJumpDistance(i)) + context.jumpPenalty; // Ostinato: momentumJumpCosts
                     return;
                 }
                 break;
@@ -421,6 +423,17 @@ public class MovementParkour extends Movement {
                 && MovementHelper.fullyPassable(context, bx, y + 1, bz);
     }
 
+    // Ostinato: sprint-jump ticks for 2/3 (1 and 2 block gaps), simulated once; floored at sprint speed so the
+    // edge never undercuts the per-block heuristic.
+    private static final double[] MOMENTUM_COST = {0, 0,
+            Math.max(2 * SPRINT_ONE_BLOCK_COST, TickSim.sprintJumpTicks(2)),
+            Math.max(3 * SPRINT_ONE_BLOCK_COST, TickSim.sprintJumpTicks(3))};
+
+    /** Ostinato: cost of a flat {@code dist} (2 or 3) jump entered at sprint from a run-up. */
+    static double momentumCost(int dist) {
+        return MOMENTUM_COST[dist];
+    }
+
     private static double costFromJumpDistance(int dist) {
         switch (dist) {
             case 2:
@@ -491,7 +504,11 @@ public class MovementParkour extends Movement {
             logDebug("sorry");
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        if (dist >= 4 || ascend || dist == 3 && narrowLanding()) {
+        // Ostinato: momentumJumpCosts priced this 1 or 2 block gap as a sprint jump off the run-up, so fly it as one
+        boolean momentumSprint = !ascend && ext == 0 && dist <= 3 && Baritone.settings().momentumJumpCosts.value
+                && ctx.player().isSprinting() && !isTallTop(ctx.world().getBlockState(dest.below()))
+                && MovementHelper.canWalkOn(ctx, src.relative(direction.getOpposite()).below());
+        if (dist >= 4 || ascend || dist == 3 && narrowLanding() || momentumSprint) { // Ostinato: momentumSprint
             state.setInput(Input.SPRINT, true);
         }
         if (Baritone.settings().allowWalkOnMagmaBlocks.value && ctx.world().getBlockState(ctx.playerFeet().below()).is(Blocks.MAGMA_BLOCK)) {
