@@ -405,6 +405,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return safeToCancel;
     }
 
+    @Override
     public void requestPause() {
         pauseRequestedLastTick = true;
     }

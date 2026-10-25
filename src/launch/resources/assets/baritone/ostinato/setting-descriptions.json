@@ -88,6 +88,7 @@
  "humanInputCaps": "Limit how fast the bot can turn each tick so it never snaps its aim like no human could",
  "maxYawPerTick": "Most the bot may turn left or right in one tick, in degrees",
  "maxPitchPerTick": "Most the bot may look up or down in one tick, in degrees",
+ "pathTieBreak": "Among equally good search options, try the one closer to the goal first. 0 keeps the classic order",
  "slowPathTimeDelayMS": "Milliseconds between each node",
  "slowPathTimeoutMS": "The alternative timeout number when slowPath is on",
  "doBedWaypoints": "allows baritone to save bed waypoints when interacting with beds",

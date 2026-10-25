@@ -881,6 +881,11 @@ public final class Settings {
     public final Setting<Double> maxPitchPerTick = new Setting<>(90.0);
 
     /**
+     * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
+     */
+    public final Setting<Double> pathTieBreak = new Setting<>(0.0);
+
+    /**
      * Milliseconds between each node
      */
     public final Setting<Long> slowPathTimeDelayMS = new Setting<>(100L);
@@ -2324,7 +2329,7 @@ public final class Settings {
      * /register or /login, walks the lobby menus to a spectator spot and follows fights; it never attacks or chats.
      * Its password is kept in {@code baritone/servers/<host>.secret}; a server that kicks it is never joined again.
      */
-    public final Setting<String> autoSpectateServer = new Setting<>("crackedpvp.club");
+    public final Setting<String> autoSpectateServer = new Setting<>(""); // Ostinato: no built-in server; the user picks one
 
     /** Longest auto-spectate session, in minutes. */
     public final Setting<Integer> autoSpectateMinutes = new Setting<>(20);

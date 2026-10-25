@@ -150,6 +150,8 @@ public class PathBenchTest {
             rec.start();
         }
         String spec = System.getenv("OSTINATO_BENCH_FINDER");
+        String tie = System.getenv("OSTINATO_BENCH_TIE"); // Ostinato: Phase 2 tie-break A/B
+        if (tie != null) baritone.Baritone.settings().pathTieBreak.value = Double.parseDouble(tie);
         List<PathBench.Result> rs = PathBench.bench(qs, PathBench.finder(spec), reps);
         if (rec != null) {
             rec.stop();

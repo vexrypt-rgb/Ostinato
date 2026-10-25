@@ -83,7 +83,8 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         this.favoring = favoring;
         this.calcContext = context;
         allowReuse = !favoring.hasAvoidance();
-        this.heuristicWeight = heuristicWeight;
+        // Ostinato: tie-break toward the goal (lower h wins among equal f) by nudging the weight up a hair (pathTieBreak)
+        this.heuristicWeight = heuristicWeight * (1 + Baritone.settings().pathTieBreak.value);
     }
 
     @Override

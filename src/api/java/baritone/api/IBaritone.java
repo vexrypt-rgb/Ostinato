@@ -144,6 +144,27 @@ public interface IBaritone {
      */
     void openClick();
 
+    /** Ostinato: policy hooks a driving mod injects (break/place avoiders, walk rules, tools, heuristics, fluids). */
+    baritone.api.policy.IAgentPolicy getAgentPolicy();
+
+    /** Ostinato: the combat process. */
+    baritone.api.process.IPvpProcess getPvpProcess();
+
+    /** Ostinato: the sealed swarm link (always non-null; check {@code isOnline()}). */
+    baritone.api.swarm.ISwarm getSwarm();
+
+    /** Ostinato: the movement engine selected by the {@code movementBackend} setting. */
+    baritone.api.movement.IMovementEngine getMovementEngine();
+
+    /** Ostinato: which backend {@link #getMovementEngine()} prefers. */
+    baritone.api.movement.MovementBackendKind getMovementBackendPreference();
+
+    /**
+     * Ostinato: text for the freecam ghost tag (for example the driver's current task). Null restores the
+     * default (Baritone's active process). Global, not per-instance.
+     */
+    void setFreecamStatus(java.util.function.Supplier<String> status);
+
     // Ostinato: health estimator
     /**
      * @return The estimated health of nearby living entities (see {@link baritone.api.utils.IHealthEstimator}). The

@@ -81,7 +81,7 @@ public final class SettingCategorizer {
         rule("Parkour|Diagonal|Sprint|sprint|Jump|Vines|Slab|Step|SafeWalk|Magma|FallHeight|WalkOn", MOVEMENT);
         rule("Water|Lava|Swim|swim|Boat|Fluid|Liquid", WATER_AIR);
         rule("Avoidance|avoidance", PATHING);
-        rule("Timeout|timeout|cost|Cost|pathing|Path|path|Chunk|chunk|Cache|cache|repack|prune|splice|slowPath|planning|"
+        rule("Timeout|timeout|cost|Cost|pathing|Path|path|Chunk|chunk|Cache|cache|repack|prune|splice|slowPath|pathTieBreak|planning|"
                 + "Lookahead|Heuristic|Repropagation|backtrack|blacklist|Goal|goal", ADVANCED);
     }
 
