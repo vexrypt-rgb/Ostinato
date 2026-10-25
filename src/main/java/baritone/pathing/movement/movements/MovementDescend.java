@@ -288,9 +288,9 @@ public class MovementDescend extends Movement {
                 res.cost = tentativeCost;
                 return false;
             }
-            if (unprotectedFallHeight <= 11 && MovementHelper.isClimbable(ontoBlock.getBlock())) {
-                // if fall height is greater than or equal to 11, we don't actually grab on to vines or ladders. the more you know
-                // this effectively "resets" our falling speed
+            if (MovementHelper.isClimbable(ontoBlock.getBlock()) && grabClimbable(context, effectiveStartHeight, newY, unprotectedFallHeight)) {
+                // Ostinato: under 11 blocks this is the old cutoff, so a default search is unchanged. allowLadderClutch
+                // also catches a cell a faster fall still starts a tick inside. Either way the grab resets falling speed.
                 costSoFar += FALL_N_BLOCKS_COST[unprotectedFallHeight - 1];// we fall until the top of this block (not including this block)
                 costSoFar += LADDER_DOWN_ONE_COST;
                 effectiveStartHeight = newY;
@@ -531,8 +531,41 @@ public class MovementDescend extends Movement {
         if (plan == null) {
             return COST_INF;
         }
+        // Ostinato: a missed place is the whole fall. Don't offer one that would kill, or that drops below the experimental floor.
+        if (!clutchMissSurvivable(context, startY - landY)) {
+            return COST_INF;
+        }
         // a ladder comes back off the wall after we land (MovementFall.pickUpLadder), mining it and waiting on the drop is about a second
         return plan.ticks() + context.placeBucketCost() + (context.clutchPicksUp ? LADDER_PICKUP_COST : 0);
+    }
+
+    /**
+     * Ostinato: the old "drop into this cell is 11 blocks or less" grab. Past that, only when {@code ladderGrab}
+     * and a tick of the fall actually starts inside the cell.
+     */
+    private static boolean grabClimbable(CalculationContext context, int startY, int cellY, int unprotectedFallHeight) {
+        if (unprotectedFallHeight <= 11) {
+            return true;
+        }
+        return context.ladderGrab && LadderClutch.grabs(startY, cellY);
+    }
+
+    /**
+     * Ostinato: half-hearts a missed ladder place would cost. Survivable means at least 1 left, and at least
+     * {@code experimentalMinHealth} while that preset is on.
+     */
+    static boolean clutchMissSurvivable(CalculationContext context, int blocksFallen) {
+        int damage = ExperimentalMovement.fallDamage(blocksFallen);
+        double floor = context.experimental ? Math.max(1.0, context.experimentalMinHealth) : 1.0;
+        return ExperimentalMovement.canAffordFall(context.health, damage, floor);
+    }
+
+    /**
+     * Ostinato: this fall has caught a ladder or vine in its own column, and the landing is still below.
+     * Holding forward here climbs back up. No keys lets vanilla slide down the climbable.
+     */
+    static boolean slideOnGrabbedLadder(boolean clutchOn, boolean onClimbable, int feetX, int feetY, int feetZ, int columnX, int columnZ, int srcY, int destY) {
+        return clutchOn && onClimbable && feetX == columnX && feetZ == columnZ && feetY < srcY && feetY > destY;
     }
 
     static final double LADDER_PICKUP_COST = 20;

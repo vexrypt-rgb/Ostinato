@@ -220,9 +220,10 @@ Beyond upstream Baritone, Ostinato adds:
     (`MovementClimbJump`).
   - **Chained jumps** (`allowMomentumJumps`, on by default): two jumps through a one block pad, landing
     with the speed the next jump needs, for gaps no single jump makes (`MovementChainJump`).
-  - **Ladder clutch** (`allowLadderClutch`, off by default): survive a long fall by placing a ladder or
-    vine on a wall beside the last blocks of it, then pick the ladder back up (`pickupLadders`). Needs
-    one on the hotbar; a water bucket is still preferred when it is no more expensive.
+  - **Ladder clutch** (`allowLadderClutch`, off by default): survive a long fall by grabbing a ladder or
+    vine already in the column, or by placing one on a wall beside the last blocks, then pick the ladder
+    back up (`pickupLadders`). Placing needs one on the hotbar; a water bucket is still preferred when it
+    is no more expensive. Off, an existing ladder is caught only from a drop of 11 blocks or less.
   - **Experimental movement** (`experimentalMovement`): a preset, not a settings rewrite. Parkour,
     neos, momentum and climb jumps, diagonals and `kinematicTravel` act as if on, jumps cost
     `experimentalJumpBias` times as much, block placement at most `experimentalBlockPlacementPenalty`,
