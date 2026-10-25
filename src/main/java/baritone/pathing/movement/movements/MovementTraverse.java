@@ -35,6 +35,8 @@ import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.AirBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -45,6 +47,8 @@ import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
@@ -188,7 +192,10 @@ public class MovementTraverse extends Movement {
                 if ((blockSrc == Blocks.LILY_PAD || blockSrc instanceof CarpetBlock) && !srcDown.getFluidState().isEmpty()) {
                     return COST_INF; // we can stand on these but can't place against them
                 }
-                WC = WC * (SNEAK_ONE_BLOCK_COST / WALK_ONE_BLOCK_COST);//since we are sneak backplacing, we are sneaking lol
+                // Ostinato: allowGodBridge prices this backplace as a walk. Off, the sneak multiplier is unchanged.
+                if (!(context.allowGodBridge && !throughWater && GodBridge.footing(srcDown))) {
+                    WC = WC * (SNEAK_ONE_BLOCK_COST / WALK_ONE_BLOCK_COST);//since we are sneak backplacing, we are sneaking lol
+                }
                 return WC + placeCost + hardness1 + hardness2;
             }
             return COST_INF;
@@ -341,6 +348,10 @@ public class MovementTraverse extends Movement {
                             .setInput(Input.MOVE_BACK, true);
                 }
             }
+            // Ostinato: god bridge only when the setting is on. Otherwise this falls through to the sneak backplace.
+            if (Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value && godBridge(state)) {
+                return state;
+            }
             double dist1 = Math.max(Math.abs(ctx.player().position().x - (dest.getX() + 0.5D)), Math.abs(ctx.player().position().z - (dest.getZ() + 0.5D)));
             PlaceResult p = MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), false, !Baritone.settings().assumeSafeWalk.value);
             if ((p == PlaceResult.READY_TO_PLACE || dist1 < 0.6) && !Baritone.settings().assumeSafeWalk.value) {
@@ -483,6 +494,103 @@ public class MovementTraverse extends Movement {
 
     private static boolean ironClosed(BlockState state) {
         return state.getBlock() == Blocks.IRON_DOOR && state.hasProperty(DoorBlock.OPEN) && !state.getValue(DoorBlock.OPEN);
+    }
+
+    // Ostinato: one tick of a god bridge. False leaves the sneak backplace to run, with no keys changed here.
+    private boolean godBridge(MovementState state) {
+        if (ctx.player().isInWater() || ctx.player().isInLava() || ctx.player().getY() < src.getY() - 0.05) {
+            return false;
+        }
+        BlockState anchor = BlockStateInterface.get(ctx, src.below());
+        if (!GodBridge.footing(anchor)) {
+            return false;
+        }
+        BlockPos feetFloor = ctx.playerFeet().below();
+        if (!feetFloor.equals(src.below())) {
+            BlockState floor = BlockStateInterface.get(ctx, feetFloor);
+            if (!floor.isAir() && !GodBridge.footing(floor)) {
+                return false;
+            }
+        }
+        BlockState head = BlockStateInterface.get(ctx, dest.above());
+        BlockState feetCell = BlockStateInterface.get(ctx, dest);
+        if (MovementHelper.isWater(head) || MovementHelper.isWater(feetCell) || MovementHelper.isLava(head) || MovementHelper.isLava(feetCell)) {
+            return false;
+        }
+        BlockStateInterface bsi = ((Baritone) baritone).bsi;
+        if (bsi == null || sidePlace(bsi, positionToPlace)) {
+            return false;
+        }
+        int dx = dest.getX() - src.getX();
+        int dz = dest.getZ() - src.getZ();
+        double px = ctx.player().getX();
+        double pz = ctx.player().getZ();
+        double cx = src.getX() + 0.5;
+        double cz = src.getZ() + 0.5;
+        double past = dx * (px - cx) + dz * (pz - cz) - 0.5;
+        double lateral = GodBridge.lateral(dx, dz, px, pz, cx, cz);
+        if (Math.abs(lateral) > GodBridge.LATERAL_LIMIT) {
+            return false;
+        }
+        float back = GodBridge.backYaw(dx, dz, lateral);
+        boolean facing = Math.abs(Mth.wrapDegrees(ctx.playerRotations().getYaw() - back)) <= GodBridge.YAW_SLACK;
+        if (GodBridge.sneakInstead(facing, past)) {
+            return false;
+        }
+        if (!ctx.player().onGround() && past > 0) {
+            return false;
+        }
+        Vec3 delta = ctx.player().getDeltaMovement();
+        double dragged = dx * delta.x + dz * delta.z;
+        double upcoming = facing && ctx.player().onGround() ? GodBridge.displacement(dragged) : dragged;
+        double predict = past + upcoming;
+        Rotation aim;
+        if (predict > 0) {
+            double eye = ctx.playerHead().y - ctx.player().getY();
+            Vec3 from = new Vec3(px + dx * upcoming, ctx.player().getY() + eye, pz + dz * upcoming);
+            double faceX = (dest.getX() + src.getX() + 1.0D) * 0.5D;
+            double faceY = (dest.getY() + src.getY() - 1.0D) * 0.5D;
+            double faceZ = (dest.getZ() + src.getZ() + 1.0D) * 0.5D;
+            aim = RotationUtils.calcRotationFromVec3d(from, new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
+        } else {
+            aim = new Rotation(back, (float) GodBridge.pitchDegrees(GodBridge.AIM_PAST));
+        }
+        if (!((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, positionToPlace.getX(), positionToPlace.getY(), positionToPlace.getZ())) {
+            state.setStatus(MovementStatus.UNREACHABLE);
+            return true;
+        }
+        state.setTarget(new MovementState.MovementTarget(aim, true));
+        state.setInput(Input.SNEAK, false);
+        state.setInput(Input.SPRINT, false);
+        state.setInput(Input.JUMP, false);
+        if (facing) {
+            state.setInput(Input.MOVE_FORWARD, false);
+            state.setInput(Input.MOVE_BACK, true);
+        }
+        if (past > 0 && past <= GodBridge.SUPPORT && ctx.objectMouseOver() instanceof BlockHitResult hit
+                && hit.getType() == HitResult.Type.BLOCK
+                && hit.getBlockPos().equals(src.below())
+                && hit.getDirection() == GodBridge.travel(dx, dz)
+                && hit.getBlockPos().relative(hit.getDirection()).equals(positionToPlace)) {
+            state.setInput(Input.CLICK_RIGHT, true);
+        }
+        return true;
+    }
+
+    private boolean sidePlace(BlockStateInterface bsi, BlockPos placeAt) {
+        for (int i = 0; i < 5; i++) {
+            Direction dir = HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[i];
+            int ax = placeAt.getX() + dir.getStepX();
+            int ay = placeAt.getY() + dir.getStepY();
+            int az = placeAt.getZ() + dir.getStepZ();
+            if (ax == src.getX() && az == src.getZ()) {
+                continue;
+            }
+            if (MovementHelper.canPlaceAgainst(bsi, ax, ay, az)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static DoorPass.Kind openerKind(Block block) {

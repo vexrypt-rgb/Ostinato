@@ -290,6 +290,14 @@ public final class Settings {
     public final Setting<Boolean> pickupLadders = new Setting<>(true);
 
     /**
+     * Ostinato: when the only face to place a bridge block against is the one underfoot, turn around and walk
+     * backward, and click that far face instead of sneaking to the edge. Off, those traverses still sneak, so
+     * default paths do not move. Stays off ice, slime, honey, magma, water, ladders, vines and blocks a click
+     * opens. Side placement is unchanged. Ignored while {@link #assumeSafeWalk} is on.
+     */
+    public final Setting<Boolean> allowGodBridge = new Setting<>(false);
+
+    /**
      * Move like a speedrunner: allowParkour, allowParkourAscend, allowNeos, allowMomentumJumps, allowClimbJumps,
      * allowTasJumps, allowDiagonalAscend, allowDiagonalDescend and kinematicTravel behave as if they were on, whatever their own value
      * (the settings are left alone, so turning this off hands your choices back). Jumps get cheaper by

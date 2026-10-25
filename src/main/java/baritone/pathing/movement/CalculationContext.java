@@ -99,6 +99,8 @@ public class CalculationContext {
     public final boolean hasClutchItem;
     /** Ostinato: allowLadderClutch, snapshotted. Existing ladders past the old 11 block cutoff use LadderClutch.grabs. */
     public final boolean ladderGrab;
+    /** Ostinato: allowGodBridge, and assumeSafeWalk is off. A backplace traverse costs a walk instead of a sneak. */
+    public final boolean allowGodBridge;
     /** The clutch item is a ladder (vines win if both are there) and pickupLadders is on, so a clutch also costs the pickup. */
     public final boolean clutchPicksUp;
     /** The clutch item is a ladder (a vine can go on any wall, a ladder needs us to be about 0.6 off it). */
@@ -214,6 +216,7 @@ public class CalculationContext {
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
         this.hasClutchItem = false;
         this.ladderGrab = Baritone.settings().allowLadderClutch.value;
+        this.allowGodBridge = Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value;
         this.clutchIsLadder = false;
         this.clutchPicksUp = false;
         this.blockReach = Baritone.settings().blockReachDistance.value;
@@ -296,6 +299,7 @@ public class CalculationContext {
         net.minecraft.world.item.Item clutchItem = ladderClutch ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
         this.ladderGrab = ladderClutch;
+        this.allowGodBridge = Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value;
         this.clutchIsLadder = clutchItem == net.minecraft.world.item.Items.LADDER;
         this.clutchPicksUp = clutchItem == net.minecraft.world.item.Items.LADDER && Baritone.settings().pickupLadders.value;
         this.blockReach = Baritone.settings().blockReachDistance.value;
