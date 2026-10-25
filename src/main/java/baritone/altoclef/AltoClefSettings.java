@@ -29,7 +29,8 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
-public class AltoClefSettings {
+// Ostinato: exposed to drivers as baritone.api.policy.IAgentPolicy.
+public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
 
     // woo singletons
     private static AltoClefSettings _instance = new AltoClefSettings();
@@ -307,4 +308,4 @@ public class AltoClefSettings {
     public boolean isCanWalkOnEndPortal() {
         return canWalkOnEndPortal;
     }
-}
+}
