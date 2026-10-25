@@ -189,7 +189,7 @@ public class MovementDescend extends Movement {
         if (!MovementHelper.canWalkThrough(context, destX, y - 2, destZ, below)) {
             return false;
         }
-        return fallDown(context, x, y, z, destX, destZ, frontBreak, 3, 0, y - 1, 0, Integer.MIN_VALUE, res);
+        return fallDown(context, x, y, z, destX, destZ, frontBreak, 3, 0, y - 1, 0, Integer.MIN_VALUE, COST_INF, res);
     }
 
     /**
@@ -232,7 +232,7 @@ public class MovementDescend extends Movement {
      * noSteerY was already offered its holes by the caller.
      */
     private static boolean fallDown(CalculationContext context, int x, int y, int z, int cx, int cz, double frontBreak, int from,
-                                    int legStart, int legTop, int steers, int noSteerY, MutableMoveResult res) {
+                                    int legStart, int legTop, int steers, int noSteerY, double bound, MutableMoveResult res) {
         double costSoFar = 0;
         int effectiveStartHeight = y;
         for (int fallHeight = from; true; fallHeight++) {
@@ -245,6 +245,12 @@ public class MovementDescend extends Movement {
             boolean reachedMinimum = fallHeight >= context.minFallHeight;
             BlockState ontoBlock = context.get(cx, newY, cz);
             int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight); // equal to fallHeight - y + effectiveFallHeight, which is equal to -newY + effectiveFallHeight, which is equal to effectiveFallHeight - newY
+            // Ostinato: Phase 2 early-out. Every landing below costs at least this (ladders add FALL[h-1] to costSoFar,
+            // the rest add on top of tentativeCost); the caller only takes a result under bound. A clutch can undercut it.
+            if (bound < COST_INF && !context.hasClutchItem
+                    && WALK_OFF_BLOCK_COST + FALL_N_BLOCKS_COST[Math.max(unprotectedFallHeight - 1, 0)] + frontBreak + costSoFar >= bound) {
+                return false;
+            }
             double tentativeCost = WALK_OFF_BLOCK_COST + FALL_N_BLOCKS_COST[unprotectedFallHeight] + frontBreak + costSoFar;
             if (reachedMinimum && MovementHelper.isWater(ontoBlock)) {
                 if (!MovementHelper.canWalkThrough(context, cx, newY, cz, ontoBlock)) {
@@ -307,10 +313,10 @@ public class MovementDescend extends Movement {
                 boolean[] throughBucket = holder[0];
                 int mark = scratch.depth - 1;
                 try {
-                if (steerThrough(context, x, y, z, cx, cz, fallHeight, newY, legStart, legTop, steers, through, throughBucket)) {
+                if (steerThrough(context, x, y, z, cx, cz, fallHeight, newY, legStart, legTop, steers, bound, through, throughBucket)) {
                     // the plain landing on this floor (a clutch, a bucket, a mount, a hit we can take) might still be cheaper;
                     // nothing above it changed the fall (no ladder, costSoFar is 0), so pick up right at this floor
-                    boolean bucket = fallDown(context, x, y, z, cx, cz, frontBreak, fallHeight, legStart, legTop, steers, newY, res);
+                    boolean bucket = fallDown(context, x, y, z, cx, cz, frontBreak, fallHeight, legStart, legTop, steers, newY, bound, res);
                     if (through.cost < res.cost) {
                         copy(through, res);
                         return throughBucket[0];
@@ -430,7 +436,7 @@ public class MovementDescend extends Movement {
      * offset hole, the next ledge down) and carry on falling from there. Fills out with the cheapest such fall.
      */
     private static boolean steerThrough(CalculationContext context, int x, int y, int z, int cx, int cz, int fallHeight, int newY,
-                                        int legStart, int legTop, int steers, MutableMoveResult out, boolean[] bucketOut) {
+                                        int legStart, int legTop, int steers, double bound, MutableMoveResult out, boolean[] bucketOut) {
         int toDepth = y - (newY + 1); // feet on the floor's top when we get there
         int tried = 0;
         FallScratch scratch = SCRATCH.get(); // Ostinato: pooled, was one allocation per call
@@ -450,7 +456,9 @@ public class MovementDescend extends Movement {
             }
             sub.reset();
             // water in the opening is a landing on this floor's level, so start the next leg right at it
-            boolean bucket = fallDown(context, x, y, z, hx, hz, 0, fallHeight, y - newY + 2, newY - 1, steers + 1, Integer.MIN_VALUE, sub);
+            // Ostinato: a hole only counts if it beats the best so far (and what our caller would take)
+            double subBound = Math.min(out.cost, bound) - STEER_COST;
+            boolean bucket = fallDown(context, x, y, z, hx, hz, 0, fallHeight, y - newY + 2, newY - 1, steers + 1, Integer.MIN_VALUE, subBound, sub);
             if (sub.cost < COST_INF && sub.y <= newY) {
                 sub.cost += STEER_COST;
                 int[] tail = sub.steer == null ? new int[0] : sub.steer;
