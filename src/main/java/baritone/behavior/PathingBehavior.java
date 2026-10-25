@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.pathing.decide.PathDecisionMatrix;
 import baritone.pathing.calc.HierarchicalPathFinder;
 import baritone.pathing.calc.hierarchy.SectionGraph;
 import baritone.pathing.seed.SeedPlanning;
@@ -822,6 +823,22 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return blocks >= Baritone.settings().pathingFarSegmentDistance.value ? w : 1;
     }
 
+    /** Ostinato: the decision matrix's backend for this segment, or null (off, no file, thin row). */
+    static PathDecisionMatrix.Action decide(Goal goal, BlockPos start, CalculationContext context) {
+        if (!Baritone.settings().pathDecisionMatrix.value || !(goal instanceof IGoalRenderPos rp)) {
+            return null;
+        }
+        java.nio.file.Path file = net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath()
+                .resolve(Baritone.settings().pathDecisionMatrixFile.value);
+        var m = PathDecisionMatrix.active(file);
+        if (m == null) {
+            return null;
+        }
+        BlockPos g = rp.getGoalPos();
+        double blocks = goal.heuristic(start.getX(), start.getY(), start.getZ()) / Baritone.settings().costHeuristic.value;
+        return m.choose(PathDecisionMatrix.categorize(context, start.getX(), start.getY(), start.getZ(), g.getX(), g.getZ(), blocks));
+    }
+
     private AbstractNodeCostSearch createPathfinder(BlockPos start, Goal goal, IPath previous, CalculationContext context) {
         Goal transformed = goal;
         if (Baritone.settings().simplifyUnloadedYCoord.value && goal instanceof IGoalRenderPos) {
@@ -839,7 +856,13 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         }
         // Ostinato: was always `new AStarPathFinder(..., context)` (weight 1); far segments may now use weighted A*.
         double weight = farSegmentWeight(transformed, start);
-        if (Baritone.settings().pathingHierarchical.value) { // Ostinato: opt-in hierarchical planner
+        boolean hierarchical = Baritone.settings().pathingHierarchical.value;
+        PathDecisionMatrix.Action pick = decide(transformed, start, context); // Ostinato: decision matrix
+        if (pick != null) {
+            weight = pick.weight;
+            hierarchical = pick.hierarchical;
+        }
+        if (hierarchical) { // Ostinato: opt-in hierarchical planner
             return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
         }
         AStarPathFinder astar = new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);

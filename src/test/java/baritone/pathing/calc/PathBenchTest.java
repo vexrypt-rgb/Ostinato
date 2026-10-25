@@ -134,6 +134,67 @@ public class PathBenchTest {
     }
 
     /** Ostinato: the full benchmark; only when OSTINATO_BENCH is set (e.g. OSTINATO_BENCH=baseline). Writes build/pathbench/. */
+    /**
+     * Ostinato: trains the path decision matrix. OSTINATO_MATRIX_TRAIN=1: every action on query numbers 0-1 (train),
+     * then on 2-3 (held out) compares the matrix's pick against the default (weighted A* on far segments, as shipped).
+     * Writes build/pathbench/path-matrix.tsv and path-matrix-eval.md.
+     */
+    @Test
+    public void trainDecisionMatrix() throws Exception {
+        Assume.assumeTrue(System.getenv("OSTINATO_MATRIX_TRAIN") != null);
+        PathBench.boot();
+        PathBench.apply(PathBench.Engine.BARITONE);
+        baritone.pathing.decide.PathDecisionMatrix m = new baritone.pathing.decide.PathDecisionMatrix();
+        m.minSamples = 2;
+        List<PathBench.Query> qs = PathBench.queries(Terrain.values());
+        java.util.Map<PathBench.Query, baritone.pathing.decide.PathDecisionMatrix.Category> cat = new java.util.HashMap<>();
+        for (PathBench.Query q : qs) {
+            var w = PathBench.world(q.terrain());
+            var ctx = PathBench.context(w);
+            var g = ((baritone.api.pathing.goals.GoalBlock) q.goal());
+            double blocks = q.goal().heuristic(q.start().x, q.start().y, q.start().z) / baritone.Baritone.settings().costHeuristic.value;
+            cat.put(q, baritone.pathing.decide.PathDecisionMatrix.categorize(ctx, q.start().x, q.start().y, q.start().z, g.x, g.z, blocks));
+        }
+        for (PathBench.Query q : qs) PathBench.run(q, PathBench.ASTAR); // warm-up
+        java.util.function.Function<baritone.pathing.decide.PathDecisionMatrix.Action, PathBench.Finder> fin = a -> (s, g, c) -> a.hierarchical
+                ? new HierarchicalPathFinder(s, s.x, s.y, s.z, g, new baritone.utils.pathing.Favoring(null, c), c, new baritone.pathing.calc.hierarchy.SectionGraph(), a.weight)
+                : new AStarPathFinder(s, s.x, s.y, s.z, g, new baritone.utils.pathing.Favoring(null, c), c, a.weight);
+        for (PathBench.Query q : qs) {
+            if (q.n() >= 2) continue;
+            for (var a : baritone.pathing.decide.PathDecisionMatrix.Action.values()) {
+                PathBench.Result r = PathBench.run(q, fin.apply(a));
+                m.record(cat.get(q), a, baritone.pathing.decide.PathDecisionMatrix.score(r.ok(), r.cost(), r.ms()));
+            }
+        }
+        StringBuilder rep = new StringBuilder("| query | category | pick | pick score | default score |\n|---|---|---|---|---|\n");
+        double sp = 0, sd = 0;
+        int held = 0, decided = 0, pf = 0, df = 0;
+        for (PathBench.Query q : qs) {
+            if (q.n() < 2) continue;
+            held++;
+            PathBench.Result d = PathBench.run(q, PathBench.weighted(baritone.Baritone.settings().pathingFarSegmentWeight.value));
+            var pick = m.choose(cat.get(q));
+            PathBench.Result p = pick == null ? d : PathBench.run(q, fin.apply(pick));
+            if (pick != null) decided++;
+            double ps = baritone.pathing.decide.PathDecisionMatrix.score(p.ok(), p.cost(), p.ms());
+            double ds = baritone.pathing.decide.PathDecisionMatrix.score(d.ok(), d.cost(), d.ms());
+            sp += ps;
+            sd += ds;
+            if (!p.ok()) pf++;
+            if (!d.ok()) df++;
+            rep.append(String.format(java.util.Locale.ROOT, "| %s/%s/%d | %s | %s | %.1f | %.1f |%n", q.terrain(), q.length(), q.n(), cat.get(q).key(), pick, ps, ds));
+        }
+        rep.append(String.format(java.util.Locale.ROOT, "%nHeld out %d queries, matrix decided %d. Mean score (travel+plan ticks): matrix %.1f vs default %.1f. Failures: matrix %d, default %d.%n",
+                held, decided, sp / held, sd / held, pf, df));
+        System.out.println(rep);
+        PathBench.write("path-matrix-eval.md", rep.toString());
+        PathBench.write("path-matrix.tsv", m.export());
+        // round trip: the exported file loads back to the same picks
+        var back = baritone.pathing.decide.PathDecisionMatrix.parse(m.export());
+        back.minSamples = 2;
+        for (PathBench.Query q : qs) assertEquals(m.choose(cat.get(q)), back.choose(cat.get(q)));
+    }
+
     @Test
     public void benchmark() {
         String label = System.getenv("OSTINATO_BENCH");
