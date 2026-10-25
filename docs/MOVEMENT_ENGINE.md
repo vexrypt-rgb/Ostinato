@@ -18,7 +18,7 @@ Stable travel boundary for TenorClef and other agents. **Mining / digging / buil
 | Class | Role |
 |-------|------|
 | `HybridMovementEngine` | Starts Baritone custom-goal pathing (flown by the kinematic and physics travel drivers); follow goals become a `GoalNear` round the entity |
-| `MovementBackends` | `engine(IBaritone)` factory and `preference()`, both reached by TenorClef through reflection |
+| `MovementBackends` | `engine(IBaritone)` factory and `preference()`, both reached by TenorClef through reflection. `preference()` stays `BARITONE`. The executor reads `travelStack`. |
 
 There is no alternate backend. Ostinato used to bridge to the Tungsten mod for goto travel; its own kinematic and
 physics travel replaced that, and the bridge and the `movementBackend` setting were removed.

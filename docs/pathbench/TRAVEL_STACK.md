@@ -9,7 +9,7 @@ The block route is still Baritone's A*. What changed is who presses the keys.
 | 3 | Sim probe | `simTravel` (default on). Jump versus no-jump each tick, sprinting toward the landing, checked in `PlayerSim`. One search per spot, then a 128-entry cache. |
 | 4 | Baritone movement | Temporary backup. It runs only when the three layers above decline. |
 
-`travelStack` picks the order: `auto` (default), `kinematic`, `physics`, `sim`, or `baritone`. `getMovementBackendPreference()` returns that choice. `baritone` is the backup alone, for a comparison run.
+`travelStack` picks the order: `auto` (default), `kinematic`, `physics`, `sim`, or `baritone`. The path executor reads that setting. `MovementBackends.preference()` and `getMovementBackendPreference()` stay `BARITONE` so TenorClef's reflection check holds. `baritone` is the backup alone, for a comparison run.
 
 The A* search is unchanged, so path cost, length, node count and peak heap on the Phase 1 bench stay the Phase 1 numbers. Confirm on the bench machine with `scripts/pathbench-phase1.sh travel normal` and `scripts/pathbench-phase1.sh travel pi`. Do not run that on a Surface Pro.
 

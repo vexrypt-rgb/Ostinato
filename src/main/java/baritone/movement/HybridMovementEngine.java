@@ -1,5 +1,6 @@
 package baritone.movement;
 
+import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.movement.IMovementEngine;
 import baritone.api.movement.MovementBackendKind;
@@ -9,6 +10,7 @@ import baritone.api.movement.MovementStatus;
 import baritone.api.movement.PathResult;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.utils.Helper;
+import baritone.pathing.travel.TravelStack;
 
 /**
  * Travel for agent layers on Baritone custom-goal pathing (which the kinematic and physics travel drivers fly).
@@ -108,7 +110,7 @@ public final class HybridMovementEngine implements IMovementEngine, Helper {
     @Override
     public String statusLine() {
         return "HybridMovementEngine route=" + MovementBackendKind.BARITONE
-                + " stack=" + MovementBackends.preference()
+                + " stack=" + TravelStack.preference(Baritone.settings().travelStack.value)
                 + " status=" + lastStatus
                 + " pathing=" + isPathing();
     }

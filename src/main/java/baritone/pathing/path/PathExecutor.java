@@ -227,7 +227,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         lastDriver = Driver.BARITONE;
         // Ostinato: kinematic family, then physics, then the cached jump/no-jump probe. Baritone movement is the backup below.
         java.util.List<TravelStack.Layer> stack = TravelStack.order(
-                baritone.movement.MovementBackends.preference(),
+                TravelStack.preference(Baritone.settings().travelStack.value),
                 baritone.utils.ExperimentalMovement.kinematicTravel(),
                 Baritone.settings().simTravel.value);
         boolean skipLookAhead = false;

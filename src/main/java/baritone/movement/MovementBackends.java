@@ -1,22 +1,21 @@
 package baritone.movement;
 
-import baritone.Baritone;
 import baritone.api.IBaritone;
 import baritone.api.movement.IMovementEngine;
 import baritone.api.movement.MovementBackendKind;
-import baritone.pathing.travel.TravelStack;
 
 /**
  * Entry points TenorClef reaches by reflection ({@code engine}, {@code preference}). Travel always runs on Ostinato's
  * own pathing; mining / digging / builder processes keep their own.
- * {@link #preference()} is the {@code travelStack} setting: auto, kinematic, physics, sim, or baritone.
+ * {@link #preference()} stays {@link MovementBackendKind#BARITONE}. The path executor reads {@code travelStack} itself.
  */
 public final class MovementBackends {
 
     private MovementBackends() {}
 
     public static MovementBackendKind preference() {
-        return TravelStack.preference(Baritone.settings().travelStack.value);
+        // Ostinato: TenorClef asserts this stays BARITONE. Key order is travelStack, not this method.
+        return MovementBackendKind.BARITONE;
     }
 
     /** TenorClef-facing travel engine bound to a Baritone instance. */
