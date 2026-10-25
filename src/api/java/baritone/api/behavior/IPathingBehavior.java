@@ -111,6 +111,14 @@ public interface IPathingBehavior extends IBehavior {
     void requestPause();
 
     /**
+     * Ostinato: whether the current movement can be interrupted this tick without risk (e.g. not mid-jump
+     * or mid-bridge). Drivers check this before taking control of the player.
+     *
+     * @return {@code true} if it is safe to cancel or pause pathing now
+     */
+    boolean isSafeToCancel();
+
+    /**
      * Returns the current path, from the current path executor, if there is one.
      *
      * @return The current path
