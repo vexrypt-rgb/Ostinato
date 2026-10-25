@@ -2261,6 +2261,13 @@ public final class Settings {
     /** How far away (blocks) {@code spectateLearn} watches players. */
     public final Setting<Double> spectateRadius = new Setting<>(48.0);
 
+    /**
+     * Ostinato: decide by itself who in render distance is fighting (hits, damage, swings at someone in reach) and
+     * record those fights, with no spectate command or server menu. Fighters are watched at any loaded distance,
+     * beyond {@code spectateRadius}. On a multiplayer server {@code spectateLearnOnServers} still applies.
+     */
+    public final Setting<Boolean> spectateAutoDetect = new Setting<>(true);
+
     /** Most processor time (milliseconds a game tick, on its own low-priority thread) spent working out keys. */
     public final Setting<Double> spectateBudgetMs = new Setting<>(1.5);
 
