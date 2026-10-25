@@ -1,5 +1,6 @@
 package baritone.process;
 
+import baritone.utils.HumanInputCaps;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.world.item.component.SwingAnimation;
 
@@ -361,8 +362,9 @@ public final class BoatProcess extends BaritoneProcessHelper {
                 if (phaseTicks % 2 == 1) {
                     // the look target only lands on the next player tick; useItem raycasts (and sends) the current
                     // rotation, so face the surface now or the use misses and we wait for the next retry
-                    ctx.player().setYRot(aim.getYaw());
-                    ctx.player().setXRot(aim.getPitch());
+                    // Ostinato: capped like every other turn; a far aim takes a few retries instead of one snap
+                    ctx.player().setYRot(HumanInputCaps.capYaw(ctx.player().getYRot(), aim.getYaw(), HumanInputCaps.maxYaw()));
+                    ctx.player().setXRot(HumanInputCaps.capPitch(ctx.player().getXRot(), aim.getPitch(), HumanInputCaps.maxPitch()));
                     Minecraft.getInstance().gameMode.useItem(ctx.player(), InteractionHand.MAIN_HAND);
                 }
                 return pause();
