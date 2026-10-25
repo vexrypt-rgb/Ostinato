@@ -297,6 +297,16 @@ public class MovementFall extends Movement {
         }
 
         BlockPos playerFeet = ctx.playerFeet();
+        // Ostinato: a caught ladder is slid. Forward would climb it, and sneak would freeze the slide.
+        if (MovementDescend.slideOnGrabbedLadder(Baritone.settings().allowLadderClutch.value, ctx.player().onClimbable(),
+                playerFeet.getX(), playerFeet.getY(), playerFeet.getZ(), fx, fz, src.y, dest.y)) {
+            double dx = ctx.player().position().x - (fx + 0.5);
+            double dz = ctx.player().position().z - (fz + 0.5);
+            if (dx * dx + dz * dz > 0.04) {
+                MovementHelper.moveTowards(ctx, state, new BlockPos(fx, playerFeet.getY(), fz));
+            }
+            return state;
+        }
         Rotation toDest = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(dest), ctx.playerRotations());
         Rotation targetRotation = null;
         BlockState destState = ctx.world().getBlockState(dest);
