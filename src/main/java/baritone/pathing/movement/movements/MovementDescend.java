@@ -477,17 +477,68 @@ public class MovementDescend extends Movement {
 
     /** Everything we can drift through between the two columns, from fromY up to toY. */
     private static boolean openBox(CalculationContext context, int ax, int az, int bx, int bz, int fromY, int toY) {
-        for (int yy = toY; yy >= fromY; yy--) {
-            for (int xx = Math.min(ax, bx); xx <= Math.max(ax, bx); xx++) {
-                for (int zz = Math.min(az, bz); zz <= Math.max(az, bz); zz++) {
-                    if (!MovementHelper.fullyPassable(context, xx, yy, zz)) {
-                        return false;
-                    }
+        if (fromY > toY) {
+            return true;
+        }
+        ColumnCache cc = COLUMNS.get().of(context); // Ostinato: the columns' open runs are reused across holes, floors and sources
+        for (int xx = Math.min(ax, bx); xx <= Math.max(ax, bx); xx++) {
+            for (int zz = Math.min(az, bz); zz <= Math.max(az, bz); zz++) {
+                if (!cc.openDown(context, xx, zz, toY, fromY)) {
+                    return false;
                 }
             }
         }
         return true;
     }
+
+    /**
+     * Ostinato: per search (per CalculationContext), per thread: for column x,z from a top y, how far down every cell is
+     * fullyPassable. openBox rescanned the same columns for every hole of every floor of every fall (~8% of all planner
+     * CPU). Value packs the lowest checked-open y and whether the cell under it is known blocked.
+     */
+    static final class ColumnCache {
+        private Object ctx;
+        private final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap runs = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
+
+        ColumnCache of(CalculationContext context) {
+            if (ctx != context || runs.size() > (1 << 20)) {
+                ctx = context;
+                runs.clear();
+            }
+            return this;
+        }
+
+        boolean openDown(CalculationContext context, int x, int z, int top, int bottom) {
+            long key = ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (top & 0xFFF);
+            int low;
+            boolean blocked;
+            if (runs.containsKey(key)) {
+                int v = runs.get(key);
+                low = v >> 1;
+                blocked = (v & 1) != 0;
+                if (low <= bottom) {
+                    return true;
+                }
+                if (blocked) {
+                    return false;
+                }
+            } else {
+                low = top + 1;
+                blocked = false;
+            }
+            while (low > bottom) {
+                if (!MovementHelper.fullyPassable(context, x, low - 1, z)) {
+                    blocked = true;
+                    break;
+                }
+                low--;
+            }
+            runs.put(key, (low << 1) | (blocked ? 1 : 0));
+            return low <= bottom;
+        }
+    }
+
+    private static final ThreadLocal<ColumnCache> COLUMNS = ThreadLocal.withInitial(ColumnCache::new);
 
     private static void copy(MutableMoveResult from, MutableMoveResult to) {
         to.x = from.x;
