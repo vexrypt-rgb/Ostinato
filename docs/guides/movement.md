@@ -29,6 +29,7 @@ Turn `kinematicTravel` off to get classic Baritone movement for a comparison.
 | `allowBoats` | true | Place and ride a boat across big water when faster than swimming |
 | `experimentalMovement` | off | Bundle switch for the experimental moves; tuned by `experimentalJumpBias` (0.9), `experimentalBlockPlacementPenalty` (5) and `experimentalMinHealth` (12) |
 | `fastMode` | off | Speedrunner preset. Does not rewrite your settings. See [fastMode](../fast-mode.md). Floor is `fastModeMinHealth` (10) |
+| `physicalInput` | off | Looks and keys stay inside what a hand can do in one tick: limited turn speed and acceleration, and at most two key changes. Off, nothing about aiming or keys changes. See [physical input](../physical-input.md) |
 
 Experimental moves are not tested as thoroughly as stock Baritone ones; turn them on one at a time.
 Not every setting exists on every branch (for example `physicsTravel` is on older versions); `#set list` is authoritative.

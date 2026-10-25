@@ -935,6 +935,13 @@ public final class Settings {
     public final Setting<Double> maxPitchPerTick = new Setting<>(90.0);
 
     /**
+     * Ostinato: when on, mouse looks and key chords stay inside what a hand can do in one tick.
+     * A look has a speed and an acceleration limit, so the aim cannot snap, and at most two keys
+     * change state (releases first). Off, the look and the keys are exactly what they already were.
+     */
+    public final Setting<Boolean> physicalInput = new Setting<>(false);
+
+    /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
      */
     public final Setting<Double> pathTieBreak = new Setting<>(0.0);

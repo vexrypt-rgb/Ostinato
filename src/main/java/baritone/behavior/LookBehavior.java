@@ -19,6 +19,7 @@ package baritone.behavior;
 
 import baritone.utils.HumanInputCaps;
 import baritone.utils.OstinatoRandom;
+import baritone.utils.PhysicalInput;
 import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.behavior.ILookBehavior;
@@ -142,12 +143,34 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         turnBy(p, my, mp);
     }
 
+    /** Ostinato: one physical look step per client tick, shared by tickStart, boat aim and the player update. */
+    private int lookSerial;
+    private final PhysicalInput.Look physical = new PhysicalInput.Look();
+    private final float[] physicalBuf = new float[2];
+
+    /**
+     * Ostinato: the rotation that will actually be set. When {@code physicalInput} is off this is {@code toYaw}
+     * and {@code toPitch} with nothing else changed.
+     */
+    public float[] physicalLook(float fromYaw, float fromPitch, float toYaw, float toPitch) {
+        if (!Baritone.settings().physicalInput.value) {
+            physical.disarm();
+            physicalBuf[0] = toYaw;
+            physicalBuf[1] = toPitch;
+            return physicalBuf;
+        }
+        float step = 0f;
+        if (ctx.player() != null && ctx.minecraft() != null) step = mouseStep();
+        return physical.emit(true, lookSerial, fromYaw, fromPitch, toYaw, toPitch, step);
+    }
+
     /**
      * Ostinato: called as each client tick begins, before anything reads the rotation. The view is put exactly where
      * the per-tick model says the frames should have brought it, and the next tick's step is planned from there when
      * no fresh aim arrives. Deterministic per tick, so a client's frame rate cannot change a fight.
      */
     public void tickStart() {
+        lookSerial++; // Ostinato: physical look takes one step for the whole tick
         if (!Baritone.settings().frameLook.value) {
             frameGoal = null;
             return;
@@ -156,7 +179,16 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         if (frameGoal == null || p == null) return;
         if (frameTo != null) {
             float my = net.minecraft.util.Mth.wrapDegrees(frameTo.getYaw() - p.getYRot()), mp = frameTo.getPitch() - p.getXRot();
-            if (my != 0 || mp != 0) turnBy(p, my, mp);
+            if (my != 0 || mp != 0) {
+                if (!Baritone.settings().physicalInput.value) {
+                    turnBy(p, my, mp);
+                } else {
+                    // Ostinato: the per-tick coast is one mouse step, not a snap to the planned angle
+                    float[] o = physicalLook(p.getYRot(), p.getXRot(), p.getYRot() + my, p.getXRot() + mp);
+                    float ay = o[0] - p.getYRot(), ap = o[1] - p.getXRot();
+                    if (ay != 0 || ap != 0) turnBy(p, ay, ap);
+                }
+            }
         }
         if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) {
             frameGoal = null;
@@ -299,9 +331,13 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 this.processor.capOverride = this.turnCap;
                 final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 this.processor.capOverride = 0;
-                // Ostinato: the human-input gate; no single-tick turn past a fast flick, pitch kept in range
-                ctx.player().setYRot(HumanInputCaps.capYaw(this.prevRotation.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw()));
-                ctx.player().setXRot(HumanInputCaps.capPitch(this.prevRotation.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch()));
+                // Ostinato: the human-input gate; no single-tick turn past a fast flick, pitch kept in range.
+                // physicalInput (off by default) then keeps that inside a hand's speed and acceleration.
+                float toY = HumanInputCaps.capYaw(this.prevRotation.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw());
+                float toP = HumanInputCaps.capPitch(this.prevRotation.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch());
+                float[] aimed = physicalLook(this.prevRotation.getYaw(), this.prevRotation.getPitch(), toY, toP);
+                ctx.player().setYRot(aimed[0]);
+                ctx.player().setXRot(aimed[1]);
                 break;
             }
             case POST: {
@@ -362,12 +398,22 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     public void onWorldEvent(WorldEvent event) {
         this.serverRotation = null;
         this.target = null;
+        this.physical.disarm(); // Ostinato
     }
 
     public void pig() {
         if (this.target != null) {
             final Rotation actual = this.processor.peekRotation(this.target.rotation);
-            ctx.player().setYRot(HumanInputCaps.capYaw(ctx.player().getYRot(), actual.getYaw(), HumanInputCaps.maxYaw())); // Ostinato: capped
+            float fromY = ctx.player().getYRot();
+            float toY = HumanInputCaps.capYaw(fromY, actual.getYaw(), HumanInputCaps.maxYaw()); // Ostinato: capped
+            if (!Baritone.settings().physicalInput.value) {
+                ctx.player().setYRot(toY);
+            } else {
+                float fromP = ctx.player().getXRot();
+                float[] aimed = physicalLook(fromY, fromP, toY, fromP);
+                ctx.player().setYRot(aimed[0]);
+                ctx.player().setXRot(aimed[1]);
+            }
         }
     }
 
