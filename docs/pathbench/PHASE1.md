@@ -16,3 +16,13 @@ predict-pi       nonTO   80.0s  162557 n/s alloc   1817MB peak 461MB median 111.
 - Allocation is down 78% (8.1 GB -> 1.8 GB). Throughput change is within run-to-run noise (+7% normal, -5% pi).
 - Cuts: primitive key in LineWalk.corridor (boxed Long was 23% of bytes), pooled MutableMoveResult in the steered-fall recursion (~40%), no ArrayList in MovementBubbleLift when no bubble column is near, O(1) set lookups for block-list settings, pathing worker threads named, daemon, below client priority (lowest on 1-2 cores).
 - Rejected: MovePredictor (per-search reject lookup table; branch pf/move-predictor-proto). Paths got longer (+3.1 blocks mean, +2 travel ticks), median plan time rose, peak heap rose on normal. Allocation was no better than the cuts above.
+
+# Phase 2, batch A: tie-break toward goal (opt-in, `pathTieBreak`, default 0)
+
+| config | non-timeout s | nodes expanded (56 shared) | median ms | mean cost change | worst cost change | failures |
+|---|---|---|---|---|---|---|
+| stock order | 79.9 | 6.46M | 108.4 | 0 | 0 | 6.7% |
+| pathTieBreak 0.001 | 82.7 | 6.08M (-6%) | 105.7 | +0.035% | +0.85% | 6.7% |
+| pathTieBreak 0.01 | 76.4 | 6.25M (-3%) | 91.8 | +0.048% | +0.85% | 6.7% |
+
+Small node savings, wall time within noise, slightly costlier paths: kept off by default (trade-off, not a win).
