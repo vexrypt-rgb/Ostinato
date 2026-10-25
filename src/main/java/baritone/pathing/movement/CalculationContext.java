@@ -122,6 +122,10 @@ public class CalculationContext {
     public final double breakBlockAdditionalCost;
     public double backtrackCostFavoringCoefficient;
     public double jumpPenalty;
+    /** Ostinato: ascend walk part, descend walk-off and landing, from TickSim when tickAccurateCosts is on. */
+    public final double ascendWalkCost;
+    public final double walkOffCost;
+    public final double descendLandCost;
     public final double walkOnWaterOnePenalty;
     public final boolean allowWalkOnMagmaBlocks;
     public final BetterWorldBorder worldBorder;
@@ -226,6 +230,10 @@ public class CalculationContext {
         this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
         this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
         this.jumpPenalty = Baritone.settings().jumpPenalty.value;
+        boolean tickAccurate = Baritone.settings().tickAccurateCosts.value;
+        this.ascendWalkCost = tickAccurate ? TickCosts.ASCEND : Math.max(ActionCosts.JUMP_ONE_BLOCK_COST, ActionCosts.WALK_ONE_BLOCK_COST);
+        this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
+        this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         this.worldBorder = bsi.worldBorder;
@@ -336,6 +344,10 @@ public class CalculationContext {
         this.breakBlockAdditionalCost = Baritone.settings().blockBreakAdditionalPenalty.value;
         this.backtrackCostFavoringCoefficient = Baritone.settings().backtrackCostFavoringCoefficient.value;
         this.jumpPenalty = Baritone.settings().jumpPenalty.value;
+        boolean tickAccurate = Baritone.settings().tickAccurateCosts.value;
+        this.ascendWalkCost = tickAccurate ? TickCosts.ASCEND : Math.max(ActionCosts.JUMP_ONE_BLOCK_COST, ActionCosts.WALK_ONE_BLOCK_COST);
+        this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
+        this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         // why cache these things here, why not let the movements just get directly from settings?
@@ -491,5 +503,12 @@ public class CalculationContext {
     public boolean isPossiblyProtected(int x, int y, int z) {
         // TODO more protection logic here; see #220
         return false;
+    }
+
+    /** Ostinato: TickSim results are constants, computed once per JVM. Walk figures: the executors do not sprint these. */
+    private static final class TickCosts {
+        static final double ASCEND = TickSim.ascendTicks(false);
+        static final double WALK_OFF = TickSim.walkOffTicks(false);
+        static final double DESCEND_LAND = TickSim.descendLandTicks(false);
     }
 }
