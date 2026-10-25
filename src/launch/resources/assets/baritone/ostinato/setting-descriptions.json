@@ -389,5 +389,6 @@
  "healthEstimator": "Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health, scoreboard, boss bars) or, where the server hides or fakes it, from the hits, potions, apples, effects and totems seen. Combat and mob fighting then pick and finish targets by it. Off, they read the health the game shows.",
  "testHarness": "Ostinato: let the in-client test harnesses run (the parkour course runner PkTest and BastTest). Each still needs its own launch property to say what to run (-Dostinato.pktest= , -Dostinato.basttest=true); -Dostinato.testHarness=true turns this on for one launch. Off, those properties do nothing.",
  "failureTimeoutMaxMS": "When a search runs out of time with no usable path but nodes still open, it is tried again from the same spot with double the failure timeout, up to this; only then does the calculation count as failed",
+ "momentumJumpCosts": "Ostinato: price 1 and 2 block flat parkour gaps with a straight run-up as sprint jumps (tick-simulated) instead of walking speed, and sprint them. Off keeps the stock costs and execution.",
  "tickAccurateCosts": "Ostinato: estimate ascend and descend costs with a short tick simulation of vanilla movement (friction, acceleration, air control, gravity, drag) instead of the fixed tables. Off keeps the stock costs."
 }

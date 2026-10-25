@@ -142,6 +142,13 @@ public final class Settings {
     public final Setting<Boolean> tickAccurateCosts = new Setting<>(false);
 
     /**
+     * Ostinato: price 1 and 2 block flat parkour gaps that have a straight run-up behind the take-off block as
+     * sprint jumps (tick-simulated, never below sprint speed) instead of walking speed, and sprint them. Off keeps
+     * the stock costs and execution.
+     */
+    public final Setting<Boolean> momentumJumpCosts = new Setting<>(false);
+
+    /**
      * Walking on water uses up hunger really quick, so penalize it
      */
     public final Setting<Double> walkOnWaterOnePenalty = new Setting<>(3D);
