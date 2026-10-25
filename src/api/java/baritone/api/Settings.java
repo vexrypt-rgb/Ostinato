@@ -607,6 +607,15 @@ public final class Settings {
      */
     public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
 
+    /**
+     * Ostinato: let the trained path decision matrix pick the backend (A*, weighted A*, hierarchical) per segment from its
+     * terrain and distance category. Off until proven; with no matrix file or a thin row the settings above decide.
+     */
+    public final Setting<Boolean> pathDecisionMatrix = new Setting<>(false);
+
+    /** Ostinato: matrix file, relative to the game directory (export from pathbench: build/pathbench/path-matrix.tsv). */
+    public final Setting<String> pathDecisionMatrixFile = new Setting<>("ostinato/path-matrix.tsv");
+
     /** Ostinato: how many sections beyond the start/goal box the abstract search may detour through. */
     public final Setting<Integer> pathingHierarchyMargin = new Setting<>(3);
 

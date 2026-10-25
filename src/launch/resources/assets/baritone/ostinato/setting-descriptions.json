@@ -331,6 +331,8 @@
  "pathingFarSegmentWeight": "Ostinato: explicit weighted A* for far segments. When the segment's start is at least pathingFarSegmentDistance blocks (by the goal heuristic) from the goal, A* orders its open set by g + weight * h instead of g + h. Higher is faster but the path can cost up to weight times the best one (roughly, Baritone's heuristic is not strictly admissible); near segments always plan with weight 1. 1 = off (stock Baritone).",
  "pathingFarSegmentDistance": "Ostinato: how far from the goal (in blocks, heuristic / costHeuristic) a segment must start for pathingFarSegmentWeight to apply.",
  "pathingHierarchical": "Ostinato: plan through the section-level (16x16x16) abstract graph first and keep block-level A* inside the resulting corridor (HierarchicalPathFinder). Falls back to plain A* when there is no abstract route. Off until proven.",
+ "pathDecisionMatrix": "Ostinato: let the trained decision matrix pick A*, weighted A* or hierarchical per segment from its terrain and distance (off until proven).",
+ "pathDecisionMatrixFile": "Ostinato: decision matrix file, relative to the game folder; pathbench writes build/pathbench/path-matrix.tsv.",
  "pathingHierarchyMargin": "Ostinato: how many sections beyond the start/goal box the abstract search may detour through.",
  "pathingHierarchyCorridorRadius": "Ostinato: corridor half-width in sections around the abstract route.",
  "pathingHierarchyHeuristicFactor": "Ostinato: block-level heuristic becomes max(h, factor * section cost-to-go). 0 keeps the stock heuristic (corridor only); values toward 1 expand fewer nodes but may cost path quality where the abstract costs are rough.",
