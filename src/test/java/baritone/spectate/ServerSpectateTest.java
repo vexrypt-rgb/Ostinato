@@ -42,7 +42,7 @@ public class ServerSpectateTest {
 
     @Test
     public void picksTheNoButton() {
-        // the crackedpvp.club prompt, as its parts: only the two buttons carry a run-command click
+        // a typical cracked-server prompt, as its parts: only the two buttons carry a run-command click
         List<String> texts = Arrays.asList("\n", " Are you using a premium account?\n", " (after accepting, you will need to re-join.)\n", "\n", "  ", "[\u2714 Yes]", "      ", "[\u2716 No]", "\n");
         List<Boolean> click = Arrays.asList(false, false, false, false, false, true, false, true, false);
         assertEquals(7, ServerSpectate.pickChoice(texts, click, "no"));
