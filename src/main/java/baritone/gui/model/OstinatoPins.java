@@ -36,7 +36,8 @@ public final class OstinatoPins {
             "elytraGlideWithoutFireworks", "elytraGlideRatio", "elytraGlidePitch",
             "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme",
             "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale",
-            "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch"
+            "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch",
+            "trainingTask", "trainingLegit", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir"
     )));
 
     private OstinatoPins() {}

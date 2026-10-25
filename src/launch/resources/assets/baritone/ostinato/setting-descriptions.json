@@ -276,6 +276,13 @@
  "physicsTravel": "Experimental: drive land stretches with keys found by searching simulated player physics. The travel stack tries this after kinematic when travelStack is auto or physics.",
  "travelStack": "Which layer drives a spot. auto tries kinematic, then physics, then the jump/no-jump sim probe, then Baritone's own movement. kinematic, physics, sim, or baritone pin one layer. baritone is the backup alone.",
  "simTravel": "When kinematic and physics leave a jump, search jump versus no-jump each tick in the player sim, cache the keys, and fly them. A miss leaves the spot to Baritone. Off skips that probe.",
+ "trainingTask": "Headless training circuits on fixed seeds. Off, #train does nothing and pathing is unchanged.",
+ "trainingLegit": "When training, the task model may use only what a player can see, F3 or pie cues, and sounds the client would play. Off uses full information.",
+ "trainingSeed": "Default circuit seed documented for the plains camp. The suite still runs seeds 71001, 71002 and 71003.",
+ "trainingTasks": "Comma-separated circuit ids: log-planks, stone-step, night-listen.",
+ "trainingModel": "Task model id passed to the loader. heuristic is the built-in stub. A model file can replace the id.",
+ "trainingModelFile": "Optional model file with id= and delegate= lines. Empty uses the built-in heuristic.",
+ "trainingOutDir": "Directory for training JSONL and CSV, relative to the game directory. Bucket files are not overwritten by a different bucket.",
  "swarmWireVersion": "Swarm messaging: SIGIL wire format used to seal frames, S2 (sigil's default since 0.4.0) or S1 (for peers on sigil 0.3 or older). Both are always accepted on receive. Unknown values fall back to S2.",
  "swarmMaxLineChars": "Swarm messaging: longest chat line the server accepts. Every swarm frame is sealed as one sigil token (swarmWireVersion) that fits in this minus swarmLineReserveChars. There is no plaintext mode.",
  "swarmLineReserveChars": "Swarm messaging: characters of each line kept free for the transport prefix (for example \"/msg \").",
@@ -381,5 +388,6 @@
  "autoSpectateThinkMaxMs": "Ostinato: auto-spectate, longest the think pause before chat opens to type a command, in milliseconds.",
  "healthEstimator": "Keep an estimate of every nearby creature's and player's health, from what the server shows (synced health, scoreboard, boss bars) or, where the server hides or fakes it, from the hits, potions, apples, effects and totems seen. Combat and mob fighting then pick and finish targets by it. Off, they read the health the game shows.",
  "testHarness": "Ostinato: let the in-client test harnesses run (the parkour course runner PkTest and BastTest). Each still needs its own launch property to say what to run (-Dostinato.pktest= , -Dostinato.basttest=true); -Dostinato.testHarness=true turns this on for one launch. Off, those properties do nothing.",
- "failureTimeoutMaxMS": "When a search runs out of time with no usable path but nodes still open, it is tried again from the same spot with double the failure timeout, up to this; only then does the calculation count as failed"
+ "failureTimeoutMaxMS": "When a search runs out of time with no usable path but nodes still open, it is tried again from the same spot with double the failure timeout, up to this; only then does the calculation count as failed",
+ "tickAccurateCosts": "Ostinato: estimate ascend and descend costs with a short tick simulation of vanilla movement (friction, acceleration, air control, gravity, drag) instead of the fixed tables. Off keeps the stock costs."
 }

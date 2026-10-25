@@ -136,6 +136,12 @@ public final class Settings {
     public final Setting<Double> jumpPenalty = new Setting<>(2D);
 
     /**
+     * Ostinato: estimate ascend and descend costs with a short tick simulation of vanilla movement (friction,
+     * acceleration, air control, gravity, drag) instead of the fixed tables. Off keeps the stock costs.
+     */
+    public final Setting<Boolean> tickAccurateCosts = new Setting<>(false);
+
+    /**
      * Walking on water uses up hunger really quick, so penalize it
      */
     public final Setting<Double> walkOnWaterOnePenalty = new Setting<>(3D);
@@ -2435,6 +2441,27 @@ public final class Settings {
      * {@code -Dostinato.testHarness=true} turns this on for one launch. Off, those properties do nothing.
      */
     public final Setting<Boolean> testHarness = new Setting<>(false);
+
+    /** Ostinato: headless training circuits. Off, {@code #train} does nothing and pathing is unchanged. */
+    public final Setting<Boolean> trainingTask = new Setting<>(false);
+
+    /** Ostinato: training decisions may use only vision, F3 or pie cues, and client-audible sound. */
+    public final Setting<Boolean> trainingLegit = new Setting<>(false);
+
+    /** Ostinato: default circuit seed. The suite still runs 71001, 71002 and 71003. */
+    public final Setting<String> trainingSeed = new Setting<>("71001");
+
+    /** Ostinato: comma-separated circuit ids for {@code #train}. */
+    public final Setting<String> trainingTasks = new Setting<>("log-planks,stone-step,night-listen");
+
+    /** Ostinato: task model id. A file may replace it. heuristic is the built-in stub. */
+    public final Setting<String> trainingModel = new Setting<>("heuristic");
+
+    /** Ostinato: optional model file ({@code id=} and {@code delegate=}). Empty uses the built-in heuristic. */
+    public final Setting<String> trainingModelFile = new Setting<>("");
+
+    /** Ostinato: directory for training JSONL and CSV. Relative to the game directory. */
+    public final Setting<String> trainingOutDir = new Setting<>("baritone/training");
 
     // here be dragons
 
