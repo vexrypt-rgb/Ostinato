@@ -19,6 +19,7 @@ package baritone.pathing.movement;
 
 import baritone.Baritone;
 import baritone.utils.ExperimentalMovement;
+import baritone.utils.FastMode;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
@@ -109,8 +110,12 @@ public class CalculationContext {
     public final boolean experimental;
     public final double experimentalMinHealth;
     public final double fallDamageCost;
-    /** 1 unless experimentalMovement wants jumps to look a bit cheaper. */
+    /** 1 unless experimentalMovement or fastMode wants jumps to look a bit cheaper. */
     public final double jumpBias;
+    /** Ostinato: fastMode, snapshotted. Off, fall budgets and parkour flags stay on the other settings. */
+    public final boolean fastMode;
+    /** Ostinato: fastModeMinHealth, snapshotted. Unused while {@link #fastMode} is false. */
+    public final double fastModeMinHealth;
     /** Health plus absorption when the context was made, for falls that hurt. */
     public final double health;
     public final boolean assumeWalkOnWater;
@@ -205,7 +210,7 @@ public class CalculationContext {
         this.avoidWalkThrough = null;
         this.allowBreakAnyway = new ArrayList<>(Baritone.settings().allowBreakAnyway.value);
         this.allowParkour = ExperimentalMovement.allowParkour();
-        this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.allowParkourPlace = FastMode.allowParkourPlace(); // Ostinato
         this.nativeSearch = Baritone.settings().nativeAcceleration.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
@@ -215,13 +220,15 @@ public class CalculationContext {
         this.allowTasJumps = ExperimentalMovement.allowTasJumps();
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps();
         this.hasClutchItem = false;
-        this.ladderGrab = Baritone.settings().allowLadderClutch.value;
+        this.ladderGrab = FastMode.allowLadderClutch(); // Ostinato
         this.allowGodBridge = Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value;
         this.clutchIsLadder = false;
         this.clutchPicksUp = false;
         this.blockReach = Baritone.settings().blockReachDistance.value;
         this.experimental = ExperimentalMovement.on();
         this.experimentalMinHealth = Baritone.settings().experimentalMinHealth.value;
+        this.fastMode = FastMode.on(); // Ostinato
+        this.fastModeMinHealth = Baritone.settings().fastModeMinHealth.value;
         this.fallDamageCost = Baritone.settings().fallDamageCost.value;
         this.jumpBias = ExperimentalMovement.jumpBias();
         this.health = 20;
@@ -265,10 +272,10 @@ public class CalculationContext {
         this.aquaAffinity = player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SUBMERGED_MINING_SPEED) > 0.5;
         this.hasThrowaway = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
         this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(BucketHolder.STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
-        this.hasBoat = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
-                && BoatUtil.hasBoat(player.getInventory().getNonEquipmentItems());
-        this.freeBoats = Baritone.settings().allowBoats.value && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused()
-                ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
+        // Ostinato: fastMode behaves as if allowBoats were on. Off, this is allowBoats.
+        boolean boats = FastMode.allowBoats() && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused();
+        this.hasBoat = boats && BoatUtil.hasBoat(player.getInventory().getNonEquipmentItems());
+        this.freeBoats = boats ? BoatUtil.freeBoats(world, player, 64) : java.util.Collections.emptySet();
         this.allowSteeredFalls = Baritone.settings().allowSteeredFalls.value;
         this.freeMounts = Baritone.settings().allowMountClutch.value && !AltoClefSettings.getInstance().isInteractionPaused()
                 ? MountUtil.freeMounts(world, player, 128) : java.util.Collections.emptySet();
@@ -283,7 +290,7 @@ public class CalculationContext {
         // every jump over a gap is planned for a plain fall: under Levitation or Slow Falling none lands where planned
         this.allowParkour = ExperimentalMovement.allowParkour()
                 && ClientWorld.plainGravity(baritone.getPlayerContext());
-        this.allowParkourPlace = Baritone.settings().allowParkourPlace.value;
+        this.allowParkourPlace = FastMode.allowParkourPlace(); // Ostinato
         this.nativeSearch = Baritone.settings().nativeAcceleration.value;
         this.allowJumpAtBuildLimit = Baritone.settings().allowJumpAtBuildLimit.value;
         this.allowParkourAscend = ExperimentalMovement.allowParkourAscend();
@@ -295,7 +302,7 @@ public class CalculationContext {
         this.allowClimbJumps = ExperimentalMovement.allowClimbJumps() && fullPace;
         this.allowTasJumps = ExperimentalMovement.allowTasJumps() && fullPace;
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps() && fullPace;
-        boolean ladderClutch = Baritone.settings().allowLadderClutch.value;
+        boolean ladderClutch = FastMode.allowLadderClutch(); // Ostinato
         net.minecraft.world.item.Item clutchItem = ladderClutch ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
         this.ladderGrab = ladderClutch;
@@ -305,6 +312,8 @@ public class CalculationContext {
         this.blockReach = Baritone.settings().blockReachDistance.value;
         this.experimental = ExperimentalMovement.on();
         this.experimentalMinHealth = Baritone.settings().experimentalMinHealth.value;
+        this.fastMode = FastMode.on(); // Ostinato
+        this.fastModeMinHealth = Baritone.settings().fastModeMinHealth.value;
         this.fallDamageCost = Baritone.settings().fallDamageCost.value;
         this.jumpBias = ExperimentalMovement.jumpBias();
         this.health = player.getHealth() + player.getAbsorptionAmount();

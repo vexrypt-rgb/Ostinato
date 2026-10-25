@@ -18,6 +18,7 @@
 package baritone.utils;
 
 import baritone.Baritone;
+// Ostinato: fastMode ORs into the parkour, diagonal, bias and placement helpers. TAS and kinematic stay on this preset.
 
 /**
  * experimentalMovement is a preset, not a setting rewrite: the real settings never change, so switching it off hands the
@@ -36,19 +37,20 @@ public final class ExperimentalMovement {
     }
 
     public static boolean allowParkour() {
-        return on() || Baritone.settings().allowParkour.value;
+        // Ostinato: fastMode opens parkour without writing the setting. Off, this is the old answer.
+        return on() || FastMode.on() || Baritone.settings().allowParkour.value;
     }
 
     public static boolean allowParkourAscend() {
-        return on() || Baritone.settings().allowParkourAscend.value;
+        return on() || FastMode.on() || Baritone.settings().allowParkourAscend.value;
     }
 
     public static boolean allowNeos() {
-        return on() || Baritone.settings().allowNeos.value;
+        return on() || FastMode.on() || Baritone.settings().allowNeos.value;
     }
 
     public static boolean allowClimbJumps() {
-        return on() || Baritone.settings().allowClimbJumps.value;
+        return on() || FastMode.on() || Baritone.settings().allowClimbJumps.value;
     }
 
     public static boolean allowTasJumps() {
@@ -56,15 +58,15 @@ public final class ExperimentalMovement {
     }
 
     public static boolean allowMomentumJumps() {
-        return on() || Baritone.settings().allowMomentumJumps.value;
+        return on() || FastMode.on() || Baritone.settings().allowMomentumJumps.value;
     }
 
     public static boolean allowDiagonalAscend() {
-        return on() || Baritone.settings().allowDiagonalAscend.value;
+        return on() || FastMode.on() || Baritone.settings().allowDiagonalAscend.value;
     }
 
     public static boolean allowDiagonalDescend() {
-        return on() || Baritone.settings().allowDiagonalDescend.value;
+        return on() || FastMode.on() || Baritone.settings().allowDiagonalDescend.value;
     }
 
     /** The kinematic controller is what flies the jumps, so the preset implies it. */
@@ -72,14 +74,16 @@ public final class ExperimentalMovement {
         return on() || Baritone.settings().kinematicTravel.value;
     }
 
-    /** The lower of the two, so somebody who already set a cheaper penalty keeps it. */
+    /** The lower of the two, so somebody who already set a cheaper penalty keeps it. fastMode uses the same cap. */
     public static double blockPlacementPenalty() {
         double penalty = Baritone.settings().blockPlacementPenalty.value;
-        return on() ? Math.min(penalty, Baritone.settings().experimentalBlockPlacementPenalty.value) : penalty;
+        // Ostinato: off (neither preset), this is blockPlacementPenalty unchanged.
+        return on() || FastMode.on() ? Math.min(penalty, Baritone.settings().experimentalBlockPlacementPenalty.value) : penalty;
     }
 
     public static double jumpBias() {
-        return on() ? Baritone.settings().experimentalJumpBias.value : 1;
+        // Ostinato: off, jumps are not discounted.
+        return on() || FastMode.on() ? Baritone.settings().experimentalJumpBias.value : 1;
     }
 
     /** LivingEntity.calculateFallDamage before armor and feather falling, which only make it smaller. */

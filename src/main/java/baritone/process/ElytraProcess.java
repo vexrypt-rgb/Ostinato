@@ -40,6 +40,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.process.elytra.*;
 import baritone.utils.BaritoneProcessHelper;
+import baritone.utils.FastMode;
 import baritone.utils.PathingCommandContext;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.ChatFormatting;
@@ -278,7 +279,7 @@ public class ElytraProcess extends BaritoneProcessHelper implements IBaritonePro
         }
 
         if (this.state == State.FLYING || this.state == State.START_FLYING) {
-            this.state = ctx.player().onGround() && Baritone.settings().elytraAutoJump.value
+            this.state = ctx.player().onGround() && FastMode.elytraGroundTakeoff()
                     ? State.LOCATE_JUMP
                     : State.START_FLYING;
         }

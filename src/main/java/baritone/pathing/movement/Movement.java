@@ -26,6 +26,7 @@ import baritone.api.utils.*;
 import baritone.api.utils.input.Input;
 import baritone.behavior.PathingBehavior;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.FastMode;
 import java.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -142,7 +143,7 @@ public abstract class Movement implements IMovement, MovementHelper {
         // In deep water the swim controller steers instead (real sprint-swim, #3988).
         boolean swimming = applySwim(currentState);
         if (!swimming && MovementHelper.isLiquid(ctx, ctx.playerFeet()) && ctx.player().position().y < dest.y + 0.6
-                && !(Baritone.settings().swimInWater.value && this instanceof baritone.pathing.movement.movements.MovementTraverse)) {
+                && !(FastMode.swimInWater() && this instanceof baritone.pathing.movement.movements.MovementTraverse)) {
             currentState.setInput(Input.JUMP, true);
         }
         if (ctx.player().isInWall()) {
@@ -209,7 +210,7 @@ public abstract class Movement implements IMovement, MovementHelper {
      * @return true if it took over steering (the caller must not force JUMP)
      */
     private boolean applySwim(MovementState state) {
-        if (!Baritone.settings().swimInWater.value || currentState.getStatus().isComplete()) return false;
+        if (!FastMode.swimInWater() || currentState.getStatus().isComplete()) return false;
         net.minecraft.world.entity.player.Player p = ctx.player();
         if (!p.isInWater() || p.isPassenger()) return false;
         if (!Boolean.TRUE.equals(state.getInputStates().get(Input.MOVE_FORWARD))) return false;

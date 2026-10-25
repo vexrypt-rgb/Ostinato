@@ -29,6 +29,7 @@ import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.movement.SurfaceSpeed;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.FastMode;
 import baritone.utils.pathing.MutableMoveResult;
 import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
@@ -246,6 +247,10 @@ public class MovementDiagonal extends Movement {
             return;
         }
         if (optionA != 0 || optionB != 0) {
+            // Ostinato: fastMode will not edge around a blocked corner. Off, the old diagonal cost.
+            if (context.fastMode) {
+                return;
+            }
             multiplier *= SQRT_2 - 0.001; // TODO tune
             if (MovementHelper.isClimbable(startIn)) {
                 // edging around doesn't work if doing so would climb a ladder or vine instead of moving sideways
@@ -278,7 +283,7 @@ public class MovementDiagonal extends Movement {
             return state;
         }
 
-        boolean swim = Baritone.settings().swimInWater.value && MovementHelper.isLiquid(ctx, src) && MovementHelper.isLiquid(ctx, dest)
+        boolean swim = FastMode.swimInWater() && MovementHelper.isLiquid(ctx, src) && MovementHelper.isLiquid(ctx, dest)
                 && MovementHelper.isLiquid(ctx, src.below()) && MovementHelper.isLiquid(ctx, dest.below());
         if (ctx.playerFeet().equals(dest) || (swim && MovementHelper.atSwum(ctx, dest))) {
             return state.setStatus(MovementStatus.SUCCESS);
@@ -293,7 +298,7 @@ public class MovementDiagonal extends Movement {
         }
         state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
         MovementHelper.moveTowards(ctx, state, dest);
-        if (swim || (ctx.player().isSwimming() && Baritone.settings().swimInWater.value)) {
+        if (swim || (ctx.player().isSwimming() && FastMode.swimInWater())) {
             MovementHelper.surfaceSwim(ctx, state);
         }
         return state;

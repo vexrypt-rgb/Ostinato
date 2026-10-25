@@ -19,6 +19,7 @@ package baritone.pathing.movement.movements;
 
 import baritone.Baritone;
 import baritone.utils.ExperimentalMovement;
+import baritone.utils.FastTravel;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.MovementStatus;
@@ -552,11 +553,15 @@ public class MovementDescend extends Movement {
 
     /**
      * Ostinato: half-hearts a missed ladder place would cost. Survivable means at least 1 left, and at least
-     * {@code experimentalMinHealth} while that preset is on.
+     * {@code experimentalMinHealth} while that preset is on, or {@code fastModeMinHealth} while fastMode is on.
+     * Both on: the higher floor.
      */
     static boolean clutchMissSurvivable(CalculationContext context, int blocksFallen) {
         int damage = ExperimentalMovement.fallDamage(blocksFallen);
-        double floor = context.experimental ? Math.max(1.0, context.experimentalMinHealth) : 1.0;
+        // Ostinato: off, the floor is 1, same as before.
+        double floor = context.experimental || context.fastMode
+                ? Math.max(1.0, FastTravel.fallFloor(context.experimental, context.experimentalMinHealth, context.fastMode, context.fastModeMinHealth))
+                : 1.0;
         return ExperimentalMovement.canAffordFall(context.health, damage, floor);
     }
 
@@ -637,11 +642,13 @@ public class MovementDescend extends Movement {
     private static void hurtingFall(CalculationContext context, int destX, int destZ, int newY, int blocks, double tentativeCost, BlockState onto, MutableMoveResult res) {
         int damage = onto.is(Blocks.HAY_BLOCK) ? softFallDamage(blocks, HAY_FALL_MULTIPLIER) : ExperimentalMovement.fallDamage(blocks);
         int hit = damage + ExperimentalMovement.SAFE_FALL; // the plain fall that hurts as much, which is what the caps are in
-        if (context.experimental) {
+        // Ostinato: fastMode uses the same hurting-fall gate, with fastModeMinHealth. Off, the old budget.
+        if (context.experimental || context.fastMode) {
             if (hit > ExperimentalMovement.MAX_HURT_FALL) {
                 return;
             }
-            if (!ExperimentalMovement.canAffordFall(context.health, damage, context.experimentalMinHealth)) {
+            double floor = FastTravel.fallFloor(context.experimental, context.experimentalMinHealth, context.fastMode, context.fastModeMinHealth);
+            if (!ExperimentalMovement.canAffordFall(context.health, damage, floor)) {
                 return;
             }
         } else if (hit > FallBudget.maxBlocks(context.health, FallBudget.FLOOR, context.maxFallHeightNoWater, FallBudget.CAP)) {
