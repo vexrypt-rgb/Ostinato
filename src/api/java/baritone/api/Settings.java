@@ -269,8 +269,11 @@ public final class Settings {
     public final Setting<Float> parkourTurnCap = new Setting<>(180f);
 
     /**
-     * Survive a long fall by placing a ladder or vine on a wall beside the last blocks of it, like a water bucket clutch.
-     * Needs a ladder or vine on the hotbar.
+     * Survive a long fall by grabbing a ladder or vine already in the column, or by placing one on a wall beside the
+     * last blocks of it, like a water bucket clutch. Placing needs a ladder or vine on the hotbar. Off, an existing
+     * ladder is still caught only when the drop into that cell is 11 blocks or less, so default paths do not move.
+     * A place is not offered when missing it would leave you below 1 health, or below {@link #experimentalMinHealth}
+     * while {@link #experimentalMovement} is on.
      */
     public final Setting<Boolean> allowLadderClutch = new Setting<>(false);
 

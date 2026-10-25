@@ -37,9 +37,11 @@ eat at a bad moment, report it with the fight log.
 
 ## Water and ladder clutch
 - Water bucket clutch: stock behaviour, needs a water bucket.
-- Ladder clutch (`allowLadderClutch`, default off): during a long fall, place a ladder or vine on a wall
-  beside the last blocks. Needs a ladder or vine on the hotbar. The controller keeps a sticky aim at the wall
-  and a carrot ahead of the route so it does not wobble.
+- Ladder clutch (`allowLadderClutch`, default off): during a long fall, grab a ladder or vine already in the
+  column (including drops past 11 blocks, when a tick starts inside that cell), or place one on a wall beside
+  the last blocks. Placing needs a ladder or vine on the hotbar, and is not offered when a miss would leave you
+  below 1 health (or below `experimentalMinHealth` while that preset is on). The controller keeps a sticky aim
+  at the wall and a carrot ahead of the route so it does not wobble. See [ladder clutch](../ladder-clutch.md).
 - Ladder pillar: climbing with ladders re-aims only after the bot drifts off the column.
 
 ## Limits
