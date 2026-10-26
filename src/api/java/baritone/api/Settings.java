@@ -837,6 +837,14 @@ public final class Settings {
     public final Setting<Integer> pathingMapDefaultSize = new Setting<>(1024);
 
     /**
+     * Ostinato: pathfinding for one core and about 512 MB of heap. On, the search stores nodes in y-slices instead of
+     * full 16×8×16 cells, reuses its open-set arrays and a small block-read cache, recycles unchecked-move offers, and
+     * skips an edge that cannot beat a node already reached at the same or a lower cost. The route cost and the nodes
+     * expanded stay the same. Off (the default) is the usual search, so recorded path costs stay identical.
+     */
+    public final Setting<Boolean> piCheapPathing = new Setting<>(false);
+
+    /**
      * Load factor coefficient for the Long2ObjectOpenHashMap used in pathing
      * <p>
      * Decrease for faster map operations, but higher memory usage

@@ -41,12 +41,15 @@ public class PathBenchTest {
                         && Long.parseLong(l.substring(l.lastIndexOf(' ') + 1)) <= 300_000))
                 .toList();
         boolean fastMode = baritone.Baritone.settings().fastMode.value;
+        boolean piCheap = baritone.Baritone.settings().piCheapPathing.value;
         baritone.Baritone.settings().fastMode.value = false; // Ostinato: goldens are the default planner
+        baritone.Baritone.settings().piCheapPathing.value = false; // Ostinato: goldens are the off path
         List<PathBench.Result> rs;
         try {
             rs = qs.stream().map(q -> PathBench.run(q, PathBench.ASTAR)).toList();
         } finally {
             baritone.Baritone.settings().fastMode.value = fastMode;
+            baritone.Baritone.settings().piCheapPathing.value = piCheap;
         }
         String got = PathBench.fingerprint(rs);
         for (String line : got.split("\n")) {
@@ -224,6 +227,7 @@ public class PathBenchTest {
         if (tie != null) baritone.Baritone.settings().pathTieBreak.value = Double.parseDouble(tie);
         if (System.getenv("OSTINATO_BENCH_TICK") != null) baritone.Baritone.settings().tickAccurateCosts.value = true; // Ostinato: tick-accurate A/B
         if (System.getenv("OSTINATO_BENCH_MOMENTUM") != null) baritone.Baritone.settings().momentumJumpCosts.value = true; // Ostinato: momentumJumpCosts A/B
+        if (System.getenv("OSTINATO_BENCH_PI") != null) baritone.Baritone.settings().piCheapPathing.value = true; // Ostinato: pi-cheap A/B
         List<PathBench.Result> rs = PathBench.bench(qs, PathBench.finder(spec), reps);
         if (rec != null) {
             rec.stop();

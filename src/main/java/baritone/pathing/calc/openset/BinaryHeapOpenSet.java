@@ -52,6 +52,20 @@ public final class BinaryHeapOpenSet implements IOpenSet {
      */
     private int size;
 
+    /**
+     * Ostinato: thread-local arrays reused by {@code piCheapPathing}. Null on the stock heap, which still allocates its own.
+     */
+    private Buf buf;
+
+    /** Ostinato: one open-set buffer per pathing thread. A nested search allocates its own instead of sharing it. */
+    private static final ThreadLocal<Buf> POOL = new ThreadLocal<>();
+
+    private static final class Buf {
+        PathNode[] array;
+        double[] keys;
+        boolean inUse;
+    }
+
     public BinaryHeapOpenSet() {
         this(INITIAL_CAPACITY);
     }
@@ -60,6 +74,50 @@ public final class BinaryHeapOpenSet implements IOpenSet {
         this.size = 0;
         this.array = new PathNode[size];
         this.keys = new double[size];
+    }
+
+    private BinaryHeapOpenSet(Buf buf) {
+        this.size = 0;
+        this.array = buf.array;
+        this.keys = buf.keys;
+        this.buf = buf;
+    }
+
+    /**
+     * Ostinato: an open set backed by this thread's retained arrays. The caller must {@link #release()} it,
+     * including on failure, so the nodes in it can be collected.
+     */
+    public static BinaryHeapOpenSet pooled() {
+        Buf b = POOL.get();
+        if (b == null) {
+            b = new Buf();
+            b.array = new PathNode[INITIAL_CAPACITY];
+            b.keys = new double[INITIAL_CAPACITY];
+            POOL.set(b);
+        }
+        if (b.inUse) {
+            return new BinaryHeapOpenSet();
+        }
+        b.inUse = true;
+        return new BinaryHeapOpenSet(b);
+    }
+
+    /** Ostinato: drop node references and hand the arrays back. A stock heap ignores this. */
+    public void release() {
+        if (buf == null) {
+            return;
+        }
+        for (int i = 1; i <= size; i++) {
+            array[i] = null;
+        }
+        size = 0;
+        buf.inUse = false;
+        buf = null;
+    }
+
+    /** Ostinato: the backing array, so a test can see that a later pooled heap reused it. */
+    public PathNode[] arrayForTest() {
+        return array;
     }
 
     public int size() {
@@ -71,6 +129,10 @@ public final class BinaryHeapOpenSet implements IOpenSet {
         if (size >= array.length - 1) {
             array = Arrays.copyOf(array, array.length << 1);
             keys = Arrays.copyOf(keys, keys.length << 1);
+            if (buf != null) { // Ostinato: keep the grown arrays for the next search on this thread
+                buf.array = array;
+                buf.keys = keys;
+            }
         }
         size++;
         siftUp(size, value, value.combinedCost);
