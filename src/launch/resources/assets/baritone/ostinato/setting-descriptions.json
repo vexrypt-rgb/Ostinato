@@ -286,6 +286,7 @@
  "trainingModelFile": "Optional model file with id= and delegate= lines. Empty uses the built-in heuristic.",
  "trainingOutDir": "Directory for training JSONL and CSV, relative to the game directory. Bucket files are not overwritten by a different bucket.",
  "trainingGearChoice": "When training, try the armor and tools the circuit can supply and keep the kit with the best score of time, deaths and durability. Off, the circuits and their result files stay on the harness baseline. Does not change pathfinding.",
+ "raceEveryBlockItem": "Every-block and every-item race. Off, #train every_block_item does nothing and the default training suite is unchanged. On, that named circuit enumerates collectables and records a race score. Does not change pathfinding.",
  "agentApi": "Master switch for the AI agent API. Off, #agent does not call a provider and pathing is unchanged.",
  "agentChat": "In-game chat hook. Off, #agent does not send chat to a provider. Needs agentApi as well.",
  "agentProvider": "Provider id: groq, gemini, openrouter, ollama, or empty for auto. Auto uses the first configured cloud key, otherwise Ollama. A cloud provider with no key also uses Ollama.",
