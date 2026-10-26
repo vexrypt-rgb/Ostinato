@@ -158,6 +158,18 @@ public final class MazeTest implements AbstractGameEventListener {
             f.setAccessible(true);
             Object v = f.get(b.getBuilderProcess());
             sb.append("incorrect=").append(v instanceof java.util.Collection<?> c ? c.size() : -1);
+            RoomPlan plan = b.getMazeProcess().lastBuilt();
+            if (plan != null && v instanceof java.util.Collection<?> c && c.size() <= 6) {
+                sb.append(" [");
+                for (Object o : c) {
+                    if (!(o instanceof BlockPos bp)) continue;
+                    int rx = bp.getX() - plan.originX, ry = bp.getY() - plan.originY, rz = bp.getZ() - plan.originZ;
+                    String role = plan.inRelative(rx, ry, rz) ? plan.role(rx, ry, rz).name() : "OUT";
+                    sb.append(bp.toShortString()).append('=').append(role).append(':')
+                            .append(mc.level.getBlockState(bp).getBlock().getDescriptionId().replace("block.minecraft.", "")).append(' ');
+                }
+                sb.append("] size=").append(plan.sizeX).append('x').append(plan.sizeY).append('x').append(plan.sizeZ);
+            }
             var pf = b.getBuilderProcess().getClass().getDeclaredField("paused");
             pf.setAccessible(true);
             sb.append(" paused=").append(pf.get(b.getBuilderProcess()));
