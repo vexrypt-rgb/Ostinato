@@ -25,19 +25,25 @@ import baritone.utils.pathing.LazyCheck;
 public final class PendingOffer {
 
     /** Cost to the node through this offer, as offered. */
-    final double cost;
+    double cost;
     /** The move's unscaled offered cost, and the scale the search applied to it. */
-    final double raw, mult;
-    final PathNode prev;
-    final LazyCheck check;
+    double raw, mult;
+    PathNode prev;
+    LazyCheck check;
     /** The next costlier offer into the same node. */
     PendingOffer next;
 
     PendingOffer(double cost, double raw, double mult, PathNode prev, LazyCheck check) {
+        set(cost, raw, mult, prev, check);
+    }
+
+    /** Ostinato: refill a recycled offer. piCheapPathing only; the stock search always constructs a new one. */
+    void set(double cost, double raw, double mult, PathNode prev, LazyCheck check) {
         this.cost = cost;
         this.raw = raw;
         this.mult = mult;
         this.prev = prev;
         this.check = check;
+        this.next = null;
     }
 }

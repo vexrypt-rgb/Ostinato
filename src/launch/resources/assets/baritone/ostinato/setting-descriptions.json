@@ -73,6 +73,7 @@
  "pathCutoffMinimumLength": "Only apply static cutoff for paths of at least this length (in terms of number of movements)",
  "planningTickLookahead": "Start planning the next path once the remaining movements tick estimates sum up to less than this value",
  "pathingMapDefaultSize": "Default size of the Long2ObjectOpenHashMap used in pathing",
+ "piCheapPathing": "Pathfind with less memory and fewer allocations, for one core and about 512 MB of heap. The routes stay the same. Off, the default, is the usual search.",
  "pathingMapLoadFactor": "Load factor coefficient for the Long2ObjectOpenHashMap used in pathing Decrease for faster map operations, but higher memory usage",
  "maxFallHeightNoWater": "How far are you allowed to fall onto solid ground (without a water bucket)? 3 won't deal any damage. But if you just want to get down the mountain quickly and you have Feather Falling IV, you might set it a bit higher, like 4 or 5.",
  "maxFallHeightBucket": "How far are you allowed to fall onto solid ground (with a water bucket)? It's not that reliable, so I've set it below what would kill an unarmored player (23)",

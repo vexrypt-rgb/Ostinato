@@ -24,6 +24,7 @@ import baritone.altoclef.AltoClefSettings;
 import baritone.api.IBaritone;
 import baritone.api.pathing.movement.ActionCosts;
 import baritone.cache.WorldData;
+import baritone.pathing.calc.PiCheap;
 import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.precompute.PrecomputedData;
 import baritone.utils.BlockStateInterface;
@@ -414,7 +415,40 @@ public class CalculationContext {
         return baritone;
     }
 
+    /** Ostinato: block-read cache while piCheapPathing is on for this search. Null the rest of the time. */
+    private PiCheap.BlockCache piBlocks;
+    private int piDepth;
+
+    /**
+     * Ostinato: start the block-read cache for this search. Nested searches on the same context share it.
+     * {@code on} false does nothing, which is every search while piCheapPathing is off.
+     */
+    public void beginPiCheap(boolean on) {
+        if (!on) {
+            return;
+        }
+        if (piDepth == 0) {
+            piBlocks = PiCheap.claim();
+        }
+        piDepth++;
+    }
+
+    /** Ostinato: pair of {@link #beginPiCheap}. The cache arrays stay on the thread for the next search. */
+    public void endPiCheap(boolean on) {
+        if (!on || piDepth == 0) {
+            return;
+        }
+        piDepth--;
+        if (piDepth == 0) {
+            piBlocks = null;
+        }
+    }
+
     public BlockState get(int x, int y, int z) {
+        PiCheap.BlockCache c = piBlocks;
+        if (c != null && c.owner == Thread.currentThread()) {
+            return c.read(x, y, z, bsi); // Ostinato: piCheapPathing block cache
+        }
         return bsi.get0(x, y, z); // laughs maniacally
     }
 

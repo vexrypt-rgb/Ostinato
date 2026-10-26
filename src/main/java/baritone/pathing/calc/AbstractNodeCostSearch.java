@@ -55,9 +55,21 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
      * @see <a href="https://github.com/cabaletta/baritone/issues/107">Issue #107</a>
      */
     private final Long2ObjectOpenHashMap<PathNode[]> cells;
+    /**
+     * Ostinato: one 16×16 slice per y inside the same cell key, allocated only for a y the search touches.
+     * Null when {@code piCheapPathing} is off. {@link #cells} is null when it is on.
+     */
+    private final Long2ObjectOpenHashMap<PathNode[][]> piCells;
+    /** Ostinato: snapshot of piCheapPathing. Off keeps the stock 16×8×16 cells. */
+    protected final boolean piCheap;
     private PathNode[] prevCell;
     private long prevCellKey = Long.MIN_VALUE;
+    private PathNode[][] prevSlices;
+    private PathNode[] prevSlice;
+    private long prevPiKey = Long.MIN_VALUE;
+    private int prevSliceY = Integer.MIN_VALUE;
     private int numNodesCreated;
+    private static final PathNode[] NO_SLICE = new PathNode[0];
 
     private static final int CELL_BITS_X = 4;
     private static final int CELL_BITS_Y = 3;
@@ -66,6 +78,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
 
     /** Ostinato: every node the search has reached. */
     protected Iterable<PathNode> nodes() {
+        if (piCells != null) {
+            return () -> new PiNodeIter(piCells);
+        }
         java.util.ArrayList<PathNode> all = new java.util.ArrayList<>(numNodesCreated);
         for (PathNode[] cell : cells.values()) {
             for (int i = 0; i < cell.length; i++) {
@@ -147,7 +162,17 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         this.startZ = startZ;
         this.goal = goal;
         this.context = context;
-        this.cells = new Long2ObjectOpenHashMap<>(Baritone.settings().pathingMapDefaultSize.value, Baritone.settings().pathingMapLoadFactor.value);
+        // Ostinato: the setting is read once. Off allocates the stock map and nothing else.
+        this.piCheap = Baritone.settings().piCheapPathing.value;
+        int mapSize = Baritone.settings().pathingMapDefaultSize.value;
+        float load = Baritone.settings().pathingMapLoadFactor.value;
+        if (piCheap) {
+            this.piCells = new Long2ObjectOpenHashMap<>(mapSize, load);
+            this.cells = null;
+        } else {
+            this.cells = new Long2ObjectOpenHashMap<>(mapSize, load);
+            this.piCells = null;
+        }
     }
 
     public void cancel() {
@@ -285,6 +310,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
      */
 
     protected PathNode getNodeAtPosition(int x, int y, int z, long hashCode) {
+        if (piCheap) {
+            return nodeInSlice(x, y, z, true);
+        }
         long cellKey = ((long) ((x >> CELL_BITS_X) & 0xFFFFFFF) << 36)
                 | ((long) ((z >> CELL_BITS_Z) & 0xFFFFFFF) << 8)
                 | ((y >> CELL_BITS_Y) & 0xFF);
@@ -307,6 +335,75 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         if (node == null) {
             node = new PathNode(x, y, z, goal);
             cell[index] = node;
+            numNodesCreated++;
+        }
+        return node;
+    }
+
+    /**
+     * Ostinato: the node at this position if the search has already created it. Does not allocate.
+     * Used by pi-cheap edge pruning; the stock search does not call it.
+     */
+    protected PathNode peekNodeAtPosition(int x, int y, int z) {
+        if (piCheap) {
+            return nodeInSlice(x, y, z, false);
+        }
+        long cellKey = ((long) ((x >> CELL_BITS_X) & 0xFFFFFFF) << 36)
+                | ((long) ((z >> CELL_BITS_Z) & 0xFFFFFFF) << 8)
+                | ((y >> CELL_BITS_Y) & 0xFF);
+        PathNode[] cell = cellKey == prevCellKey ? prevCell : cells.get(cellKey);
+        if (cell == null) {
+            return null;
+        }
+        int index = ((y & ((1 << CELL_BITS_Y) - 1)) << (CELL_BITS_X + CELL_BITS_Z))
+                | ((z & ((1 << CELL_BITS_Z) - 1)) << CELL_BITS_X)
+                | (x & ((1 << CELL_BITS_X) - 1));
+        return cell[index];
+    }
+
+    /** Ostinato: 16×16 slice for one y. {@code create} false returns null and allocates nothing. */
+    private PathNode nodeInSlice(int x, int y, int z, boolean create) {
+        long cellKey = ((long) ((x >> CELL_BITS_X) & 0xFFFFFFF) << 36)
+                | ((long) ((z >> CELL_BITS_Z) & 0xFFFFFFF) << 8)
+                | ((y >> CELL_BITS_Y) & 0xFF);
+        int yIn = y & ((1 << CELL_BITS_Y) - 1);
+        PathNode[][] slices;
+        if (prevSlices != null && cellKey == prevPiKey) {
+            slices = prevSlices;
+        } else {
+            slices = piCells.get(cellKey);
+            if (slices == null) {
+                if (!create) {
+                    return null;
+                }
+                slices = new PathNode[1 << CELL_BITS_Y][];
+                piCells.put(cellKey, slices);
+            }
+            prevSlices = slices;
+            prevPiKey = cellKey;
+            prevSlice = null;
+            prevSliceY = Integer.MIN_VALUE;
+        }
+        PathNode[] slice;
+        if (yIn == prevSliceY && prevSlice != null) {
+            slice = prevSlice;
+        } else {
+            slice = slices[yIn];
+            if (slice == null) {
+                if (!create) {
+                    return null;
+                }
+                slice = new PathNode[1 << (CELL_BITS_X + CELL_BITS_Z)];
+                slices[yIn] = slice;
+            }
+            prevSlice = slice;
+            prevSliceY = yIn;
+        }
+        int index = ((z & ((1 << CELL_BITS_Z) - 1)) << CELL_BITS_X) | (x & ((1 << CELL_BITS_X) - 1));
+        PathNode node = slice[index];
+        if (node == null && create) {
+            node = new PathNode(x, y, z, goal);
+            slice[index] = node;
             numNodesCreated++;
         }
         return node;
@@ -374,5 +471,62 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
 
     protected int mapSize() {
         return numNodesCreated;
+    }
+
+    /** Ostinato: walks y-slices without copying every node into a list. */
+    private static final class PiNodeIter implements java.util.Iterator<PathNode> {
+        private final java.util.Iterator<PathNode[][]> cells;
+        private PathNode[][] slices;
+        private PathNode[] slice = NO_SLICE;
+        private int sy = 8;
+        private int i;
+        private PathNode next;
+
+        PiNodeIter(Long2ObjectOpenHashMap<PathNode[][]> map) {
+            this.cells = map.values().iterator();
+            advance();
+        }
+
+        private void advance() {
+            next = null;
+            while (true) {
+                while (i < slice.length) {
+                    PathNode n = slice[i++];
+                    if (n != null) {
+                        next = n;
+                        return;
+                    }
+                }
+                if (slices != null && sy + 1 < slices.length) {
+                    sy++;
+                    PathNode[] s = slices[sy];
+                    slice = s == null ? NO_SLICE : s;
+                    i = 0;
+                    continue;
+                }
+                if (!cells.hasNext()) {
+                    return;
+                }
+                slices = cells.next();
+                sy = -1;
+                slice = NO_SLICE;
+                i = 0;
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return next != null;
+        }
+
+        @Override
+        public PathNode next() {
+            if (next == null) {
+                throw new java.util.NoSuchElementException();
+            }
+            PathNode n = next;
+            advance();
+            return n;
+        }
     }
 }
