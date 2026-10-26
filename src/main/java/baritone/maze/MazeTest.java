@@ -119,6 +119,10 @@ public final class MazeTest implements AbstractGameEventListener {
             case 3 -> {
                 if (++wait < 60) return;
                 Baritone.settings().mazeMode.value = true;
+                // Ostinato: harness knob so a proof run can pick a room theme/loot roll (default keeps the setting).
+                String ms = System.getProperty("ostinato.mazetest.mazeSeed");
+                if (ms != null) Baritone.settings().mazeSeed.value = Long.parseLong(ms);
+                say("mazeSeed=" + Baritone.settings().mazeSeed.value);
                 var out = b.getMazeProcess().buildHere();
                 say("build " + (out.ok() ? "ok: " + out.message : "refused: " + out.error)
                         + " gamemode=" + mc.gameMode.getPlayerMode().getName());
