@@ -68,6 +68,7 @@ public final class SettingCategorizer {
                 "spectateLearn", "spectateLearnOnServers", "spectateAutoDetect", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "spectateLearnLateFights", "sparSeedPriors", "spectateLearnSuspectedCheats", "autoSpectateServer", "autoSpectateMinutes", "autoSpectateHoverMinMs", "autoSpectateHoverMaxMs", "autoSpectateClickGapMinMs", "autoSpectateClickGapMaxMs", "autoSpectateReadMinMs", "autoSpectateReadMaxMs", "autoSpectateKeyMinMs", "autoSpectateKeyMaxMs", "autoSpectateThinkMinMs", "autoSpectateThinkMaxMs", "healthEstimator",
                 "testHarness",
                 "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir", "trainingGearChoice", "raceEveryBlockItem",
+                "overnightRaces", "overnightEveryBlockItem", "overnightDir", "overnightTimeoutMs",
                 "agentApi", "agentChat", "agentProvider", "agentBaseUrl", "agentModel", "agentApiKey",
                 "agentDryRun", "agentOwnerOnly", "agentOwner", "agentKeyFile", "agentOneSession", "agent429ToOllama",
                 "agentMemory", "agentTools", "agentRouteDir"); // Ostinato: testHarness, legit track, compass follow, gear choice, every-block race, agent API

@@ -90,6 +90,8 @@ The numbers above are the shape, not a frozen registry size. `collected` and `to
 
 This circuit does not create a Minecraft world folder. Cleanup is unchanged: `RaceWorldCleanup` deletes direct children named `race_*`, `hyp_*`, or `agentrun_*` only when `ostinato-race-root.txt` is present, and it keeps `vexflat` (any name starting with that), `pk_*`, `pkrun_*`, `SigilTest`, and `gs_world`.
 
+Overnight A/B races use the same recorder and the same cleanup. They are off unless `overnightRaces` is on. See [overnight.md](overnight.md).
+
 ## Pathfinding
 
 Nothing under `baritone.pathing` references this circuit. The registry scan runs only after the switch is on and the circuit is named. The Pi search heap is unchanged.

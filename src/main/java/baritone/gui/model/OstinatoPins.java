@@ -38,6 +38,7 @@ public final class OstinatoPins {
             "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale",
             "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch",
             "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir", "trainingGearChoice", "raceEveryBlockItem",
+            "overnightRaces", "overnightEveryBlockItem", "overnightDir", "overnightTimeoutMs",
             "agentApi", "agentChat", "agentProvider", "agentBaseUrl", "agentModel", "agentApiKey",
             "agentDryRun", "agentOwnerOnly", "agentOwner", "agentKeyFile", "agentOneSession", "agent429ToOllama",
             "agentMemory", "agentTools", "agentRouteDir"

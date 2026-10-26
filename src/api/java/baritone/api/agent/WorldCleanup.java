@@ -23,4 +23,11 @@ public interface WorldCleanup {
      * Returns the names removed. Callers pass a race directory, never a personal saves folder, from tests.
      */
     List<String> deleteLeftovers(Path savesRoot) throws IOException;
+
+    /**
+     * Deletes one race world when the marker is present and {@link #isRaceWorld} is true.
+     * Returns the name when it was removed. A keep-list name, a missing folder, or a directory
+     * without {@code ostinato-race-root.txt} removes nothing.
+     */
+    List<String> deleteWorld(Path savesRoot, String worldName) throws IOException;
 }

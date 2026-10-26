@@ -9,7 +9,7 @@ import java.util.Set;
 
 public final class AgentPolicy {
 
-    public static final String DEFAULT_TOOLS = "goto,mine,follow,settings,route";
+    public static final String DEFAULT_TOOLS = "goto,mine,follow,pvp,gear,settings,route";
 
     private AgentPolicy() {}
 

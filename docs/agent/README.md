@@ -19,7 +19,7 @@ Foundation for in-game chat and later overnight hypothesis races. Both use the s
 | `agentOneSession` | on | One provider call at a time. Status and routes do not take the lock. |
 | `agent429ToOllama` | on | On HTTP 429, retry that turn once against Ollama. |
 | `agentMemory` | on | Last few turns in `baritone/agent-memory.jsonl`. Role and text only. |
-| `agentTools` | `goto,mine,follow,settings,route` | Whitelist. Unknown names are ignored. `set` means settings. |
+| `agentTools` | `goto,mine,follow,pvp,gear,settings,route` | Whitelist. Unknown names are ignored. `set` means settings. `pvp` fights. `gear` changes one gear or combat setting. |
 | `agentRouteDir` | `baritone/agent-routes` | Saved task routes, relative to the game directory. |
 
 These options are in the settings screen under Advanced, with the other Ostinato settings. `agentApi` and `agentChat` stay off until you turn them on. The other defaults apply once those two are on.
@@ -90,6 +90,8 @@ Chat memory, when `agentMemory` is on, loads the last eight turns into the next 
 
 `every_block_item` is an opt-in training circuit that writes those same lines. It is off unless `raceEveryBlockItem` (or `-Dostinato.raceEveryBlockItem=true`) is set, and it is not part of the default suite. Coverage, the exclusion list, and the score fields are in [../race/README.md](../race/README.md).
 
+Overnight races append to their own `races.jsonl`. The queue, the timeout, and what is live versus stubbed are in [../race/overnight.md](../race/overnight.md). `overnightRaces` and `overnightEveryBlockItem` default off.
+
 `RaceWorldCleanup` deletes only direct child folders named `race_*`, `hyp_*`, or `agentrun_*`. It always keeps `vexflat` (any name starting with that), `pk_*`, `pkrun_*`, `SigilTest`, and `gs_world`. Other folders, including `New World`, stay. Deletion runs only when the directory contains `ostinato-race-root.txt`, so a normal saves folder is left alone. Tests use a temp directory.
 
 ## Safety
@@ -103,7 +105,6 @@ Chat memory, when `agentMemory` is on, loads the last eight turns into the next 
 
 Not in this change:
 
-- Overnight multi-agent hypothesis races on the race recorder.
-- Driving the live client UI to create and delete worlds. Cleanup of leftover race worlds is the policy above.
-- A full tool-calling loop (combat, gear, and settings beyond the stubs).
+- Driving the Create World screen. Opening an existing race folder, leaving it, and deleting leftovers is in [../race/overnight.md](../race/overnight.md).
+- A full multi-step tool loop beyond one reply. `pvp` and `gear` map to the existing combat and settings commands.
 - GPU batch sims and swappable tiny models.

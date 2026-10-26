@@ -2551,6 +2551,29 @@ public final class Settings {
     public final Setting<Boolean> raceEveryBlockItem = new Setting<>(false);
 
     /**
+     * Ostinato: overnight A/B hypothesis races. Off, #overnight does nothing, no world is created or deleted,
+     * and pathing is unchanged. On, #overnight start runs the queue in baritone/overnight/queue.jsonl.
+     */
+    public final Setting<Boolean> overnightRaces = new Setting<>(false);
+
+    /**
+     * Ostinato: when an overnight run scores, also run every_block_item. Off, the race records the agent
+     * outcome only and does not enumerate the block or item registry. Does not change pathfinding.
+     */
+    public final Setting<Boolean> overnightEveryBlockItem = new Setting<>(false);
+
+    /**
+     * Ostinato: directory for the overnight queue, state, and races.jsonl, relative to the game directory.
+     */
+    public final Setting<String> overnightDir = new Setting<>("baritone/overnight");
+
+    /**
+     * Ostinato: per-run timeout in milliseconds when a queue line does not set timeoutMs. The run is recorded
+     * as timeout and its world is deleted.
+     */
+    public final Setting<Integer> overnightTimeoutMs = new Setting<>(600000);
+
+    /**
      * Ostinato: master switch for the AI agent API. Off, {@code #agent} does not call a provider and pathing is unchanged.
      */
     public final Setting<Boolean> agentApi = new Setting<>(false);
@@ -2607,7 +2630,7 @@ public final class Settings {
     public final Setting<Boolean> agentMemory = new Setting<>(true);
 
     /** Ostinato: comma-separated tools {@code #agent} may run. Unknown names are ignored. {@code set} means settings. */
-    public final Setting<String> agentTools = new Setting<>("goto,mine,follow,settings,route");
+    public final Setting<String> agentTools = new Setting<>("goto,mine,follow,pvp,gear,settings,route");
 
     /** Ostinato: directory of saved task routes, relative to the game directory. */
     public final Setting<String> agentRouteDir = new Setting<>("baritone/agent-routes");

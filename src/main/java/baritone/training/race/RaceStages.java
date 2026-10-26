@@ -1,7 +1,7 @@
 package baritone.training.race;
 
 // Ostinato: stage list for every_block_item. Checklist steps are score hooks.
-// TODO: the overnight runner fills these. Only crafting.use is credited from an existing circuit today.
+// TODO: enchant, netherite, and the other interactions stay at 0. The overnight runner can opt into this score. It does not collect them.
 
 import baritone.api.training.TrainingResult;
 

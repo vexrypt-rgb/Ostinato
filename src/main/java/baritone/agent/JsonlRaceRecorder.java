@@ -28,6 +28,20 @@ public final class JsonlRaceRecorder implements RaceRecorder {
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
+    @Override
+    public boolean containsRun(String runId) throws IOException {
+        if (runId == null || runId.isBlank() || file == null || !Files.isRegularFile(file)) {
+            return false;
+        }
+        String needle = "\"runId\":\"" + runId + "\"";
+        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            if (line.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static String toJson(RaceRun run) {
         JsonObject object = new JsonObject();
         object.addProperty("runId", run.runId);

@@ -38,8 +38,16 @@ public final class AgentActions {
             "Save or run a named task route. op is save or run. save uses steps separated by semicolons.",
             List.of("op", "name", "steps"),
             AgentActions::routeCommand);
+    public static final AgentAction PVP = new Mapped("pvp",
+            "Fight players, hostiles, or one player name. The harness does not fight for the agent.",
+            List.of("target"),
+            AgentActions::pvpCommand);
+    public static final AgentAction GEAR = new Mapped("gear",
+            "Change one gear or combat setting by name and value. Cannot change agent settings or anything with a key.",
+            List.of("name", "value"),
+            AgentActions::gearCommand);
 
-    public static final List<AgentAction> ALL = List.of(GOTO, MINE, FOLLOW, SETTINGS, ROUTE);
+    public static final List<AgentAction> ALL = List.of(GOTO, MINE, FOLLOW, PVP, GEAR, SETTINGS, ROUTE);
 
     private AgentActions() {}
 
@@ -127,6 +135,25 @@ public final class AgentActions {
     /** Route is stored by the chat hook. It is not a Baritone command line. */
     static String routeCommand(Map<String, String> args) {
         return null;
+    }
+
+    static String pvpCommand(Map<String, String> args) {
+        String target = args.get("target");
+        if (target == null || target.isBlank()) {
+            target = "players";
+        }
+        if ("players".equalsIgnoreCase(target) || "hostiles".equalsIgnoreCase(target)) {
+            return "pvp " + target.toLowerCase(Locale.ROOT);
+        }
+        if (PLAYER.matcher(target).matches()) {
+            return "pvp " + target;
+        }
+        return null;
+    }
+
+    /** Gear is a settings change. The same secret names are refused. */
+    static String gearCommand(Map<String, String> args) {
+        return settingsCommand(args);
     }
 
     private static final class Mapped implements AgentAction {
