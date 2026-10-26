@@ -12,7 +12,7 @@ Set-Content $o $t
 $props = "-Dostinato.noMouseGrab=true -Dostinato.windowPos=$pos -Dostinato.testHarness=true -Dostinato.mazetest=true -Dostinato.mazetest.furnish=true -Dostinato.mazetest.furnishTimeoutTicks=60000 -Dostinato.mazetest.exit=true -Dostinato.mazetest.timeoutTicks=12000 $extra"
 $si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
 # Ostinato: cap the Gradle daemon heap at 1G (native OOM at 16GB RAM with -Xmx4G daemon + client)
-$cmd = "cmd.exe /c `"set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot&& set JAVA_TOOL_OPTIONS=$props&& gradlew.bat "-Dorg.gradle.jvmargs=-Xmx1G" :fabric:runClient -PclientXmx=1536M --offline --console=plain > proof\complete-mazetest.log 2>&1`""
+$cmd = "cmd.exe /c `"set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot&& set JAVA_TOOL_OPTIONS=$props&& gradlew.bat -Dorg.gradle.jvmargs=-Xmx1G :fabric:runClient -PclientXmx=1536M --offline --console=plain > proof\complete-mazetest.log 2>&1`""
 $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = "$PSScriptRoot"; ProcessStartupInformation = $si }
 "rv=$($r.ReturnValue) pid=$($r.ProcessId) pos=$pos"
 try { (Get-Process -Id $r.ProcessId).PriorityClass = 'BelowNormal' } catch {}
