@@ -31,6 +31,7 @@ public final class TestHarness {
         String pk = System.getProperty("ostinato.pktest");
         if (pk != null && !pk.isEmpty()) sb.append("ostinato.pktest ");
         if (Boolean.getBoolean("ostinato.basttest")) sb.append("ostinato.basttest ");
+        if (Boolean.getBoolean("ostinato.mazetest")) sb.append("ostinato.mazetest ");
         return sb.toString().trim();
     }
 
@@ -44,5 +45,6 @@ public final class TestHarness {
         }
         baritone.structure.BastTest.install(b);
         baritone.structure.PkTest.install(b);
+        baritone.maze.MazeTest.install(b);
     }
 }

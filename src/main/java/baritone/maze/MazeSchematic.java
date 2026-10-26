@@ -71,25 +71,16 @@ public final class MazeSchematic extends AbstractSchematic {
     }
 
     /**
-     * Survival has no themed blocks in the inventory, so the builder would stall on every wall. Instead the interior
-     * is dug out and the shell keeps the stone it already has. Only a shell gap (air or fluid) needs a block, taken
-     * from whatever full block the bot carries (dug stone or cobble). Containers and lights wait for a later pass.
+     * Survival is a dig-only pass: the interior is carved and every shell, floor, wall and ceiling cell keeps whatever is
+     * already there. Nothing is placed. A shell cell that is air is usually the bot's own entry shaft, and asking the
+     * builder to fill it while the bot stands in it made the live build stall (GoalPlace above its head, breaks never
+     * taken). Gaps, lights and containers are left for a later seal and loot pass.
      */
     static BlockState survivalState(BlockRole role, BlockState current, List<BlockState> approxPlaceable) {
-        if (role == BlockRole.AIR || role == BlockRole.OUTSIDE) {
+        if (role == BlockRole.AIR || role == BlockRole.OUTSIDE || current == null) {
             return Blocks.AIR.defaultBlockState();
         }
-        if (current != null && current.isSolidRender() && !current.hasBlockEntity()) {
-            return current;
-        }
-        if (approxPlaceable != null) {
-            for (BlockState s : approxPlaceable) {
-                if (s != null && s.isSolidRender() && !s.hasBlockEntity()) {
-                    return s;
-                }
-            }
-        }
-        return Blocks.COBBLESTONE.defaultBlockState();
+        return current;
     }
 
     private static BlockState container(ContainerKind kind) {
