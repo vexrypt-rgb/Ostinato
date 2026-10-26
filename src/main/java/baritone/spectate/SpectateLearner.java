@@ -166,55 +166,68 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         return BaritoneAPI.getSettings();
     }
 
-    // Ostinato: automatic fight detection in render distance
+    // Ostinato: automatic fight detection in render distance. Off, none of this runs and spectateLearn is unchanged.
     private final FightDetector fights = new FightDetector();
     private long detectTick;
     private final Set<Integer> swungIds = new HashSet<>(); // Ostinato: arm swings from the animate packet
     private final Map<Integer, Double> lastH2 = new HashMap<>();
+    private final Map<Integer, Integer> pendingDeaths = new HashMap<>(); // id -> tick, applied after detect so a fall is credited first
+    private final Map<Integer, String> watchedNames = new HashMap<>();
+    private final List<FightDetector.Outcome> pendingEnds = new ArrayList<>();
 
     private void detectFights(ClientLevel level) {
         if (level == null || !s().spectateAutoDetect.value) {
             fights.clear();
+            lastH2.clear();
             return;
         }
         Player me = Minecraft.getInstance().player;
+        if (watchedNames.size() > 200) watchedNames.clear();
         List<FightDetector.Obs> obs = new ArrayList<>();
         for (Player p : level.players()) {
             if (p == me || p.getId() < 0 || p.isSpectator()) continue;
             // Ostinato: sumo: a sudden horizontal shove (knockback) counts even with no HP lost
-            net.minecraft.world.phys.Vec3 v = p.getDeltaMovement();
+            Vec3 v = p.getDeltaMovement();
             double h2 = v.x * v.x + v.z * v.z;
-            Double prev = lastH2.put(p.getId(), h2);
-            boolean knocked = prev != null && h2 > 0.09 && h2 > prev * 2.5;
+            boolean knocked = FightDetector.velocityKnock(lastH2.put(p.getId(), h2), h2);
+            watchedNames.put(p.getId(), p.getName().getString());
             obs.add(new FightDetector.Obs(p.getId(), p.getX(), p.getY(), p.getZ(), p.getYRot(),
                     p.hurtTime >= 9, swungIds.contains(p.getId()), knocked, !p.isAlive()));
         }
         fights.voidY(level.getMinY() - 8); // Ostinato: knocked off into the void
         fights.tick(++detectTick, obs);
         swungIds.clear();
-        // Ostinato: save detected fights: sumo shoves enter FightBook as hits, void/fall/kill ends as deaths
-        int t = tick;
+        // Hits and endings are posted later, after the worker is up, so the shove is in the book before the death.
         for (FightDetector.Contact c : fights.drainContacts()) {
             if (!(level.getEntity(c.attacker()) instanceof Player a) || !(level.getEntity(c.victim()) instanceof Player v)) continue;
             String late = lateSigns(a, true) != null ? lateSigns(a, true) : lateSigns(v, false);
             pendingHits.add(new Object[]{a.getId(), v.getId(), a.getName().getString(), v.getName().getString(), tick, false, late});
         }
-        for (FightDetector.Outcome o : fights.drainOutcomes()) {
-            int loser = o.loser();
-            post(l -> l.book.died(t, loser)); // no-op when the death packet already ended it
-        }
+        pendingEnds.addAll(fights.drainOutcomes());
     }
 
     /** Whether to watch here: the setting, and on a multiplayer server its own setting as well. */
     public boolean active() {
-        // Ostinato: auto fight detection turns watching on by itself while a fight is seen
-        if (!s().spectateLearn.value && !(s().spectateAutoDetect.value && fights.anyFight())) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return false;
-        if (mc.hasSingleplayerServer()) return true;
-        ServerData sd = mc.getCurrentServer();
-        if (sd != null && sd.isLan()) return true;
-        return s().spectateLearnOnServers.value;
+        boolean singleOrLan = mc.hasSingleplayerServer();
+        if (!singleOrLan) {
+            ServerData sd = mc.getCurrentServer();
+            singleOrLan = sd != null && sd.isLan();
+        }
+        // Ostinato: an ending on this tick still records, then watching drops once the fight is gone
+        boolean seen = fights.anyFight() || !pendingEnds.isEmpty();
+        return watching(s().spectateLearn.value, s().spectateAutoDetect.value, seen, singleOrLan, s().spectateLearnOnServers.value);
+    }
+
+    /**
+     * Ostinato: the recording gate, with no client attached. Auto-detect does nothing until a fight is seen, and on a
+     * server it still needs {@code learnOnServers}. Both off leaves watching off, fight or not.
+     */
+    static boolean watching(boolean learn, boolean auto, boolean fightSeen, boolean singleOrLan, boolean learnOnServers) {
+        if (!learn && !(auto && fightSeen)) return false;
+        if (singleOrLan) return true;
+        return learnOnServers;
     }
 
     // ---------------------------------------------------------------- game thread
@@ -234,6 +247,11 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             availableSince.clear();
             flagged.clear();
             closeRecorders();
+            fights.clear(); // Ostinato
+            pendingEnds.clear();
+            pendingDeaths.clear();
+            watchedNames.clear();
+            lastH2.clear();
             post(l -> {
                 l.minds.clear();
                 l.book.resetPlayers(); // Ostinato: entity ids start over
@@ -249,6 +267,9 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
             looks.clear(); // Ostinato
             pendingSplash.clear(); // Ostinato
             firstSeenTick.clear(); // Ostinato: joined late: turning watching on is an arrival
+            pendingHits.clear(); // Ostinato: auto-detect off, or the fight is over: nothing new is recorded
+            pendingEnds.clear();
+            pendingDeaths.clear();
             closeRecorders();
             return;
         }
@@ -306,6 +327,7 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         }
         pendingHits.clear();
         critVictims.clear();
+        flushDetected(); // Ostinato: after the hits, so a shove is in the book before the fall that ends it
         if (tick % 20 == 0) {
             Map<Integer, Vec3> pos = new HashMap<>();
             Map<Integer, Float> hp = new HashMap<>();
@@ -346,6 +368,48 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
         else closeRecorders();
         mainNanos += System.nanoTime() - t0;
         mainTicks++;
+    }
+
+    /**
+     * Ostinato: ledge deaths go to {@link FightBook#knockOff} for the last attacker in the credit window. A fall with
+     * no attacker that recent closes as a draw. An ordinary hit-death still uses {@link FightBook#died}, so a short
+     * stray hit is dropped the way it was. Runs after this tick's hits are queued.
+     */
+    private void flushDetected() {
+        int now = tick;
+        Set<Integer> ended = new HashSet<>();
+        for (FightDetector.Outcome o : pendingEnds) {
+            ended.add(o.loser());
+            String cause = o.cause();
+            boolean ledge = "void".equals(cause) || "knockoff".equals(cause) || "fall".equals(cause);
+            int loser = o.loser();
+            if (ledge && o.winner() >= 0) {
+                int winner = o.winner();
+                String ln = watchedNames.getOrDefault(loser, "p" + loser);
+                String wn = watchedNames.getOrDefault(winner, "p" + winner);
+                post(l -> l.book.knockOff(now, loser, ln, winner, wn, cause));
+            } else if (ledge) {
+                post(l -> l.book.unresolved(now, loser, cause));
+            } else {
+                post(l -> l.book.died(now, loser));
+            }
+        }
+        pendingEnds.clear();
+        for (Map.Entry<Integer, Integer> e : pendingDeaths.entrySet()) {
+            int id = e.getKey();
+            if (!ended.add(id)) continue;
+            if (fights.creditFromKnock(id, detectTick)) {
+                int winner = fights.credit(id, detectTick);
+                if (winner >= 0) {
+                    String ln = watchedNames.getOrDefault(id, "p" + id);
+                    String wn = watchedNames.getOrDefault(winner, "p" + winner);
+                    post(l -> l.book.knockOff(now, id, ln, winner, wn, "fall"));
+                    continue;
+                }
+            }
+            post(l -> l.book.died(now, id));
+        }
+        pendingDeaths.clear();
     }
 
     private float hp(LivingEntity e) {
@@ -620,6 +684,12 @@ public final class SpectateLearner extends Behavior implements PacketTap.Listene
     @Override
     public void entityEvent(Entity e, byte event) {
         if (event == 35 && looks.containsKey(e.getId())) kitEvent(e.getId(), "pop:totem"); // Ostinato
+        // Ostinato: while auto-detect is on, a death waits until this tick's detector has credited a knock-off
+        if (event == 3 && e instanceof Player && s().spectateAutoDetect.value) {
+            pendingDeaths.put(e.getId(), tick);
+            watchedNames.put(e.getId(), ((Player) e).getName().getString());
+            return;
+        }
         if (event == 3 && looks.containsKey(e.getId()) && !seen.containsKey(e.getId())) { // Ostinato: deaths of those only looked at
             int id = e.getId(), t = tick;
             post(l -> l.book.died(t, id));

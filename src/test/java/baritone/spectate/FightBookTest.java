@@ -36,6 +36,30 @@ public class FightBookTest {
         assertEquals(0, pr.startSteps("heal.eatNear", 9, 2), 1e-9);
     }
 
+    /** Ostinato: one shove off a ledge counts; a normal short death still does not, and a second report does not double. */
+    @Test
+    public void knockOffCountsAndAShortDeathDoesNot() {
+        FightBook plain = new FightBook(null, null);
+        plain.hit(0, 2, "A", 1, "B");
+        plain.died(10, 1);
+        assertEquals(0, plain.decided());
+        assertTrue(plain.active().isEmpty());
+
+        FightBook ledge = new FightBook(null, null);
+        ledge.knockOff(10, 1, "B", 2, "A", "void");
+        ledge.knockOff(12, 1, "B", 2, "A", "void");
+        ledge.died(13, 1);
+        assertEquals(1, ledge.decided());
+        assertTrue(ledge.active().isEmpty());
+
+        FightBook stale = new FightBook(null, null);
+        for (int i = 0; i < 6; i++) stale.hit(i * 15, 2, "A", 1, "B");
+        stale.unresolved(100, 1, "fall");
+        assertEquals(0, stale.decided());
+        assertEquals(1, stale.draws);
+        assertTrue(stale.active().isEmpty());
+    }
+
     @Test
     public void quietFightsEndAndShortOnesAreDropped() {
         FightBook book = new FightBook(null, null);
