@@ -363,6 +363,9 @@ public final class OvernightOrchestrator {
         if (run != null) {
             metrics.putIfAbsent("variant", run.variant);
             metrics.putIfAbsent("world", run.world);
+            // Ostinato: every result row records the queue seed and flat, including a failed create.
+            metrics.put("seed", run.seed);
+            metrics.put("flat", Boolean.toString(run.flat));
         }
         metrics.putIfAbsent("score", scoreText == null || scoreText.isBlank() ? "n/a" : scoreText);
         metrics.putIfAbsent("timeMs", Long.toString(Math.max(0, nowMs - runStart)));

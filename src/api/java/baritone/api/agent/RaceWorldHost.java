@@ -1,7 +1,7 @@
 package baritone.api.agent;
 
-// Ostinato: one singleplayer race world. The live client opens an existing world and leaves it.
-// Creating a new world through the Create World screen is stubbed. Tests use a folder host.
+// Ostinato: one singleplayer race world. The live client opens an existing world, creates a missing one, and leaves it.
+// Tests use a folder host. A host still returns stubbed only when that step is unimplemented.
 
 /**
  * Creates, watches, and leaves one race world. Deletion stays on {@link WorldCleanup}.
