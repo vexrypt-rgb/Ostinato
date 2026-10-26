@@ -192,6 +192,7 @@ public final class MazeTest implements AbstractGameEventListener {
 
     private String lightDesc(ServerLevel lvl) {
         StringBuilder s = new StringBuilder();
+        for (var st : job.steps) if (st.kind().ordinal() == 3) { var bs = lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())); if (bs.isAir() || !bs.getFluidState().isEmpty()) s.append("openSeal=").append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=").append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).getPath()).append(" "); }
         for (var st : job.steps) if (st.kind().ordinal() == 0) s.append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=")
                 .append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())).getBlock()).getPath()).append(" ");
         return s.toString().trim();
@@ -218,7 +219,7 @@ public final class MazeTest implements AbstractGameEventListener {
         String tc = tenorState();
         String line = "light=" + have[0] + "/" + want[0] + " container=" + have[1] + "/" + want[1] + " fill=" + have[2] + "/" + want[2]
                 + " seal=" + have[3] + "/" + want[3];
-        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " feet=" + mc.player.blockPosition().toShortString());
+        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " " + lightDesc(lvl) + " feet=" + mc.player.blockPosition().toShortString());
         boolean done = have[0] == want[0] && have[1] == want[1] && have[3] == want[3];
         if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
             say("FURNISH verify " + line + " lights=" + lightDesc(lvl) + " -> " + (done ? "PASS" : "FAIL"));
