@@ -401,9 +401,9 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 }
             }
         }
-        // Ostinato: only woods TenorClef can harvest (its 26.3 build marks cherry/pale oak/bamboo unsupported). With none
+        // Ostinato: only woods TenorClef can harvest (TenorClef 4983e4e9 catalogues every overworld tree wood incl. cherry, mangrove, pale oak). With none
         // left, stone stands in for planks so the furnish never waits on a tree it cannot chop.
-        java.util.Set<String> ok = java.util.Set.of("oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks");
+        java.util.Set<String> ok = java.util.Set.of("oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "cherry_planks", "mangrove_planks", "pale_oak_planks");
         java.util.List<String> out = new java.util.ArrayList<>(seen.keySet());
         out.removeIf(w -> !ok.contains(w));
         if (out.isEmpty() && !seen.isEmpty()) out.add("polished_andesite");
