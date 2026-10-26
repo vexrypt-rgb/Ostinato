@@ -190,6 +190,13 @@ public final class MazeTest implements AbstractGameEventListener {
         if (real == null || !out.ok() || job == null) { state = 6; enterRoom(mc); }
     }
 
+    private String lightDesc(ServerLevel lvl) {
+        StringBuilder s = new StringBuilder();
+        for (var st : job.steps) if (st.kind().ordinal() == 0) s.append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=")
+                .append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())).getBlock()).getPath()).append(" ");
+        return s.toString().trim();
+    }
+
     private void furnishTick(Minecraft mc) {
         if (++wait % 100 != 0 && wait <= FURNISH_TIMEOUT) return;
         ServerLevel lvl = mc.getSingleplayerServer().overworld();
@@ -199,7 +206,7 @@ public final class MazeTest implements AbstractGameEventListener {
             want[k]++;
             BlockPos bp = new BlockPos(st.x(), st.y(), st.z());
             var bs = lvl.getBlockState(bp);
-            String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).toString();
+            String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).getPath(); // Ostinato: plan ids are bare ("glowstone"), not "minecraft:glowstone"
             boolean ok = switch (st.kind()) {
                 case SEAL -> !bs.isAir() && bs.getFluidState().isEmpty();
                 case FILL -> id.contains("decorated_pot")
@@ -214,7 +221,7 @@ public final class MazeTest implements AbstractGameEventListener {
         say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " feet=" + mc.player.blockPosition().toShortString());
         boolean done = have[0] == want[0] && have[1] == want[1] && have[3] == want[3];
         if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
-            say("FURNISH verify " + line + " -> " + (done ? "PASS" : "FAIL"));
+            say("FURNISH verify " + line + " lights=" + lightDesc(lvl) + " -> " + (done ? "PASS" : "FAIL"));
             state = done ? 5 : 6;
             wait = 0;
             enterRoom(mc);
