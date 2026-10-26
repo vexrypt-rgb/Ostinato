@@ -41,6 +41,10 @@ public final class MazeTest implements AbstractGameEventListener {
     private int state, wait, ticks, shot;
     private boolean builderSeen;
     private int repass;
+    // Ostinato: furnish leg of the harness (-Dostinato.mazetest.furnish, default true): dig, then hand the room to TenorClef.
+    private static final boolean FURNISH = !"false".equals(System.getProperty("ostinato.mazetest.furnish"));
+    private static final int FURNISH_TIMEOUT = Integer.getInteger("ostinato.mazetest.furnishTimeoutTicks", 20 * 60 * 40);
+    private volatile baritone.api.maze.MazeFurnishJob job;
 
     private MazeTest(Baritone b) {
         this.b = b;
@@ -156,13 +160,78 @@ public final class MazeTest implements AbstractGameEventListener {
                         wait = 0;
                         return;
                     }
+                    if (ok && FURNISH) { startFurnish(mc); return; }
                     state = ok ? 5 : 6;
                     wait = 0;
                     enterRoom(mc);
                 }
             }
+            case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
             default -> { }
+        }
+    }
+
+    /** Ostinato: wraps the registered furnisher to capture the job, then calls furnishHere(). */
+    private void startFurnish(Minecraft mc) {
+        var real = baritone.api.maze.MazeFurnishers.get();
+        say("FURNISH furnisher=" + (real == null ? "none" : real.name()));
+        if (real != null) {
+            baritone.api.maze.MazeFurnishers.register(new baritone.api.maze.IMazeFurnisher() {
+                public boolean furnish(baritone.api.maze.MazeFurnishJob j) { job = j; return real.furnish(j); }
+                public String name() { return real.name(); }
+            });
+        }
+        var out = b.getMazeProcess().furnishHere();
+        if (real != null) baritone.api.maze.MazeFurnishers.register(real);
+        say("FURNISH handoff " + (out.ok() ? "ok: " + out.message : "refused: " + out.error));
+        state = 8;
+        wait = 0;
+        if (real == null || !out.ok() || job == null) { state = 6; enterRoom(mc); }
+    }
+
+    private void furnishTick(Minecraft mc) {
+        if (++wait % 100 != 0 && wait <= FURNISH_TIMEOUT) return;
+        ServerLevel lvl = mc.getSingleplayerServer().overworld();
+        int[] want = new int[4], have = new int[4];
+        for (var st : job.steps) {
+            int k = st.kind().ordinal();
+            want[k]++;
+            BlockPos bp = new BlockPos(st.x(), st.y(), st.z());
+            var bs = lvl.getBlockState(bp);
+            String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).toString();
+            boolean ok = switch (st.kind()) {
+                case SEAL -> !bs.isAir() && bs.getFluidState().isEmpty();
+                case FILL -> id.contains("decorated_pot")
+                        || (lvl.getBlockEntity(bp) instanceof net.minecraft.world.Container c && !c.isEmpty());
+                default -> st.blockIds().isEmpty() ? !bs.isAir() : st.blockIds().contains(id);
+            };
+            if (ok) have[k]++;
+        }
+        String tc = tenorState();
+        String line = "light=" + have[0] + "/" + want[0] + " container=" + have[1] + "/" + want[1] + " fill=" + have[2] + "/" + want[2]
+                + " seal=" + have[3] + "/" + want[3];
+        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " feet=" + mc.player.blockPosition().toShortString());
+        boolean done = have[0] == want[0] && have[1] == want[1] && have[3] == want[3];
+        if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
+            say("FURNISH verify " + line + " -> " + (done ? "PASS" : "FAIL"));
+            state = done ? 5 : 6;
+            wait = 0;
+            enterRoom(mc);
+        }
+    }
+
+    /** Ostinato: TenorClef user-task state by reflection (no compile dependency). */
+    private static String tenorState() {
+        try {
+            Object mod = Class.forName("adris.altoclef.AltoClef").getMethod("getInstance").invoke(null);
+            Object chain = mod.getClass().getMethod("getUserTaskChain").invoke(mod);
+            boolean active = (boolean) chain.getClass().getMethod("isActive").invoke(chain);
+            Object task = null;
+            try { task = chain.getClass().getMethod("getCurrentTask").invoke(chain); } catch (ReflectiveOperationException ignored) { }
+            return (active ? "active" : "idle") + (task == null ? "" : ":" + String.valueOf(task).replace('\n', ' '));
+        } catch (Throwable t) {
+            return "absent(" + t.getClass().getSimpleName() + ")";
         }
     }
 
