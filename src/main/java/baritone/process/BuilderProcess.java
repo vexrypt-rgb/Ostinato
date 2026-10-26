@@ -459,7 +459,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             digUnderFeet = true;
             r = toBreakNearPlayer(bcc);
             digUnderFeet = false;
-            if (r.isPresent()) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
+            if (r.isPresent() && (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0)) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
             if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
                 // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
                 // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
@@ -473,7 +473,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 }
                 if (best != null) {
                     r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
-                    System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
+                    if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
                 }
             }
         }
