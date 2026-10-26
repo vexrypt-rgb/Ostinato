@@ -82,7 +82,8 @@ public final class DefaultCommands {
                 new TimingsCommand(baritone), // Ostinato: planned vs real movement ticks
                 new TrainCommand(baritone), // Ostinato: headless training circuits
                 new CompassCommand(baritone), // Ostinato: read the compass needle
-                new AgentCommand(baritone) // Ostinato: AI provider chat hook, off unless agentApi and agentChat are on
+                new AgentCommand(baritone), // Ostinato: AI provider chat hook, off unless agentApi and agentChat are on
+                new OvernightCommand(baritone) // Ostinato: hypothesis queue, off unless overnightRaces is on
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);

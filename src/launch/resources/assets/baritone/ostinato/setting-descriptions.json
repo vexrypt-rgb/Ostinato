@@ -419,5 +419,9 @@
  "mazeMinActionDelay": "Ostinato: minimum ticks to wait before a maze action. 20 ticks is one second. The maze process waits this long, plus up to mazeMaxActionDelay and mazeActionJitter, before the builder starts.",
  "mazeMaxActionDelay": "Ostinato: maximum ticks, before jitter, to wait before a maze action. Clamped up to mazeMinActionDelay when it is lower.",
  "mazeActionJitter": "Ostinato: extra ticks added or subtracted from the maze action delay, chosen from the room seed. Zero means the delay stays between mazeMinActionDelay and mazeMaxActionDelay.",
- "mazeMapFile": "Ostinato: maze map file of claimed cells and containers that must not be refilled. Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room."
+ "mazeMapFile": "Ostinato: maze map file of claimed cells and containers that must not be refilled. Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room.",
+ "overnightRaces": "Ostinato: overnight A/B hypothesis races. Off, #overnight does nothing, no world is created or deleted, and pathing is unchanged. On, #overnight start runs the queue in baritone/overnight/queue.jsonl.",
+ "overnightEveryBlockItem": "Ostinato: when an overnight run scores, also run every_block_item. Off, the race records the agent outcome only and does not enumerate the block or item registry. Does not change pathfinding.",
+ "overnightDir": "Ostinato: directory for the overnight queue, state, and races.jsonl, relative to the game directory.",
+ "overnightTimeoutMs": "Ostinato: per-run timeout in milliseconds when a queue line does not set timeoutMs. The run is recorded as timeout and its world is deleted."
 }

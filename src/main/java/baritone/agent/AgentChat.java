@@ -24,6 +24,7 @@ public final class AgentChat {
             + "goto walks to x, y, z or a block id. mine breaks a block id, with an optional count. "
             + "follow uses target players or entities, or entity plus a mob id, or player plus a name. "
             + "settings changes one Baritone setting by name and value. "
+            + "pvp fights players, hostiles, or a player name. gear changes one gear or combat setting. "
             + "route saves or runs a named task route; op is save, run, or list. "
             + "Do not ask for or repeat API keys. Keep the reply to one or two sentences. "
             + "If tools are unavailable, write a line: TOOL name key=value.";

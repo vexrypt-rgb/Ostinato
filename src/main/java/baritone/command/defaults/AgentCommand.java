@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 
 public class AgentCommand extends Command {
 
-    static final Path MEMORY_FILE = Path.of("baritone", "agent-memory.jsonl");
+    public static final Path MEMORY_FILE = Path.of("baritone", "agent-memory.jsonl");
 
     public AgentCommand(IBaritone baritone) {
         super(baritone, "agent");

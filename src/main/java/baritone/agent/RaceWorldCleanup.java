@@ -62,6 +62,24 @@ public final class RaceWorldCleanup implements WorldCleanup {
     }
 
     @Override
+    public List<String> deleteWorld(Path savesRoot, String worldName) throws IOException {
+        if (savesRoot == null || !Files.isDirectory(savesRoot) || !isRaceWorld(worldName)) {
+            return List.of();
+        }
+        Path root = savesRoot.toAbsolutePath().normalize();
+        // Ostinato: same marker gate as deleteLeftovers, so one named delete cannot touch a personal saves folder.
+        if (!Files.isRegularFile(root.resolve(MARKER))) {
+            return List.of();
+        }
+        Path child = root.resolve(worldName).normalize();
+        if (!child.startsWith(root) || child.equals(root) || !Files.isDirectory(child) || Files.isSymbolicLink(child)) {
+            return List.of();
+        }
+        deleteTree(child);
+        return List.of(worldName);
+    }
+
+    @Override
     public List<String> deleteLeftovers(Path savesRoot) throws IOException {
         if (savesRoot == null || !Files.isDirectory(savesRoot)) {
             return List.of();

@@ -59,4 +59,24 @@ public class WorldCleanupTest {
             assertFalse(gone, Files.exists(root.resolve(gone)));
         }
     }
+
+    @Test
+    public void deleteWorldRemovesOnlyThatRaceFolder() throws Exception {
+        Path root = Files.createTempDirectory("ostinato-race-one").toAbsolutePath().normalize();
+        for (String name : List.of("vexflat", "race_old", "hyp_a", "New World")) {
+            Files.createDirectories(root.resolve(name));
+        }
+        RaceWorldCleanup cleanup = RaceWorldCleanup.INSTANCE;
+        assertEquals(List.of(), cleanup.deleteWorld(root, "hyp_a"));
+        assertTrue(Files.isDirectory(root.resolve("hyp_a")));
+
+        Files.writeString(root.resolve(RaceWorldCleanup.MARKER), "race root");
+        assertEquals(List.of(), cleanup.deleteWorld(root, "vexflat"));
+        assertEquals(List.of(), cleanup.deleteWorld(root, "New World"));
+        assertEquals(List.of("hyp_a"), cleanup.deleteWorld(root, "hyp_a"));
+        assertFalse(Files.exists(root.resolve("hyp_a")));
+        assertTrue(Files.isDirectory(root.resolve("race_old")));
+        assertTrue(Files.isDirectory(root.resolve("vexflat")));
+        assertTrue(Files.isDirectory(root.resolve("New World")));
+    }
 }
