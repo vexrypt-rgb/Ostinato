@@ -57,7 +57,7 @@ public class MazeFurnishPlannerTest {
         assertTrue(job.steps(StepKind.SEAL).isEmpty());
         Step light = job.steps(StepKind.LIGHT).get(0);
         assertEquals(plan.originX + 3, light.x());
-        assertEquals(plan.originY + 3, light.y());
+        assertEquals(plan.originY + 2, light.y()); // Ostinato: floor torch
         assertEquals(MazeFurnishPlanner.lightIds(plan.theme), light.blockIds());
         Map<String, Integer> materials = job.materials();
         assertEquals(Integer.valueOf(1), materials.get(light.blockIds().get(0)));

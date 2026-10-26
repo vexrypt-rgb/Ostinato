@@ -303,7 +303,7 @@ public final class MazeTest implements AbstractGameEventListener {
         run("give @p bread 16");
         // Ostinato: harness-only light kit (-Dostinato.mazetest.lightKit, default true). Survival rooms plan glowstone lights,
         // which a fresh overworld cannot supply; this lets the furnish leg exercise light placement + seals.
-        if (!"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p glowstone 8");
+        if (!"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p torch 16"); // Ostinato: torch light kit
         if (FILL) {
             int x0 = MazeSeed.cellOf(p.getX()) * MazeSeed.CELL, z0 = MazeSeed.cellOf(p.getZ()) * MazeSeed.CELL;
             int top = p.getY() - 2, bottom = p.getY() - 40;

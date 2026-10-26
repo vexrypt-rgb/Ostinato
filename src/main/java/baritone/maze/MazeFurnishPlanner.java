@@ -109,9 +109,9 @@ public final class MazeFurnishPlanner {
     /** Best first. The first entry matches what the creative schematic places, so both modes look the same. */
     public static List<String> lightIds(MazeTheme theme) {
         return switch (theme) {
-            case HUB -> List.of("sea_lantern", "glowstone", "jack_o_lantern");
-            case DEEP -> List.of("glowstone", "shroomlight", "jack_o_lantern");
-            default -> List.of("glowstone", "jack_o_lantern");
+            default -> List.of("torch"); // Ostinato: floor torch; no wall insert, so the shell stays whole
+            // (Ostinato: glowstone/sea lantern/shroomlight inserts dropped for torches)
+            
         };
     }
 

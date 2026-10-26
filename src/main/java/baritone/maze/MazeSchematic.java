@@ -77,7 +77,7 @@ public final class MazeSchematic extends AbstractSchematic {
      * taken). Gaps, lights and containers are left for a later seal and loot pass.
      */
     static BlockState survivalState(BlockRole role, BlockState current, List<BlockState> approxPlaceable) {
-        if (role == BlockRole.AIR || role == BlockRole.OUTSIDE || current == null) {
+        if (role == BlockRole.AIR || role == BlockRole.LIGHT || role == BlockRole.OUTSIDE || current == null) { // Ostinato: torch cell is carved; furnish places the torch
             return Blocks.AIR.defaultBlockState();
         }
         return current;
@@ -96,7 +96,7 @@ public final class MazeSchematic extends AbstractSchematic {
             return Blocks.AIR.defaultBlockState();
         }
         if (role == BlockRole.LIGHT) {
-            return theme == MazeTheme.HUB ? Blocks.SEA_LANTERN.defaultBlockState() : Blocks.GLOWSTONE.defaultBlockState();
+            return Blocks.TORCH.defaultBlockState(); // Ostinato: torches light the room
         }
         return switch (theme) {
             case YELLOW_OFFICE -> switch (role) {

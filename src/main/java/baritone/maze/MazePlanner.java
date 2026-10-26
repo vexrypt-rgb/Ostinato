@@ -147,7 +147,7 @@ public final class MazePlanner {
         }
         roles[9][2][3] = BlockRole.STUB_CAP;
         roles[9][3][3] = BlockRole.STUB_CAP;
-        roles[3][3][3] = BlockRole.LIGHT;
+        roles[3][2][3] = BlockRole.LIGHT; // Ostinato: floor torch in the middle of the room; no shell block is given up for it
         int spot = (int) Long.remainderUnsigned(roomSeed, LOOT_SPOTS.length);
         int[] feature = LOOT_SPOTS[spot];
         roles[feature[0]][feature[1]][feature[2]] = BlockRole.FEATURE;
