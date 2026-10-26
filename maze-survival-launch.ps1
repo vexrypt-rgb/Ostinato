@@ -9,7 +9,8 @@ $o = "$PSScriptRoot\fabric\run\client\options.txt"; $t = gc $o
 $set = @{maxFps="30";enableVsync="false";renderDistance="6";simulationDistance="5";pauseOnLostFocus="false";inactivityFpsLimit="`"afk`""}
 $t = $t | % { $k = ($_ -split ":",2)[0]; if ($k -like "soundCategory_*") { "${k}:0.0" } elseif ($set.ContainsKey($k)) { "${k}:" + $set[$k] } else { $_ } }
 Set-Content $o $t
-$props = "-Dostinato.noMouseGrab=true -Dostinato.windowPos=$pos -Dostinato.testHarness=true -Dostinato.mazetest=true -Dostinato.mazetest.furnish=true -Dostinato.mazetest.furnishTimeoutTicks=60000 -Dostinato.mazetest.exit=true -Dostinato.mazetest.timeoutTicks=12000 $extra"
+# Ostinato: run33 hit the 60000-tick furnish cap at light 75/133; kit+gather alone uses ~35 min, so allow 90 min.
+$props = "-Dostinato.noMouseGrab=true -Dostinato.windowPos=$pos -Dostinato.testHarness=true -Dostinato.mazetest=true -Dostinato.mazetest.furnish=true -Dostinato.mazetest.furnishTimeoutTicks=108000 -Dostinato.mazetest.exit=true -Dostinato.mazetest.timeoutTicks=12000 $extra"
 $si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
 # Ostinato: cap the Gradle daemon heap at 1G (native OOM at 16GB RAM with -Xmx4G daemon + client)
 $cmd = "cmd.exe /c `"set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot&& set JAVA_TOOL_OPTIONS=$props&& gradlew.bat -Dorg.gradle.jvmargs=-Xmx1G :fabric:runClient -PclientXmx=1536M --offline --console=plain > proof\complete-mazetest.log 2>&1`""
