@@ -127,10 +127,10 @@ public final class MazeTest implements AbstractGameEventListener {
             case 4 -> {
                 boolean busy = b.getMazeProcess().isActive() || b.getBuilderProcess().isActive();
                 if (b.getBuilderProcess().isActive()) builderSeen = true;
-                if (++wait % 200 == 0) {
+                if (++wait % 100 == 0) {
                     say("progress t=" + wait + " feet=" + mc.player.blockPosition().toShortString()
                             + " builder=" + (b.getBuilderProcess().isActive() ? b.getBuilderProcess().displayName() : "idle")
-                            + " maze=" + b.getMazeProcess().status());
+                            + " maze=" + b.getMazeProcess().status() + " " + diag(mc));
                 }
                 if (wait > TIMEOUT_TICKS) {
                     verify(mc);
@@ -148,6 +148,35 @@ public final class MazeTest implements AbstractGameEventListener {
             case 5, 6 -> shots(mc);
             default -> { }
         }
+    }
+
+    /** Ostinato: why a builder that is "active" is not moving: what it wants, what it presses, what it looks at. */
+    private String diag(Minecraft mc) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            var f = b.getBuilderProcess().getClass().getDeclaredField("incorrectPositions");
+            f.setAccessible(true);
+            Object v = f.get(b.getBuilderProcess());
+            sb.append("incorrect=").append(v instanceof java.util.Collection<?> c ? c.size() : -1);
+            var pf = b.getBuilderProcess().getClass().getDeclaredField("paused");
+            pf.setAccessible(true);
+            sb.append(" paused=").append(pf.get(b.getBuilderProcess()));
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            sb.append("incorrect=?");
+        }
+        var in = b.getInputOverrideHandler();
+        sb.append(" keys=");
+        for (var i : baritone.api.utils.input.Input.values()) if (in.isInputForcedDown(i)) sb.append(i.name()).append(',');
+        sb.append(" goal=").append(b.getPathingBehavior().getGoal());
+        sb.append(" pathing=").append(b.getPathingBehavior().isPathing());
+        sb.append(" rot=").append((int) mc.player.getYRot()).append('/').append((int) mc.player.getXRot());
+        sb.append(" hit=").append(mc.hitResult == null ? "null" : mc.hitResult.getType()
+                + (mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult bh ? "@" + bh.getBlockPos().toShortString() : ""));
+        sb.append(" held=").append(mc.player.getMainHandItem().getItem());
+        sb.append(" onGround=").append(mc.player.onGround());
+        sb.append(" screen=").append(mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName());
+        sb.append(" focused=").append(mc.isWindowActive());
+        return sb.toString();
     }
 
     private void setup(Minecraft mc) {
