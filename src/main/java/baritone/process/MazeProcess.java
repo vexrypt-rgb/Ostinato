@@ -212,7 +212,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 map.bus().publishLoot(placement.x(), placement.y(), placement.z(),
                         placement.kind().name().toLowerCase(), placement.theme().id, placement.payload());
             }
-            baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot), new BlockPos(plan.originX, plan.originY, plan.originZ));
+            baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, !ctx.player().getAbilities().instabuild), new BlockPos(plan.originX, plan.originY, plan.originZ));
             handedToBuilder = name;
             summary = "Building " + name + " (" + plan.theme.displayName + ")";
             logDirect(summary);
