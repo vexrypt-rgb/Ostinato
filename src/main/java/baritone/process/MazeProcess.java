@@ -122,6 +122,15 @@ public final class MazeProcess extends BaritoneProcessHelper {
     }
 
     private RoomPlan lastBuilt;
+    private boolean restoreBreakFromAbove;
+
+    /** Ostinato: puts breakFromAbove back once the survival room build that turned it on is no longer running. */
+    private void restoreSettingsWhenDone() {
+        if (restoreBreakFromAbove && !(handedToBuilder != null && baritone.getBuilderProcess().isActive())) {
+            Baritone.settings().breakFromAbove.value = false;
+            restoreBreakFromAbove = false;
+        }
+    }
 
     public Outcome planHere() {
         Report report = prepare(false);
@@ -154,6 +163,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
+        restoreSettingsWhenDone();
         if (!enabled()) {
             if (phase != Phase.IDLE) {
                 clearPending();
@@ -219,7 +229,14 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 map.bus().publishLoot(placement.x(), placement.y(), placement.z(),
                         placement.kind().name().toLowerCase(), placement.theme().id, placement.payload());
             }
-            baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, !ctx.player().getAbilities().instabuild), new BlockPos(plan.originX, plan.originY, plan.originZ));
+            boolean survival = !ctx.player().getAbilities().instabuild;
+            if (survival && !Baritone.settings().breakFromAbove.value) {
+                // Ostinato: a survival room is dug from inside. The builder only breaks blocks at or above the feet unless
+                // breakFromAbove is on, and live it stood on the last interior layer with nothing in reach (no path, no keys).
+                Baritone.settings().breakFromAbove.value = true;
+                restoreBreakFromAbove = true;
+            }
+            baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, survival), new BlockPos(plan.originX, plan.originY, plan.originZ));
             handedToBuilder = name;
             lastBuilt = plan;
             summary = "Building " + name + " (" + plan.theme.displayName + ")";
