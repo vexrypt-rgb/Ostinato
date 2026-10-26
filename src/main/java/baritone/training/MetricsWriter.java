@@ -52,7 +52,7 @@ public final class MetricsWriter {
     }
 
     static String taskJson(TrainingResult task) {
-        return "{\"runId\":\"" + task.runId + "\",\"circuit\":\"" + task.circuitId + "\",\"seed\":" + task.seed
+        String json = "{\"runId\":\"" + task.runId + "\",\"circuit\":\"" + task.circuitId + "\",\"seed\":" + task.seed
                 + ",\"mode\":\"" + task.mode + "\",\"model\":\"" + task.modelId + "\",\"success\":" + task.success
                 + ",\"totalTicks\":" + task.totalTicks + ",\"mineTicks\":" + task.mineTicks
                 + ",\"craftTicks\":" + task.craftTicks + ",\"placeTicks\":" + task.placeTicks
@@ -64,6 +64,11 @@ public final class MetricsWriter {
                 + "\",\"biome\":\"" + task.biome + "\",\"temperature\":" + task.temperature
                 + ",\"mobPressure\":\"" + task.mobPressure + "\",\"inventoryPressure\":\"" + task.inventoryPressure
                 + "\",\"cues\":\"" + task.cues + "\"}";
+        // Ostinato: gear score is additive. The baseline line has no gearScore field.
+        if (!task.gearScored) {
+            return json;
+        }
+        return json.substring(0, json.length() - 1) + ",\"gearScore\":" + task.gearScore + "}";
     }
 
     private static String csvRow(TrainingResult task) {

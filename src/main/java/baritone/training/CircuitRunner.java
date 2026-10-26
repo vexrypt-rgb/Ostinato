@@ -21,11 +21,26 @@ public final class CircuitRunner {
     private CircuitRunner() {}
 
     public static TrainingResult run(String circuitId, boolean legit, ITrainingModel model, Path outDir) throws IOException {
+        return play(circuitId, legit, model, outDir, null);
+    }
+
+    /**
+     * Ostinato: {@code equip == null} is the stock circuit, the same actions and files as the harness baseline.
+     * A locker kit spends its equip ticks first, then the same policy runs with that tool and armor.
+     */
+    static TrainingResult play(String circuitId, boolean legit, ITrainingModel model, Path outDir, GearChoice.Equip equip)
+            throws IOException {
         TrainingWorld world = TrainingWorld.create(circuitId);
         world.reset();
-        String gearTool = "NONE";
-        String gearArmor = "NONE";
-        String gearReason = "";
+        if (equip != null) {
+            world.equip(equip);
+            for (int i = 0; i < equip.ticks; i++) {
+                world.act("WAIT");
+            }
+        }
+        String gearTool = equip == null ? "NONE" : equip.tool;
+        String gearArmor = equip == null ? "NONE" : equip.armor;
+        String gearReason = equip == null ? "" : equip.reason;
         Set<String> cues = new LinkedHashSet<>();
         List<String> actions = new ArrayList<>();
         ITaskView view = Senses.observe(world, legit);
@@ -34,11 +49,11 @@ public final class CircuitRunner {
         while (!world.success() && !world.dead() && world.ticks < MAX_TICKS && guard < MAX_TICKS) {
             guard++;
             TaskDecision decision = model.decide(view);
-            if (decision.gearTool != null) {
+            if (equip == null && decision.gearTool != null) {
                 gearTool = decision.gearTool;
                 gearReason = decision.gearReason == null ? "" : decision.gearReason;
             }
-            if (decision.gearArmor != null) {
+            if (equip == null && decision.gearArmor != null) {
                 gearArmor = decision.gearArmor;
             }
             String act = decision.act == null ? "WAIT" : decision.act;

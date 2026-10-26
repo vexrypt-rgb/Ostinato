@@ -66,6 +66,7 @@ public class TrainingSimTest {
 
         String taskLine = Files.readAllLines(out.resolve("runs.jsonl"), StandardCharsets.UTF_8).get(0);
         assertFalse(taskLine.contains("riseBlocks"));
+        assertFalse(taskLine.contains("gearScore"));
         String pathLine = Files.readString(out.resolve("path-signals.jsonl"), StandardCharsets.UTF_8);
         assertTrue(pathLine.contains("riseBlocks"));
         assertTrue(Files.exists(out.resolve("runs.csv")));
@@ -141,6 +142,7 @@ public class TrainingSimTest {
         assertTrue(settings.contains("trainingTask = new Setting<>(false)"));
         assertTrue(settings.contains("trainingLegit = new Setting<>(false)"));
         assertTrue(settings.contains("compassFollow = new Setting<>(false)"));
+        assertTrue(settings.contains("trainingGearChoice = new Setting<>(false)"));
         for (String rel : new String[]{
                 "src/test/java/baritone/pathing/calc/PathBench.java",
                 "src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java",

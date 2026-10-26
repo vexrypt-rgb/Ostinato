@@ -37,7 +37,7 @@ public final class OstinatoPins {
             "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme",
             "pvpAutotune", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale",
             "renderKinCorridor", "renderKinRollouts", "renderKinJumps", "renderPhysSpeedTrail", "renderPhysInputs", "renderPhysSearch",
-            "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir"
+            "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir", "trainingGearChoice"
     )));
 
     private OstinatoPins() {}

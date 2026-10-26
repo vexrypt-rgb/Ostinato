@@ -2527,6 +2527,13 @@ public final class Settings {
     /** Ostinato: directory for training JSONL and CSV. Relative to the game directory. */
     public final Setting<String> trainingOutDir = new Setting<>("baritone/training");
 
+    /**
+     * Ostinato: when training, try the armor and tools the circuit can supply and keep the kit with the best
+     * score of time, deaths and durability. Off, the circuits and their result files stay on the harness baseline.
+     * Does not change pathfinding.
+     */
+    public final Setting<Boolean> trainingGearChoice = new Setting<>(false);
+
     // here be dragons
 
     Settings() {

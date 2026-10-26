@@ -32,12 +32,26 @@ public final class TrainingResult {
     public final String inventoryPressure;
     public final String cues;
     public final String actions;
+    /** Ostinato: true when gear-choice scoring published this row. False on the harness baseline. */
+    public final boolean gearScored;
+    /** Ostinato: time + deaths * weight + durability * weight. Zero when {@link #gearScored} is false. */
+    public final int gearScore;
 
     public TrainingResult(String runId, String circuitId, long seed, String mode, String modelId, boolean success,
             int totalTicks, int mineTicks, int craftTicks, int placeTicks, int deaths, String deathCauses,
             int pathFailures, int blocksBroken, int blocksPlaced, int durabilitySpent, String gearTool,
             String gearArmor, String gearReason, String bucketKey, String biome, double temperature,
             String mobPressure, String inventoryPressure, String cues, String actions) {
+        this(runId, circuitId, seed, mode, modelId, success, totalTicks, mineTicks, craftTicks, placeTicks, deaths,
+                deathCauses, pathFailures, blocksBroken, blocksPlaced, durabilitySpent, gearTool, gearArmor, gearReason,
+                bucketKey, biome, temperature, mobPressure, inventoryPressure, cues, actions, false, 0);
+    }
+
+    public TrainingResult(String runId, String circuitId, long seed, String mode, String modelId, boolean success,
+            int totalTicks, int mineTicks, int craftTicks, int placeTicks, int deaths, String deathCauses,
+            int pathFailures, int blocksBroken, int blocksPlaced, int durabilitySpent, String gearTool,
+            String gearArmor, String gearReason, String bucketKey, String biome, double temperature,
+            String mobPressure, String inventoryPressure, String cues, String actions, boolean gearScored, int gearScore) {
         this.runId = runId;
         this.circuitId = circuitId;
         this.seed = seed;
@@ -64,5 +78,15 @@ public final class TrainingResult {
         this.inventoryPressure = inventoryPressure;
         this.cues = cues;
         this.actions = actions;
+        this.gearScored = gearScored;
+        this.gearScore = gearScore;
+    }
+
+    /** Same row, marked as the gear-choice winner. */
+    public TrainingResult withGearScore(int score) {
+        return new TrainingResult(runId, circuitId, seed, mode, modelId, success, totalTicks, mineTicks, craftTicks,
+                placeTicks, deaths, deathCauses, pathFailures, blocksBroken, blocksPlaced, durabilitySpent, gearTool,
+                gearArmor, gearReason, bucketKey, biome, temperature, mobPressure, inventoryPressure, cues, actions,
+                true, score);
     }
 }

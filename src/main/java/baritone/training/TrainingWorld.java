@@ -14,6 +14,8 @@ public final class TrainingWorld {
     public static final long SEED_HILLS = 71002L;
     public static final long SEED_NIGHT = 71003L;
     public static final long SEED_COMPASS = 71004L;
+    /** Ostinato: locker camp. Not part of the default suite. */
+    public static final long SEED_CAMP = 71005L;
 
     static final int SX = 24;
     static final int SY = 6;
@@ -50,6 +52,10 @@ public final class TrainingWorld {
     private final int startZ;
     private final int startYaw;
     private final int startDirt;
+    /** Ostinato: a mob beside the path knocks an unarmored bot into the pit. Stock circuits leave this false. */
+    final boolean hazard;
+    /** Ostinato: the camp locker can supply every catalog kit. Stock circuits leave this false. */
+    final boolean locker;
 
     int x;
     int y;
@@ -81,10 +87,15 @@ public final class TrainingWorld {
     /** Compass target. Negative when this circuit has no needle. */
     private int markX = -1;
     private int markZ = -1;
+    /** Ostinato: set only by {@link #equip}. False keeps mine times and movement on the harness baseline. */
+    boolean gearLive;
+    String toolName = "HAND";
+    int armorRank;
 
     private TrainingWorld(String circuitId, long seed, String biome, double temperature, String jumpMajority,
             String terrain, String mobPressure, int riseBlocks, int gapBlocks, String goalItem, String craftGoal,
-            int startX, int startY, int startZ, int startYaw, int startDirt, int mobX, int mobY, int mobZ, boolean hasMob) {
+            int startX, int startY, int startZ, int startYaw, int startDirt, int mobX, int mobY, int mobZ, boolean hasMob,
+            boolean hazard, boolean locker) {
         this.circuitId = circuitId;
         this.seed = seed;
         this.biome = biome;
@@ -105,6 +116,8 @@ public final class TrainingWorld {
         this.mobY = mobY;
         this.mobZ = mobZ;
         this.hasMob = hasMob;
+        this.hazard = hazard;
+        this.locker = locker;
     }
 
     public static TrainingWorld create(String circuitId) {
@@ -113,6 +126,7 @@ public final class TrainingWorld {
             case "stone-step" -> hills();
             case "night-listen" -> night();
             case "compass-hunt" -> compass();
+            case "gear-camp" -> camp();
             default -> throw new IllegalArgumentException(circuitId);
         };
     }
@@ -128,13 +142,14 @@ public final class TrainingWorld {
             case "71002" -> "stone-step";
             case "71003" -> "night-listen";
             case "71004" -> "compass-hunt";
+            case "71005" -> "gear-camp";
             default -> throw new IllegalArgumentException(raw);
         };
     }
 
     private static TrainingWorld plains() {
         TrainingWorld w = new TrainingWorld("log-planks", SEED_PLAINS, "PLAINS", 0.8, "WALK", "FLAT", "DAY",
-                0, 0, "PLANKS", "PLANKS", 4, 1, 2, 0, 0, 0, 0, 0, false);
+                0, 0, "PLANKS", "PLANKS", 4, 1, 2, 0, 0, 0, 0, 0, false, false, false);
         w.fillFloor(0, 16, 0, 16, 0);
         w.set(4, 1, 6, LOG);
         w.set(4, 1, 1, DEPOSIT);
@@ -145,7 +160,7 @@ public final class TrainingWorld {
 
     private static TrainingWorld hills() {
         TrainingWorld w = new TrainingWorld("stone-step", SEED_HILLS, "HILLS", 0.2, "STEP", "RISE", "DAY",
-                1, 0, "COBBLE", "PICK", 2, 1, 2, 0, 8, 0, 0, 0, false);
+                1, 0, "COBBLE", "PICK", 2, 1, 2, 0, 8, 0, 0, 0, false, false, false);
         w.fillFloor(0, 16, 0, 7, 0);
         w.fillFloor(0, 16, 8, 14, 1);
         w.set(2, 1, 5, LOG);
@@ -160,7 +175,7 @@ public final class TrainingWorld {
 
     private static TrainingWorld night() {
         TrainingWorld w = new TrainingWorld("night-listen", SEED_NIGHT, "FOREST", 0.7, "WALK", "FLAT", "NIGHT",
-                0, 0, "PLANKS", "PLANKS", 5, 1, 5, 0, 0, 11, 1, 5, true);
+                0, 0, "PLANKS", "PLANKS", 5, 1, 5, 0, 0, 11, 1, 5, true, false, false);
         w.fillFloor(0, 16, 0, 16, 0);
         w.set(9, 1, 5, LOG);
         w.set(5, 1, 2, DEPOSIT);
@@ -177,9 +192,26 @@ public final class TrainingWorld {
     /** Lodestone due south, outside the 8-block view. The player starts facing west, so the needle is the cue. */
     private static TrainingWorld compass() {
         TrainingWorld w = new TrainingWorld("compass-hunt", SEED_COMPASS, "PLAINS", 0.8, "WALK", "FLAT", "DAY",
-                0, 0, "COMPASS", "COMPASS", 4, 1, 4, 1, 0, 0, 0, 0, false);
+                0, 0, "COMPASS", "COMPASS", 4, 1, 4, 1, 0, 0, 0, 0, false, false, false);
         w.fillFloor(0, 20, 0, 20, 0);
         w.markCompass(4, 16);
+        w.snapshot();
+        w.reset();
+        return w;
+    }
+
+    /**
+     * Ostinato: flat quarry with a kit locker. A zombie stands east of the path and a pit sits west of it.
+     * No logs, so a pick has to come from the locker. Not in {@link #suiteIds()}.
+     */
+    private static TrainingWorld camp() {
+        TrainingWorld w = new TrainingWorld("gear-camp", SEED_CAMP, "MESA", 2.0, "WALK", "FLAT", "NIGHT",
+                0, 0, "COBBLE", "PICK", 4, 1, 4, 0, 0, 5, 1, 6, true, true, true);
+        w.fillFloor(0, 16, 0, 16, 0);
+        w.set(4, 1, 9, STONE);
+        w.set(4, 1, 2, DEPOSIT);
+        w.set(3, 0, 6, PIT);
+        w.set(3, 1, 6, PIT);
         w.snapshot();
         w.reset();
         return w;
@@ -225,6 +257,44 @@ public final class TrainingWorld {
         mineLock = mineLeft = craftLock = craftLeft = 0;
         knocked = false;
         lastCue = "";
+        gearLive = false;
+        toolName = "HAND";
+        armorRank = 0;
+    }
+
+    /** Tool the stock circuit already reaches with no locker. Empty when the camp must choose one. */
+    String stockTool() {
+        if ("COBBLE".equals(goalItem) && contains(LOG)) {
+            return "WOOD_PICK";
+        }
+        if (locker) {
+            return "";
+        }
+        return "HAND";
+    }
+
+    boolean hasLocker() {
+        return locker;
+    }
+
+    /** Ostinato: grant a locker kit. Mine pace and knockoff stay off until this is called. */
+    void equip(GearChoice.Equip equip) {
+        gearLive = true;
+        toolName = equip.tool;
+        armorRank = GearChoice.armorRank(equip.armor);
+        int granted = GearChoice.pickDurability(equip.tool);
+        if (granted >= 0) {
+            pick = granted;
+        }
+    }
+
+    private boolean contains(byte id) {
+        for (byte cell : cells) {
+            if (cell == id) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String inventoryPressure() {
@@ -297,6 +367,23 @@ public final class TrainingWorld {
     }
 
     private void move(boolean jump) {
+        // Ostinato: unarmored locker kit beside the camp mob is shoved into the pit. Stock circuits never enter.
+        if (gearLive && hazard && armorRank == 0 && hasMob && manhattan(mobX, mobZ) <= 1) {
+            knocked = true;
+            int sx = x + Integer.signum(x - mobX);
+            int sz = z + Integer.signum(z - mobZ);
+            if (sx == x && sz == z) {
+                sz = z + 1;
+            }
+            if (at(sx, y, sz) == PIT || at(sx, y - 1, sz) == PIT || !floorAt(sx, y, sz)) {
+                die("KNOCKOFF");
+                return;
+            }
+            x = sx;
+            z = sz;
+            addCue("MOB_HURT@" + bearing(mobX - x, mobZ - z));
+            return;
+        }
         int nx = x + fx(yaw);
         int nz = z + fz(yaw);
         if (jump && solid(nx, y, nz) && !solid(nx, y + 1, nz)) {
@@ -353,6 +440,16 @@ public final class TrainingWorld {
         if (mineLock != b) {
             mineLock = b;
             mineLeft = b == LOG ? 8 : 6;
+            // Ostinato: a locker tool can mine faster. The stock assignment above is what gearLive false keeps.
+            if (gearLive) {
+                int paced = GearChoice.breakTicks(toolName, b);
+                if (paced < 0) {
+                    pathFailures++;
+                    mineLock = 0;
+                    return;
+                }
+                mineLeft = paced;
+            }
         }
         mineLeft--;
         if (mineLeft > 0) {

@@ -1,6 +1,6 @@
 # Training circuits
 
-Headless task harness for later pathfinding autotune, PvE autotune, and a swappable task model. It does not run inside A*. With `trainingTask` off (the default), `#train` returns immediately and pathing is unchanged.
+Headless task harness for later pathfinding autotune, PvE autotune, and a swappable task model. It does not run inside A*. With `trainingTask` off (the default), `#train` returns immediately and pathing is unchanged. `trainingGearChoice` also defaults off. Off, circuit rows stay on the baseline below.
 
 ## Worlds
 
@@ -12,6 +12,7 @@ Each run creates and resets an in-memory world. The seed selects an authored lay
 | 71002 | `stone-step` | hills, 0.2 | Punch two logs, craft sticks and a wooden pick at the crafting table, step up, mine stone, place cobble. Hotbar starts with 8 dirt. |
 | 71003 | `night-listen` | forest, 0.7, night | Same plank deposit. The log starts to the east, outside the look cone. A zombie, water and lava are off to the side. |
 | 71004 | `compass-hunt` | plains, 0.8 | Walk to a lodestone that starts outside the look cone. Legit mode has the compass cardinal. Full mode also has the block. |
+| 71005 | `gear-camp` | mesa, 2.0, night | Opt-in, not in the default suite. No logs. A locker supplies the kit. Stone is south, a pit is west of the path, a zombie stands east of it. |
 
 No creative give. The dirt on 71002 is the starting kit and is not a tool. A wooden pick is a crafting-table recipe: 2 planks make 4 sticks, 3 planks and 2 sticks make the pick. Stone does not break by hand.
 
@@ -60,6 +61,16 @@ Each run writes three things under the output directory:
 - `path-signals.jsonl` — terrain, majority jump, rise and gap counts. Joined to the task row only by `runId`.
 
 The bucket key is `biome|jumpMajority|terrain|mobPressure|inventoryPressure`.
+
+## Gear choice
+
+`trainingGearChoice` defaults off. Off, `#train` and `TrainingMain` play each circuit once, and `runs.jsonl` has no `gearScore` field. The scorer is not referenced from pathfinding, so search fingerprints and the Pi heap are unchanged.
+
+On, the harness plays every kit that circuit can actually supply. A plank task has a hand. A cobble task with logs has a hand and a wooden pick. `gear-camp` has a locker: hand, wood, stone and iron picks, and no armor, leather, iron or diamond. A stock kit is played with no grant, so crafting stays inside the run. A locker kit spends equip ticks (wood 4, stone 14, iron 22, leather 6, iron armor 18, diamond 30), then the same policy runs.
+
+The score is `ticks + deaths * 1000 + durability * 2`. Lower wins. Ties keep the earlier, cheaper kit. The winner is the `TrainingResult` (`gearScore` is added to that JSON line only). Every kit is a row in `gear-rows.jsonl` with `time`, `deaths`, `durability`, `score` and `chosen`. On the camp, no armor is knocked into the pit. Leather and a wooden pick win: heavier kits cost more equip ticks than their faster mining saves, and a death costs more than the whole job.
+
+Headless opt-in: `-Dostinato.trainingGearChoice=true`. In game the setting is `trainingGearChoice`.
 
 ## Model hook
 
