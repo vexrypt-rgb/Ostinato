@@ -70,7 +70,8 @@ public final class LootPlanner {
 
     public static List<LootPlacement> plan(RoomPlan plan, PlacedLedger ledger) {
         PlacedLedger book = ledger == null ? PlacedLedger.EMPTY : ledger;
-        int gate = (int) Long.remainderUnsigned(MazeSeed.mix(plan.roomSeed, 99, plan.theme.ordinal()), 100);
+        int gate = (int) Long.remainderUnsigned(MazeSeed.mix(plan.roomSeed, 99, plan.theme.ordinal()), 100); // Ostinato: harness knob -Dostinato.mazetest.lootGate=0..99 forces the container roll for proof runs
+        gate = Integer.getInteger("ostinato.mazetest.lootGate", gate);
         ContainerKind[] kinds = kindsFor(plan.theme, gate);
         List<LootPlacement> out = new ArrayList<>();
         for (int i = 0; i < kinds.length; i++) {

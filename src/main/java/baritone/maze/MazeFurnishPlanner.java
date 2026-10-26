@@ -162,6 +162,25 @@ public final class MazeFurnishPlanner {
         return false;
     }
 
+    /** Ostinato: plank ids for logs near the room, most common first. Set by MazeProcess before planning; empty = unknown. */
+    public static volatile List<String> woods = List.of();
+
+    /**
+     * Ostinato: {@code ids} with every *_planks entry swapped for a wood that grows nearby (the {@code rank}-th most common,
+     * so floor and walls differ when two woods are around). Non-wood ids keep their place, so concrete stays first.
+     */
+    static List<String> wood(int rank, String... ids) {
+        List<String> w = woods;
+        List<String> out = new ArrayList<>();
+        boolean put = false;
+        for (String id : ids) {
+            if (id.endsWith("_planks") && !w.isEmpty()) {
+                if (!put) { out.add(w.get(Math.min(rank, w.size() - 1))); put = true; }
+                for (String o : w) if (!out.contains(o)) out.add(o);
+            } else if (!out.contains(id)) out.add(id);
+        }
+        return List.copyOf(out);
+    }
     /**
      * Ostinato: per-theme palette, best first. The first id matches the creative schematic; later ids are themed blocks
      * a survival furnisher can actually make (TenorClef picks the first it can obtain), never plain stone.
@@ -171,9 +190,9 @@ public final class MazeFurnishPlanner {
         // hundreds of stone) come first; the creative look (concrete, quartz, bricks) stays in MazeSchematic.
         return switch (theme) {
             case YELLOW_OFFICE -> switch (role) {
-                case FLOOR -> List.of("oak_planks", "spruce_planks", "birch_planks");
-                case WALL -> List.of("yellow_concrete", "yellow_terracotta", "birch_planks", "sandstone", "oak_planks");
-                default -> List.of("polished_diorite", "polished_andesite", "birch_planks");
+                case FLOOR -> wood(0, "oak_planks", "spruce_planks", "birch_planks");
+                case WALL -> wood(1, "yellow_concrete", "yellow_terracotta", "birch_planks", "sandstone", "oak_planks");
+                default -> wood(2, "polished_diorite", "polished_andesite", "birch_planks");
             };
             case PIPES -> switch (role) {
                 case FLOOR -> List.of("polished_andesite", "andesite");
@@ -181,9 +200,9 @@ public final class MazeFurnishPlanner {
                 default -> List.of("polished_andesite", "andesite");
             };
             case HUB -> switch (role) {
-                case FLOOR -> List.of("birch_planks", "oak_planks");
-                case WALL -> List.of("spruce_planks", "oak_planks");
-                default -> List.of("polished_diorite", "birch_planks");
+                case FLOOR -> wood(0, "birch_planks", "oak_planks");
+                case WALL -> wood(1, "spruce_planks", "oak_planks");
+                default -> wood(2, "polished_diorite", "birch_planks");
             };
             case DEEP -> switch (role) {
                 case FLOOR -> List.of("polished_deepslate", "cobbled_deepslate");
