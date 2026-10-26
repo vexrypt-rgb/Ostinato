@@ -35,10 +35,18 @@ public final class MazeSchematic extends AbstractSchematic {
     private final RoomPlan plan;
     private final List<LootPlacement> loot;
 
+    /** Survival: carve the interior and keep whatever solid block is already there for the shell. */
+    private final boolean survival;
+
     public MazeSchematic(RoomPlan plan, List<LootPlacement> loot) {
+        this(plan, loot, false);
+    }
+
+    public MazeSchematic(RoomPlan plan, List<LootPlacement> loot, boolean survival) {
         super(plan.sizeX, plan.sizeY, plan.sizeZ);
         this.plan = plan;
         this.loot = loot == null ? List.of() : List.copyOf(loot);
+        this.survival = survival;
     }
 
     @Override
@@ -51,12 +59,37 @@ public final class MazeSchematic extends AbstractSchematic {
 
     @Override
     public BlockState desiredState(int x, int y, int z, BlockState current, List<BlockState> approxPlaceable) {
+        if (survival) {
+            return survivalState(plan.role(x, y, z), current, approxPlaceable);
+        }
         for (LootPlacement placement : loot) {
             if (placement.x() - plan.originX == x && placement.y() - plan.originY == y && placement.z() - plan.originZ == z) {
                 return container(placement.kind());
             }
         }
         return state(plan.theme, plan.role(x, y, z));
+    }
+
+    /**
+     * Survival has no themed blocks in the inventory, so the builder would stall on every wall. Instead the interior
+     * is dug out and the shell keeps the stone it already has. Only a shell gap (air or fluid) needs a block, taken
+     * from whatever full block the bot carries (dug stone or cobble). Containers and lights wait for a later pass.
+     */
+    static BlockState survivalState(BlockRole role, BlockState current, List<BlockState> approxPlaceable) {
+        if (role == BlockRole.AIR || role == BlockRole.OUTSIDE) {
+            return Blocks.AIR.defaultBlockState();
+        }
+        if (current != null && current.isSolidRender() && !current.hasBlockEntity()) {
+            return current;
+        }
+        if (approxPlaceable != null) {
+            for (BlockState s : approxPlaceable) {
+                if (s != null && s.isSolidRender() && !s.hasBlockEntity()) {
+                    return s;
+                }
+            }
+        }
+        return Blocks.COBBLESTONE.defaultBlockState();
     }
 
     private static BlockState container(ContainerKind kind) {
