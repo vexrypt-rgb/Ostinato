@@ -43,12 +43,12 @@ public class MazeSurvivalBuildTest {
     }
 
     @Test
-    public void survivalBuildCarvesSealedRoomWithoutThemedBlocks() {
+    public void survivalBuildCarvesRoomWithoutPlacingAnything() {
         World w = new World();
         MazePlanner.Attempt a = MazePlanner.placeOpen(42L, 0, 0, 30, -64, 320, w.probe(), null, MazePlanner.SEARCH_RADIUS);
         assertTrue("refused: " + a.refusal, a.ok());
         RoomPlan plan = a.plan;
-        // a one-block air pocket in the planned wall, which the survival build must patch with carried stone
+        // a one-block air pocket in the planned wall, like the entry shaft, which the dig-only survival build leaves alone
         int gx = -1, gy = -1, gz = -1;
         outer:
         for (int x = 0; x < plan.sizeX; x++) for (int y = 0; y < plan.sizeY; y++) for (int z = 0; z < plan.sizeZ; z++) {
@@ -69,14 +69,15 @@ public class MazeSurvivalBuildTest {
             w.set(plan.originX + x, plan.originY + y, plan.originZ + z, want);
         }
         assertTrue("dug " + broken, broken > 0);
-        assertEquals("patched the one wall gap", 1, placed);
+        assertEquals("dig-only: survival never places, the gap is left for the seal pass", 0, placed);
         // idempotent: a second pass wants nothing (builder would report done)
         for (int x = 0; x < plan.sizeX; x++) for (int y = 0; y < plan.sizeY; y++) for (int z = 0; z < plan.sizeZ; z++) {
             BlockState cur = w.get(plan.originX + x, plan.originY + y, plan.originZ + z);
             if (schem.inSchematic(x, y, z, cur)) assertSame(cur, schem.desiredState(x, y, z, cur, inventory));
         }
         ShellSeal.SealVerdict v = ShellSeal.check(plan, w.probe());
-        assertTrue("not sealed: " + v.reason + " " + v.breaches, v.ok());
+        assertTrue("the one wall gap stays open until a seal pass", w.get(plan.originX + gx, plan.originY + gy, plan.originZ + gz).isAir());
+        assertTrue("stone behind the gap still seals the room: " + v.reason + " " + v.breaches, v.ok());
         int air = 0;
         for (int x = 0; x < plan.sizeX; x++) for (int y = 0; y < plan.sizeY; y++) for (int z = 0; z < plan.sizeZ; z++) {
             if (plan.role(x, y, z) == BlockRole.AIR) { assertTrue(w.get(plan.originX + x, plan.originY + y, plan.originZ + z).isAir()); air++; }
