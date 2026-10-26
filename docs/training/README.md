@@ -79,3 +79,7 @@ Headless opt-in: `-Dostinato.trainingGearChoice=true`. In game the setting is `t
 ## Pathbench
 
 The harness is not referenced from `PathBench`, `AbstractNodeCostSearch`, or `PathDecisionMatrix`. Idle cost is the settings objects. Do not run `scripts/pathbench-phase1.sh` on a Surface Pro. The bench machine should confirm 5 reps and the 512 MB Pi heap against main before this is treated as heap-neutral in production numbers.
+
+## Race circuit
+
+`every_block_item` is not one of the seeds above. `raceEveryBlockItem` defaults off. Off, this suite does not enumerate the registry and does not write `races.jsonl`. On, `#train every_block_item` or `TrainingMain` with that circuit id records a race score. See [../race/README.md](../race/README.md).

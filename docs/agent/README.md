@@ -88,6 +88,8 @@ Chat memory, when `agentMemory` is on, loads the last eight turns into the next 
 
 `RaceRun` / `RaceRecorder` record a run id, hypothesis, agent, provider, model, metrics, and outcome. `JsonlRaceRecorder` appends one JSON line. There is no API-key field.
 
+`every_block_item` is an opt-in training circuit that writes those same lines. It is off unless `raceEveryBlockItem` (or `-Dostinato.raceEveryBlockItem=true`) is set, and it is not part of the default suite. Coverage, the exclusion list, and the score fields are in [../race/README.md](../race/README.md).
+
 `RaceWorldCleanup` deletes only direct child folders named `race_*`, `hyp_*`, or `agentrun_*`. It always keeps `vexflat` (any name starting with that), `pk_*`, `pkrun_*`, `SigilTest`, and `gs_world`. Other folders, including `New World`, stay. Deletion runs only when the directory contains `ostinato-race-root.txt`, so a normal saves folder is left alone. Tests use a temp directory.
 
 ## Safety

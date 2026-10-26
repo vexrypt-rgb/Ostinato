@@ -1,8 +1,9 @@
 package baritone.training;
 
-// Ostinato: headless entry. args: [outDir] [suite|circuit|legit|full] [circuit] [modelId] [modelFile]
+// Ostinato: headless entry. args: [outDir] [suite|circuit|legit|full|every_block_item] [circuit] [modelId] [modelFile]
 
 import baritone.api.training.TrainingResult;
+import baritone.training.race.RaceCircuit;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -20,6 +21,11 @@ public final class TrainingMain {
         boolean legit = "legit".equalsIgnoreCase(which);
         // Ostinato: absent property keeps the stock suite. In game, #train reads trainingGearChoice instead.
         boolean gear = Boolean.getBoolean("ostinato.trainingGearChoice");
+        // Ostinato: every_block_item is not in the suite. The property is the headless switch.
+        if ((RaceCircuit.ID.equals(which) || RaceCircuit.ID.equals(circuit)) && !RaceCircuit.optedIn(false)) {
+            System.out.println("raceEveryBlockItem is off");
+            return;
+        }
         if ("full".equalsIgnoreCase(which) || "suite".equalsIgnoreCase(which) || "legit".equalsIgnoreCase(which)) {
             if (!circuit.isBlank()) {
                 report(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out, gear));
@@ -41,6 +47,9 @@ public final class TrainingMain {
                 + " deaths=" + result.deaths + " pathFailures=" + result.pathFailures;
         if (result.gearScored) {
             line = line + " durability=" + result.durabilitySpent + " gearScore=" + result.gearScore;
+        }
+        if (RaceCircuit.ID.equals(result.circuitId)) {
+            line = line + " progress=" + result.actions;
         }
         System.out.println(line);
     }

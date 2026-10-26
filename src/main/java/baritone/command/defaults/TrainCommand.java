@@ -9,6 +9,7 @@ import baritone.api.training.TrainingHarnesses;
 import baritone.api.training.TrainingResult;
 import baritone.training.TrainingSuite;
 import baritone.training.TrainingWorld;
+import baritone.training.race.RaceCircuit;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -54,19 +55,28 @@ public class TrainCommand extends Command {
         Path out = Path.of(Baritone.settings().trainingOutDir.value);
         // Ostinato: default off. The property lets a headless launch opt in without a settings file.
         boolean gear = Baritone.settings().trainingGearChoice.value || Boolean.getBoolean("ostinato.trainingGearChoice");
+        // Ostinato: every_block_item stays out of the default suite. Naming it while the switch is off does nothing.
+        boolean race = Baritone.settings().raceEveryBlockItem.value;
+        if (RaceCircuit.ID.equals(circuit) && !RaceCircuit.optedIn(race)) {
+            logDirect("raceEveryBlockItem is off");
+            return;
+        }
         if (circuit == null || circuit.isBlank()) {
             for (TrainingResult result : TrainingSuite.INSTANCE.runConfigured(legit, model, file, out,
-                    Baritone.settings().trainingTasks.value, gear)) {
+                    Baritone.settings().trainingTasks.value, gear, race)) {
                 logDirect(line(result));
             }
             return;
         }
-        logDirect(line(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out, gear)));
+        logDirect(line(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out, gear, race)));
     }
 
     private static String line(TrainingResult result) {
         String text = result.circuitId + " " + result.mode + " success=" + result.success + " ticks=" + result.totalTicks
                 + " gear=" + result.gearTool + " bucket=" + result.bucketKey;
+        if (RaceCircuit.ID.equals(result.circuitId)) {
+            return text + " progress=" + result.actions;
+        }
         if (!result.gearScored) {
             return text;
         }
@@ -75,7 +85,8 @@ public class TrainCommand extends Command {
 
     @Override
     public Stream<String> tabComplete(String label, IArgConsumer args) {
-        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen", "compass-hunt", "gear-camp");
+        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen", "compass-hunt",
+                "gear-camp", RaceCircuit.ID);
     }
 
     @Override
@@ -90,11 +101,13 @@ public class TrainCommand extends Command {
                 "trainingTask must be on. trainingLegit restricts the bot to vision, F3 or pie, sound, and the compass needle.",
                 "compass-hunt scores that needle against the full-information lodestone. Live follow also needs compassFollow.",
                 "trainingGearChoice (off) tries the kits the circuit can supply and keeps the best time, death and durability score.",
+                "raceEveryBlockItem (off) runs every_block_item: collectables from the registry, plus enchant, netherite, and interactions.",
                 "",
                 "Usage:",
                 "> train",
                 "> train legit night-listen",
                 "> train seed",
-                "> train log-planks");
+                "> train log-planks",
+                "> train every_block_item");
     }
 }

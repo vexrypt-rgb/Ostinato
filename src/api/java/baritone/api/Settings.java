@@ -2544,6 +2544,13 @@ public final class Settings {
     public final Setting<Boolean> trainingGearChoice = new Setting<>(false);
 
     /**
+     * Ostinato: every-block and every-item race. Off, #train every_block_item does nothing and the default
+     * training suite is unchanged. On, that named circuit enumerates collectables and records a race score.
+     * Does not change pathfinding.
+     */
+    public final Setting<Boolean> raceEveryBlockItem = new Setting<>(false);
+
+    /**
      * Ostinato: master switch for the AI agent API. Off, {@code #agent} does not call a provider and pathing is unchanged.
      */
     public final Setting<Boolean> agentApi = new Setting<>(false);
