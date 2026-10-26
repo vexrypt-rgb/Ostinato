@@ -459,6 +459,21 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             digUnderFeet = true;
             r = toBreakNearPlayer(bcc);
             digUnderFeet = false;
+            if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
+                // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
+                // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
+                double reach = ctx.playerController().getBlockReachDistance();
+                BetterBlockPos best = null;
+                double bestD = Double.MAX_VALUE;
+                for (BetterBlockPos p : incorrectPositions) {
+                    if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
+                    double d = ctx.playerHead().distanceToSqr(p.x + 0.5, p.y + 0.5, p.z + 0.5);
+                    if (d < bestD && d <= reach * reach) { bestD = d; best = p; }
+                }
+                if (best != null) {
+                    r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
+                }
+            }
         }
         stallDebug = "toBreak=" + r.map(p -> p.first().toString()).orElse("none") + " stall=" + stallTicks;
         return r;
