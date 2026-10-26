@@ -18,24 +18,30 @@ public final class TrainingMain {
         String model = args.length > 3 ? args[3] : "heuristic";
         Path file = args.length > 4 ? Path.of(args[4]) : null;
         boolean legit = "legit".equalsIgnoreCase(which);
+        // Ostinato: absent property keeps the stock suite. In game, #train reads trainingGearChoice instead.
+        boolean gear = Boolean.getBoolean("ostinato.trainingGearChoice");
         if ("full".equalsIgnoreCase(which) || "suite".equalsIgnoreCase(which) || "legit".equalsIgnoreCase(which)) {
             if (!circuit.isBlank()) {
-                report(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out));
+                report(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out, gear));
                 return;
             }
-            List<TrainingResult> all = TrainingSuite.INSTANCE.runAll(legit, model, file, out);
+            List<TrainingResult> all = TrainingSuite.INSTANCE.runAll(legit, model, file, out, gear);
             for (TrainingResult result : all) {
                 report(result);
             }
             return;
         }
-        report(TrainingSuite.INSTANCE.run(which, legit, model, file, out));
+        report(TrainingSuite.INSTANCE.run(which, legit, model, file, out, gear));
     }
 
     private static void report(TrainingResult result) {
-        System.out.println(result.circuitId + " " + result.mode + " success=" + result.success
+        String line = result.circuitId + " " + result.mode + " success=" + result.success
                 + " ticks=" + result.totalTicks + " mine=" + result.mineTicks + " craft=" + result.craftTicks
                 + " place=" + result.placeTicks + " gear=" + result.gearTool + " bucket=" + result.bucketKey
-                + " deaths=" + result.deaths + " pathFailures=" + result.pathFailures);
+                + " deaths=" + result.deaths + " pathFailures=" + result.pathFailures;
+        if (result.gearScored) {
+            line = line + " durability=" + result.durabilitySpent + " gearScore=" + result.gearScore;
+        }
+        System.out.println(line);
     }
 }

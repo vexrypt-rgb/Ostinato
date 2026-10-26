@@ -52,24 +52,30 @@ public class TrainCommand extends Command {
         String fileSetting = Baritone.settings().trainingModelFile.value;
         Path file = fileSetting == null || fileSetting.isBlank() ? null : Path.of(fileSetting);
         Path out = Path.of(Baritone.settings().trainingOutDir.value);
+        // Ostinato: default off. The property lets a headless launch opt in without a settings file.
+        boolean gear = Baritone.settings().trainingGearChoice.value || Boolean.getBoolean("ostinato.trainingGearChoice");
         if (circuit == null || circuit.isBlank()) {
             for (TrainingResult result : TrainingSuite.INSTANCE.runConfigured(legit, model, file, out,
-                    Baritone.settings().trainingTasks.value)) {
+                    Baritone.settings().trainingTasks.value, gear)) {
                 logDirect(line(result));
             }
             return;
         }
-        logDirect(line(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out)));
+        logDirect(line(TrainingSuite.INSTANCE.run(circuit, legit, model, file, out, gear)));
     }
 
     private static String line(TrainingResult result) {
-        return result.circuitId + " " + result.mode + " success=" + result.success + " ticks=" + result.totalTicks
+        String text = result.circuitId + " " + result.mode + " success=" + result.success + " ticks=" + result.totalTicks
                 + " gear=" + result.gearTool + " bucket=" + result.bucketKey;
+        if (!result.gearScored) {
+            return text;
+        }
+        return text + " deaths=" + result.deaths + " durability=" + result.durabilitySpent + " gearScore=" + result.gearScore;
     }
 
     @Override
     public Stream<String> tabComplete(String label, IArgConsumer args) {
-        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen", "compass-hunt");
+        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen", "compass-hunt", "gear-camp");
     }
 
     @Override
@@ -83,6 +89,7 @@ public class TrainCommand extends Command {
                 "Resets a fixed-seed circuit world and scores mine, craft, and place.",
                 "trainingTask must be on. trainingLegit restricts the bot to vision, F3 or pie, sound, and the compass needle.",
                 "compass-hunt scores that needle against the full-information lodestone. Live follow also needs compassFollow.",
+                "trainingGearChoice (off) tries the kits the circuit can supply and keeps the best time, death and durability score.",
                 "",
                 "Usage:",
                 "> train",
