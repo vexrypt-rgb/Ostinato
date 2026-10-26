@@ -133,7 +133,7 @@ public final class MazeTest implements AbstractGameEventListener {
                 boolean busy = b.getMazeProcess().isActive() || b.getBuilderProcess().isActive();
                 if (b.getBuilderProcess().isActive()) builderSeen = true;
                 if (++wait % 100 == 0) {
-                    say("progress t=" + wait + " feet=" + mc.player.blockPosition().toShortString()
+                    say("progress t=" + wait + " feet=" + mc.player.blockPosition().toShortString() + " " + b.getBuilderProcess().stallDebug
                             + " builder=" + (b.getBuilderProcess().isActive() ? b.getBuilderProcess().displayName() : "idle")
                             + " maze=" + b.getMazeProcess().status() + " " + diag(mc));
                 }

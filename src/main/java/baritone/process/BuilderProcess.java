@@ -441,6 +441,29 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         return state;
     }
 
+    // Ostinato: stall breaker. With breakFromAbove the block under the feet was always skipped, so a survival dig that ends
+    // standing on the last incorrect interior block (nothing else in reach, every GoalBreak already "reached") softlocked.
+    // After the feet stay put for STALL_TICKS with nothing to break, allow that block too.
+    private static final int STALL_TICKS = 100;
+    private boolean digUnderFeet;
+    private int stallTicks;
+    private BetterBlockPos stallFeet;
+    public String stallDebug = "";
+
+    private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayerWithStall(BuilderCalculationContext bcc) {
+        digUnderFeet = false;
+        Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
+        BetterBlockPos feet = ctx.playerFeet();
+        if (r.isPresent() || !feet.equals(stallFeet)) { stallTicks = 0; stallFeet = feet; }
+        else if (++stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
+            digUnderFeet = true;
+            r = toBreakNearPlayer(bcc);
+            digUnderFeet = false;
+        }
+        stallDebug = "toBreak=" + r.map(p -> p.first().toString()).orElse("none") + " stall=" + stallTicks;
+        return r;
+    }
+
     private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayer(BuilderCalculationContext bcc) {
         BetterBlockPos center = ctx.playerFeet();
         BetterBlockPos pathStart = baritone.getPathingBehavior().pathStart();
@@ -450,7 +473,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                     int x = center.x + dx;
                     int y = center.y + dy;
                     int z = center.z + dz;
-                    if (dy == -1 && x == pathStart.x && z == pathStart.z) {
+                    if (dy == -1 && x == pathStart.x && z == pathStart.z && !digUnderFeet) {
                         continue; // dont mine what we're supported by, but not directly standing on
                     }
                     BlockState desired = bcc.getSchematic(x, y, z, bcc.bsi.get0(x, y, z));
@@ -737,7 +760,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             trim();
         }
 
-        Optional<Pair<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayer(bcc);
+        Optional<Pair<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayerWithStall(bcc);
         if (toBreak.isPresent() && isSafeToCancel && ctx.player().onGround()) {
             // we'd like to pause to break this block
             // only change look direction if it's safe (don't want to fuck up an in progress parkour for example
