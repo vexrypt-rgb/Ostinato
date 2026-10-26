@@ -2201,6 +2201,11 @@ public final class Settings {
 
         @Override
         public String toString() {
+            // Ostinato: printing a setting must not print agentApiKey. Saving uses settingToString instead.
+            if (SettingsUtil.isSecretSetting(name)) {
+                Object current = value;
+                return getName() + (current == null || String.valueOf(current).isBlank() ? "" : " (hidden)");
+            }
             return SettingsUtil.settingToString(this);
         }
 
@@ -2537,6 +2542,68 @@ public final class Settings {
      * Does not change pathfinding.
      */
     public final Setting<Boolean> trainingGearChoice = new Setting<>(false);
+
+    /**
+     * Ostinato: master switch for the AI agent API. Off, {@code #agent} does not call a provider and pathing is unchanged.
+     */
+    public final Setting<Boolean> agentApi = new Setting<>(false);
+
+    /**
+     * Ostinato: in-game chat hook. Off, {@code #agent} does not send chat to a provider. Needs {@link #agentApi} as well.
+     */
+    public final Setting<Boolean> agentChat = new Setting<>(false);
+
+    /**
+     * Ostinato: provider id {@code groq}, {@code gemini}, {@code openrouter}, {@code ollama}, or empty for auto.
+     * Auto uses the first configured cloud key and otherwise Ollama. A cloud provider with no key also uses Ollama.
+     */
+    public final Setting<String> agentProvider = new Setting<>("");
+
+    /** Ostinato: OpenAI-compatible base URL. Empty uses the preset for {@link #agentProvider}. */
+    public final Setting<String> agentBaseUrl = new Setting<>("");
+
+    /** Ostinato: model id. Empty uses the preset default. */
+    public final Setting<String> agentModel = new Setting<>("");
+
+    /**
+     * Ostinato: API key. Empty reads {@code GROQ_API_KEY}, {@code GEMINI_API_KEY}, {@code OPENROUTER_API_KEY},
+     * or {@code OSTINATO_AGENT_API_KEY}. Never logged, never tab-completed, never printed in chat.
+     */
+    public final Setting<String> agentApiKey = new Setting<>("");
+
+    /**
+     * Ostinato: when on, {@code #agent} prints the commands it would run and does not run them.
+     */
+    public final Setting<Boolean> agentDryRun = new Setting<>(true);
+
+    /**
+     * Ostinato: when on, only the local player, or {@link #agentOwner} when that name is set, may use {@code #agent}.
+     */
+    public final Setting<Boolean> agentOwnerOnly = new Setting<>(true);
+
+    /** Ostinato: player name allowed to use {@code #agent} when {@link #agentOwnerOnly} is on. Empty allows the local player. */
+    public final Setting<String> agentOwner = new Setting<>("");
+
+    /**
+     * Ostinato: file whose first line is an API key, read after the setting and the environment variables. Never logged.
+     * A key file alone does not choose a cloud host.
+     */
+    public final Setting<String> agentKeyFile = new Setting<>("");
+
+    /** Ostinato: one in-flight provider call per client. Status and saved routes do not take this lock. */
+    public final Setting<Boolean> agentOneSession = new Setting<>(true);
+
+    /** Ostinato: on HTTP 429, retry that turn once against Ollama and do not retry again. */
+    public final Setting<Boolean> agent429ToOllama = new Setting<>(true);
+
+    /** Ostinato: keep the last few chat turns in {@code baritone/agent-memory.jsonl}. The key is never written. */
+    public final Setting<Boolean> agentMemory = new Setting<>(true);
+
+    /** Ostinato: comma-separated tools {@code #agent} may run. Unknown names are ignored. {@code set} means settings. */
+    public final Setting<String> agentTools = new Setting<>("goto,mine,follow,settings,route");
+
+    /** Ostinato: directory of saved task routes, relative to the game directory. */
+    public final Setting<String> agentRouteDir = new Setting<>("baritone/agent-routes");
 
     // here be dragons
 

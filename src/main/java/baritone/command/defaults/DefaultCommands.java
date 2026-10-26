@@ -80,7 +80,8 @@ public final class DefaultCommands {
                 new AutoSpectateCommand(baritone), // Ostinato: watch-only server spectating
                 new TimingsCommand(baritone), // Ostinato: planned vs real movement ticks
                 new TrainCommand(baritone), // Ostinato: headless training circuits
-                new CompassCommand(baritone) // Ostinato: read the compass needle
+                new CompassCommand(baritone), // Ostinato: read the compass needle
+                new AgentCommand(baritone) // Ostinato: AI provider chat hook, off unless agentApi and agentChat are on
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);
