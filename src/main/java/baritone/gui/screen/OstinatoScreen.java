@@ -331,6 +331,11 @@ public final class OstinatoScreen extends Screen {
             if (e.kind == Kind.COLOR && e.s.value instanceof Color) {
                 return String.format("#%06X", ((Color) e.s.value).getRGB() & 0xFFFFFF);
             }
+            // Ostinato: the settings screen shows agentApiKey as (hidden).
+            if (SettingsUtil.isSecretSetting(e.s.getName())) {
+                Object secret = e.s.value;
+                return secret == null || String.valueOf(secret).isBlank() ? "" : "(hidden)";
+            }
             return SettingsUtil.settingValueToString(e.s);
         } catch (Throwable t) {
             return String.valueOf(e.s.value);

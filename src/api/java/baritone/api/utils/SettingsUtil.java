@@ -81,7 +81,8 @@ public class SettingsUtil {
             forEachLine(settingsByName(settingsName), line -> {
                 Matcher matcher = SETTING_PATTERN.matcher(line);
                 if (!matcher.matches()) {
-                    Helper.HELPER.logDirect("Invalid syntax in setting file: " + line);
+                    // Ostinato: a bad agentApiKey line must not land in chat.
+                    Helper.HELPER.logDirect("Invalid syntax in setting file: " + redactSettingsLine(line));
                     return;
                 }
 
@@ -94,7 +95,8 @@ public class SettingsUtil {
                 try {
                     parseAndApply(settings, settingName, settingValue);
                 } catch (Exception ex) {
-                    Helper.HELPER.logDirect("Unable to parse line " + line);
+                    // Ostinato: a bad agentApiKey line must not land in chat.
+                    Helper.HELPER.logDirect("Unable to parse line " + redactSettingsLine(line));
                     ex.printStackTrace();
                 }
             });
@@ -166,6 +168,35 @@ public class SettingsUtil {
     public static String settingValueToString(Settings.Setting setting) throws IllegalArgumentException {
         //noinspection unchecked
         return settingValueToString(setting, setting.value);
+    }
+
+    /** Ostinato: agentApiKey is stored, but chat, tab-complete, and logs show this instead of the key. */
+    public static boolean isSecretSetting(String name) {
+        return name != null && name.equalsIgnoreCase("agentApiKey");
+    }
+
+    /** Ostinato: value for chat and the GUI. The settings file still uses {@link #settingValueToString}. */
+    public static String chatValue(Settings.Setting setting) {
+        if (isSecretSetting(setting.getName())) {
+            Object value = setting.value;
+            if (value == null || String.valueOf(value).isBlank()) {
+                return "";
+            }
+            return "(hidden)";
+        }
+        return settingValueToString(setting);
+    }
+
+    /** Ostinato: drop a secret from a settings-file line before it is logged. */
+    public static String redactSettingsLine(String line) {
+        if (line == null) {
+            return "";
+        }
+        String trimmed = line.stripLeading().toLowerCase(java.util.Locale.ROOT);
+        if (trimmed.startsWith("agentapikey")) {
+            return "agentApiKey (hidden)";
+        }
+        return line;
     }
 
     public static String settingDefaultToString(Settings.Setting setting) throws IllegalArgumentException {

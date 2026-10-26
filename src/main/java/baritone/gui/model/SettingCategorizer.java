@@ -66,7 +66,10 @@ public final class SettingCategorizer {
         put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune", "pvpAutotuneMode",
                 "spectateLearn", "spectateLearnOnServers", "spectateAutoDetect", "spectateSaveLogs", "spectateRadius", "spectateBudgetMs", "spectateKitDetect", "spectateLearnKits", "spectateFightTypes", "spectateLearnLateFights", "sparSeedPriors", "spectateLearnSuspectedCheats", "autoSpectateServer", "autoSpectateMinutes", "autoSpectateHoverMinMs", "autoSpectateHoverMaxMs", "autoSpectateClickGapMinMs", "autoSpectateClickGapMaxMs", "autoSpectateReadMinMs", "autoSpectateReadMaxMs", "autoSpectateKeyMinMs", "autoSpectateKeyMaxMs", "autoSpectateThinkMinMs", "autoSpectateThinkMaxMs", "healthEstimator",
                 "testHarness",
-                "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir", "trainingGearChoice"); // Ostinato: testHarness, legit track, compass follow, gear choice
+                "trainingTask", "trainingLegit", "compassFollow", "trainingSeed", "trainingTasks", "trainingModel", "trainingModelFile", "trainingOutDir", "trainingGearChoice",
+                "agentApi", "agentChat", "agentProvider", "agentBaseUrl", "agentModel", "agentApiKey",
+                "agentDryRun", "agentOwnerOnly", "agentOwner", "agentKeyFile", "agentOneSession", "agent429ToOllama",
+                "agentMemory", "agentTools", "agentRouteDir"); // Ostinato: testHarness, legit track, compass follow, gear choice, agent API
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 

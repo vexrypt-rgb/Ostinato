@@ -101,8 +101,10 @@ public class SetCommand extends Command {
                         hoverComponent.setStyle(hoverComponent.getStyle().withColor(ChatFormatting.GRAY));
                         hoverComponent.append(setting.getName());
                         hoverComponent.append(String.format("\nType: %s", settingTypeToString(setting)));
-                        hoverComponent.append(String.format("\n\nValue:\n%s", settingValueToString(setting)));
-                        hoverComponent.append(String.format("\n\nDefault Value:\n%s", settingDefaultToString(setting)));
+                        // Ostinato: the settings list hover must not show agentApiKey.
+                        hoverComponent.append(String.format("\n\nValue:\n%s", SettingsUtil.chatValue(setting)));
+                        hoverComponent.append(String.format("\n\nDefault Value:\n%s",
+                                SettingsUtil.isSecretSetting(setting.getName()) ? "" : settingDefaultToString(setting)));
                         String commandSuggestion = Baritone.settings().prefix.value + String.format("set %s ", setting.getName());
                         MutableComponent component = Component.literal(setting.getName());
                         component.setStyle(component.getStyle().withColor(ChatFormatting.GRAY));
@@ -151,9 +153,10 @@ public class SetCommand extends Command {
         }
         if (!doingSomething && !args.hasAny()) {
             logDirect(String.format("Value of setting %s:", setting.getName()));
-            logDirect(settingValueToString(setting));
+            logDirect(SettingsUtil.chatValue(setting)); // Ostinato: agentApiKey prints as (hidden)
         } else {
-            String oldValue = settingValueToString(setting);
+            boolean secret = SettingsUtil.isSecretSetting(setting.getName());
+            String oldValue = secret ? SettingsUtil.chatValue(setting) : settingValueToString(setting);
             if (resetting) {
                 setting.reset();
             } else if (toggling) {
@@ -173,6 +176,10 @@ public class SetCommand extends Command {
                 try {
                     SettingsUtil.parseAndApply(Baritone.settings(), arg, newValue);
                 } catch (Throwable t) {
+                    if (secret) {
+                        // Ostinato: the parser failure must not print the key.
+                        throw new CommandInvalidTypeException(args.consumed(), "a valid value");
+                    }
                     t.printStackTrace();
                     throw new CommandInvalidTypeException(args.consumed(), "a valid value", t);
                 }
@@ -182,19 +189,24 @@ public class SetCommand extends Command {
                         "Successfully %s %s to %s",
                         resetting ? "reset" : "set",
                         setting.getName(),
-                        settingValueToString(setting)
+                        SettingsUtil.chatValue(setting) // Ostinato: agentApiKey prints as (hidden)
                 ));
             }
-            MutableComponent oldValueComponent = Component.literal(String.format("Old value: %s", oldValue));
-            oldValueComponent.setStyle(oldValueComponent.getStyle()
-                    .withColor(ChatFormatting.GRAY)
-                    .withHoverEvent(new HoverEvent.ShowText(
-                            Component.literal("Click to set the setting back to this value")
-                    ))
-                    .withClickEvent(new ClickEvent.RunCommand(
-                            FORCE_COMMAND_PREFIX + String.format("set %s %s", setting.getName(), oldValue)
-                    )));
-            logDirect(oldValueComponent);
+            if (secret) {
+                // Ostinato: do not put the previous key in chat or in a click-to-restore command.
+                logDirect("Old value: (hidden)");
+            } else {
+                MutableComponent oldValueComponent = Component.literal(String.format("Old value: %s", oldValue));
+                oldValueComponent.setStyle(oldValueComponent.getStyle()
+                        .withColor(ChatFormatting.GRAY)
+                        .withHoverEvent(new HoverEvent.ShowText(
+                                Component.literal("Click to set the setting back to this value")
+                        ))
+                        .withClickEvent(new ClickEvent.RunCommand(
+                                FORCE_COMMAND_PREFIX + String.format("set %s %s", setting.getName(), oldValue)
+                        )));
+                logDirect(oldValueComponent);
+            }
             if ((setting.getName().equals("chatControl") && !(Boolean) setting.value && !Baritone.settings().chatControlAnyway.value) ||
                     setting.getName().equals("chatControlAnyway") && !(Boolean) setting.value && !Baritone.settings().chatControl.value) {
                 logDirect("Warning: Chat commands will no longer work. If you want to revert this change, use prefix control (if enabled) or click the old value listed above.", ChatFormatting.RED);
@@ -235,6 +247,9 @@ public class SetCommand extends Command {
                             helper.append("false", "true");
                         }
                         return helper.filterPrefix(args.getString()).stream();
+                    } else if (SettingsUtil.isSecretSetting(setting.getName())) {
+                        // Ostinato: tab complete must not suggest the API key.
+                        return Stream.empty();
                     } else {
                         return Stream.of(settingValueToString(setting));
                     }

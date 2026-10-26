@@ -77,6 +77,11 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
     private void logRanCommand(String command, String rest) {
         if (settings.echoCommands.value) {
             String msg = command + rest;
+            // Ostinato: never echo an API key into chat, the hover, or click-to-rerun.
+            if (command.equalsIgnoreCase("agentApiKey")
+                    || (command + rest).toLowerCase(Locale.US).contains("agentapikey")) {
+                msg = "agentApiKey (hidden)";
+            }
             String toDisplay = settings.censorRanCommands.value ? command + " ..." : msg;
             MutableComponent component = Component.literal(String.format("> %s", toDisplay));
             component.setStyle(component.getStyle()
@@ -183,6 +188,9 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
                             helper.append("false", "true");
                         }
                         return helper.filterPrefix(argc.getString()).stream();
+                    } else if (SettingsUtil.isSecretSetting(setting.getName())) {
+                        // Ostinato: tab complete must not suggest the API key.
+                        return Stream.empty();
                     } else {
                         return Stream.of(SettingsUtil.settingValueToString(setting));
                     }
