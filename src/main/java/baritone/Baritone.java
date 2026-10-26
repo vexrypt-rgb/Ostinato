@@ -142,6 +142,7 @@ public class Baritone implements IBaritone {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
+            this.registerProcess(baritone.process.CompassFollowProcess::new); // Ostinato: compass needle, idle unless trainingLegit and compassFollow
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
             this.exploreProcess          = this.registerProcess(ExploreProcess::new);

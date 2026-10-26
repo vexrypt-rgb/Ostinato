@@ -2499,14 +2499,24 @@ public final class Settings {
     /** Ostinato: headless training circuits. Off, {@code #train} does nothing and pathing is unchanged. */
     public final Setting<Boolean> trainingTask = new Setting<>(false);
 
-    /** Ostinato: training decisions may use only vision, F3 or pie cues, and client-audible sound. */
+    /**
+     * Ostinato: legit training track. On, pathing reads loaded chunks inside render distance (no world cache, no seed
+     * predictor) and training decisions may use only that view, F3 biome and temperature, the debug pie while it is
+     * open, client-audible sounds, and a held compass. Off, pathing and the full-information circuits are unchanged.
+     */
     public final Setting<Boolean> trainingLegit = new Setting<>(false);
 
-    /** Ostinato: default circuit seed. The suite still runs 71001, 71002 and 71003. */
+    /**
+     * Ostinato: follow the compass in the main hand, offhand, or hotbar. The goal is the needle's target (lodestone,
+     * spawn, last death, or a player entity loaded on this client). Does nothing unless {@code trainingLegit} is also on.
+     */
+    public final Setting<Boolean> compassFollow = new Setting<>(false);
+
+    /** Ostinato: default circuit seed. The suite still runs 71001, 71002, 71003 and 71004. */
     public final Setting<String> trainingSeed = new Setting<>("71001");
 
     /** Ostinato: comma-separated circuit ids for {@code #train}. */
-    public final Setting<String> trainingTasks = new Setting<>("log-planks,stone-step,night-listen");
+    public final Setting<String> trainingTasks = new Setting<>("log-planks,stone-step,night-listen,compass-hunt");
 
     /** Ostinato: task model id. A file may replace it. heuristic is the built-in stub. */
     public final Setting<String> trainingModel = new Setting<>("heuristic");

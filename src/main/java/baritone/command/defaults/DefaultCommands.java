@@ -79,7 +79,8 @@ public final class DefaultCommands {
                 new PortalCommand(baritone),
                 new AutoSpectateCommand(baritone), // Ostinato: watch-only server spectating
                 new TimingsCommand(baritone), // Ostinato: planned vs real movement ticks
-                new TrainCommand(baritone) // Ostinato: headless training circuits
+                new TrainCommand(baritone), // Ostinato: headless training circuits
+                new CompassCommand(baritone) // Ostinato: read the compass needle
         ));
         ExecutionControlCommands prc = new ExecutionControlCommands(baritone);
         commands.add(prc.pauseCommand);

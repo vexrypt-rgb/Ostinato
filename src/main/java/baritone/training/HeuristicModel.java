@@ -27,13 +27,17 @@ public final class HeuristicModel implements ITrainingModel {
         TaskDecision gear = null;
         if (!geared) {
             geared = true;
-            String reason = "COBBLE".equals(view.goalItem())
+            String reason = "COMPASS".equals(view.goalItem())
+                    ? "follow the compass needle the player can see"
+                    : "COBBLE".equals(view.goalItem())
                     ? "start with the hand; cobble needs a wooden pick crafted from the logs"
                     : "a log breaks by hand; the kit has no armor";
             gear = TaskDecision.act("WAIT").withGear("HAND", "NONE", reason);
         }
         TaskDecision next;
-        if ("COBBLE".equals(view.goalItem()) && view.pickDurability() < 0) {
+        if ("COMPASS".equals(view.goalItem())) {
+            next = followCompass(view);
+        } else if ("COBBLE".equals(view.goalItem()) && view.pickDurability() < 0) {
             if (view.planks() >= 3 && view.sticks() >= 2) {
                 int[] table = find(view, "TABLE");
                 if (table != null && Math.abs(table[0]) + Math.abs(table[2]) == 1) {
@@ -64,6 +68,22 @@ public final class HeuristicModel implements ITrainingModel {
         return next.withGear(gear.gearTool, gear.gearArmor, gear.gearReason);
     }
 
+    /** Lodestone in view, otherwise the cardinal the needle shows. No absolute coordinate in legit mode. */
+    private TaskDecision followCompass(ITaskView view) {
+        if (find(view, "LODESTONE") != null) {
+            return approach(view, "LODESTONE");
+        }
+        String bearing = sound(view, "COMPASS");
+        if (bearing == null || bearing.isEmpty() || "SELF".equals(bearing)) {
+            return TaskDecision.act("WAIT");
+        }
+        int want = yawOfBearing(bearing);
+        if (view.yaw() != want) {
+            return TaskDecision.act(turn(view.yaw(), want));
+        }
+        return TaskDecision.act("WALK");
+    }
+
     private TaskDecision approach(ITaskView view, String name) {
         int[] rel = find(view, name);
         if (rel == null) {
@@ -86,7 +106,7 @@ public final class HeuristicModel implements ITrainingModel {
             if ("DEPOSIT".equals(name)) {
                 return TaskDecision.act("PLACE");
             }
-            if ("TABLE".equals(name)) {
+            if ("TABLE".equals(name) || "LODESTONE".equals(name)) {
                 return TaskDecision.act("WAIT");
             }
             return TaskDecision.act("MINE");
