@@ -69,7 +69,7 @@ public class TrainCommand extends Command {
 
     @Override
     public Stream<String> tabComplete(String label, IArgConsumer args) {
-        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen");
+        return Stream.of("suite", "legit", "full", "seed", "log-planks", "stone-step", "night-listen", "compass-hunt");
     }
 
     @Override
@@ -81,7 +81,8 @@ public class TrainCommand extends Command {
     public List<String> getLongDesc() {
         return Arrays.asList(
                 "Resets a fixed-seed circuit world and scores mine, craft, and place.",
-                "trainingTask must be on. trainingLegit restricts the bot to vision, F3 or pie, and sound.",
+                "trainingTask must be on. trainingLegit restricts the bot to vision, F3 or pie, sound, and the compass needle.",
+                "compass-hunt scores that needle against the full-information lodestone. Live follow also needs compassFollow.",
                 "",
                 "Usage:",
                 "> train",

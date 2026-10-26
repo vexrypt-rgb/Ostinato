@@ -58,6 +58,12 @@ public final class Senses {
                 fullEntities.add("ZOMBIE@" + world.mobX() + "," + world.mobY() + "," + world.mobZ());
             }
         }
+        if (world.hasNeedle()) {
+            String needle = TrainingWorld.bearing(world.markX() - world.x, world.markZ() - world.z);
+            if (!"SELF".equals(needle)) {
+                sounds.add("COMPASS@" + needle);
+            }
+        }
         if (!world.lastCue.isEmpty()) {
             for (String cue : world.lastCue.split(";")) {
                 if (!sounds.contains(cue)) {
@@ -77,7 +83,7 @@ public final class Senses {
     private static boolean interesting(byte id) {
         return id == TrainingWorld.LOG || id == TrainingWorld.STONE || id == TrainingWorld.TABLE
                 || id == TrainingWorld.DEPOSIT || id == TrainingWorld.WATER || id == TrainingWorld.LAVA
-                || id == TrainingWorld.PIT;
+                || id == TrainingWorld.PIT || id == TrainingWorld.LODESTONE;
     }
 
     private static boolean inView(int dx, int dy, int dz, int fx, int fz) {

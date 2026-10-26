@@ -6,6 +6,7 @@ import java.util.List;
  * Ostinato: what a task model may read. In legit mode {@link #fullBlocks()} and {@link #fullEntities()} are empty.
  * Self position, biome temperature and the pie slice are the F3-style cues. Visible tokens are blocks inside the
  * render view. Sound tokens are client-audible cues with a compass bearing, not an entity id.
+ * A held compass adds {@code COMPASS@N} (or E, S, W). That token is the needle, not a hidden coordinate.
  */
 public interface ITaskView {
 

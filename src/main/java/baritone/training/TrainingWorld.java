@@ -6,13 +6,14 @@ import java.util.Arrays;
 
 /**
  * Small deterministic world a circuit resets. Seeds select a layout:
- * 71001 plains camp, 71002 hill quarry, 71003 night thicket.
+ * 71001 plains camp, 71002 hill quarry, 71003 night thicket, 71004 compass hunt.
  */
 public final class TrainingWorld {
 
     public static final long SEED_PLAINS = 71001L;
     public static final long SEED_HILLS = 71002L;
     public static final long SEED_NIGHT = 71003L;
+    public static final long SEED_COMPASS = 71004L;
 
     static final int SX = 24;
     static final int SY = 6;
@@ -25,6 +26,7 @@ public final class TrainingWorld {
     static final byte WATER = 6;
     static final byte LAVA = 7;
     static final byte PIT = 8;
+    static final byte LODESTONE = 9;
 
     public final String circuitId;
     public final long seed;
@@ -76,6 +78,9 @@ public final class TrainingWorld {
     private int craftLeft;
     private boolean knocked;
     String lastCue = "";
+    /** Compass target. Negative when this circuit has no needle. */
+    private int markX = -1;
+    private int markZ = -1;
 
     private TrainingWorld(String circuitId, long seed, String biome, double temperature, String jumpMajority,
             String terrain, String mobPressure, int riseBlocks, int gapBlocks, String goalItem, String craftGoal,
@@ -107,12 +112,13 @@ public final class TrainingWorld {
             case "log-planks" -> plains();
             case "stone-step" -> hills();
             case "night-listen" -> night();
+            case "compass-hunt" -> compass();
             default -> throw new IllegalArgumentException(circuitId);
         };
     }
 
     public static String[] suiteIds() {
-        return new String[]{"log-planks", "stone-step", "night-listen"};
+        return new String[]{"log-planks", "stone-step", "night-listen", "compass-hunt"};
     }
 
     /** The trainingSeed setting. Unknown text is refused. */
@@ -121,6 +127,7 @@ public final class TrainingWorld {
             case "71001" -> "log-planks";
             case "71002" -> "stone-step";
             case "71003" -> "night-listen";
+            case "71004" -> "compass-hunt";
             default -> throw new IllegalArgumentException(raw);
         };
     }
@@ -165,6 +172,35 @@ public final class TrainingWorld {
         w.snapshot();
         w.reset();
         return w;
+    }
+
+    /** Lodestone due south, outside the 8-block view. The player starts facing west, so the needle is the cue. */
+    private static TrainingWorld compass() {
+        TrainingWorld w = new TrainingWorld("compass-hunt", SEED_COMPASS, "PLAINS", 0.8, "WALK", "FLAT", "DAY",
+                0, 0, "COMPASS", "COMPASS", 4, 1, 4, 1, 0, 0, 0, 0, false);
+        w.fillFloor(0, 20, 0, 20, 0);
+        w.markCompass(4, 16);
+        w.snapshot();
+        w.reset();
+        return w;
+    }
+
+    private void markCompass(int mx, int mz) {
+        markX = mx;
+        markZ = mz;
+        set(mx, 1, mz, LODESTONE);
+    }
+
+    boolean hasNeedle() {
+        return markX >= 0;
+    }
+
+    int markX() {
+        return markX;
+    }
+
+    int markZ() {
+        return markZ;
     }
 
     private byte[] snap;
@@ -241,6 +277,12 @@ public final class TrainingWorld {
             case "CRAFT" -> craft();
             case "PLACE" -> place();
             default -> pathFailures++;
+        }
+        if (!dead() && markX >= 0 && Math.abs(x - markX) + Math.abs(z - markZ) <= 1) {
+            deposited = true;
+            if (placeTicks < 0) {
+                placeTicks = ticks;
+            }
         }
         if (!dead() && hasMob && manhattan(mobX, mobZ) <= 2) {
             addCue("MOB_HURT@" + bearing(mobX - x, mobZ - z));
@@ -443,7 +485,7 @@ public final class TrainingWorld {
 
     private boolean solid(int px, int py, int pz) {
         byte id = at(px, py, pz);
-        return id == GRASS || id == LOG || id == STONE || id == TABLE || id == DEPOSIT;
+        return id == GRASS || id == LOG || id == STONE || id == TABLE || id == DEPOSIT || id == LODESTONE;
     }
 
     private boolean floorAt(int px, int feetY, int pz) {
@@ -494,6 +536,7 @@ public final class TrainingWorld {
             case LAVA -> "LAVA";
             case PIT -> "PIT";
             case GRASS -> "GRASS";
+            case LODESTONE -> "LODESTONE";
             default -> "AIR";
         };
     }

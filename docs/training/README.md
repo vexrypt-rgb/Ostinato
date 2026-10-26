@@ -11,6 +11,7 @@ Each run creates and resets an in-memory world. The seed selects an authored lay
 | 71001 | `log-planks` | plains, 0.8 | Punch an oak log, craft planks in the inventory grid, place one on the deposit. |
 | 71002 | `stone-step` | hills, 0.2 | Punch two logs, craft sticks and a wooden pick at the crafting table, step up, mine stone, place cobble. Hotbar starts with 8 dirt. |
 | 71003 | `night-listen` | forest, 0.7, night | Same plank deposit. The log starts to the east, outside the look cone. A zombie, water and lava are off to the side. |
+| 71004 | `compass-hunt` | plains, 0.8 | Walk to a lodestone that starts outside the look cone. Legit mode has the compass cardinal. Full mode also has the block. |
 
 No creative give. The dirt on 71002 is the starting kit and is not a tool. A wooden pick is a crafting-table recipe: 2 planks make 4 sticks, 3 planks and 2 sticks make the pick. Stone does not break by hand.
 
@@ -36,17 +37,19 @@ Headless scores from `TrainingSimTest` on 2026-10-25 (no client):
 | stone-step | full | 65 | 10 | 41 | 65 | wooden pick, 1 durability |
 | night-listen | full | 28 | 12 | 16 | 28 | hand |
 | night-listen | legit | 38 | 14 | 18 | 38 | hand |
+| compass-hunt | full | 12 | — | — | 12 | hand |
+| compass-hunt | legit | 12 | — | — | 12 | hand |
 
-The legit night run is the same deposit with the log outside the look cone, so it spends turns on the mob bearing before the log enters view. Deaths and path failures were 0. The task file does not contain `riseBlocks`; that count is only in `path-signals.jsonl` (1 on the hill circuit, 0 on the others).
+The legit night run is the same deposit with the log outside the look cone, so it spends turns on the mob bearing before the log enters view. Compass-hunt starts facing west of a lodestone to the south. Both modes turn onto `COMPASS@S` and walk 11 blocks. The arrival tick is the place column. Deaths and path failures were 0. The task file does not contain `riseBlocks`; that count is only in `path-signals.jsonl` (1 on the hill circuit, 0 on the others).
 
 ## Legit mode
 
-`trainingLegit` defaults off. Full mode lists every task block and entity for pathfinding autotune that needs ground truth. Legit mode leaves those lists empty. The model then gets:
+`trainingLegit` defaults off. Full mode lists every task block and entity for pathfinding autotune that needs ground truth. Legit mode leaves those lists empty. Live pathing, the compass needle, the pie chart and sound cues are described in [LEGIT.md](LEGIT.md). The model then gets:
 
 - Blocks inside 8 blocks and about 50 degrees of look, plus the block directly in front.
 - Its own feet, facing, biome name and temperature (the F3 readout).
 - The pie-chart top: `chunkBuilder` while mining, `soundEngine` when a sound is playing, otherwise `gameRenderer`.
-- Sounds with a compass bearing and no entity id: footsteps, block break, mob ambient, mob hurt when a mob is adjacent, water, lava.
+- Sounds with a compass bearing and no entity id: footsteps, block break, mob ambient, mob hurt when a mob is adjacent, water, lava, and `COMPASS@N` (or E, S, W) while a circuit has a needle.
 
 ## Scores
 

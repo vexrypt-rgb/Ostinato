@@ -54,6 +54,12 @@ public class BlockStateInterface {
 
     private final boolean useTheRealWorld;
 
+    // Ostinato: trainingLegit off leaves these false and get0 stays on the cache and seed path below.
+    private final boolean legitClip;
+    private final int legitChunkX;
+    private final int legitChunkZ;
+    private final int legitChunks;
+
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
     public BlockStateInterface(IPlayerContext ctx) {
@@ -70,6 +76,21 @@ public class BlockStateInterface {
             this.provider = (ClientChunkCache) world.getChunkSource();
         }
         this.useTheRealWorld = !Baritone.settings().pathThroughCachedOnly.value;
+        boolean clip = false;
+        int cx = 0;
+        int cz = 0;
+        int chunks = 0;
+        // Ostinato: legit track sees loaded chunks inside render distance. Off, legitClip stays false.
+        if (Baritone.settings().trainingLegit.value && ctx.player() != null && ctx.minecraft() != null) {
+            clip = true;
+            cx = LegitHorizon.chunkOf(ctx.player().getX());
+            cz = LegitHorizon.chunkOf(ctx.player().getZ());
+            chunks = ctx.minecraft().options.renderDistance().get();
+        }
+        this.legitClip = clip;
+        this.legitChunkX = cx;
+        this.legitChunkZ = cz;
+        this.legitChunks = chunks;
         if (!ctx.minecraft().isSameThread()) {
             throw new IllegalStateException("BlockStateInterface must be constructed on the main thread");
         }
@@ -85,6 +106,10 @@ public class BlockStateInterface {
         this.worldData = null;
         this.worldBorder = worldBorder;
         this.useTheRealWorld = false;
+        this.legitClip = false;
+        this.legitChunkX = 0;
+        this.legitChunkZ = 0;
+        this.legitChunks = 0;
         this.headlessMinY = minY;
         this.headlessHeight = height;
         this.isPassableBlockPos = new BlockPos.MutableBlockPos();
@@ -104,6 +129,10 @@ public class BlockStateInterface {
     }
 
     public boolean worldContainsLoadedChunk(int blockX, int blockZ) {
+        // Ostinato: legit track does not treat a cached or far chunk as loaded.
+        if (legitClip) {
+            return legitLoaded(blockX, blockZ);
+        }
         return provider.hasChunk(blockX >> 4, blockZ >> 4);
     }
 
@@ -122,6 +151,10 @@ public class BlockStateInterface {
     }
 
     public BlockState get0(int x, int y, int z) { // Mickey resigned
+        // Ostinato: one branch. Off, the body below is the full-information lookup.
+        if (legitClip) {
+            return legitBlock(x, y, z);
+        }
         int worldY = y;
         y -= world.dimensionType().minY();
         // Invalid vertical position
@@ -171,6 +204,10 @@ public class BlockStateInterface {
     }
 
     public boolean isLoaded(int x, int z) {
+        // Ostinato: legit track ignores the seed predictor outside what the client has loaded.
+        if (legitClip) {
+            return legitLoaded(x, z);
+        }
         return isKnown(x, z) || SeedPlan.covers(x, z);
     }
 
@@ -179,6 +216,10 @@ public class BlockStateInterface {
      * to {@link #isLoaded}, which also counts columns only the seed predictor ({@link SeedPlan}) covers.
      */
     public boolean isKnown(int x, int z) {
+        // Ostinato: legit track does not answer from the world cache.
+        if (legitClip) {
+            return legitLoaded(x, z);
+        }
         LevelChunk prevChunk = prev;
         if (prevChunk != null && prevChunk.getPos().x() == x >> 4 && prevChunk.getPos().z() == z >> 4) {
             return true;
@@ -201,6 +242,31 @@ public class BlockStateInterface {
         }
         prevCached = prevRegion;
         return prevRegion.isCached(x & 511, z & 511);
+    }
+
+    // Ostinato: loaded client chunk inside the render square. No cache and no seed.
+    private boolean legitLoaded(int x, int z) {
+        if (provider == null || !LegitHorizon.inside(x, z, legitChunkX, legitChunkZ, legitChunks)) {
+            return false;
+        }
+        LevelChunk chunk = provider.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
+        return chunk != null && !chunk.isEmpty();
+    }
+
+    private BlockState legitBlock(int x, int y, int z) {
+        if (world == null || !legitLoaded(x, z)) {
+            return AIR;
+        }
+        y -= world.dimensionType().minY();
+        if (y < 0 || y >= world.dimensionType().height()) {
+            return AIR;
+        }
+        LevelChunk chunk = provider.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
+        if (chunk != null && !chunk.isEmpty()) {
+            prev = chunk;
+            return getFromChunk(chunk, x, y, z);
+        }
+        return AIR;
     }
 
     // get the block at x,y,z from this chunk WITHOUT creating a single blockpos object

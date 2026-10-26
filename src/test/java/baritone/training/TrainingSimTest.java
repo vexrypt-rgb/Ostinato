@@ -79,6 +79,35 @@ public class TrainingSimTest {
     }
 
     @Test
+    public void compassHuntLegitFollowsTheNeedle() throws Exception {
+        Path out = Files.createTempDirectory("ostinato-compass");
+        Probe legit = new Probe(new HeuristicModel("heuristic"));
+        TrainingResult fair = CircuitRunner.run("compass-hunt", true, legit, out);
+        assertTrue(fair.actions, fair.success);
+        assertEquals("LEGIT", fair.mode);
+        assertEquals(71004L, fair.seed);
+        assertTrue(legit.first.fullBlocks().isEmpty());
+        assertTrue(legit.first.fullEntities().isEmpty());
+        assertTrue(joined(legit.first.sounds()).contains("COMPASS@S"));
+        assertFalse(joined(legit.first.visible()).contains("LODESTONE@"));
+        assertFalse(fair.cues.contains("4,1,16"));
+        assertTrue(fair.cues.contains("COMPASS"));
+        assertTrue(fair.actions.startsWith("TURN_RIGHT"));
+        assertEquals(12, fair.totalTicks);
+        assertEquals(0, fair.pathFailures);
+        assertEquals(0, fair.deaths);
+
+        Probe full = new Probe(new HeuristicModel("heuristic"));
+        TrainingResult ground = CircuitRunner.run("compass-hunt", false, full, out);
+        assertTrue(ground.actions, ground.success);
+        assertEquals("FULL", ground.mode);
+        assertTrue(joined(full.first.fullBlocks()).contains("LODESTONE@4,1,16"));
+        assertTrue(fair.totalTicks >= ground.totalTicks);
+
+        assertEquals("compass-hunt", TrainingWorld.circuitForSeed("71004"));
+    }
+
+    @Test
     public void modelFileSuppliesTheId() throws Exception {
         Path out = Files.createTempDirectory("ostinato-train-model");
         Path file = out.resolve("model.txt");
@@ -111,6 +140,7 @@ public class TrainingSimTest {
         String settings = Files.readString(project("src/api/java/baritone/api/Settings.java"), StandardCharsets.UTF_8);
         assertTrue(settings.contains("trainingTask = new Setting<>(false)"));
         assertTrue(settings.contains("trainingLegit = new Setting<>(false)"));
+        assertTrue(settings.contains("compassFollow = new Setting<>(false)"));
         for (String rel : new String[]{
                 "src/test/java/baritone/pathing/calc/PathBench.java",
                 "src/main/java/baritone/pathing/calc/AbstractNodeCostSearch.java",
