@@ -33,8 +33,8 @@ Tools the agent may enqueue, when they are on the whitelist: `goto`, `mine`, `fo
 | `hypothesis` | yes | Id. Letters, digits, `_`, `-`, at most 64. Written as `hypothesis` on the result row. |
 | `variant` | yes | A/B label, same character rules, at most 32. |
 | `world` | yes | Folder name. Must be `race_*`, `hyp_*`, or `agentrun_*`. Anything else is rejected. |
-| `seed` | no | Recorded for a live create. Not applied while create-new is stubbed. |
-| `flat` | no | Defaults true. Same limit as `seed`. |
+| `seed` | no | World seed, the same rules as the create-world screen (`WorldOptions.parseSeed`). Blank or omitted is a random seed. A number is that long. Any other text is the string's hash. Written on every result row as `seed`. |
+| `flat` | no | Defaults true. True creates `WorldPresets.FLAT`. False creates the normal preset. Written on every result row as `flat` (`true` or `false`). |
 | `prompt` | no | Text sent through the existing agent API. Empty uses the hypothesis id. |
 | `timeoutMs` | no | This run's limit. Zero or omitted uses `overnightTimeoutMs`. |
 
@@ -66,10 +66,10 @@ Headless tests do not launch a client. The state machine, the queue, and cleanup
 `{overnightDir}/races.jsonl`, one JSON line per run, through `JsonlRaceRecorder`. There is no API-key field. A `runId` already in the file is not written again. `runId` is `hypothesis-variant-world`.
 
 ```json
-{"runId":"speed-A-hyp_speed_a","hypothesis":"speed","agent":"agent","provider":"groq","model":"openai/gpt-oss-20b","metrics":{"variant":"A","world":"hyp_speed_a","score":"3/3","timeMs":"1200"},"outcome":"pass"}
+{"runId":"speed-A-hyp_speed_a","hypothesis":"speed","agent":"agent","provider":"groq","model":"openai/gpt-oss-20b","metrics":{"variant":"A","world":"hyp_speed_a","seed":"71006","flat":"true","score":"3/3","timeMs":"1200"},"outcome":"pass"}
 ```
 
-`outcome` is `pass`, `incomplete`, `error`, `timeout`, `abort`, or `stubbed`. `score` is `n/a` unless `overnightEveryBlockItem` is on, in which case it is the circuit's `collected/total` and the stage fields from [README.md](README.md) are added. `timeMs` is wall time for the run. The circuit's `timeTicks` is added only when that option is on.
+`outcome` is `pass`, `incomplete`, `error`, `timeout`, `abort`, or `stubbed`. `score` is `n/a` unless `overnightEveryBlockItem` is on, in which case it is the circuit's `collected/total` and the stage fields from [README.md](README.md) are added. `timeMs` is wall time for the run. The circuit's `timeTicks` is added only when that option is on. Every row records `seed` and `flat` from the queue line. A blank seed is stored as an empty string.
 
 ## State and resume
 
@@ -94,11 +94,13 @@ The marker is what allows deletion. Without it, cleanup deletes nothing. Do not 
 | Open an existing `race_*`, `hyp_*`, or `agentrun_*` folder with the vanilla world-open flow | Live |
 | Leave that world with the client's level disconnect, back toward the title screen, without quitting the process | Live |
 | Delete leftover race folders through `RaceWorldCleanup` after the world is left | Live |
-| Create a new flat or seeded world through the Create World screen | Stubbed |
+| Create a missing race folder with `WorldOpenFlows.createFreshLevel` (survival, the queue seed, flat or normal preset) | Live |
 
-A missing world does not open the Create World screen and does not click its buttons. The run is recorded as `stubbed`, the agent is not called, and the queue moves on. Seed and flat on the queue line are stored and are not applied. To run inside a world, create the folder yourself (flat, the seed you want, a race prefix) and leave it in `saves` before `start`. The host then opens that folder.
+When the queue world is missing and no world is loaded, the host creates that folder. The folder name is the queue `world` with no extra suffix. If the name vanilla would store is different, including `race_x (1)` when `race_x` is already taken, the create fails and the renamed folder is not made. The host then polls until the loaded world folder equals the queue name. A timeout is recorded as `timeout`. A cancel, a rename, or a create that does not start is recorded as `error`. The live host does not record `stubbed` for a missing world. `stubbed` remains an outcome for a host that still reports an unimplemented step.
 
-The plan is in `RaceWorldPlans`: `OPEN_EXISTING`, `STUB_NEW`, `ALREADY_OPEN`, `BUSY` (some other world is loaded), `REJECT` (the name is not a race world).
+Seed and flat are applied only on that create. A blank seed is random. `flat` true (the default) uses `WorldPresets.FLAT`. `flat` false uses `WorldPresets.NORMAL`. Game mode is survival. An existing folder is opened as it is. Seed and flat are not written over it.
+
+The plan is in `RaceWorldPlans`: `OPEN_EXISTING`, `CREATE_NEW`, `ALREADY_OPEN`, `BUSY` (some other world is loaded), `REJECT` (the name is not a race world).
 
 ## Safety
 
@@ -111,6 +113,6 @@ The plan is in `RaceWorldPlans`: `OPEN_EXISTING`, `STUB_NEW`, `ALREADY_OPEN`, `B
 
 ## Not in this change
 
-- Driving the Create World screen (world type, seed field, confirm buttons).
 - Actually collecting every block and item, the enchant path, or the netherite upgrade. The score hook is opt-in and still only credits `crafting.use`.
 - GPU batch sims and tiny models.
+- Clicking the Create World screen. New worlds go through `createFreshLevel`, and a folder vanilla would rename is a failed run.

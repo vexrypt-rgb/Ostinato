@@ -6,6 +6,8 @@ import baritone.api.agent.RaceRecorder;
 import baritone.api.agent.RaceRun;
 import baritone.api.agent.RaceWorldHost;
 
+import net.minecraft.world.level.levelgen.WorldOptions;
+
 import org.junit.Test;
 
 import java.io.IOException;
@@ -15,6 +17,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -255,11 +258,15 @@ public class OvernightRaceTest {
         assertTrue(command.contains("overnightEveryBlockItem"));
         String host = Files.readString(project("src/main/java/baritone/agent/ClientRaceWorldHost.java"),
                 StandardCharsets.UTF_8);
-        assertFalse(host.contains("CreateWorldScreen"));
+        assertTrue(host.contains("createFreshLevel"));
+        assertTrue(host.contains("WorldPresets.FLAT"));
+        assertTrue(host.contains("WorldOptions.parseSeed"));
+        assertTrue(host.contains("GameType.SURVIVAL"));
         assertTrue(host.contains("openWorld"));
         assertTrue(host.contains("disconnect"));
+        assertFalse(host.contains("STUB_NEW"));
 
-        assertEquals(RaceWorldPlans.Kind.STUB_NEW, RaceWorldPlans.plan(true, false, false, false));
+        assertEquals(RaceWorldPlans.Kind.CREATE_NEW, RaceWorldPlans.plan(true, false, false, false));
         assertEquals(RaceWorldPlans.Kind.OPEN_EXISTING, RaceWorldPlans.plan(true, true, false, false));
         assertEquals(RaceWorldPlans.Kind.ALREADY_OPEN, RaceWorldPlans.plan(true, true, true, true));
         assertEquals(RaceWorldPlans.Kind.BUSY, RaceWorldPlans.plan(true, true, true, false));
@@ -282,7 +289,53 @@ public class OvernightRaceTest {
         assertTrue(readme.contains("queue.jsonl"));
         assertTrue(readme.contains("races.jsonl"));
         assertTrue(readme.contains("stubbed"));
+        assertTrue(readme.contains("CREATE_NEW"));
+        assertFalse(readme.contains("STUB_NEW"));
         assertTrue(readme.contains("vexflat"));
+    }
+
+    @Test
+    public void seedFlatParsingFolderCollisionAndMetrics() throws Exception {
+        HypothesisRun omitted = HypothesisQueue.parse(one("hyp_a")).get(0);
+        assertEquals("", omitted.seed);
+        assertTrue(omitted.flat);
+        assertEquals(OptionalLong.empty(), RaceWorldPlans.parseSeed(null));
+        assertEquals(OptionalLong.empty(), RaceWorldPlans.parseSeed("  "));
+        assertEquals(OptionalLong.of(71006L), RaceWorldPlans.parseSeed(" 71006 "));
+        assertEquals(OptionalLong.of(-3L), RaceWorldPlans.parseSeed("-3"));
+        assertEquals(OptionalLong.of("stone".hashCode()), RaceWorldPlans.parseSeed("stone"));
+        for (String text : new String[]{"", "  ", "71006", "-3", "stone", "999999999999999999999"}) {
+            assertEquals(text, WorldOptions.parseSeed(text), RaceWorldPlans.parseSeed(text));
+        }
+
+        Path saves = Files.createTempDirectory("ostinato-folder");
+        assertEquals("race_x", RaceWorldPlans.resolvedFolder(saves, "race_x"));
+        assertEquals("", RaceWorldPlans.folderMismatch("race_x", "race_x"));
+        Files.createDirectories(saves.resolve("race_x"));
+        assertEquals("race_x (1)", RaceWorldPlans.resolvedFolder(saves, "race_x"));
+        String renamed = RaceWorldPlans.folderMismatch("race_x", "race_x (1)");
+        assertTrue(renamed.contains("race_x"));
+        assertTrue(renamed.contains("race_x (1)"));
+        Files.createDirectories(saves.resolve("race_x (1)"));
+        assertEquals("race_x (2)", RaceWorldPlans.resolvedFolder(saves, "race_x"));
+
+        Fixture fix = fixture(QUEUE);
+        drain(fix.orch, 0, 1);
+        String races = Files.readString(fix.races, StandardCharsets.UTF_8);
+        assertTrue(races.contains("\"seed\":\"71006\""));
+        assertTrue(races.contains("\"flat\":\"true\""));
+        assertTrue(races.contains("\"seed\":\"\""));
+        assertTrue(races.contains("\"flat\":\"false\""));
+
+        Fixture failed = fixture(QUEUE);
+        failed.host.enqueue(RaceWorldHost.Status.FAILED);
+        drain(failed.orch, 0, 1);
+        String failedLines = Files.readString(failed.races, StandardCharsets.UTF_8);
+        assertTrue(failedLines.contains("\"outcome\":\"error\""));
+        assertTrue(failedLines.contains("\"seed\":\"71006\""));
+        assertTrue(failedLines.contains("\"flat\":\"true\""));
+        assertTrue(failedLines.contains("\"runId\":\"speed-A-hyp_a\""));
+        assertTrue(failedLines.contains("\"flat\":\"false\""));
     }
 
     private static String one(String world) {

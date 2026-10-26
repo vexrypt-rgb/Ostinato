@@ -105,6 +105,6 @@ Overnight races append to their own `races.jsonl`. The queue, the timeout, and w
 
 Not in this change:
 
-- Driving the Create World screen. Opening an existing race folder, leaving it, and deleting leftovers is in [../race/overnight.md](../race/overnight.md).
+- Clicking the Create World screen. Creating a missing race folder, opening an existing one, leaving it, and deleting leftovers is in [../race/overnight.md](../race/overnight.md).
 - A full multi-step tool loop beyond one reply. `pvp` and `gear` map to the existing combat and settings commands.
 - GPU batch sims and swappable tiny models.

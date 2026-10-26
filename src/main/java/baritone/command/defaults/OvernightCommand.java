@@ -219,7 +219,7 @@ public class OvernightCommand extends Command {
                 "overnightRaces must be on. It defaults off, and an off command does not create or delete a world.",
                 "Start writes ostinato-race-root.txt into the saves folder and then deletes only race_, hyp_, and agentrun_ worlds.",
                 "vexflat, pk_, pkrun_, SigilTest, and gs_world are kept.",
-                "Opening an existing race world is live. Creating a new world through the menu is not automated.",
+                "A missing race world is created in that folder. An existing race folder is opened. The folder name has to match.",
                 "overnightEveryBlockItem (off) adds the every_block_item score. It does not run while off.",
                 "agentDryRun still prints commands instead of running them until you turn it off.",
                 "",
