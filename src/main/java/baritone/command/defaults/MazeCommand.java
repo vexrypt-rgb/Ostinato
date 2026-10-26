@@ -67,12 +67,19 @@ public class MazeCommand extends Command {
                 }
                 logDirect(outcome.message);
             }
+            case "furnish" -> {
+                MazeProcess.Outcome outcome = process.furnishHere();
+                if (!outcome.ok()) {
+                    throw new CommandInvalidStateException(outcome.error);
+                }
+                logDirect(outcome.message);
+            }
             case "status" -> logDirect(process.status());
             case "cancel" -> {
                 process.cancel();
                 logDirect("Stopped");
             }
-            default -> throw new CommandInvalidTypeException(args.consumed(), "build, plan, status or cancel");
+            default -> throw new CommandInvalidTypeException(args.consumed(), "build, plan, furnish, status or cancel");
         }
     }
 
@@ -93,6 +100,6 @@ public class MazeCommand extends Command {
 
     @Override
     public List<String> getLongDesc() {
-        return Arrays.asList("> maze.backrooms - toggle", "> maze.backrooms build|plan|status|cancel");
+        return Arrays.asList("> maze.backrooms - toggle", "> maze.backrooms build|plan|furnish|status|cancel");
     }
 }

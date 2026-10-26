@@ -21,7 +21,11 @@ import baritone.Baritone;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
+import baritone.api.maze.IMazeFurnisher;
+import baritone.api.maze.MazeFurnishJob;
+import baritone.api.maze.MazeFurnishers;
 import baritone.maze.LootPlanner;
+import baritone.maze.MazeFurnishPlanner;
 import baritone.maze.MazeMap;
 import baritone.maze.MazePlanner;
 import baritone.maze.MazeSeed;
@@ -239,6 +243,8 @@ public final class MazeProcess extends BaritoneProcessHelper {
             baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, survival), new BlockPos(plan.originX, plan.originY, plan.originZ));
             handedToBuilder = name;
             lastBuilt = plan;
+            furnishRoom = plan; // Ostinato: remembered for #maze furnish (TenorClef gather, light, loot, seal)
+            furnishLoot = loot;
             summary = "Building " + name + " (" + plan.theme.displayName + ")";
             logDirect(summary);
         } catch (IOException e) {
@@ -246,6 +252,42 @@ public final class MazeProcess extends BaritoneProcessHelper {
             logDirect(summary);
         }
         return new PathingCommand((Goal) null, PathingCommandType.DEFER);
+    }
+
+    private RoomPlan furnishRoom;
+    private List<LootPlanner.LootPlacement> furnishLoot = List.of();
+
+    /**
+     * Ostinato: plans what the last room still needs (lights, containers, loot, shell and entry shaft seal) and hands it
+     * to the registered {@link IMazeFurnisher}, normally TenorClef. Ostinato does not gather or fill anything itself;
+     * with no furnisher this only prints the job and its materials. Creative rooms only get fills.
+     */
+    public Outcome furnishHere() {
+        if (!enabled()) {
+            return Outcome.fail("Maze mode is off");
+        }
+        if (ctx.player() == null || ctx.world() == null) {
+            return Outcome.fail("No world");
+        }
+        if (furnishRoom == null) {
+            return Outcome.fail("No room built yet this session");
+        }
+        if (handedToBuilder != null && baritone.getBuilderProcess().isActive()) {
+            return Outcome.fail("The room is still being dug");
+        }
+        boolean survival = !ctx.player().getAbilities().instabuild;
+        MazeFurnishJob job = MazeFurnishPlanner.plan(furnishRoom, furnishLoot, new MazeWorldProbe(ctx.world()), survival);
+        String materials = job.materials().entrySet().stream()
+                .map(e -> e.getKey() + " x" + e.getValue())
+                .reduce((a, b) -> a + ", " + b).orElse("nothing");
+        IMazeFurnisher furnisher = MazeFurnishers.get();
+        if (furnisher == null) {
+            return Outcome.ok("Furnish " + job.summary() + ". Needs " + materials + ". No furnisher registered (TenorClef registers one).");
+        }
+        if (!furnisher.furnish(job)) {
+            return Outcome.fail(furnisher.name() + " refused the furnish job");
+        }
+        return Outcome.ok("Handed " + job.summary() + " to " + furnisher.name() + ". Needs " + materials);
     }
 
     private Report prepare(boolean building) {
