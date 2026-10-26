@@ -2612,6 +2612,39 @@ public final class Settings {
     /** Ostinato: directory of saved task routes, relative to the game directory. */
     public final Setting<String> agentRouteDir = new Setting<>("baritone/agent-routes");
 
+    /**
+     * Ostinato: underground maze mode. Off, {@code #maze} does nothing and pathing is unchanged.
+     * On, {@code #maze build} may plan one sealed room and hand it to the builder.
+     */
+    public final Setting<Boolean> mazeMode = new Setting<>(false);
+
+    /**
+     * Ostinato: seed for maze rooms, themes, and loot. The same seed and cell always produce the same room.
+     * Zero is a normal seed, not a random one.
+     */
+    public final Setting<Long> mazeSeed = new Setting<>(0L);
+
+    /**
+     * Ostinato: minimum ticks to wait before a maze action. 20 ticks is one second.
+     * The maze process waits this long, plus up to {@link #mazeMaxActionDelay} and {@link #mazeActionJitter}, before the builder starts.
+     */
+    public final Setting<Integer> mazeMinActionDelay = new Setting<>(4);
+
+    /** Ostinato: maximum ticks, before jitter, to wait before a maze action. Clamped up to {@link #mazeMinActionDelay} when it is lower. */
+    public final Setting<Integer> mazeMaxActionDelay = new Setting<>(9);
+
+    /**
+     * Ostinato: extra ticks added or subtracted from the maze action delay, chosen from the room seed.
+     * Zero means the delay stays between {@link #mazeMinActionDelay} and {@link #mazeMaxActionDelay}.
+     */
+    public final Setting<Integer> mazeActionJitter = new Setting<>(2);
+
+    /**
+     * Ostinato: maze map file of claimed cells and containers that must not be refilled.
+     * Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room.
+     */
+    public final Setting<String> mazeMapFile = new Setting<>("maze-map.txt");
+
     // here be dragons
 
     Settings() {

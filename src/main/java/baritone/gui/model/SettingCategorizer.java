@@ -48,7 +48,8 @@ public final class SettingCategorizer {
         put(m, BUILDING, "acceptableThrowawayItems", "allowPlace", "blockPlacementPenalty", "okIfAir", "okIfWater",
                 "incorrectSize", "distanceTrim", "mapArtMode", "startAtLayer", "layerOrder", "layerHeight", "skipFailedLayers",
                 "breakFromAbove", "goalBreakFromAbove", "placeIncorrectBlockPenaltyMultiplier",
-                "breakCorrectBlockPenaltyMultiplier", "backfill");
+                "breakCorrectBlockPenaltyMultiplier", "backfill",
+                "mazeMode", "mazeSeed", "mazeMinActionDelay", "mazeMaxActionDelay", "mazeActionJitter", "mazeMapFile");
         put(m, WATER_AIR, "allowDoorAirPockets", "allowBoats", "allowBoatFall", "maxFallHeightBoat", "walkOnWaterOnePenalty",
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater", "allowMountClutch", "allowSteeredFalls");
@@ -73,6 +74,7 @@ public final class SettingCategorizer {
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
+        rule("^maze", BUILDING);
         rule("^swarm", SWARM);
         rule("^elytra", ELYTRA);
         rule("^(color|render)|Render|Opacity$|LineWidth|^selection", RENDER);

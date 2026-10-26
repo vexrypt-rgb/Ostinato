@@ -16,6 +16,7 @@ only on some release lines are marked.
 | [Swarm and region builds](swarm-and-region-builds.md) | `#swarm`, signed whispers, splitting a schematic over bots |
 | [Screen, freecam and task lists](gui-freecam-tasks.md) | The Ostinato screen, `#freecam`, `#tasks` |
 | [Settings](settings.md) | How `#set` works and the Ostinato-specific settings |
+| [Maze](../maze/README.md) | Underground maze mode, off by default |
 
 Existing documents: [Features](../../FEATURES.md) · [Usage (upstream Baritone)](../../USAGE.md) ·
 [Setup](../../SETUP.md) · [Region builds](../REGION_BUILD.md) · [Movement engine](../MOVEMENT_ENGINE.md) ·

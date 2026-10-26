@@ -413,5 +413,11 @@
  "failureTimeoutMaxMS": "When a search runs out of time with no usable path but nodes still open, it is tried again from the same spot with double the failure timeout, up to this; only then does the calculation count as failed",
  "momentumJumpCosts": "Ostinato: price 1 and 2 block flat parkour gaps with a straight run-up as sprint jumps (tick-simulated) instead of walking speed, and sprint them. Off keeps the stock costs and execution.",
  "tickAccurateCosts": "Ostinato: estimate ascend and descend costs with a short tick simulation of vanilla movement (friction, acceleration, air control, gravity, drag) instead of the fixed tables. Off keeps the stock costs.",
- "physicalInput": "When on, mouse looks and key chords stay inside what a hand can do in one tick. A look has a speed and an acceleration limit, so the aim cannot snap, and at most two keys change state (releases first). Off, the look and the keys are exactly what they already were."
+ "physicalInput": "When on, mouse looks and key chords stay inside what a hand can do in one tick. A look has a speed and an acceleration limit, so the aim cannot snap, and at most two keys change state (releases first). Off, the look and the keys are exactly what they already were.",
+ "mazeMode": "Ostinato: underground maze mode. Off, #maze does nothing and pathing is unchanged. On, #maze build may plan one sealed room and hand it to the builder.",
+ "mazeSeed": "Ostinato: seed for maze rooms, themes, and loot. The same seed and cell always produce the same room. Zero is a normal seed, not a random one.",
+ "mazeMinActionDelay": "Ostinato: minimum ticks to wait before a maze action. 20 ticks is one second. The maze process waits this long, plus up to mazeMaxActionDelay and mazeActionJitter, before the builder starts.",
+ "mazeMaxActionDelay": "Ostinato: maximum ticks, before jitter, to wait before a maze action. Clamped up to mazeMinActionDelay when it is lower.",
+ "mazeActionJitter": "Ostinato: extra ticks added or subtracted from the maze action delay, chosen from the room seed. Zero means the delay stays between mazeMinActionDelay and mazeMaxActionDelay.",
+ "mazeMapFile": "Ostinato: maze map file of claimed cells and containers that must not be refilled. Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room."
 }
