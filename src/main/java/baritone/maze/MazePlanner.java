@@ -27,7 +27,7 @@ import java.util.List;
 public final class MazePlanner {
 
     public static final int SIZE_X = 10;
-    public static final int SIZE_Y = 5;
+    public static final int SIZE_Y = 7; // Ostinato: 4 blocks clear inside (was 2)
     public static final int SIZE_Z = 7;
     public static final int SEARCH_RADIUS = 3;
 
@@ -115,13 +115,13 @@ public final class MazePlanner {
             }
         }
         for (int x = 0; x <= 6; x++) {
-            for (int y = 0; y <= 4; y++) {
+            for (int y = 0; y <= SIZE_Y - 1; y++) {
                 for (int z = 0; z <= 6; z++) {
                     boolean edgeX = x == 0 || x == 6;
                     boolean edgeZ = z == 0 || z == 6;
                     if (y == 0) {
                         roles[x][y][z] = BlockRole.SHELL;
-                    } else if (y == 4) {
+                    } else if (y == SIZE_Y - 1) {
                         roles[x][y][z] = BlockRole.CEILING;
                     } else if (edgeX || edgeZ) {
                         roles[x][y][z] = BlockRole.WALL;

@@ -41,6 +41,7 @@ public final class MazeFurnishPlanner {
         List<LootPlacement> containers = loot == null ? List.of() : loot;
         List<Step> steps = new ArrayList<>();
         if (survival) {
+            addCladding(plan, steps);
             for (int x = 0; x < plan.sizeX; x++) {
                 for (int y = 0; y < plan.sizeY; y++) {
                     for (int z = 0; z < plan.sizeZ; z++) {
@@ -129,4 +130,62 @@ public final class MazeFurnishPlanner {
             case POT -> "decorated_pot";
         };
     }
-}
+
+    /**
+     * Ostinato: survival cladding. The dig pass leaves bare stone; every floor, wall and ceiling face that looks into
+     * the room is swapped for the theme's block. Sent as LIGHT-kind steps (TenorClef: break what is there, place one
+     * of blockIds) so the furnisher needs no new step kind. Cells that touch no room air stay as dug stone.
+     */
+    static void addCladding(RoomPlan plan, List<Step> steps) {
+        for (int y = 0; y < plan.sizeY; y++) {
+            for (int x = 0; x < plan.sizeX; x++) {
+                for (int z = 0; z < plan.sizeZ; z++) {
+                    BlockRole role = plan.role(x, y, z);
+                    if (role != BlockRole.FLOOR && role != BlockRole.WALL && role != BlockRole.CEILING) continue;
+                    if (!touchesRoomAir(plan, x, y, z)) continue;
+                    steps.add(new Step(StepKind.LIGHT, plan.originX + x, plan.originY + y, plan.originZ + z,
+                            cladIds(plan.theme, role), List.of()));
+                }
+            }
+        }
+    }
+
+    private static boolean touchesRoomAir(RoomPlan plan, int x, int y, int z) {
+        int[][] d = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        for (int[] o : d) {
+            int ax = x + o[0], ay = y + o[1], az = z + o[2];
+            if (plan.inRelative(ax, ay, az)) {
+                BlockRole r = plan.role(ax, ay, az);
+                if (r == BlockRole.AIR || r == BlockRole.LIGHT) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Ostinato: per-theme palette, best first. The first id matches the creative schematic; later ids are themed blocks
+     * a survival furnisher can actually make (TenorClef picks the first it can obtain), never plain stone.
+     */
+    public static List<String> cladIds(MazeTheme theme, BlockRole role) {
+        return switch (theme) {
+            case YELLOW_OFFICE -> switch (role) {
+                case FLOOR -> List.of("birch_planks", "oak_planks", "yellow_wool");
+                case WALL -> List.of("yellow_concrete", "yellow_terracotta", "sandstone", "birch_planks");
+                default -> List.of("smooth_sandstone", "smooth_stone", "stone_bricks");
+            };
+            case PIPES -> switch (role) {
+                case FLOOR -> List.of("cracked_stone_bricks", "stone_bricks");
+                case WALL -> List.of("stone_bricks", "polished_andesite");
+                default -> List.of("stone_bricks", "smooth_stone");
+            };
+            case HUB -> switch (role) {
+                case FLOOR -> List.of("smooth_quartz", "birch_planks", "oak_planks");
+                case WALL -> List.of("bookshelf", "spruce_planks", "oak_planks");
+                default -> List.of("quartz_block", "smooth_stone", "birch_planks");
+            };
+            case DEEP -> switch (role) {
+                case FLOOR -> List.of("polished_deepslate", "cobbled_deepslate");
+                default -> List.of("deepslate_bricks", "polished_deepslate", "cobbled_deepslate");
+            };
+        };
+    }}

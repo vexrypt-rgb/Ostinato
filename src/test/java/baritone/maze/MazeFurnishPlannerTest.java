@@ -51,11 +51,12 @@ public class MazeFurnishPlannerTest {
         RoomPlan plan = roomWithLoot();
         List<LootPlacement> loot = LootPlanner.plan(plan, LootPlanner.PlacedLedger.EMPTY);
         MazeFurnishJob job = MazeFurnishPlanner.plan(plan, loot, dug(plan), true);
-        assertEquals(1, job.steps(StepKind.LIGHT).size());
+        assertEquals(1, job.steps(StepKind.LIGHT).stream().filter(s -> s.blockIds().equals(MazeFurnishPlanner.lightIds(plan.theme))).toList().size()); // Ostinato: other LIGHT-kind steps are cladding
+        assertTrue(job.steps(StepKind.LIGHT).size() > 100);
         assertEquals(loot.size(), job.steps(StepKind.CONTAINER).size());
         assertEquals(loot.size(), job.steps(StepKind.FILL).size());
         assertTrue(job.steps(StepKind.SEAL).isEmpty());
-        Step light = job.steps(StepKind.LIGHT).get(0);
+        Step light = job.steps(StepKind.LIGHT).stream().filter(s -> s.blockIds().equals(MazeFurnishPlanner.lightIds(plan.theme))).toList().get(0);
         assertEquals(plan.originX + 3, light.x());
         assertEquals(plan.originY + 2, light.y()); // Ostinato: floor torch
         assertEquals(MazeFurnishPlanner.lightIds(plan.theme), light.blockIds());
@@ -63,7 +64,7 @@ public class MazeFurnishPlannerTest {
         assertEquals(Integer.valueOf(1), materials.get(light.blockIds().get(0)));
         int lootItems = loot.stream().flatMap(p -> p.stacks().stream()).mapToInt(LootPlanner.LootStack::count).sum();
         int listed = materials.values().stream().mapToInt(Integer::intValue).sum();
-        assertEquals(1 + loot.size() + lootItems, listed);
+        assertEquals(job.steps(StepKind.LIGHT).size() + loot.size() + lootItems, listed); // Ostinato: torch + cladding
     }
 
     @Test
@@ -71,7 +72,7 @@ public class MazeFurnishPlannerTest {
         RoomPlan plan = roomWithLoot();
         List<LootPlacement> loot = LootPlanner.plan(plan, LootPlanner.PlacedLedger.EMPTY);
         int sx = plan.originX + 2, sz = plan.originZ + 3;
-        int ceiling = plan.originY + 4;
+        int ceiling = plan.originY + MazePlanner.SIZE_Y - 1;
         int[][] shaft = new int[MazeSeed.COVER + 1][];
         for (int i = 0; i <= MazeSeed.COVER; i++) {
             shaft[i] = new int[]{sx, ceiling + i, sz};
