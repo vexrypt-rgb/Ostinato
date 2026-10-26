@@ -116,6 +116,13 @@ public final class MazeProcess extends BaritoneProcessHelper {
     }
 
     /** Plans a room and reports it. Does not claim the cell or start the builder. */
+    /** Ostinato: the last room handed to the builder, for the live MazeTest harness. Null until one is built. */
+    public RoomPlan lastBuilt() {
+        return lastBuilt;
+    }
+
+    private RoomPlan lastBuilt;
+
     public Outcome planHere() {
         Report report = prepare(false);
         return report.error != null ? Outcome.fail(report.error) : Outcome.ok(report.message);
@@ -214,6 +221,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             }
             baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, !ctx.player().getAbilities().instabuild), new BlockPos(plan.originX, plan.originY, plan.originZ));
             handedToBuilder = name;
+            lastBuilt = plan;
             summary = "Building " + name + " (" + plan.theme.displayName + ")";
             logDirect(summary);
         } catch (IOException e) {
