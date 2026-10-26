@@ -245,6 +245,7 @@ public class TabCompleteHelper {
      */
     public TabCompleteHelper addCommands(ICommandManager manager) {
         return append(manager.getRegistry().descendingStream()
+                .filter(command -> !command.hiddenFromHelp()) // Ostinato: unlisted commands stay secret
                 .flatMap(command -> command.getNames().stream())
                 .distinct()
         );
@@ -259,6 +260,7 @@ public class TabCompleteHelper {
         return append(
                 BaritoneAPI.getSettings().allSettings.stream()
                         .filter(s -> !s.isJavaOnly())
+                        .filter(s -> !SettingsUtil.isUnlistedSetting(s.getName())) // Ostinato: maze easter egg
                         .map(Settings.Setting::getName)
                         .sorted(String.CASE_INSENSITIVE_ORDER)
         );

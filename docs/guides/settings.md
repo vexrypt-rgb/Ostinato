@@ -15,6 +15,5 @@ the [Baritone project](https://github.com/cabaletta/baritone); this page lists t
 | Interface | `guiKeybind`, `renderPathHud`, `pathHudAnchor`, `freecamSpeed`, `freecamKey`, `freecamGhostOpacity`, `enemyMobs` | [GUI](gui-freecam-tasks.md) |
 | Region build | `buildPartition*`, `buildRegionProtectForeign` | [Swarm](swarm-and-region-builds.md) |
 | Swarm | `swarmEnabled`, `swarmRosterFile`, `swarmSigilHome`, `swarmRequireSignedSender`, `swarmChannel`, rate limits | [Swarm](swarm-and-region-builds.md) |
-| Maze | `mazeMode` (off), `mazeSeed`, `mazeMinActionDelay`, `mazeMaxActionDelay`, `mazeActionJitter`, `mazeMapFile` | [Maze](../maze/README.md) |
 
 Defaults quoted in these guides come from the source at the time of writing; use `#set <name>` for yours.

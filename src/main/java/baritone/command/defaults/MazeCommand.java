@@ -24,7 +24,6 @@ import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.exception.CommandException;
 import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.api.command.exception.CommandInvalidTypeException;
-import baritone.api.command.helpers.TabCompleteHelper;
 import baritone.process.MazeProcess;
 
 import java.util.Arrays;
@@ -32,17 +31,27 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 
+/** Ostinato: secret maze easter egg. Only reachable as #maze.backrooms; hidden from help and tab-complete. */
 public class MazeCommand extends Command {
 
     public MazeCommand(IBaritone baritone) {
-        super(baritone, "maze");
+        super(baritone, "maze.backrooms");
     }
 
     @Override
     public void execute(String label, IArgConsumer args) throws CommandException {
         args.requireMax(1);
         MazeProcess process = ((Baritone) baritone).getMazeProcess();
-        String action = args.hasAny() ? args.getString().toLowerCase(Locale.US) : "build";
+        if (!args.hasAny()) {
+            boolean on = !Baritone.settings().mazeMode.value;
+            Baritone.settings().mazeMode.value = on;
+            if (!on) {
+                process.cancel();
+            }
+            logDirect(on ? "The walls hum." : "The hum fades.");
+            return;
+        }
+        String action = args.getString().toLowerCase(Locale.US);
         switch (action) {
             case "build" -> {
                 MazeProcess.Outcome outcome = process.buildHere();
@@ -68,34 +77,22 @@ public class MazeCommand extends Command {
     }
 
     @Override
-    public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
-        if (args.hasExactlyOne()) {
-            return new TabCompleteHelper().append("build", "plan", "status", "cancel").filterPrefix(args.getString()).stream();
-        }
-        return Stream.empty();
+    public Stream<String> tabComplete(String label, IArgConsumer args) {
+        return Stream.empty(); // Ostinato: nothing to discover
+    }
+
+    @Override
+    public boolean hiddenFromHelp() {
+        return true;
     }
 
     @Override
     public String getShortDesc() {
-        return "Plan or build one sealed underground maze room";
+        return "";
     }
 
     @Override
     public List<String> getLongDesc() {
-        return Arrays.asList(
-                "Builds one Backrooms-style room under you, plus a corridor stub that is plugged shut.",
-                "The room is refused or shifted when air or fluid touches the shell, so it does not open into a cave.",
-                "Off unless mazeMode is true, and it does not change normal pathing while it is off.",
-                "",
-                "Each build claims one cell in the maze map so a later build, or another bot sharing that file, does not dig it again.",
-                "Containers are placed empty; their seed-stable contents are written to the map and not refilled.",
-                "",
-                "Usage:",
-                "> maze - plan a sealed room and, after the stealth delay, hand it to the builder.",
-                "> maze build - the same.",
-                "> maze plan - report the room and do not build or claim it.",
-                "> maze status - whether maze mode is on, and what it is doing.",
-                "> maze cancel - stop a wait, or cancel a maze build the builder has taken."
-        );
+        return Arrays.asList("> maze.backrooms - toggle", "> maze.backrooms build|plan|status|cancel");
     }
 }

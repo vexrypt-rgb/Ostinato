@@ -175,6 +175,11 @@ public class SettingsUtil {
         return name != null && name.equalsIgnoreCase("agentApiKey");
     }
 
+    /** Ostinato: maze is a secret easter egg. Its settings stay out of the GUI, #set lists, and tab-complete. */
+    public static boolean isUnlistedSetting(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).startsWith("maze");
+    }
+
     /** Ostinato: value for chat and the GUI. The settings file still uses {@link #settingValueToString}. */
     public static String chatValue(Settings.Setting setting) {
         if (isSecretSetting(setting.getName())) {

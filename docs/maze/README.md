@@ -1,8 +1,17 @@
 # Underground maze mode
 
-Backrooms-style maze mode for Ostinato. It is **off by default** (`mazeMode false`). While it is off, `#maze` refuses to run and no path cost, movement setting, or process behavior changes.
+Backrooms-style maze mode for Ostinato. It is **off by default** (`mazeMode false`). While it is off, `#maze.backrooms build` refuses to run and no path cost, movement setting, or process behavior changes.
 
 This document is the full wish-list. The foundation that landed with it is called out in [What landed](#what-landed) and [What is stubbed](#what-is-stubbed).
+
+## Secret activation
+
+Maze mode is an easter egg. There is no settings button, help entry, or tab-complete for it.
+
+- Type `#maze.backrooms` in chat to toggle `mazeMode`.
+- Or, with the Ostinato menu open, press Up Up Down Down Left Right Left Right B A. A quiet action-bar line says whether it turned on or off.
+
+Both default off. While off, normal pathing is unchanged.
 
 ## Full vision
 
@@ -29,19 +38,19 @@ The maze is a place bots can keep extending under an otherwise untouched world.
 
 | Piece | Behavior |
 | --- | --- |
-| Settings | `mazeMode` (default **false**), `mazeSeed` (default `0`, which is a real seed), `mazeMinActionDelay`, `mazeMaxActionDelay`, `mazeActionJitter`, `mazeMapFile`. They show up in the settings screen under Building. |
+| Settings | `mazeMode` (default **false**), `mazeSeed` (default `0`, which is a real seed), `mazeMinActionDelay`, `mazeMaxActionDelay`, `mazeActionJitter`, `mazeMapFile`. They are unlisted: not in the settings screen, `#set` lists, or tab-complete. `#set mazeSeed 12345` still works if you know the name. |
 | Shared map | `MazeMap` stores claimed cells and container positions in `mazeMapFile` (default `baritone/maze-map.txt`). The first claim wins. |
 | Swarm hook | `MazeSwarmBus` is the interface a later transport can attach with `MazeProcess.attachBus`. The default bus drops messages. Nothing is sent over chat or a socket. |
 | Seeded rooms | `MazeSeed.roomSeed` and `MazeTheme.forCell` depend only on `mazeSeed` and the cell. Same numbers, same room, on every bot. |
-| One room | `#maze` or `#maze build` plans **one** room plus a short corridor stub, under the player. The stub is plugged with solid blocks. |
+| One room | `#maze.backrooms build` plans **one** room plus a short corridor stub, under the player. The stub is plugged with solid blocks. |
 | Cave check | `ShellSeal` refuses the spot when air, fluid, or an unloaded block touches the shell, or when there are fewer than 4 solid blocks of cover above the ceiling. The planner shifts inside the cell (sideways, then deeper) and then tries nearby unclaimed cells. |
 | Themes | Yellow office, pipes, and hub have their own block palettes. Deep uses the same shell with a deepslate palette and is marked stubbed. |
 | Loot plan | `LootPlanner` rolls containers and item ids from the room seed. Chests, barrels, and pots follow the rates below. Positions already in the map are skipped. |
 | Cadence | The process waits `StealthCadence.delayTicks` before it hands the schematic to the builder. The wait is stable for a given room seed. |
-| Command | `#maze`, `#maze build`, `#maze plan`, `#maze status`, `#maze cancel`. |
+| Command | `#maze.backrooms` (toggle), `#maze.backrooms build`, `#maze.backrooms plan`, `#maze.backrooms status`, `#maze.backrooms cancel`. Hidden from `#help` and tab-complete.. |
 | Tests | Seed stability, theme catalog, loot determinism and the no-refill ledger, and the seal / surface-cover helper. They do not start a world. |
 
-Cell size is 32 blocks. The room is inset inside the cell so two neighboring cells cannot overlap. Each `#maze build` claims that one cell when the map file has been written, then the normal builder carves the schematic.
+Cell size is 32 blocks. The room is inset inside the cell so two neighboring cells cannot overlap. Each `#maze.backrooms build` claims that one cell when the map file has been written, then the normal builder carves the schematic.
 
 Approximate container rates (a roll of 0–99 on the room seed):
 
@@ -60,7 +69,7 @@ These are named in the code or the settings, and deliberately not finished:
 
 | Wish | Foundation stand-in |
 | --- | --- |
-| Expands forever on its own | One room per `#maze build`. There is no loop that keeps digging. Run the command again for the next open cell. |
+| Expands forever on its own | One room per `#maze.backrooms build`. There is no loop that keeps digging. Run the command again for the next open cell. |
 | Full corridors between rooms | The stub runs toward +X for a few blocks and is **resealed**. Cells do not join up yet. |
 | Soft theme blends at the edges | Every block in a cell uses that cell's theme. There is no blend. |
 | Rare surface entries | The generator never opens a stair to the surface. If the cover check fails it shifts deeper or refuses. |
@@ -70,21 +79,21 @@ These are named in the code or the settings, and deliberately not finished:
 | Lore books | Deep and hub "books" are the `book` item. Written books with pages are not generated. |
 | Deep rooms of their own | `MazeTheme.DEEP` is stubbed. It uses the shared room shape and a deepslate palette. |
 | Recycling excavated blocks | The builder uses the player's inventory and the usual throwaway blocks. Dug stone is not turned into the shell. |
-| Maintenance pass | `ShellSeal.maintenanceTargets` lists blocks that break the seal. Nothing places them back. `#maze plan` reports a refusal; it does not repair. |
+| Maintenance pass | `ShellSeal.maintenanceTargets` lists blocks that break the seal. Nothing places them back. `#maze.backrooms plan` reports a refusal; it does not repair. |
 | Approach tunnel | The builder pathfinds to the schematic the usual way. That path can dig. The room shell itself is checked; the path to it is not a maze corridor. |
 
 ## Commands and settings
 
-`#maze` does nothing useful until `mazeMode` is true:
+`mazeMode` is toggled by `#maze.backrooms` or the Konami code:
 
 ```
-#set mazeMode true
+#maze.backrooms
 #set mazeSeed 12345
-#maze plan
-#maze build
+#maze.backrooms plan
+#maze.backrooms build
 ```
 
-`#maze plan` only prints the cell, theme, origin, and how many containers the seed would place. It does not claim the cell.
+`#maze.backrooms plan` only prints the cell, theme, origin, and how many containers the seed would place. It does not claim the cell.
 
 `mazeMinActionDelay` and `mazeMaxActionDelay` are in game ticks (20 ticks is one second). `mazeActionJitter` adds or subtracts that many ticks. A minimum above the maximum is clamped up. Negative jitter is treated as zero.
 
@@ -103,3 +112,10 @@ Pure planning, with no Minecraft types, lives in `src/main/java/baritone/maze/`:
 `MazeWorldProbe` and `MazeSchematic` are the only maze types that touch Minecraft. `MazeProcess` stays inactive unless `mazeMode` is on and a build is waiting. It does not write pathing settings.
 
 Tests are in `src/test/java/baritone/maze/`.
+
+## Recorded wish-list (not coded yet)
+
+- **Plot and claim avoidance.** Probe for server land claims (GriefPrevention, Towny, plot worlds) before claiming a cell, and skip claimed land.
+- **Farm without surface damage.** Harvest surface resources with no visible scars, and replant any tree that is cut.
+- **Farming room type.** A room theme with underground crop plots and lighting.
+- **Natural-looking loot.** Loot in containers should read like naturally generated chests, not a bot stash.

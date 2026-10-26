@@ -42,10 +42,6 @@ The pathing goal can be set to any of these options:
 
 And finally `GoalComposite`. `GoalComposite` is a list of other goals, any one of which satisfies the goal. For example, `mine diamond_ore` creates a `GoalComposite` of `GoalTwoBlocks`s for every diamond ore location it knows of.
 
-# Maze mode
-
-Off by default (`mazeMode`). One sealed underground room per `#maze build`, with a shared map so later builds do not dig the same cell. Normal pathing is unchanged while the setting is off. The full wish-list and the list of what is still stubbed are in [docs/maze/README.md](docs/maze/README.md).
-
 # Future features
 
 Things it doesn't have yet

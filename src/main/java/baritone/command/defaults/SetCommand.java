@@ -80,6 +80,7 @@ public class SetCommand extends Command {
             List<? extends Settings.Setting> toPaginate =
                     (viewModified ? SettingsUtil.modifiedSettings(Baritone.settings()) : Baritone.settings().allSettings).stream()
                             .filter(s -> !s.isJavaOnly())
+                            .filter(s -> !SettingsUtil.isUnlistedSetting(s.getName())) // Ostinato: maze easter egg
                             .filter(s -> s.getName().toLowerCase(Locale.US).contains(search.toLowerCase(Locale.US)))
                             .sorted((s1, s2) -> String.CASE_INSENSITIVE_ORDER.compare(s1.getName(), s2.getName()))
                             .collect(Collectors.toList());
