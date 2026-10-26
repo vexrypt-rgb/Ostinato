@@ -49,6 +49,8 @@ public final class FightBook {
         public String late;
         /** Ostinato: why one of its fighters looks like a cheater ({@link CheatWatch}), or null. Kept out of the tallies unless {@link #includeCheats}. */
         public String cheat;
+        /** Ostinato: a knock-off, fall, or void. Counts even when the bout was shorter than {@link #MIN_HITS}. */
+        boolean decisive;
 
         /** {@code 1v1}, {@code ffa} or {@code team}; 1v1 until the group closes. */
         public String type() {
@@ -124,6 +126,10 @@ public final class FightBook {
     int lateSkipped;
     private java.util.function.Consumer<FightGroup> onGroup;
     private KitSignatures signatures;
+    // Ostinato: a knock-off already given to this pair, so a death packet in the same moment does not count twice
+    private final Map<Long, Integer> knockAt = new HashMap<>();
+    private int closedLoser = Integer.MIN_VALUE, closedTick = -10000;
+    private boolean closedCounted;
     private LearnedKits learned; // null: the game folder's
     private boolean learnKits = true;
     /** A label below this confidence counts as unknown for the per-kit tallies. */
@@ -305,6 +311,9 @@ public final class FightBook {
         suspects.clear(); // Ostinato: ids start over
         kits.clear();
         clues.clear();
+        knockAt.clear(); // Ostinato
+        closedLoser = Integer.MIN_VALUE;
+        closedCounted = false;
     }
 
     /** Once a second: where each player in an open group is and their health ({x, y, z, hp}), for the group log. */
@@ -388,8 +397,50 @@ public final class FightBook {
             g.kits.put(id, kit(tick, id, true));
             g.dead.add(id);
         }
+        int before = finished;
         for (Fight f : fightsOf(id)) finish(f, f.other(id), "death", tick);
+        if (finished > before) { // Ostinato: a counted death, so a same-moment knock-off does not count again
+            closedLoser = id;
+            closedTick = tick;
+            closedCounted = true;
+        }
         forgetKit(id);
+    }
+
+    /**
+     * Ostinato: {@code loser} was knocked off, fell, or went into the void, and {@code winner} hit them inside the
+     * short credit window. Counts even when the fight was one shove, which a normal {@link #died} would drop.
+     * A second call for the same pair within a few ticks does nothing.
+     */
+    public void knockOff(int tick, int loser, String loserName, int winner, String winnerName, String cause) {
+        if (winner < 0 || loser < 0 || loser == winner) return;
+        if (closedCounted && closedLoser == loser && tick - closedTick <= 5) return;
+        long k = key(loser, winner);
+        Integer prev = knockAt.get(k);
+        if (prev != null && tick - prev <= 5) return;
+        if (knockAt.size() > 256) knockAt.clear();
+        Fight f = active.get(k);
+        if (f == null) f = hit(tick, winner, winnerName, loser, loserName, false, null);
+        f.decisive = true;
+        knockAt.put(k, tick);
+        closedLoser = loser;
+        closedTick = tick;
+        closedCounted = true;
+        finish(f, winner, cause, tick);
+    }
+
+    /**
+     * Ostinato: the fight ended in a fall or the void but the last attacker is outside the credit window.
+     * Open fights close as draws, so an old opponent is not given the win.
+     */
+    public void unresolved(int tick, int id, String cause) {
+        if (closedLoser == id && tick - closedTick <= 5) return;
+        List<Fight> fs = fightsOf(id);
+        if (fs.isEmpty()) return;
+        for (Fight f : fs) finish(f, -1, cause, tick);
+        closedLoser = id;
+        closedTick = tick;
+        closedCounted = false;
     }
 
     /**
@@ -467,7 +518,7 @@ public final class FightBook {
     }
 
     private void settle(Fight f, int winner, String why, int tick) {
-        boolean counts = tick - f.start >= MIN_TICKS && f.hitsA + f.hitsB >= MIN_HITS;
+        boolean counts = f.decisive || (tick - f.start >= MIN_TICKS && f.hitsA + f.hitsB >= MIN_HITS); // Ostinato: a ledge death counts
         if (onSettled != null) onSettled.accept(f, counts);
         if (!counts) {
             discarded++;

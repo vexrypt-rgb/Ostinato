@@ -2361,11 +2361,15 @@ public final class Settings {
     public final Setting<Double> spectateRadius = new Setting<>(48.0);
 
     /**
-     * Ostinato: decide by itself who in render distance is fighting (hits, damage, swings at someone in reach) and
-     * record those fights, with no spectate command or server menu. Fighters are watched at any loaded distance,
-     * beyond {@code spectateRadius}. On a multiplayer server {@code spectateLearnOnServers} still applies.
+     * Ostinato: decide by itself who in render distance is fighting (a swing while facing someone in reach, a hurt
+     * next to another player, or a knockback shove) and record that fight, with no spectate command or server menu.
+     * Recording starts on its own and stops when the fight ends, the players walk apart, or they leave render
+     * distance. A ledge shove counts when the victim then falls, dies, or drops below the arena; the kill goes to
+     * the last attacker within a few seconds. Off by default, so {@code spectateLearn} is unchanged until this is
+     * turned on. On a multiplayer server {@code spectateLearnOnServers} still applies. Watched past
+     * {@code spectateRadius}, out to whoever the client has loaded.
      */
-    public final Setting<Boolean> spectateAutoDetect = new Setting<>(true);
+    public final Setting<Boolean> spectateAutoDetect = new Setting<>(false);
 
     /** Most processor time (milliseconds a game tick, on its own low-priority thread) spent working out keys. */
     public final Setting<Double> spectateBudgetMs = new Setting<>(1.5);
