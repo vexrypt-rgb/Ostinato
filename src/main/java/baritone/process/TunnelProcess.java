@@ -45,6 +45,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private boolean restoreBreakFromAbove, restoreAllowInventory, resumeEdge;
     private int pickWait;
     private Map<String, Integer> lastNeeds = Map.of();
+    private boolean copperMissed; // Ostinato: a copper kit ask came back unmet; fall back to iron/stone
 
     public TunnelProcess(Baritone baritone) {
         super(baritone);
@@ -279,6 +280,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (before.containsKey("bed") && !now.containsKey("bed") && bed != null) {
             System.out.println("TUNNELS bed spawn set near " + bed.toShortString());
         }
+        if (!copperMissed && before.keySet().stream().anyMatch(k -> k.contains("copper_") && now.containsKey(k))) {
+            copperMissed = true;
+            System.out.println("TUNNELS copper kit unmet " + before + "; falling back to iron/stone");
+        }
         if (!now.isEmpty()) edgesSinceNeedFail = 0; // back off; dig on and ask again later
         System.out.println("TUNNELS provision done left=" + now);
         lastNeeds = now;
@@ -293,29 +298,35 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private Map<String, Integer> needs() {
         Map<String, Integer> n = new LinkedHashMap<>();
         var inv = ctx.player().getInventory();
-        int ironPicks = 0, picks = 0, food = 0, torches = 0, beds = 0;
+        int ironPicks = 0, picks = 0, food = 0, torches = 0, beds = 0, shovels = 0, swords = 0;
         double bestPick = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
             if (s.isEmpty()) continue;
             if (s.is(ItemTags.PICKAXES)) {
                 picks++;
-                if (s.is(Items.IRON_PICKAXE)) ironPicks++;
+                if (!s.is(Items.WOODEN_PICKAXE) && !s.is(Items.STONE_PICKAXE) && !s.is(Items.GOLDEN_PICKAXE)) ironPicks++; // copper, iron or better
                 double left = s.getMaxDamage() <= 0 ? 1 : 1 - (double) s.getDamageValue() / s.getMaxDamage();
                 bestPick = Math.max(bestPick, left);
             }
             if (s.get(DataComponents.FOOD) != null) food += s.getCount();
             if (s.is(Items.TORCH)) torches += s.getCount();
+            if (s.is(ItemTags.SHOVELS)) shovels++;
+            if (s.is(ItemTags.SWORDS)) swords++;
             if (s.is(ItemTags.BEDS)) beds++;
         }
         // Ostinato: no pick at all is pickGate's job (hard); here only the iron upgrade / worn spare (soft).
-        if (picks > 0 && (ironPicks == 0 || bestPick < 0.15)) n.put("iron_pickaxe", ironPicks + 1);
+        // Ostinato: copper first (copper ore is everywhere in 26.3); once a copper ask comes back unmet, iron/stone.
+        String tier = copperMissed ? "iron" : "copper";
+        if (picks > 0 && (ironPicks == 0 || bestPick < 0.15)) n.put(tier + "_pickaxe", ironPicks + 1);
+        if (shovels == 0) n.put(copperMissed ? "stone_shovel" : "copper_shovel", 1);
+        if (swords == 0) n.put(copperMissed ? "stone_sword" : "copper_sword", 1);
         if (food < 6) n.put("food", 20);
         if (torches < 8) n.put("torch", 16);
-        if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:iron_helmet", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:iron_chestplate", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:iron_leggings", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:iron_boots", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:" + tier + "_helmet", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:" + tier + "_chestplate", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:" + tier + "_leggings", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:" + tier + "_boots", 1);
         BlockPos f = face();
         if (bed == null || horiz(bed, f) > BED_RANGE) {
             BlockPos placed = phase == Phase.PROVISION && lastNeeds.containsKey("bed") ? bedNear(ctx.playerFeet(), 5) : null;
