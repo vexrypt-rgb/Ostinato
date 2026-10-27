@@ -53,7 +53,10 @@ public final class MazeTest implements AbstractGameEventListener {
     // Ostinato: expand mode (-Dostinato.mazetest.rooms=N, default 1 = the single-room proof). After a room passes dig+furnish,
     // the harness walks the bot's spawn to a nearby unclaimed cell, preferring a theme not built yet, and runs the same
     // setup -> buildHere -> dig -> furnish -> verify loop there. RESULT is printed once, after the last room.
-    private static final int ROOMS = Math.max(1, Integer.getInteger("ostinato.mazetest.rooms", 1));
+    // Ostinato: rooms<=0 = forever (keep expanding until a room FAILs or the client dies).
+    private static final int ROOMS = Integer.getInteger("ostinato.mazetest.rooms", 1);
+    private static final boolean FOREVER = ROOMS <= 0;
+    private static final String ROOMS_CAP = FOREVER ? "inf" : String.valueOf(ROOMS);
     private int roomsDone;
     private final java.util.List<String> roomLog = new java.util.ArrayList<>();
     private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
@@ -447,10 +450,10 @@ public final class MazeTest implements AbstractGameEventListener {
         String entry = (done == null ? "?" : done.theme.id + "@" + done.cellX + "," + done.cellZ) + "=" + (state == 5 ? "PASS" : "FAIL");
         roomLog.add(entry);
         if (done != null) cellsDone.add(((long) done.cellX << 32) ^ (done.cellZ & 0xffffffffL));
-        say("ROOM-RESULT " + roomsDone + "/" + ROOMS + " " + entry + " ticks=" + ticks);
-        if (state == 5 && roomsDone < ROOMS && done != null && nextRoom(mc, done)) return;
-        String summary = " rooms=" + roomsDone + "/" + ROOMS + " themes=" + roomLog.stream().map(r -> r.split("@")[0]).distinct().toList() + " " + roomLog;
-        finish(mc, (state == 5 && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : "FAIL verify") + (ROOMS > 1 ? summary : ""));
+        say("ROOM-RESULT " + roomsDone + "/" + ROOMS_CAP + " " + entry + " ticks=" + ticks);
+        if (state == 5 && (FOREVER || roomsDone < ROOMS) && done != null && nextRoom(mc, done)) return;
+        String summary = " rooms=" + roomsDone + "/" + ROOMS_CAP + " themes=" + roomLog.stream().map(r -> r.split("@")[0]).distinct().toList() + " " + roomLog;
+        finish(mc, (state == 5 && !FOREVER && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : "FAIL verify") + (ROOMS != 1 ? summary : ""));
     }
 
     /** Ostinato: expand mode. Moves the player to the surface over the next cell and restarts the room loop there. */
@@ -458,6 +461,7 @@ public final class MazeTest implements AbstractGameEventListener {
         long seed = Baritone.settings().mazeSeed.value;
         java.util.Set<String> built = new java.util.HashSet<>();
         for (String r : roomLog) built.add(r.split("@")[0]);
+        if (FOREVER && built.size() >= 3) built.retainAll(java.util.Set.of(roomLog.get(roomLog.size() - 1).split("@")[0])); // Ostinato: forever: all themes seen -> restart rotation, just avoid repeating the last one
         int[] pick = null;
         // Ostinato: 2-cell steps so the planner's search radius cannot fold the new room back into the last one.
         for (int ring = 2; ring <= 12 && pick == null; ring += 2) {
@@ -484,7 +488,7 @@ public final class MazeTest implements AbstractGameEventListener {
             say("EXPAND failed to load cell " + pick[0] + "," + pick[1] + ": " + ex);
             return false;
         }
-        say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
+        say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS_CAP + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
                 + " surface=" + bx + "," + top + "," + bz + " built=" + built);
         run("effect clear @p night_vision");
         run("tp @p " + (bx + 0.5) + " " + top + " " + (bz + 0.5));
