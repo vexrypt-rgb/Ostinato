@@ -727,6 +727,9 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        // Ostinato: a process ticked earlier this tick (e.g. #maze.tunnels pausing an edge for a pickaxe) may have cancelled
+        // this build after executeProcesses queued it; report inactive instead of NPE-ing on the cleared origin.
+        if (schematic == null) return null;
         return onTick(calcFailed, isSafeToCancel, 0);
     }
 
