@@ -45,6 +45,13 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     private boolean active;
     private int surfaceY;
+    /** Column where the scan actually found air, not just the y of it. */
+    private int surfaceX, surfaceZ;
+    /** Ticks spent surfacing without the air bar rising. A roofed pool must not hold the dig forever. */
+    private int breathTicks;
+    private int breathAir;
+    /** After a give-up, let the dig swim or mine before we grab the path again. */
+    private int breathCooldown;
     private int depth;
     /** Where surfacing began: a teleport (or long drift) makes the goal stale. */
     private int fromX, fromZ;
@@ -79,7 +86,11 @@ public final class AirProcess extends BaritoneProcessHelper {
             // Whatever process is driving: sneaking is the only thing that stops magma burning us.
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
         }
-        if (!active && ctx.player().isInWater() && ctx.player().tickCount % 20 == 0) {
+        if (breathCooldown > 0) {
+            if (air < 30) breathCooldown = 0; // one bubble left: try again before drowning
+            else breathCooldown--;
+        }
+        if (!active && breathCooldown == 0 && ctx.player().isInWater() && ctx.player().tickCount % 20 == 0) {
             // Blocks to the nearest breathable spot: open surface straight up, or a bubble column.
             int surface = findSurfaceY();
             surfaceInReach = surface != NONE;
@@ -88,15 +99,17 @@ public final class AirProcess extends BaritoneProcessHelper {
             depth = Math.min(sd, colDist);
             if (depth == Integer.MAX_VALUE) depth = 0; // no air in reach: keep going, one may come into range
         }
-        if (!active && ctx.player().isSwimming() && col == null && surfaceInReach && baritone.getPathingBehavior().isPathing() && air > 20) {
+        if (!active && breathCooldown == 0 && ctx.player().isSwimming() && col == null && surfaceInReach && baritone.getPathingBehavior().isPathing() && air > 20) {
             // Swimming under open water: the movement creeps up to breathe without leaving the swim pose.
             return false;
         }
-        if (!active && ctx.player().isInWater() && air < Math.min(max - 40, Math.max(max / 3, depth * 9)) && !goalWithinBreath(air, depth)) {
+        if (!active && breathCooldown == 0 && ctx.player().isInWater() && air < Math.min(max - 40, Math.max(max / 3, depth * 9)) && !goalWithinBreath(air, depth)) {
             // ~1.5x the straight swim (4 ticks/block): paths detour around hulls and walls.
             active = true;
             fromX = ctx.playerFeet().getX();
             fromZ = ctx.playerFeet().getZ();
+            breathTicks = 0;
+            breathAir = air;
             surfaceY = findSurfaceY();
             Goal c = columnGoal(surfaceY == NONE ? Integer.MAX_VALUE : surfaceY - ctx.playerFeet().getY());
             if (c == null && surfaceY == NONE && !startDoorPocket()) {
@@ -105,13 +118,22 @@ public final class AirProcess extends BaritoneProcessHelper {
                 return false;
             }
             // startDoorPocket nulls goal; a y+64 surface goal left after the pocket drowned the bot.
-            goal = door != null ? null : c != null ? c : surfaceGoal(surfaceY == NONE ? ctx.playerFeet().getY() + 64 : surfaceY);
+            int ty = surfaceY == NONE ? ctx.playerFeet().getY() + 64 : surfaceY;
+            int tx = surfaceY == NONE ? ctx.playerFeet().getX() : surfaceX;
+            int tz = surfaceY == NONE ? ctx.playerFeet().getZ() : surfaceZ;
+            goal = door != null ? null : c != null ? c : surfaceGoal(ty, tx, tz);
             if (door != null) logDebug("Low on air (" + air + "), nothing to breathe in reach: door air pocket at " + door);
             else if (c != null) logDebug("Low on air (" + air + " d=" + depth + " eta=" + baritone.getPathingBehavior().estimatedTicksToGoal().map(Math::round).orElse(-1L) + "), heading to a bubble column");
             else logDebug("Low on air (" + air + "), surfacing to y=" + surfaceY);
         } else if (active && door == null && air < 60 && surfaceY != NONE && ctx.playerFeet().getY() < surfaceY - 12 && startDoorPocket()) {
             // Too deep to make the surface on what's left: breathe in a door instead.
             logDebug("Air critical (" + air + "), door air pocket at " + door);
+        } else if (active && door == null && breathStalled(air)) {
+            // Run46: in-goal under a dirt roof (Surface y=34, two bubbles) for the whole dig timeout.
+            logDebug("Surfacing gave up, air still " + air);
+            active = false;
+            // Long enough for the dig to take a step, short enough that a 2-bubble bar does not hit zero.
+            breathCooldown = Math.min(200, Math.max(40, air - 30));
         } else if (active && door == null && (air >= max || Math.abs(ctx.playerFeet().getX() - fromX) + Math.abs(ctx.playerFeet().getZ() - fromZ) > 48)) {
             active = false;
         }
@@ -136,7 +158,11 @@ public final class AirProcess extends BaritoneProcessHelper {
                     BlockState st = ctx.world().getBlockState(p);
                     if (!MovementHelper.isWater(st)) {
                         // a roof (glass, ice, a hull) is not a surface: there must be air to breathe
-                        if (y - 1 > best && y > feet.getY() && st.getCollisionShape(ctx.world(), p).isEmpty() && st.getFluidState().isEmpty()) best = y - 1;
+                        if (y - 1 > best && y > feet.getY() && st.getCollisionShape(ctx.world(), p).isEmpty() && st.getFluidState().isEmpty()) {
+                            best = y - 1;
+                            surfaceX = p.getX();
+                            surfaceZ = p.getZ();
+                        }
                         break;
                     }
                 }
@@ -195,16 +221,27 @@ public final class AirProcess extends BaritoneProcessHelper {
         return ctx.world().getBlockState(p).getBlock() == Blocks.BUBBLE_COLUMN;
     }
 
-    private static Goal surfaceGoal(int target) {
+    /** 15s with no real breath: the "surface" is a roof. Hand the path back. */
+    private boolean breathStalled(int air) {
+        if (air > breathAir + 5) {
+            breathAir = air;
+            breathTicks = 0;
+            return false;
+        }
+        return ++breathTicks > 300;
+    }
+
+    /** Breathable column, not "any x/z at this y". The latter was true under the dirt roof. */
+    private static Goal surfaceGoal(int target, int colX, int colZ) {
         return new Goal() {
             @Override
             public boolean isInGoal(int x, int y, int z) {
-                return y >= target;
+                return y >= target && Math.abs(x - colX) <= 1 && Math.abs(z - colZ) <= 1;
             }
 
             @Override
             public double heuristic(int x, int y, int z) {
-                return Math.max(0, target - y) * MovementSwim.SWIM_ONE_BLOCK_COST;
+                return (Math.max(0, target - y) + Math.abs(x - colX) + Math.abs(z - colZ)) * MovementSwim.SWIM_ONE_BLOCK_COST;
             }
 
             @Override

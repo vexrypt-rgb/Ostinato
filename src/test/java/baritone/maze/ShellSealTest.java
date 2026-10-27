@@ -36,7 +36,7 @@ public class ShellSealTest {
         assertEquals(MazePlanner.SIZE_X, plan.sizeX);
         assertEquals(MazePlanner.SIZE_Y, plan.sizeY);
         assertEquals(MazePlanner.SIZE_Z, plan.sizeZ);
-        assertEquals(54, count(plan, BlockRole.AIR));
+        assertEquals(104, count(plan, BlockRole.AIR)); // Ostinato: 4-high room
         assertEquals(2, count(plan, BlockRole.STUB_CAP));
         assertEquals(1, count(plan, BlockRole.LIGHT));
         assertEquals(1, count(plan, BlockRole.FEATURE));
@@ -53,8 +53,8 @@ public class ShellSealTest {
     @Test
     public void airAboveTheCeilingIsSurfaceVisible() {
         RoomPlan plan = MazePlanner.layout(1, 0, 0, 8, 20, 8);
-        // Ceiling is originY + 4. Cover is the next four blocks. The second of those is open.
-        BlockProbe thinCover = (x, y, z) -> y == 26 ? BlockKind.AIR : BlockKind.SOLID;
+        // Ceiling is originY + 6. Cover is the next four blocks. The second of those is open.
+        BlockProbe thinCover = (x, y, z) -> y == 28 ? BlockKind.AIR : BlockKind.SOLID;
         SealVerdict verdict = ShellSeal.check(plan, thinCover);
         assertTrue(verdict.shellClear);
         assertFalse(verdict.underground);

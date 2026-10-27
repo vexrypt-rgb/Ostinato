@@ -32,6 +32,6 @@ public enum BlockRole {
     STUB_CAP;
 
     public boolean solid() {
-        return this != OUTSIDE && this != AIR;
+        return this != OUTSIDE && this != AIR && this != LIGHT; // Ostinato: the light is a torch, not a full block
     }
 }

@@ -156,6 +156,9 @@ public class ToolSet {
         int lowestCost = Integer.MIN_VALUE;
         boolean bestSilkTouch = false;
         BlockState blockState = b.defaultBlockState();
+        boolean requiresCorrect = blockState.requiresCorrectToolForDrops(); // Ostinato
+        int savedSlot = -1; // Ostinato
+        double savedSpeed = Double.NEGATIVE_INFINITY; // Ostinato
         for (int i = 0; i < 9; i++) {
             ItemStack itemStack = player.getInventory().getItem(i);
             if (!Baritone.settings().useSwordToMine.value && itemStack.is(ItemTags.SWORDS)) {
@@ -166,9 +169,24 @@ public class ToolSet {
                 continue;
             }
             if (AltoClefSettings.getInstance().shouldForceSaveTool(blockState, itemStack)) {
+                // Ostinato: remember a saved tool that can harvest this block. The save rule means "prefer another
+                // tool", not "mine stone with a shovel": with a worn iron pick saved, the maze bot broke stone with
+                // its iron shovel at fist speed while mining cobble for the replacement pick.
+                if (requiresCorrect && itemStack.isCorrectToolForDrops(blockState)) {
+                    double s = calculateSpeedVsBlock(itemStack, blockState);
+                    if (s > savedSpeed) {
+                        savedSpeed = s;
+                        savedSlot = i;
+                    }
+                }
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
+            // Ostinato: on a tie, an item that takes no wear (hand/block) beats a wrong tool, so a shovel or axe is
+            // never chosen for stone just because it sits in a lower slot.
+            if (speed == highestSpeed && itemStack.isDamageableItem() && !player.getInventory().getItem(best).isDamageableItem()) {
+                continue;
+            }
             boolean silkTouch = hasSilkTouch(itemStack);
             if (speed > highestSpeed) {
                 highestSpeed = speed;
@@ -185,6 +203,11 @@ public class ToolSet {
                     bestSilkTouch = silkTouch;
                 }
             }
+        }
+        // Ostinato: wrong tool for a block that needs one (stone/cobble/deepslate) while a saved correct tool is on the
+        // hotbar: use the correct one. Pick-refresh still replaces the worn pick; it just mines its cobble with a pick.
+        if (savedSlot >= 0 && !player.getInventory().getItem(best).isCorrectToolForDrops(blockState)) {
+            return savedSlot;
         }
         return best;
     }

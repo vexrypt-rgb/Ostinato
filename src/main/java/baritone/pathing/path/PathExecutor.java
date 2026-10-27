@@ -178,7 +178,11 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         tickDepth++;
         try {
-            return tickOnce();
+            boolean r = tickOnce();
+            if (tickDepth == 1) {
+                watchProgress(); // Ostinato
+            }
+            return r;
         } finally {
             tickDepth--;
         }
@@ -829,7 +833,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             if (!((Movement) m).toBreak(bsi).isEmpty() || !((Movement) m).toPlace(bsi).isEmpty()) {
                 return false;
             }
-            BetterBlockPos d = m.getDest();
+            baritone.api.utils.BetterBlockPos d = m.getDest();
             if (!MovementHelper.canWalkThrough(bsi, d.x, d.y + 2, d.z) || MovementHelper.isWater(bsi.get0(d.x, d.y, d.z))) {
                 return false;
             }
@@ -952,6 +956,55 @@ public class PathExecutor implements IPathExecutor, Helper {
         return next instanceof MovementDiagonal && Baritone.settings().allowOvershootDiagonalDescend.value;
     }
 
+    // Ostinato: path-level no-progress watchdog. Every per-movement timeout here is per pathPosition, and the
+    // look-ahead/swim/kinematic drivers are exempt from it; a rewind (feet back in an earlier movement) or a driver
+    // flipping between two positions resets them all. run59/run61 bobbed underwater between two feet positions for
+    // 8+ min with pathing=true and no replan. This counts ticks since the furthest pathPosition grew or the player
+    // got closer to that movement's dest, whatever drives; past the budget the stretch is marked failed so the next
+    // search routes around it, and the path is cancelled.
+    private static final int WATCH_BASE_TICKS = 400;
+    private int watchBest = -1, watchTicks;
+    private double watchDist = Double.MAX_VALUE;
+
+    private void watchProgress() {
+        if (failed || path == null || pathPosition >= path.length() - 1) {
+            return;
+        }
+        if (pathPosition > watchBest) {
+            watchBest = pathPosition;
+            watchTicks = 0;
+            watchDist = Double.MAX_VALUE;
+        }
+        IMovement m = path.movements().get(Math.min(watchBest, path.movements().size() - 1));
+        baritone.api.utils.BetterBlockPos d = m.getDest();
+        double dist = ctx.player().position().distanceTo(new Vec3(d.x + 0.5, d.y, d.z + 0.5));
+        if (dist < watchDist - 0.5) {
+            watchDist = dist;
+            watchTicks = 0;
+            return;
+        }
+        double est = currentMovementOriginalCostEstimate == null ? 0 : currentMovementOriginalCostEstimate;
+        int budget = WATCH_BASE_TICKS + (int) Math.min(Double.isFinite(est) ? Math.max(est, 0) : 0, 1600);
+        if (++watchTicks <= budget) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (int i = Math.max(0, watchBest - 1); i <= Math.min(path.movements().size() - 1, watchBest + 1); i++) {
+            IMovement f = path.movements().get(i);
+            baritone.api.utils.BetterBlockPos fs = f.getSrc(), fd = f.getDest();
+            baritone.pathing.RouteReuse.forget(fs, fd);
+            long key = baritone.pathing.movement.JumpFailures.moveKey(fs.x, fs.y, fs.z, fd.x, fd.y, fd.z);
+            for (int k = 0; k < 3; k++) {
+                baritone.pathing.movement.JumpFailures.mark(key, now);
+            }
+        }
+        String ev = "no path progress for " + watchTicks + " ticks at " + ctx.playerFeet() + " driver=" + lastDriver + " pos=" + pathPosition + "/best=" + watchBest
+                + " move=" + m.getClass().getSimpleName() + " " + m.getSrc() + "->" + m.getDest() + " inWater=" + ctx.player().isInWater();
+        System.out.println("PATH no-progress watchdog: " + ev + ", cancelling for replan");
+        Baritone.settings().movementFault.value.accept("M05", ev);
+        logDebug("PATH no-progress watchdog: " + ev);
+        cancel();
+    }
     private void onChangeInPathPosition() {
         clearKeys();
         ticksOnCurrent = 0;

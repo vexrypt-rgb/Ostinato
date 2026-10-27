@@ -276,6 +276,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             return Outcome.fail("The room is still being dug");
         }
         boolean survival = !ctx.player().getAbilities().instabuild;
+        MazeFurnishPlanner.woods = nearbyPlanks(); // Ostinato: wood cladding asks for planks this area actually grows
         MazeFurnishJob job = MazeFurnishPlanner.plan(furnishRoom, furnishLoot, new MazeWorldProbe(ctx.world()), survival);
         String materials = job.materials().entrySet().stream()
                 .map(e -> e.getKey() + " x" + e.getValue())
@@ -385,4 +386,28 @@ public final class MazeProcess extends BaritoneProcessHelper {
             return new Report(error, null, null, List.of(), null);
         }
     }
-}
+
+    /** Ostinato: plank ids for the logs in the treetops around the player, most common first. */
+    private java.util.List<String> nearbyPlanks() {
+        java.util.Map<String, Integer> seen = new java.util.HashMap<>();
+        net.minecraft.core.BlockPos.MutableBlockPos at = new net.minecraft.core.BlockPos.MutableBlockPos();
+        int px = ctx.playerFeet().x, pz = ctx.playerFeet().z;
+        for (int x = px - 64; x <= px + 64; x += 2) {
+            for (int z = pz - 64; z <= pz + 64; z += 2) {
+                int top = ctx.world().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z);
+                for (int y = top; y > top - 12; y--) {
+                    String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(ctx.world().getBlockState(at.set(x, y, z)).getBlock()).getPath();
+                    if (id.endsWith("_log") && !id.startsWith("stripped_")) seen.merge(id.substring(0, id.length() - 4) + "_planks", 1, Integer::sum);
+                }
+            }
+        }
+        // Ostinato: only woods TenorClef can harvest (TenorClef 4983e4e9 catalogues every overworld tree wood incl. cherry, mangrove, pale oak). With none
+        // left, stone stands in for planks so the furnish never waits on a tree it cannot chop.
+        java.util.Set<String> ok = java.util.Set.of("oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "cherry_planks", "mangrove_planks", "pale_oak_planks");
+        java.util.List<String> out = new java.util.ArrayList<>(seen.keySet());
+        out.removeIf(w -> !ok.contains(w));
+        if (out.isEmpty() && !seen.isEmpty()) out.add("polished_andesite");
+        out.sort((a, b) -> seen.get(b) - seen.get(a));
+        logDirect("Maze furnish: woods nearby " + seen + " usable " + out);
+        return out;
+    }}

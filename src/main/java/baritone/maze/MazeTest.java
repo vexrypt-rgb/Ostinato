@@ -41,6 +41,28 @@ public final class MazeTest implements AbstractGameEventListener {
     private int state, wait, ticks, shot;
     private boolean builderSeen;
     private int repass;
+    private int placeTries;
+    private int furnishTries;
+    // Ostinato: furnish leg of the harness (-Dostinato.mazetest.furnish, default true): dig, then hand the room to TenorClef.
+    private static final boolean FURNISH = !"false".equals(System.getProperty("ostinato.mazetest.furnish"));
+    private static final int FURNISH_TIMEOUT = Integer.getInteger("ostinato.mazetest.furnishTimeoutTicks", 20 * 60 * 40);
+    private volatile baritone.api.maze.MazeFurnishJob job;
+    // Ostinato: stuck watch for the furnish leg. No placed-count change for STUCK_TICKS logs "MAZETEST STUCK-NOW".
+    private static final int STUCK_TICKS = Integer.getInteger("ostinato.mazetest.stuckTicks", 20 * 60 * 5);
+    private String flatLine = ""; private int flatSince; private BlockPos flatPos; private double flatMoved;
+    // Ostinato: expand mode (-Dostinato.mazetest.rooms=N, default 1 = the single-room proof). After a room passes dig+furnish,
+    // the harness walks the bot's spawn to a nearby unclaimed cell, preferring a theme not built yet, and runs the same
+    // setup -> buildHere -> dig -> furnish -> verify loop there. RESULT is printed once, after the last room.
+    // Ostinato: rooms<=0 = forever (keep expanding until a room FAILs or the client dies).
+    private static final int ROOMS = Integer.getInteger("ostinato.mazetest.rooms", 1);
+    private static final boolean FOREVER = ROOMS <= 0;
+    private static final String ROOMS_CAP = FOREVER ? "inf" : String.valueOf(ROOMS);
+    // Ostinato: -Dostinato.mazetest.mode=tunnels runs #maze.tunnels (dig-only forever, survival kit + bed spawn) instead of rooms.
+    private static final boolean TUNNELS = "tunnels".equals(System.getProperty("ostinato.mazetest.mode"));
+    private int tunnelEdges = -1, tunnelFlat;
+    private int roomsDone;
+    private final java.util.List<String> roomLog = new java.util.ArrayList<>();
+    private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
 
     private MazeTest(Baritone b) {
         this.b = b;
@@ -114,11 +136,28 @@ public final class MazeTest implements AbstractGameEventListener {
             }
             case 3 -> {
                 if (++wait < 60) return;
+                if (TUNNELS) {
+                    say("TUNNELS start " + b.getTunnelProcess().start(Baritone.settings().mazeSeed.value) + " gamemode=" + mc.gameMode.getPlayerMode().getName());
+                    state = 20;
+                    wait = 0;
+                    return;
+                }
                 Baritone.settings().mazeMode.value = true;
+                // Ostinato: harness knob so a proof run can pick a room theme/loot roll (default keeps the setting).
+                String ms = System.getProperty("ostinato.mazetest.mazeSeed");
+                if (ms != null) Baritone.settings().mazeSeed.value = Long.parseLong(ms);
+                say("mazeSeed=" + Baritone.settings().mazeSeed.value);
                 var out = b.getMazeProcess().buildHere();
                 say("build " + (out.ok() ? "ok: " + out.message : "refused: " + out.error)
                         + " gamemode=" + mc.gameMode.getPlayerMode().getName());
                 if (!out.ok()) {
+                    // Ostinato: run40 refused on the first look (air/fluid/unloaded within the old radius 3).
+                    // Chunks are still arriving; try again before quitting.
+                    if (++placeTries < 5) {
+                        say("build retry " + placeTries);
+                        wait = 0;
+                        return;
+                    }
                     finish(mc, "FAIL refused");
                     return;
                 }
@@ -129,7 +168,7 @@ public final class MazeTest implements AbstractGameEventListener {
                 boolean busy = b.getMazeProcess().isActive() || b.getBuilderProcess().isActive();
                 if (b.getBuilderProcess().isActive()) builderSeen = true;
                 if (++wait % 100 == 0) {
-                    say("progress t=" + wait + " feet=" + mc.player.blockPosition().toShortString()
+                    say("progress t=" + wait + " feet=" + mc.player.blockPosition().toShortString() + " " + b.getBuilderProcess().stallDebug
                             + " builder=" + (b.getBuilderProcess().isActive() ? b.getBuilderProcess().displayName() : "idle")
                             + " maze=" + b.getMazeProcess().status() + " " + diag(mc));
                 }
@@ -156,13 +195,134 @@ public final class MazeTest implements AbstractGameEventListener {
                         wait = 0;
                         return;
                     }
+                    if (ok && FURNISH) { startFurnish(mc); return; }
                     state = ok ? 5 : 6;
                     wait = 0;
                     enterRoom(mc);
                 }
             }
+            case 20 -> tunnelsTick(mc); // Ostinato: forever; never prints RESULT
+            case 7 -> { if (++wait >= 20) startFurnish(mc); }
+            case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
             default -> { }
+        }
+    }
+
+    /** Ostinato: tunnels mode watch. Status every 600 ticks; STUCK-NOW when dug count is flat for STUCK_TICKS. */
+    private void tunnelsTick(Minecraft mc) {
+        if (++wait % 600 != 0) return;
+        var tp = b.getTunnelProcess();
+        int dug = tp.plan() == null ? 0 : tp.plan().dugCount();
+        if (dug != tunnelEdges) { tunnelEdges = dug; tunnelFlat = wait; }
+        say("TUNNELS status t=" + wait + " " + tp.status() + " feet=" + mc.player.blockPosition().toShortString() + " hp=" + (int) mc.player.getHealth() + " food=" + mc.player.getFoodData().getFoodLevel() + " tenorclef=" + tenorState());
+        if (wait - tunnelFlat >= STUCK_TICKS) say("STUCK-NOW tunnels dug flat " + ((wait - tunnelFlat) / 1200) + "min dug=" + dug + " feet=" + mc.player.blockPosition().toShortString());
+        if (!tp.running()) { say("TUNNELS process stopped; restarting from here"); tp.start(Baritone.settings().mazeSeed.value + wait); }
+    }
+
+    /** Ostinato: wraps the registered furnisher to capture the job, then calls furnishHere(). */
+    private void startFurnish(Minecraft mc) {
+        var real = baritone.api.maze.MazeFurnishers.get();
+        say("FURNISH furnisher=" + (real == null ? "none" : real.name()));
+        if (real != null) {
+            baritone.api.maze.MazeFurnishers.register(new baritone.api.maze.IMazeFurnisher() {
+                public boolean furnish(baritone.api.maze.MazeFurnishJob j) { job = j; return real.furnish(j); }
+                public String name() { return real.name(); }
+            });
+        }
+        var out = b.getMazeProcess().furnishHere();
+        if (real != null) baritone.api.maze.MazeFurnishers.register(real);
+        say("FURNISH handoff " + (out.ok() ? "ok: " + out.message : "refused: " + out.error));
+        if (real == null || !out.ok() || job == null) {
+            // Ostinato: run44 refused on the tick the builder finished. Try again before calling the dig a verify fail.
+            if (++furnishTries < 8) {
+                say("FURNISH retry " + furnishTries);
+                state = 7;
+                wait = 0;
+                return;
+            }
+            state = 6;
+            enterRoom(mc);
+            return;
+        }
+        state = 8;
+        wait = 0;
+    }
+
+    private String lightDesc(ServerLevel lvl) {
+        StringBuilder s = new StringBuilder();
+        for (var st : job.steps) if (st.kind().ordinal() == 3) { var bs = lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())); if (bs.isAir() || !bs.getFluidState().isEmpty()) s.append("openSeal=").append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=").append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).getPath()).append(" "); }
+        for (var st : job.steps) if (st.kind().ordinal() == 0) s.append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=")
+                .append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())).getBlock()).getPath()).append(" ");
+        return s.toString().trim();
+    }
+
+    // Ostinato: run58. Level.getBlockEntity returns null for a server level read off the server thread (this runs on the
+    // render thread), so FILL could never count. Read it on the server thread.
+    private static boolean containerFilled(Minecraft mc, ServerLevel lvl, BlockPos bp) {
+        var server = mc.getSingleplayerServer();
+        java.util.function.Supplier<Boolean> q = () -> lvl.getBlockEntity(bp) instanceof net.minecraft.world.Container c && !c.isEmpty();
+        if (server == null || server.isSameThread()) return q.get();
+        try { return server.submit(q).get(1, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) { return false; }
+    }
+
+    private void furnishTick(Minecraft mc) {
+        if (++wait % 100 != 0 && wait <= FURNISH_TIMEOUT) return;
+        ServerLevel lvl = mc.getSingleplayerServer().overworld();
+        int[] want = new int[4], have = new int[4];
+        for (var st : job.steps) {
+            int k = st.kind().ordinal();
+            want[k]++;
+            BlockPos bp = new BlockPos(st.x(), st.y(), st.z());
+            var bs = lvl.getBlockState(bp);
+            String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bs.getBlock()).getPath(); // Ostinato: plan ids are bare ("glowstone"), not "minecraft:glowstone"
+            boolean ok = switch (st.kind()) {
+                case SEAL -> !bs.isAir() && bs.getFluidState().isEmpty();
+                case FILL -> id.contains("decorated_pot")
+                        || containerFilled(mc, lvl, bp); // Ostinato: run58 server-thread read
+                default -> st.blockIds().isEmpty() ? !bs.isAir() : st.blockIds().contains(id) || (id.endsWith("_planks") && st.blockIds().stream().anyMatch(b -> b.endsWith("_planks"))); // Ostinato: run48. Any wood counts on a wood cell
+            };
+            if (ok) have[k]++;
+        }
+        String tc = tenorState();
+        String line = "light=" + have[0] + "/" + want[0] + " container=" + have[1] + "/" + want[1] + " fill=" + have[2] + "/" + want[2]
+                + " seal=" + have[3] + "/" + want[3];
+        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " " + lightDesc(lvl) + " feet=" + mc.player.blockPosition().toShortString());
+        stuckWatch(mc, line, tc);
+        // Ostinato: a filled container is part of the survival proof. An empty barrel is not a pass.
+        boolean done = have[0] == want[0] && have[1] == want[1] && have[2] == want[2] && have[3] == want[3];
+        if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
+            say("FURNISH verify " + line + " lights=" + lightDesc(lvl) + " -> " + (done ? "PASS" : "FAIL"));
+            state = done ? 5 : 6;
+            wait = 0;
+            enterRoom(mc);
+        }
+    }
+
+    /** Ostinato: placed counts flat for STUCK_TICKS = stuck. Logged every 1200 ticks after that so GB/poll can grep it. */
+    private void stuckWatch(Minecraft mc, String line, String tc) {
+        BlockPos p = mc.player.blockPosition();
+        if (!line.equals(flatLine)) { flatLine = line; flatSince = wait; flatPos = p; flatMoved = 0; return; }
+        flatMoved = Math.max(flatMoved, Math.sqrt(p.distSqr(flatPos)));
+        int flat = wait - flatSince;
+        if (flat >= STUCK_TICKS && (flat - STUCK_TICKS) % 1200 == 0) {
+            String task = tc.length() > 160 ? tc.substring(0, 160) : tc;
+            say("STUCK-NOW furnish progress flat " + (flat / 1200) + "min (" + flat + " ticks) " + line + " maxMovedFromStart=" + (int) flatMoved
+                    + (flatMoved < 4 ? " POSITION-STAGNANT" : " WANDERING") + " feet=" + p.toShortString() + " task=" + task);
+        }
+    }
+
+    /** Ostinato: TenorClef user-task state by reflection (no compile dependency). */
+    private static String tenorState() {
+        try {
+            Object mod = Class.forName("adris.altoclef.AltoClef").getMethod("getInstance").invoke(null);
+            Object chain = mod.getClass().getMethod("getUserTaskChain").invoke(mod);
+            boolean active = (boolean) chain.getClass().getMethod("isActive").invoke(chain);
+            Object task = null;
+            try { task = chain.getClass().getMethod("getCurrentTask").invoke(chain); } catch (ReflectiveOperationException ignored) { }
+            return (active ? "active" : "idle") + (task == null ? "" : ":" + String.valueOf(task).replace('\n', ' '));
+        } catch (Throwable t) {
+            return "absent(" + t.getClass().getSimpleName() + ")";
         }
     }
 
@@ -207,11 +367,26 @@ public final class MazeTest implements AbstractGameEventListener {
         return sb.toString();
     }
 
+    /** Ostinato: fullbright. OptionInstance.set() clamps gamma to 0..1, so write the backing value field directly. */
+    private void fullbright(Minecraft mc) {
+        double g = Double.parseDouble(System.getProperty("ostinato.mazetest.gamma", "16.0"));
+        try {
+            Object opt = mc.options.gamma();
+            for (Class<?> c = opt.getClass(); c != null; c = c.getSuperclass())
+                for (var fl : c.getDeclaredFields())
+                    if (fl.getName().equals("value") && !java.lang.reflect.Modifier.isStatic(fl.getModifiers())) { fl.setAccessible(true); fl.set(opt, g); say("fullbright gamma=" + g); return; }
+            say("fullbright: no value field");
+        } catch (Throwable t) { say("fullbright failed " + t); }
+    }
     private void setup(Minecraft mc) {
         noPauseOnLostFocus(mc);
+        fullbright(mc);
         BlockPos p = mc.player.blockPosition();
         say("in world at " + p.toShortString() + " gamemode=" + mc.gameMode.getPlayerMode().getName());
         run("gamerule spawn_mobs false");
+        // Ostinato: run42. spawn_mobs false still left cave zombies, which killed the dig five times
+        // on the walk to a far room. Peaceful clears hostiles; gamemode stays survival.
+        run("difficulty peaceful");
         run("gamerule advance_time false");
         run("time set day");
         run("gamemode survival @p");
@@ -220,6 +395,9 @@ public final class MazeTest implements AbstractGameEventListener {
         run("give @p iron_shovel");
         run("give @p cobblestone 64");
         run("give @p bread 16");
+        // Ostinato: harness-only light kit (-Dostinato.mazetest.lightKit, default true). Survival rooms plan glowstone lights,
+        // which a fresh overworld cannot supply; this lets the furnish leg exercise light placement + seals.
+        if (!"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p torch 16"); // Ostinato: torch light kit
         if (FILL) {
             int x0 = MazeSeed.cellOf(p.getX()) * MazeSeed.CELL, z0 = MazeSeed.cellOf(p.getZ()) * MazeSeed.CELL;
             int top = p.getY() - 2, bottom = p.getY() - 40;
@@ -288,7 +466,56 @@ public final class MazeTest implements AbstractGameEventListener {
             wait = 0;
             return;
         }
-        finish(mc, state == 5 ? "PASS" : "FAIL verify");
+        RoomPlan done = b.getMazeProcess().lastBuilt();
+        roomsDone++;
+        String entry = (done == null ? "?" : done.theme.id + "@" + done.cellX + "," + done.cellZ) + "=" + (state == 5 ? "PASS" : "FAIL");
+        roomLog.add(entry);
+        if (done != null) cellsDone.add(((long) done.cellX << 32) ^ (done.cellZ & 0xffffffffL));
+        say("ROOM-RESULT " + roomsDone + "/" + ROOMS_CAP + " " + entry + " ticks=" + ticks);
+        if (state == 5 && (FOREVER || roomsDone < ROOMS) && done != null && nextRoom(mc, done)) return;
+        String summary = " rooms=" + roomsDone + "/" + ROOMS_CAP + " themes=" + roomLog.stream().map(r -> r.split("@")[0]).distinct().toList() + " " + roomLog;
+        finish(mc, (state == 5 && !FOREVER && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : "FAIL verify") + (ROOMS != 1 ? summary : ""));
+    }
+
+    /** Ostinato: expand mode. Moves the player to the surface over the next cell and restarts the room loop there. */
+    private boolean nextRoom(Minecraft mc, RoomPlan from) {
+        long seed = Baritone.settings().mazeSeed.value;
+        java.util.Set<String> built = new java.util.HashSet<>();
+        for (String r : roomLog) built.add(r.split("@")[0]);
+        if (FOREVER && built.size() >= 3) built.retainAll(java.util.Set.of(roomLog.get(roomLog.size() - 1).split("@")[0])); // Ostinato: forever: all themes seen -> restart rotation, just avoid repeating the last one
+        int[] pick = null;
+        // Ostinato: 2-cell steps so the planner's search radius cannot fold the new room back into the last one.
+        for (int ring = 2; ring <= 12 && pick == null; ring += 2) {
+            for (int dx = -ring; dx <= ring && pick == null; dx += 2) for (int dz = -ring; dz <= ring && pick == null; dz += 2) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                int x = from.cellX + dx, z = from.cellZ + dz;
+                if (cellsDone.contains(((long) x << 32) ^ (z & 0xffffffffL))) continue;
+                MazeTheme t = MazeTheme.forCell(seed, x, z);
+                if (!t.stubbed && !built.contains(t.id)) pick = new int[]{x, z};
+            }
+        }
+        if (pick == null) pick = new int[]{from.cellX + 2, from.cellZ}; // every theme seen: keep growing east
+        MazeTheme want = MazeTheme.forCell(seed, pick[0], pick[1]);
+        int bx = pick[0] * MazeSeed.CELL + MazeSeed.CELL / 2, bz = pick[1] * MazeSeed.CELL + MazeSeed.CELL / 2;
+        MinecraftServer s = mc.getSingleplayerServer();
+        int top;
+        try {
+            top = s.submit(() -> {
+                ServerLevel lvl = s.overworld();
+                lvl.getChunk(bx >> 4, bz >> 4);
+                return lvl.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            say("EXPAND failed to load cell " + pick[0] + "," + pick[1] + ": " + ex);
+            return false;
+        }
+        say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS_CAP + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
+                + " surface=" + bx + "," + top + "," + bz + " built=" + built);
+        run("effect clear @p night_vision");
+        run("tp @p " + (bx + 0.5) + " " + top + " " + (bz + 0.5));
+        state = 2; wait = 0; shot = 0; builderSeen = false; repass = 0; placeTries = 0; furnishTries = 0; job = null;
+        flatLine = ""; flatSince = 0; flatPos = null; flatMoved = 0;
+        return true;
     }
 
     private void finish(Minecraft mc, String result) {

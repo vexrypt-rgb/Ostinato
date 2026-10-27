@@ -77,6 +77,7 @@ public final class DefaultCommands {
                 new TasksCommand(baritone),
                 new SwarmCommand(baritone),
                 new PortalCommand(baritone),
+                new TunnelsCommand(baritone), // Ostinato: public #maze.tunnels
                 new MazeCommand(baritone), // Ostinato: underground maze, off unless mazeMode
                 new AutoSpectateCommand(baritone), // Ostinato: watch-only server spectating
                 new TimingsCommand(baritone), // Ostinato: planned vs real movement ticks

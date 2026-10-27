@@ -17,7 +17,9 @@
 
 package baritone.maze;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -32,14 +34,21 @@ public final class MazeWorldProbe implements BlockProbe {
 
     @Override
     public BlockKind get(int x, int y, int z) {
-        if (world == null || y < world.getMinY() || y >= world.getMaxY()) {
+        // Ostinato: the cave-guard fill is applied on the server. The client chunk can still show
+        // the old cave, so a seal check then refuses every cell (run43).
+        Level view = world;
+        if (Minecraft.getInstance() != null && Minecraft.getInstance().getSingleplayerServer() != null) {
+            ServerLevel overworld = Minecraft.getInstance().getSingleplayerServer().overworld();
+            if (overworld != null) view = overworld;
+        }
+        if (view == null || y < view.getMinY() || y >= view.getMaxY()) {
             return BlockKind.UNKNOWN;
         }
         BlockPos pos = new BlockPos(x, y, z);
-        if (!world.isLoaded(pos)) {
+        if (!view.isLoaded(pos)) {
             return BlockKind.UNKNOWN;
         }
-        BlockState state = world.getBlockState(pos);
+        BlockState state = view.getBlockState(pos);
         if (!state.getFluidState().isEmpty()) {
             return BlockKind.FLUID;
         }
