@@ -57,6 +57,9 @@ public final class MazeTest implements AbstractGameEventListener {
     private static final int ROOMS = Integer.getInteger("ostinato.mazetest.rooms", 1);
     private static final boolean FOREVER = ROOMS <= 0;
     private static final String ROOMS_CAP = FOREVER ? "inf" : String.valueOf(ROOMS);
+    // Ostinato: -Dostinato.mazetest.mode=tunnels runs #maze.tunnels (dig-only forever, survival kit + bed spawn) instead of rooms.
+    private static final boolean TUNNELS = "tunnels".equals(System.getProperty("ostinato.mazetest.mode"));
+    private int tunnelEdges = -1, tunnelFlat;
     private int roomsDone;
     private final java.util.List<String> roomLog = new java.util.ArrayList<>();
     private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
@@ -133,6 +136,12 @@ public final class MazeTest implements AbstractGameEventListener {
             }
             case 3 -> {
                 if (++wait < 60) return;
+                if (TUNNELS) {
+                    say("TUNNELS start " + b.getTunnelProcess().start(Baritone.settings().mazeSeed.value) + " gamemode=" + mc.gameMode.getPlayerMode().getName());
+                    state = 20;
+                    wait = 0;
+                    return;
+                }
                 Baritone.settings().mazeMode.value = true;
                 // Ostinato: harness knob so a proof run can pick a room theme/loot roll (default keeps the setting).
                 String ms = System.getProperty("ostinato.mazetest.mazeSeed");
@@ -192,11 +201,23 @@ public final class MazeTest implements AbstractGameEventListener {
                     enterRoom(mc);
                 }
             }
+            case 20 -> tunnelsTick(mc); // Ostinato: forever; never prints RESULT
             case 7 -> { if (++wait >= 20) startFurnish(mc); }
             case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
             default -> { }
         }
+    }
+
+    /** Ostinato: tunnels mode watch. Status every 600 ticks; STUCK-NOW when dug count is flat for STUCK_TICKS. */
+    private void tunnelsTick(Minecraft mc) {
+        if (++wait % 600 != 0) return;
+        var tp = b.getTunnelProcess();
+        int dug = tp.plan() == null ? 0 : tp.plan().dugCount();
+        if (dug != tunnelEdges) { tunnelEdges = dug; tunnelFlat = wait; }
+        say("TUNNELS status t=" + wait + " " + tp.status() + " feet=" + mc.player.blockPosition().toShortString() + " hp=" + (int) mc.player.getHealth() + " food=" + mc.player.getFoodData().getFoodLevel() + " tenorclef=" + tenorState());
+        if (wait - tunnelFlat >= STUCK_TICKS) say("STUCK-NOW tunnels dug flat " + ((wait - tunnelFlat) / 1200) + "min dug=" + dug + " feet=" + mc.player.blockPosition().toShortString());
+        if (!tp.running()) { say("TUNNELS process stopped; restarting from here"); tp.start(Baritone.settings().mazeSeed.value + wait); }
     }
 
     /** Ostinato: wraps the registered furnisher to capture the job, then calls furnishHere(). */

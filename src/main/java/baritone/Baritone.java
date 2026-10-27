@@ -93,6 +93,7 @@ public class Baritone implements IBaritone {
     private final InventoryPauserProcess inventoryPauserProcess;
     private final IElytraProcess elytraProcess;
     private final PortalBuildProcess portalBuildProcess;
+    private final TunnelProcess tunnelProcess; // Ostinato: #maze.tunnels
     private final MazeProcess mazeProcess; // Ostinato: underground maze, idle unless mazeMode
     private final PvpProcess pvpProcess;
     private final baritone.structure.StructureBehavior structureBehavior;
@@ -159,6 +160,7 @@ public class Baritone implements IBaritone {
             this.registerProcess(AirProcess::new);
             this.registerProcess(BoatProcess::new);
             this.portalBuildProcess      = this.registerProcess(PortalBuildProcess::new);
+            this.tunnelProcess           = this.registerProcess(TunnelProcess::new); // Ostinato: #maze.tunnels, idle until started
             this.mazeProcess             = this.registerProcess(MazeProcess::new); // Ostinato: idle unless mazeMode
             baritone.process.SimBench.install(this);
             baritone.utils.Lockstep.install(this); // Ostinato: -Dostinato.lockstep (before the trace, so a traced tick is one the server has answered)
@@ -354,6 +356,10 @@ public class Baritone implements IBaritone {
 
     public PortalBuildProcess getPortalBuildProcess() {
         return this.portalBuildProcess;
+    }
+
+    public TunnelProcess getTunnelProcess() { // Ostinato
+        return this.tunnelProcess;
     }
 
     public MazeProcess getMazeProcess() {
