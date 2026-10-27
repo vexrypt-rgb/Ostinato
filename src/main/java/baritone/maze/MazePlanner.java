@@ -29,7 +29,7 @@ public final class MazePlanner {
     public static final int SIZE_X = 10;
     public static final int SIZE_Y = 7; // Ostinato: 4 blocks clear inside (was 2)
     public static final int SIZE_Z = 7;
-    public static final int SEARCH_RADIUS = 3;
+    public static final int SEARCH_RADIUS = 5;
 
     /** Interior spots a feature or a container may occupy. All of them start as air. */
     public static final int[][] LOOT_SPOTS = {{2, 2, 2}, {4, 2, 2}, {2, 2, 4}, {4, 2, 4}};

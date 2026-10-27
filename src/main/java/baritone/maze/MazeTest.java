@@ -41,10 +41,14 @@ public final class MazeTest implements AbstractGameEventListener {
     private int state, wait, ticks, shot;
     private boolean builderSeen;
     private int repass;
+    private int placeTries;
     // Ostinato: furnish leg of the harness (-Dostinato.mazetest.furnish, default true): dig, then hand the room to TenorClef.
     private static final boolean FURNISH = !"false".equals(System.getProperty("ostinato.mazetest.furnish"));
     private static final int FURNISH_TIMEOUT = Integer.getInteger("ostinato.mazetest.furnishTimeoutTicks", 20 * 60 * 40);
     private volatile baritone.api.maze.MazeFurnishJob job;
+    // Ostinato: stuck watch for the furnish leg. No placed-count change for STUCK_TICKS logs "MAZETEST STUCK-NOW".
+    private static final int STUCK_TICKS = Integer.getInteger("ostinato.mazetest.stuckTicks", 20 * 60 * 5);
+    private String flatLine = ""; private int flatSince; private BlockPos flatPos; private double flatMoved;
 
     private MazeTest(Baritone b) {
         this.b = b;
@@ -127,6 +131,13 @@ public final class MazeTest implements AbstractGameEventListener {
                 say("build " + (out.ok() ? "ok: " + out.message : "refused: " + out.error)
                         + " gamemode=" + mc.gameMode.getPlayerMode().getName());
                 if (!out.ok()) {
+                    // Ostinato: run40 refused on the first look (air/fluid/unloaded within the old radius 3).
+                    // Chunks are still arriving; try again before quitting.
+                    if (++placeTries < 5) {
+                        say("build retry " + placeTries);
+                        wait = 0;
+                        return;
+                    }
                     finish(mc, "FAIL refused");
                     return;
                 }
@@ -224,12 +235,27 @@ public final class MazeTest implements AbstractGameEventListener {
         String line = "light=" + have[0] + "/" + want[0] + " container=" + have[1] + "/" + want[1] + " fill=" + have[2] + "/" + want[2]
                 + " seal=" + have[3] + "/" + want[3];
         say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " " + lightDesc(lvl) + " feet=" + mc.player.blockPosition().toShortString());
-        boolean done = have[0] == want[0] && have[1] == want[1] && have[3] == want[3];
+        stuckWatch(mc, line, tc);
+        // Ostinato: a filled container is part of the survival proof. An empty barrel is not a pass.
+        boolean done = have[0] == want[0] && have[1] == want[1] && have[2] == want[2] && have[3] == want[3];
         if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
             say("FURNISH verify " + line + " lights=" + lightDesc(lvl) + " -> " + (done ? "PASS" : "FAIL"));
             state = done ? 5 : 6;
             wait = 0;
             enterRoom(mc);
+        }
+    }
+
+    /** Ostinato: placed counts flat for STUCK_TICKS = stuck. Logged every 1200 ticks after that so GB/poll can grep it. */
+    private void stuckWatch(Minecraft mc, String line, String tc) {
+        BlockPos p = mc.player.blockPosition();
+        if (!line.equals(flatLine)) { flatLine = line; flatSince = wait; flatPos = p; flatMoved = 0; return; }
+        flatMoved = Math.max(flatMoved, Math.sqrt(p.distSqr(flatPos)));
+        int flat = wait - flatSince;
+        if (flat >= STUCK_TICKS && (flat - STUCK_TICKS) % 1200 == 0) {
+            String task = tc.length() > 160 ? tc.substring(0, 160) : tc;
+            say("STUCK-NOW furnish progress flat " + (flat / 1200) + "min (" + flat + " ticks) " + line + " maxMovedFromStart=" + (int) flatMoved
+                    + (flatMoved < 4 ? " POSITION-STAGNANT" : " WANDERING") + " feet=" + p.toShortString() + " task=" + task);
         }
     }
 
@@ -288,8 +314,20 @@ public final class MazeTest implements AbstractGameEventListener {
         return sb.toString();
     }
 
+    /** Ostinato: fullbright. OptionInstance.set() clamps gamma to 0..1, so write the backing value field directly. */
+    private void fullbright(Minecraft mc) {
+        double g = Double.parseDouble(System.getProperty("ostinato.mazetest.gamma", "16.0"));
+        try {
+            Object opt = mc.options.gamma();
+            for (Class<?> c = opt.getClass(); c != null; c = c.getSuperclass())
+                for (var fl : c.getDeclaredFields())
+                    if (fl.getName().equals("value") && !java.lang.reflect.Modifier.isStatic(fl.getModifiers())) { fl.setAccessible(true); fl.set(opt, g); say("fullbright gamma=" + g); return; }
+            say("fullbright: no value field");
+        } catch (Throwable t) { say("fullbright failed " + t); }
+    }
     private void setup(Minecraft mc) {
         noPauseOnLostFocus(mc);
+        fullbright(mc);
         BlockPos p = mc.player.blockPosition();
         say("in world at " + p.toShortString() + " gamemode=" + mc.gameMode.getPlayerMode().getName());
         run("gamerule spawn_mobs false");
