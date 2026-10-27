@@ -7,6 +7,7 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
+import baritone.pathing.RouteReuse;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.movements.MovementAscend;
 import baritone.pathing.movement.movements.MovementDescend;
@@ -47,6 +48,13 @@ public final class SwimController {
     private boolean breathing;
     private double lastX, lastY, lastZ;
     private int stuckTicks, cooldown;
+    // Ostinato: progress along the line, not raw motion. Bobbing in place (jump/sneak paddling at a ledge or a
+    // too-low exit) moves the body every tick, so the motion check above never fired and nothing else timed out a
+    // swim: run59 bobbed at -88,55,11 for 8 minutes with the path still "pathing".
+    private static final int NO_PROGRESS_TICKS = 160;
+    private static final int NO_PROGRESS_COOLDOWN = 240;
+    private int progressPos = -1, noProgress;
+    private double bestS;
     /** Ticks the controller has driven the player, so callers can verify the mode is in use. */
     public static volatile long drivenTicks;
 
@@ -102,6 +110,25 @@ public final class SwimController {
             stuckTicks = 0;
             cooldown = 60;
             Baritone.settings().movementFault.value.accept("M01", "swim stuck at " + ctx.playerFeet() + ", handing back to Baritone");
+            return -1;
+        }
+        // Ostinato: hand back when the arc position along the swim line has not grown for NO_PROGRESS_TICKS, so Baritone's
+        // own movement and its per-movement timeout (M03) get the stretch and a replan can pick another way.
+        if (pathPosition != progressPos) {
+            progressPos = pathPosition;
+            bestS = here[0];
+            noProgress = 0;
+        } else if (here[0] > bestS + 0.25) {
+            bestS = here[0];
+            noProgress = 0;
+        } else if (++noProgress > NO_PROGRESS_TICKS) {
+            IMovement cur = path.movements().get(pathPosition);
+            noProgress = 0;
+            progressPos = -1;
+            cooldown = NO_PROGRESS_COOLDOWN;
+            RouteReuse.forget(cur.getSrc(), cur.getDest());
+            Baritone.settings().movementFault.value.accept("M01", "swim no progress " + cur.getClass().getSimpleName() + " " + cur.getSrc() + "->" + cur.getDest() + " at " + ctx.playerFeet() + ", handing back to Baritone");
+            System.out.println("SWIM no-progress handback at " + ctx.playerFeet() + " move " + cur.getSrc() + "->" + cur.getDest());
             return -1;
         }
         int newPos = syncPosition(path, pathPosition);
