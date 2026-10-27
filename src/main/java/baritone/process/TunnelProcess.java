@@ -84,8 +84,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     }
 
     public void stop() {
-        if (phase == Phase.DIG && baritone.getBuilderProcess().isActive()) baritone.getPathingBehavior().cancelEverything();
+        // Ostinato: go OFF first so a re-entrant isActive() during cancel cannot restart a dig.
+        boolean digging = phase == Phase.DIG && baritone.getBuilderProcess().isActive();
         phase = Phase.OFF;
+        if (digging) baritone.getBuilderProcess().onLostControl();
         if (restoreBreakFromAbove) Baritone.settings().breakFromAbove.value = false;
         restoreBreakFromAbove = false;
         if (restoreAllowInventory) Baritone.settings().allowInventory.value = false;
@@ -117,10 +119,13 @@ public final class TunnelProcess extends BaritoneProcessHelper {
                 if (bestPickLeft() > 0) return false;
                 // Ostinato: pick broke (or was never there) mid-edge. Stop the builder instead of finishing by fist; the
                 // gate in onTick gets a pick, then the same edge resumes without spending a retry.
-                baritone.getPathingBehavior().cancelEverything();
-                System.out.println("TUNNELS pick gone mid-dig; pausing edge for a pickaxe");
+                // Ostinato: leave DIG before cancelling and stop only the builder. cancelEverything() here re-entered
+                // isActive() while still in DIG, which ran finishEdge() -> retry startDig() and left the builder
+                // running, crashing with "Digging tunnel-... stayed active after being cancelled".
                 resumeEdge = edge != null;
                 phase = edge == null ? Phase.ENTRY : Phase.NEXT;
+                baritone.getBuilderProcess().onLostControl();
+                System.out.println("TUNNELS pick gone mid-dig; pausing edge for a pickaxe");
                 return true;
             }
             finishEdge();
