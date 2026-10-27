@@ -42,7 +42,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private int tries, edgesDone, abandoned, provisions, edgesSinceNeedFail = NEED_BACKOFF;
     private BlockPos bed, entryTop;
     private String summary = "idle";
-    private boolean restoreBreakFromAbove;
+    private boolean restoreBreakFromAbove, restoreAllowInventory, resumeEdge;
+    private int pickWait;
     private Map<String, Integer> lastNeeds = Map.of();
 
     public TunnelProcess(Baritone baritone) {
@@ -61,6 +62,18 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         plan = new TunnelPlan(seed, feet.getX() + 16, feet.getY() - 16, feet.getZ());
         phase = Phase.ENTRY;
         tries = edgesDone = abandoned = provisions = 0;
+        // Ostinato: soft kit (armor, torches, food, bed, iron upgrade) waits NEED_BACKOFF edges so digging starts at once;
+        // only a pickaxe is a hard gate (pickGate). Previously the whole iron armor kit had to be built first.
+        edgesSinceNeedFail = 0;
+        resumeEdge = false;
+        pickWait = 0;
+        bed = null;
+        // Ostinato: ToolSet only scans the hotbar. A pick crafted into the main inventory left the builder mining stone
+        // by hand; allowInventory lets InventoryBehavior swap the best stone tool into the hotbar.
+        if (!Baritone.settings().allowInventory.value) {
+            Baritone.settings().allowInventory.value = true;
+            restoreAllowInventory = true;
+        }
         if (!Baritone.settings().breakFromAbove.value) {
             Baritone.settings().breakFromAbove.value = true;
             restoreBreakFromAbove = true;
@@ -74,6 +87,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         phase = Phase.OFF;
         if (restoreBreakFromAbove) Baritone.settings().breakFromAbove.value = false;
         restoreBreakFromAbove = false;
+        if (restoreAllowInventory) Baritone.settings().allowInventory.value = false;
+        restoreAllowInventory = false;
         summary = "idle";
     }
 
@@ -85,6 +100,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
                 + " needs=" + lastNeeds;
     }
 
+    public boolean provisioning() {
+        return phase == Phase.PROVISION;
+    }
+
     public TunnelPlan plan() {
         return plan;
     }
@@ -93,7 +112,16 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     public boolean isActive() {
         if (phase == Phase.OFF || ctx.player() == null) return false;
         if (phase == Phase.DIG) {
-            if (baritone.getBuilderProcess().isActive()) return false;
+            if (baritone.getBuilderProcess().isActive()) {
+                if (bestPickLeft() > 0) return false;
+                // Ostinato: pick broke (or was never there) mid-edge. Stop the builder instead of finishing by fist; the
+                // gate in onTick gets a pick, then the same edge resumes without spending a retry.
+                baritone.getPathingBehavior().cancelEverything();
+                System.out.println("TUNNELS pick gone mid-dig; pausing edge for a pickaxe");
+                resumeEdge = edge != null;
+                phase = edge == null ? Phase.ENTRY : Phase.NEXT;
+                return true;
+            }
             finishEdge();
         }
         if (phase == Phase.PROVISION) {
@@ -106,10 +134,15 @@ public final class TunnelProcess extends BaritoneProcessHelper {
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        if (phase == Phase.ENTRY) {
+        if ((phase == Phase.ENTRY || phase == Phase.NEXT) && pickGate()) {
+            // waiting for a pickaxe (provision in flight or retry pending); never dig without one
+        } else if (phase == Phase.ENTRY) {
             startDig(null, TunnelPlan.carve(entryTop, plan.center(new TunnelPlan.Node(0, 0, 0))), null, "entry");
         } else if (phase == Phase.NEXT) {
-            if (!provisionIfNeeded()) {
+            if (resumeEdge && edge != null) {
+                resumeEdge = false;
+                startDig(edge, cells, null, "resume");
+            } else if (!provisionIfNeeded()) {
                 edge = plan.next(ctx.playerFeet());
                 if (edge == null) {
                     summary = "Tunnels: no frontier";
@@ -155,7 +188,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (solid > 0 && ++tries < MAX_TRIES) {
             System.out.println("TUNNELS retry " + tries + " solid=" + solid);
             phase = edge == null ? Phase.ENTRY : Phase.NEXT;
-            if (edge != null) { startDig(edge, cells, null, "retry"); }
+            resumeEdge = edge != null; // Ostinato: retry goes through pickGate in onTick, not straight to the builder
             return;
         }
         if (edge == null) {
@@ -174,6 +207,47 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         tries = 0;
         phase = Phase.NEXT;
         if (edgesDone % 5 == 0) System.out.println("TUNNELS progress " + status() + " feet=" + ctx.playerFeet().toShortString());
+    }
+
+    /**
+     * Ostinato: hard gate before any dig. Returns true (do not dig) while no usable pickaxe is in the inventory, and hands
+     * the provisioner a stone pickaxe job (TenorClef chains logs -> planks -> wooden pick -> cobble -> stone pick).
+     * No backoff here: digging stone by hand is never the fallback. Asks again every 200 ticks if refused.
+     */
+    private boolean pickGate() {
+        if (bestPickLeft() > 0) {
+            pickWait = 0;
+            return false;
+        }
+        if (pickWait-- > 0) return true;
+        pickWait = 200;
+        Map<String, Integer> need = new LinkedHashMap<>();
+        need.put("stone_pickaxe", 1);
+        lastNeeds = need;
+        ITunnelProvisioner p = TunnelProvisioners.get();
+        if (p == null || !p.provision(need)) {
+            summary = "Tunnels: no pickaxe and " + (p == null ? "no provisioner" : "provisioner refused") + "; waiting";
+            System.out.println("TUNNELS " + summary);
+            return true;
+        }
+        provisions++;
+        phase = Phase.PROVISION;
+        summary = "Provisioning pickaxe";
+        System.out.println("TUNNELS provision " + need + " (hard: no pickaxe) via " + p.name() + " feet=" + ctx.playerFeet().toShortString());
+        return true;
+    }
+
+    /** Best remaining durability fraction over pickaxes not about to break (0 = none usable). */
+    private double bestPickLeft() {
+        var inv = ctx.player().getInventory();
+        double best = 0;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty() || !s.is(ItemTags.PICKAXES)) continue;
+            if (s.getMaxDamage() > 0 && s.getMaxDamage() - s.getDamageValue() <= 2) continue;
+            best = Math.max(best, s.getMaxDamage() <= 0 ? 1 : 1 - (double) s.getDamageValue() / s.getMaxDamage());
+        }
+        return best;
     }
 
     /** Returns true when a provision job was handed off and digging must wait. */
@@ -202,7 +276,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private void afterProvision() {
         Map<String, Integer> before = lastNeeds;
         Map<String, Integer> now = needs();
-        if (before.containsKey("bed") && !now.containsKey("bed")) {
+        if (before.containsKey("bed") && !now.containsKey("bed") && bed != null) {
             System.out.println("TUNNELS bed spawn set near " + bed.toShortString());
         }
         if (!now.isEmpty()) edgesSinceNeedFail = 0; // back off; dig on and ask again later
@@ -234,23 +308,33 @@ public final class TunnelProcess extends BaritoneProcessHelper {
             if (s.is(Items.TORCH)) torches += s.getCount();
             if (s.is(ItemTags.BEDS)) beds++;
         }
-        if (picks == 0 || bestPick < 0.15) n.put("iron_pickaxe", ironPicks + 1);
+        // Ostinato: no pick at all is pickGate's job (hard); here only the iron upgrade / worn spare (soft).
+        if (picks > 0 && (ironPicks == 0 || bestPick < 0.15)) n.put("iron_pickaxe", ironPicks + 1);
         if (food < 6) n.put("food", 20);
-        if (torches < 8) n.put("torch", 32);
+        if (torches < 8) n.put("torch", 16);
         if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:iron_helmet", 1);
         if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:iron_chestplate", 1);
         if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:iron_leggings", 1);
         if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:iron_boots", 1);
         BlockPos f = face();
         if (bed == null || horiz(bed, f) > BED_RANGE) {
-            if (phase == Phase.PROVISION && lastNeeds.containsKey("bed")) {
-                // Ostinato: provisioner placed a bed by the player; that is the new spawn.
-                bed = ctx.playerFeet();
+            BlockPos placed = phase == Phase.PROVISION && lastNeeds.containsKey("bed") ? bedNear(ctx.playerFeet(), 5) : null;
+            if (placed != null && horiz(placed, f) <= BED_RANGE) {
+                // Ostinato: only a bed block actually in the world counts. The old code saved the player's feet as the
+                // bed whenever a bed job ended, placed or not, so spawn was never really set.
+                bed = placed;
             } else {
                 n.put("bed", 1);
             }
         }
         return n;
+    }
+
+    private BlockPos bedNear(BlockPos c, int r) {
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-r, -2, -r), c.offset(r, 2, r))) {
+            if (ctx.world().getBlockState(p).is(net.minecraft.tags.BlockTags.BEDS)) return p.immutable();
+        }
+        return null;
     }
 
     private static double horiz(BlockPos a, BlockPos b) {

@@ -210,11 +210,24 @@ public final class MazeTest implements AbstractGameEventListener {
     }
 
     /** Ostinato: tunnels mode watch. Status every 600 ticks; STUCK-NOW when dug count is flat for STUCK_TICKS. */
+    private BlockPos provAt;
+    private int provItems;
+
     private void tunnelsTick(Minecraft mc) {
         if (++wait % 600 != 0) return;
         var tp = b.getTunnelProcess();
         int dug = tp.plan() == null ? 0 : tp.plan().dugCount();
         if (dug != tunnelEdges) { tunnelEdges = dug; tunnelFlat = wait; }
+        // Ostinato: provisioning (gathering a pick, food, armor) digs nothing by design; count movement or inventory
+        // change as progress there so STUCK-NOW only fires when the bot is really frozen.
+        if (tp.provisioning()) {
+            BlockPos at = mc.player.blockPosition();
+            int items = 0;
+            for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) items += mc.player.getInventory().getItem(i).getCount();
+            if (provAt == null || provAt.distManhattan(at) > 3 || items != provItems) tunnelFlat = wait;
+            provAt = at;
+            provItems = items;
+        } else provAt = null;
         say("TUNNELS status t=" + wait + " " + tp.status() + " feet=" + mc.player.blockPosition().toShortString() + " hp=" + (int) mc.player.getHealth() + " food=" + mc.player.getFoodData().getFoodLevel() + " tenorclef=" + tenorState());
         if (wait - tunnelFlat >= STUCK_TICKS) say("STUCK-NOW tunnels dug flat " + ((wait - tunnelFlat) / 1200) + "min dug=" + dug + " feet=" + mc.player.blockPosition().toShortString());
         if (!tp.running()) { say("TUNNELS process stopped; restarting from here"); tp.start(Baritone.settings().mazeSeed.value + wait); }
