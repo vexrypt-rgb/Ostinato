@@ -50,6 +50,13 @@ public final class MazeTest implements AbstractGameEventListener {
     // Ostinato: stuck watch for the furnish leg. No placed-count change for STUCK_TICKS logs "MAZETEST STUCK-NOW".
     private static final int STUCK_TICKS = Integer.getInteger("ostinato.mazetest.stuckTicks", 20 * 60 * 5);
     private String flatLine = ""; private int flatSince; private BlockPos flatPos; private double flatMoved;
+    // Ostinato: expand mode (-Dostinato.mazetest.rooms=N, default 1 = the single-room proof). After a room passes dig+furnish,
+    // the harness walks the bot's spawn to a nearby unclaimed cell, preferring a theme not built yet, and runs the same
+    // setup -> buildHere -> dig -> furnish -> verify loop there. RESULT is printed once, after the last room.
+    private static final int ROOMS = Math.max(1, Integer.getInteger("ostinato.mazetest.rooms", 1));
+    private int roomsDone;
+    private final java.util.List<String> roomLog = new java.util.ArrayList<>();
+    private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
 
     private MazeTest(Baritone b) {
         this.b = b;
@@ -435,7 +442,55 @@ public final class MazeTest implements AbstractGameEventListener {
             wait = 0;
             return;
         }
-        finish(mc, state == 5 ? "PASS" : "FAIL verify");
+        RoomPlan done = b.getMazeProcess().lastBuilt();
+        roomsDone++;
+        String entry = (done == null ? "?" : done.theme.id + "@" + done.cellX + "," + done.cellZ) + "=" + (state == 5 ? "PASS" : "FAIL");
+        roomLog.add(entry);
+        if (done != null) cellsDone.add(((long) done.cellX << 32) ^ (done.cellZ & 0xffffffffL));
+        say("ROOM-RESULT " + roomsDone + "/" + ROOMS + " " + entry + " ticks=" + ticks);
+        if (state == 5 && roomsDone < ROOMS && done != null && nextRoom(mc, done)) return;
+        String summary = " rooms=" + roomsDone + "/" + ROOMS + " themes=" + roomLog.stream().map(r -> r.split("@")[0]).distinct().toList() + " " + roomLog;
+        finish(mc, (state == 5 && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : "FAIL verify") + (ROOMS > 1 ? summary : ""));
+    }
+
+    /** Ostinato: expand mode. Moves the player to the surface over the next cell and restarts the room loop there. */
+    private boolean nextRoom(Minecraft mc, RoomPlan from) {
+        long seed = Baritone.settings().mazeSeed.value;
+        java.util.Set<String> built = new java.util.HashSet<>();
+        for (String r : roomLog) built.add(r.split("@")[0]);
+        int[] pick = null;
+        // Ostinato: 2-cell steps so the planner's search radius cannot fold the new room back into the last one.
+        for (int ring = 2; ring <= 12 && pick == null; ring += 2) {
+            for (int dx = -ring; dx <= ring && pick == null; dx += 2) for (int dz = -ring; dz <= ring && pick == null; dz += 2) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                int x = from.cellX + dx, z = from.cellZ + dz;
+                if (cellsDone.contains(((long) x << 32) ^ (z & 0xffffffffL))) continue;
+                MazeTheme t = MazeTheme.forCell(seed, x, z);
+                if (!t.stubbed && !built.contains(t.id)) pick = new int[]{x, z};
+            }
+        }
+        if (pick == null) pick = new int[]{from.cellX + 2, from.cellZ}; // every theme seen: keep growing east
+        MazeTheme want = MazeTheme.forCell(seed, pick[0], pick[1]);
+        int bx = pick[0] * MazeSeed.CELL + MazeSeed.CELL / 2, bz = pick[1] * MazeSeed.CELL + MazeSeed.CELL / 2;
+        MinecraftServer s = mc.getSingleplayerServer();
+        int top;
+        try {
+            top = s.submit(() -> {
+                ServerLevel lvl = s.overworld();
+                lvl.getChunk(bx >> 4, bz >> 4);
+                return lvl.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            say("EXPAND failed to load cell " + pick[0] + "," + pick[1] + ": " + ex);
+            return false;
+        }
+        say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
+                + " surface=" + bx + "," + top + "," + bz + " built=" + built);
+        run("effect clear @p night_vision");
+        run("tp @p " + (bx + 0.5) + " " + top + " " + (bz + 0.5));
+        state = 2; wait = 0; shot = 0; builderSeen = false; repass = 0; placeTries = 0; furnishTries = 0; job = null;
+        flatLine = ""; flatSince = 0; flatPos = null; flatMoved = 0;
+        return true;
     }
 
     private void finish(Minecraft mc, String result) {
