@@ -82,7 +82,7 @@ public class MazeFurnishPlannerTest {
         assertEquals(MazeSeed.COVER + 1, seals.size());
         for (int i = 0; i < seals.size(); i++) {
             assertEquals(ceiling + i, seals.get(i).y());
-            assertEquals(MazeFurnishPlanner.sealIds(plan.theme), seals.get(i).blockIds());
+            assertEquals(MazeFurnishPlanner.sealIds(plan.theme, plan.originY), seals.get(i).blockIds());
         }
         List<Step> steps = job.steps;
         int firstSeal = steps.indexOf(seals.get(0));
@@ -104,6 +104,15 @@ public class MazeFurnishPlannerTest {
         for (Step step : job.steps) {
             assertEquals(StepKind.FILL, step.kind());
         }
+    }
+
+    @Test
+    public void deepThemeAboveStoneDoesNotAskForDeepslate() {
+        assertEquals("cobblestone", MazeFurnishPlanner.cladIds(MazeTheme.DEEP, BlockRole.FLOOR, 73).get(0));
+        assertEquals("polished_deepslate", MazeFurnishPlanner.cladIds(MazeTheme.DEEP, BlockRole.FLOOR, -20).get(0));
+        assertEquals("cobblestone", MazeFurnishPlanner.sealIds(MazeTheme.DEEP, 73).get(0));
+        assertEquals("cobbled_deepslate", MazeFurnishPlanner.sealIds(MazeTheme.DEEP, 0).get(0));
+        assertFalse(MazeFurnishPlanner.cladIds(MazeTheme.DEEP, BlockRole.WALL, 73).get(0).contains("deepslate"));
     }
 
     @Test

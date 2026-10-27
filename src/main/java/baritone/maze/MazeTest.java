@@ -42,6 +42,7 @@ public final class MazeTest implements AbstractGameEventListener {
     private boolean builderSeen;
     private int repass;
     private int placeTries;
+    private int furnishTries;
     // Ostinato: furnish leg of the harness (-Dostinato.mazetest.furnish, default true): dig, then hand the room to TenorClef.
     private static final boolean FURNISH = !"false".equals(System.getProperty("ostinato.mazetest.furnish"));
     private static final int FURNISH_TIMEOUT = Integer.getInteger("ostinato.mazetest.furnishTimeoutTicks", 20 * 60 * 40);
@@ -181,6 +182,7 @@ public final class MazeTest implements AbstractGameEventListener {
                     enterRoom(mc);
                 }
             }
+            case 7 -> { if (++wait >= 20) startFurnish(mc); }
             case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
             default -> { }
@@ -200,9 +202,20 @@ public final class MazeTest implements AbstractGameEventListener {
         var out = b.getMazeProcess().furnishHere();
         if (real != null) baritone.api.maze.MazeFurnishers.register(real);
         say("FURNISH handoff " + (out.ok() ? "ok: " + out.message : "refused: " + out.error));
+        if (real == null || !out.ok() || job == null) {
+            // Ostinato: run44 refused on the tick the builder finished. Try again before calling the dig a verify fail.
+            if (++furnishTries < 8) {
+                say("FURNISH retry " + furnishTries);
+                state = 7;
+                wait = 0;
+                return;
+            }
+            state = 6;
+            enterRoom(mc);
+            return;
+        }
         state = 8;
         wait = 0;
-        if (real == null || !out.ok() || job == null) { state = 6; enterRoom(mc); }
     }
 
     private String lightDesc(ServerLevel lvl) {
@@ -211,6 +224,15 @@ public final class MazeTest implements AbstractGameEventListener {
         for (var st : job.steps) if (st.kind().ordinal() == 0) s.append(st.x()).append(",").append(st.y()).append(",").append(st.z()).append("=")
                 .append(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(lvl.getBlockState(new BlockPos(st.x(), st.y(), st.z())).getBlock()).getPath()).append(" ");
         return s.toString().trim();
+    }
+
+    // Ostinato: run58. Level.getBlockEntity returns null for a server level read off the server thread (this runs on the
+    // render thread), so FILL could never count. Read it on the server thread.
+    private static boolean containerFilled(Minecraft mc, ServerLevel lvl, BlockPos bp) {
+        var server = mc.getSingleplayerServer();
+        java.util.function.Supplier<Boolean> q = () -> lvl.getBlockEntity(bp) instanceof net.minecraft.world.Container c && !c.isEmpty();
+        if (server == null || server.isSameThread()) return q.get();
+        try { return server.submit(q).get(1, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) { return false; }
     }
 
     private void furnishTick(Minecraft mc) {
@@ -226,8 +248,8 @@ public final class MazeTest implements AbstractGameEventListener {
             boolean ok = switch (st.kind()) {
                 case SEAL -> !bs.isAir() && bs.getFluidState().isEmpty();
                 case FILL -> id.contains("decorated_pot")
-                        || (lvl.getBlockEntity(bp) instanceof net.minecraft.world.Container c && !c.isEmpty());
-                default -> st.blockIds().isEmpty() ? !bs.isAir() : st.blockIds().contains(id);
+                        || containerFilled(mc, lvl, bp); // Ostinato: run58 server-thread read
+                default -> st.blockIds().isEmpty() ? !bs.isAir() : st.blockIds().contains(id) || (id.endsWith("_planks") && st.blockIds().stream().anyMatch(b -> b.endsWith("_planks"))); // Ostinato: run48. Any wood counts on a wood cell
             };
             if (ok) have[k]++;
         }
@@ -331,6 +353,9 @@ public final class MazeTest implements AbstractGameEventListener {
         BlockPos p = mc.player.blockPosition();
         say("in world at " + p.toShortString() + " gamemode=" + mc.gameMode.getPlayerMode().getName());
         run("gamerule spawn_mobs false");
+        // Ostinato: run42. spawn_mobs false still left cave zombies, which killed the dig five times
+        // on the walk to a far room. Peaceful clears hostiles; gamemode stays survival.
+        run("difficulty peaceful");
         run("gamerule advance_time false");
         run("time set day");
         run("gamemode survival @p");

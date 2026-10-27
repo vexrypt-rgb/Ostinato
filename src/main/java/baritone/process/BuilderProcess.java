@@ -450,35 +450,98 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     private BetterBlockPos stallFeet;
     public String stallDebug = "";
 
+    private boolean shafting;
+
     private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayerWithStall(BuilderCalculationContext bcc) {
         digUnderFeet = false;
+        shafting = false;
         Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
         BetterBlockPos feet = ctx.playerFeet();
-        if (r.isPresent() || !feet.equals(stallFeet)) { stallTicks = 0; stallFeet = feet; }
-        else if (++stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
-            digUnderFeet = true;
-            r = toBreakNearPlayer(bcc);
-            digUnderFeet = false;
-            if (r.isPresent() && (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0)) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
-            if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
-                // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
-                // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
-                double reach = ctx.playerController().getBlockReachDistance();
-                BetterBlockPos best = null;
-                double bestD = Double.MAX_VALUE;
-                for (BetterBlockPos p : incorrectPositions) {
-                    if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
-                    double d = ctx.playerHead().distanceToSqr(p.x + 0.5, p.y + 0.5, p.z + 0.5);
-                    if (d < bestD && d <= reach * reach) { bestD = d; best = p; }
+        if (r.isPresent() || !feet.equals(stallFeet)) {
+            stallTicks = 0;
+            stallFeet = feet;
+        } else {
+            stallTicks++;
+            if (stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
+                digUnderFeet = true;
+                r = toBreakNearPlayer(bcc);
+                digUnderFeet = false;
+                if (r.isPresent() && (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0)) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
+                if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
+                    // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
+                    // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
+                    double reach = ctx.playerController().getBlockReachDistance();
+                    BetterBlockPos best = null;
+                    double bestD = Double.MAX_VALUE;
+                    for (BetterBlockPos p : incorrectPositions) {
+                        if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
+                        double d = ctx.playerHead().distanceToSqr(p.x + 0.5, p.y + 0.5, p.z + 0.5);
+                        if (d < bestD && d <= reach * reach) { bestD = d; best = p; }
+                    }
+                    if (best != null) {
+                        r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
+                        if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
+                    }
                 }
-                if (best != null) {
-                    r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
-                    if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
-                }
+            }
+            // Ostinato: run45 stood in a 1-high crawl under the room (feet y=42, shell y=80) while every
+            // search to the GoalBreak composite failed (P01). The dirt ceiling is not a schematic block, so
+            // the old breaker never swung. Mine the first solid toward the nearest incorrect block.
+            if (r.isEmpty() && stallTicks > STALL_TICKS) {
+                r = mineShaftToward(bcc, feet);
+                shafting = r.isPresent();
             }
         }
         stallDebug = "toBreak=" + r.map(p -> p.first().toString()).orElse("none") + " stall=" + stallTicks;
         return r;
+    }
+
+    /** First solid block toward the nearest incorrect schematic block, when that block is out of the 5-block window. */
+    private Optional<Pair<BetterBlockPos, Rotation>> mineShaftToward(BuilderCalculationContext bcc, BetterBlockPos feet) {
+        if (incorrectPositions == null || incorrectPositions.isEmpty()) return Optional.empty();
+        BetterBlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BetterBlockPos p : incorrectPositions) {
+            if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
+            double d = feet.distSqr(p);
+            if (d < bestD) { bestD = d; best = p; }
+        }
+        if (best == null) return Optional.empty();
+        int dyGoal = best.y - feet.y;
+        if (dyGoal < 4 && bestD < 36) return Optional.empty();
+        int sx = Integer.signum(best.x - feet.x);
+        int sz = Integer.signum(best.z - feet.z);
+        BetterBlockPos[] candidates = dyGoal >= 4
+                ? new BetterBlockPos[] {
+                    new BetterBlockPos(feet.x, feet.y + 1, feet.z),
+                    new BetterBlockPos(feet.x, feet.y + 2, feet.z),
+                    new BetterBlockPos(feet.x + sx, feet.y + 1, feet.z + sz),
+                    new BetterBlockPos(feet.x, feet.y + 3, feet.z),
+                    new BetterBlockPos(feet.x + sx, feet.y + 2, feet.z + sz) }
+                : new BetterBlockPos[] {
+                    new BetterBlockPos(feet.x + sx, feet.y + 1, feet.z + sz),
+                    new BetterBlockPos(feet.x + sx, feet.y, feet.z + sz),
+                    new BetterBlockPos(feet.x + sx, feet.y + 2, feet.z + sz) };
+        double reach = ctx.playerController().getBlockReachDistance();
+        for (BetterBlockPos p : candidates) {
+            if (p.y < feet.y) continue;
+            BlockState st = bcc.bsi.get0(p.x, p.y, p.z);
+            Block b = st.getBlock();
+            if (b instanceof AirBlock || b == Blocks.WATER || b == Blocks.LAVA || b == Blocks.BEDROCK) continue;
+            if (st.getCollisionShape(ctx.world(), p).isEmpty()) continue;
+            Optional<Rotation> rot = RotationUtils.reachable(ctx, p, reach);
+            // A 1-high crawl puts the eye inside the ceiling block, so the strict reach test misses the dirt we are looking at.
+            if (rot.isEmpty() && p.x == feet.x && p.z == feet.z) {
+                rot = Optional.of(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(p.x + 0.5, p.y + 0.5, p.z + 0.5), ctx.playerRotations()));
+            }
+            if (rot.isPresent()) {
+                if (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0) {
+                    System.out.println("MAZETEST dig stall breaker: shaft " + p + " toward " + best + " feet=" + feet + " stall=" + stallTicks);
+                }
+                return Optional.of(new Pair<>(p, rot.get()));
+            }
+        }
+        return Optional.empty();
     }
 
     private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayer(BuilderCalculationContext bcc) {
@@ -778,7 +841,11 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         }
 
         Optional<Pair<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayerWithStall(bcc);
-        if (toBreak.isPresent() && isSafeToCancel && ctx.player().onGround()) {
+        // Shafting is the crawl under the room: the stuck path is why we are here, so drop it and swing even if not onGround.
+        if (toBreak.isPresent() && (shafting || (isSafeToCancel && ctx.player().onGround()))) {
+            if (shafting) {
+                baritone.getPathingBehavior().secretInternalSegmentCancel();
+            }
             // we'd like to pause to break this block
             // only change look direction if it's safe (don't want to fuck up an in progress parkour for example
             Rotation rot = toBreak.get().second();
