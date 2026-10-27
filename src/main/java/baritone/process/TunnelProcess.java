@@ -220,6 +220,9 @@ public final class TunnelProcess extends BaritoneProcessHelper {
      * the provisioner a stone pickaxe job (TenorClef chains logs -> planks -> wooden pick -> cobble -> stone pick).
      * No backoff here: digging stone by hand is never the fallback. Asks again every 200 ticks if refused.
      */
+    private boolean pickAsked; // Ostinato: last provision was the hard pick ask
+    private int pickAskMisses;
+
     private boolean pickGate() {
         if (bestPickLeft() > 0) {
             pickWait = 0;
@@ -228,7 +231,15 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (pickWait-- > 0) return true;
         pickWait = 200;
         Map<String, Integer> need = new LinkedHashMap<>();
-        need.put("stone_pickaxe", 1);
+        // Ostinato: TenorClef counts a stone_pickaxe by item count, so a worn one (<=2 uses, not "usable" here) already
+        // satisfies {stone_pickaxe=1} and the job finishes in 0.1s with nothing made -> run70 looped forever. Ask for one
+        // more than the stone picks already held (worn or not), and one more again each time a hard ask came back
+        // with still no usable pick, so the provisioner must actually craft a fresh one.
+        int heldStone = 0;
+        var inv = ctx.player().getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) if (inv.getItem(i).is(Items.STONE_PICKAXE)) heldStone += inv.getItem(i).getCount();
+        need.put("stone_pickaxe", heldStone + 1 + Math.min(pickAskMisses, 2));
+        pickAsked = true;
         lastNeeds = need;
         ITunnelProvisioner p = TunnelProvisioners.get();
         if (p == null || !p.provision(need)) {
@@ -288,6 +299,14 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (!copperMissed && before.keySet().stream().anyMatch(k -> k.contains("copper_") && now.containsKey(k))) {
             copperMissed = true;
             System.out.println("TUNNELS copper kit unmet " + before + "; falling back to iron/stone");
+        }
+        if (pickAsked) {
+            pickAsked = false;
+            if (bestPickLeft() > 0) pickAskMisses = 0;
+            else {
+                pickAskMisses++; // Ostinato: hard pick ask returned with no usable pick; next ask escalates the count
+                System.out.println("TUNNELS pick ask unmet (no usable pickaxe after provision) misses=" + pickAskMisses);
+            }
         }
         if (!now.isEmpty()) edgesSinceNeedFail = 0; // back off; dig on and ask again later
         System.out.println("TUNNELS provision done left=" + now);
