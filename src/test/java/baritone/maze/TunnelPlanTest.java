@@ -26,4 +26,21 @@ public class TunnelPlanTest {
             assertTrue("seed " + seed + " grew no ramp in 60 edges", ramps >= 1);
         }
     }
+
+    /** Ostinato: live growth is nearest-first (a dense blob), where a ramp's free mid/far nodes are rare (run78: 31 nodes, no ramp). */
+    @Test
+    public void growsRampsWhenDense() {
+        for (long seed = 0; seed < 5; seed++) {
+            TunnelPlan plan = new TunnelPlan(seed, 0, 64, 0);
+            plan.block(new TunnelPlan.Node(-1, 0, 0));
+            plan.markDug(new TunnelPlan.Node(0, 0, 0), null, 0);
+            BlockPos root = plan.center(new TunnelPlan.Node(0, 0, 0));
+            for (int i = 0; i < 40; i++) {
+                TunnelPlan.Edge e = plan.next(root);
+                if (e == null) break;
+                plan.markDug(e.to(), e.from(), e.depth());
+            }
+            assertTrue("seed " + seed + " planned no ramp in 40 dense edges", plan.rampCount() >= 1);
+        }
+    }
 }

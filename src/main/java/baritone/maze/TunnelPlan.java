@@ -18,7 +18,7 @@ import java.util.Set;
  * of 1 block over the 5 columns between the node boxes). A ramp passes through the column of the two mid nodes and
  * notches the slab under the node above its low end, so those three nodes are blocked for good. Whether a node grows an
  * edge in a direction is a pure hash of (seed, node, direction), so the same seed always grows the same maze;
- * straight-ahead is likely, side branches less so (T and cross junctions), ramps rare.
+ * straight-ahead is likely, side branches less so (T and cross junctions), a ramp about 1 node in 5.
  * <p>
  * Torch rule (minimum torches): one floor torch at the centre of a node only when it is a junction (it grew 2+ new
  * edges) or the top/bottom of a ramp starts there. Nothing else is lit.
@@ -26,6 +26,8 @@ import java.util.Set;
 public final class TunnelPlan {
 
     public static final int STRIDE = 4, LEVEL = 4, RAMP_RUN = 2, MIN_LEVEL = -8, MAX_LEVEL = 0;
+    // Ostinato: 12% left run78's 31 nodes with no roll under it (closest 12, 15, 16), so the maze never changed level.
+    private static final int RAMP_PCT = 20;
     private static final int[][] DIRS = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
 
     public record Node(int gx, int gy, int gz) {}
@@ -41,6 +43,7 @@ public final class TunnelPlan {
     private final List<Edge> frontier = new ArrayList<>();
     private final Set<Node> torchNodes = new HashSet<>();
     private final Map<Node, List<Node>> rampBlocks = new HashMap<>(); // Ostinato: ramp target -> nodes it blocks
+    private boolean rampOwed; // Ostinato: a ramp roll that found no free run; the next dug nodes try until one fits
 
     public TunnelPlan(long seed, int ox, int oy, int oz) {
         this.seed = seed;
@@ -59,6 +62,11 @@ public final class TunnelPlan {
 
     public int frontierSize() {
         return frontier.size();
+    }
+
+    /** Ostinato: ramps planned so far (dug or still in the frontier). */
+    public int rampCount() {
+        return rampBlocks.size();
     }
 
     public boolean torchAt(Node n) {
@@ -92,14 +100,31 @@ public final class TunnelPlan {
         }
         // Ostinato: roll the ramp before the straight edges. A ramp needs its mid node free, and straight-ahead (80%)
         // used to reserve it first, so run77 dug 30 edges without one. Try all four ways; flip up/down at the level bounds.
+        // A roll with no free run is owed to the next dug nodes: nearest-first growth is a dense blob where most rolls
+        // are blocked (run78: 31 nodes, 0 ramps).
         int r = roll(n, 7), ramp = 0;
-        if (r < 12) {
-            int dy = r < 6 ? -1 : 1;
+        if (r < RAMP_PCT || rampOwed) {
+            int dy = (r < RAMP_PCT ? r < RAMP_PCT / 2 : (r & 1) == 0) ? -1 : 1;
             if (n.gy + dy < MIN_LEVEL || n.gy + dy > MAX_LEVEL) dy = -dy;
             int i0 = roll(n, 8) % 4;
             for (int k = 0; k < 4 && ramp == 0; k++) {
                 int i = (i0 + k) % 4;
                 ramp = addRamp(n, DIRS[i][0], dy, DIRS[i][1], d);
+            }
+            rampOwed = ramp == 0;
+        }
+        if (rampOwed) {
+            // Ostinato: still owed. Start it from any dug node with a free run (the blob's edge), so levels keep joining.
+            for (Node m : dug) {
+                if (m.equals(n)) continue;
+                int dy = m.gy - 1 < MIN_LEVEL ? 1 : -1;
+                for (int[] dir : DIRS) {
+                    if (addRamp(m, dir[0], dy, dir[1], depth.get(m)) > 0) {
+                        rampOwed = false;
+                        break;
+                    }
+                }
+                if (!rampOwed) break;
             }
         }
         int grown = ramp;
