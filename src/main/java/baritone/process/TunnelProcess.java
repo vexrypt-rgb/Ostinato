@@ -4,6 +4,7 @@ import baritone.Baritone;
 import baritone.api.maze.ITunnelProvisioner;
 import baritone.api.maze.TunnelProvisioners;
 import baritone.api.pathing.goals.Goal;
+import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
@@ -55,6 +56,11 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     // in DIG next to a torch cell with every block already air). digSolid/digStall: no-progress watchdog on the builder.
     private BlockPos torchAt;
     private int torchTicks, digTicks, digSolid, digStall;
+    // Ostinato: walk back to the edge's dug end before digging when a provision left the bot far away (run80: iron-boots
+    // ore hunt ended in a cave at y 18 under a y 74 dig; the builder's GoalBreak composite searched 800k nodes, never moved).
+    private static final int TRAVEL_TICKS = 6000;
+    private BlockPos travelTo;
+    private int travelTicks;
     private Map<String, Integer> lastNeeds = Map.of();
     // Ostinato: kit pieces (pickaxe, sword, helmet, ...) whose copper ask came back unmet; only those fall back to
     // iron/stone. run73 made the copper pick, sword, helmet, chest and legs, but the soft budget ran out on the boots,
@@ -87,6 +93,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         bed = null;
         copperMissed.clear();
         torchAt = null;
+        travelTo = null;
+        travelTicks = 0;
         pickAskMisses = 0;
         // Ostinato: ToolSet only scans the hotbar. A pick crafted into the main inventory left the builder mining stone
         // by hand; allowInventory lets InventoryBehavior swap the best stone tool into the hotbar.
@@ -185,6 +193,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
             startDig(null, TunnelPlan.carve(entryTop, plan.center(new TunnelPlan.Node(0, 0, 0))), null, "entry");
         } else if (phase == Phase.NEXT) {
             if (resumeEdge && edge != null) {
+                PathingCommand t = travel(plan.center(edge.from()));
+                if (t != null) return t;
                 resumeEdge = false;
                 startDig(edge, cells, null, "resume");
             } else if (!provisionIfNeeded()) {
@@ -195,11 +205,39 @@ public final class TunnelProcess extends BaritoneProcessHelper {
                     stop();
                 } else {
                     BlockPos a = plan.center(edge.from()), b = plan.center(edge.to());
+                    PathingCommand t = travel(a);
+                    if (t != null) return t;
                     startDig(edge, TunnelPlan.carve(a, b), null, "edge");
                 }
             }
         }
         return new PathingCommand((Goal) null, PathingCommandType.DEFER);
+    }
+
+    /**
+     * Ostinato: path to a dug node centre (plain GoalBlock: a straight heuristic, unlike the builder's GoalBreak composite)
+     * when the feet are more than 4 blocks above/below it or 16 out. Null when close enough or after TRAVEL_TICKS.
+     */
+    private PathingCommand travel(BlockPos a) {
+        BlockPos f = ctx.playerFeet();
+        double dx = f.getX() - a.getX(), dz = f.getZ() - a.getZ();
+        if (Math.abs(f.getY() - a.getY()) <= 4 && dx * dx + dz * dz <= 16 * 16) {
+            if (travelTo != null) System.out.println("TUNNELS travel reached " + a.toShortString() + " ticks=" + travelTicks);
+            travelTo = null;
+            travelTicks = 0;
+            return null;
+        }
+        if (!a.equals(travelTo)) {
+            travelTo = a;
+            travelTicks = 0;
+            System.out.println("TUNNELS travel to " + a.toShortString() + " from " + f.toShortString());
+        }
+        if (++travelTicks > TRAVEL_TICKS) {
+            if (travelTicks == TRAVEL_TICKS + 1) System.out.println("TUNNELS travel gave up at " + f.toShortString() + "; digging from here");
+            return null;
+        }
+        summary = "Walking back to the dig " + a.toShortString();
+        return new PathingCommand(new GoalBlock(a), PathingCommandType.SET_GOAL_AND_PATH);
     }
 
     private void startDig(TunnelPlan.Edge e, Set<BlockPos> c, BlockPos unused, String kind) {
