@@ -202,6 +202,7 @@ public final class MazeTest implements AbstractGameEventListener {
                 }
             }
             case 20 -> tunnelsTick(mc); // Ostinato: forever; never prints RESULT
+            case 30 -> walkTick(mc); // Ostinato: expand walk to the next cell
             case 7 -> { if (++wait >= 20) startFurnish(mc); }
             case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
@@ -403,11 +404,14 @@ public final class MazeTest implements AbstractGameEventListener {
         run("gamerule advance_time false");
         run("time set day");
         run("gamemode survival @p");
-        run("clear @p");
-        run("give @p iron_pickaxe");
-        run("give @p iron_shovel");
-        run("give @p cobblestone 64");
-        run("give @p bread 16");
+        // Ostinato: the starter kit is only for the first room; later rooms keep what the bot carried and farmed.
+        if (roomsDone == 0) {
+            run("clear @p");
+            run("give @p iron_pickaxe");
+            run("give @p iron_shovel");
+            run("give @p cobblestone 64");
+            run("give @p bread 16");
+        } else say("setup: keeping inventory for room " + (roomsDone + 1));
         // Ostinato: harness-only light kit (-Dostinato.mazetest.lightKit, default true). Survival rooms plan glowstone lights,
         // which a fresh overworld cannot supply; this lets the furnish leg exercise light placement + seals.
         if (!"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p torch 16"); // Ostinato: torch light kit
@@ -525,10 +529,41 @@ public final class MazeTest implements AbstractGameEventListener {
         say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS_CAP + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
                 + " surface=" + bx + "," + top + "," + bz + " built=" + built);
         run("effect clear @p night_vision");
-        run("tp @p " + (bx + 0.5) + " " + top + " " + (bz + 0.5));
-        state = 2; wait = 0; shot = 0; builderSeen = false; repass = 0; placeTries = 0; furnishTries = 0; job = null;
+        // Ostinato: walk there with the kit and everything farmed so far (was: tp). A survival bot has to cross the ground.
+        walkTo = new BlockPos(bx, top, bz);
+        walkStart = ticks;
+        walkLast = mc.player.blockPosition();
+        walkLastTick = ticks;
+        b.getCustomGoalProcess().setGoalAndPath(new baritone.api.pathing.goals.GoalXZ(bx, bz));
+        state = 30; wait = 0; shot = 0; builderSeen = false; repass = 0; placeTries = 0; furnishTries = 0; job = null;
         flatLine = ""; flatSince = 0; flatPos = null; flatMoved = 0;
         return true;
+    }
+
+    private BlockPos walkTo, walkLast;
+    private int walkStart, walkLastTick;
+
+    /** Ostinato: expand walk. Arrive (xz within 4) -> room loop; 10 min or 2 min without progress -> logged tp fallback. */
+    private void walkTick(Minecraft mc) {
+        BlockPos at = mc.player.blockPosition();
+        int dx = at.getX() - walkTo.getX(), dz = at.getZ() - walkTo.getZ();
+        if (dx * dx + dz * dz <= 16) {
+            b.getPathingBehavior().cancelEverything();
+            say("EXPAND walked to " + at.toShortString() + " in " + (ticks - walkStart) + " ticks");
+            state = 2; wait = 120;
+            return;
+        }
+        if (at.distSqr(walkLast) > 9) { walkLast = at; walkLastTick = ticks; }
+        boolean stalled = ticks - walkLastTick > 2400, capped = ticks - walkStart > 12000;
+        if (stalled || capped) {
+            b.getPathingBehavior().cancelEverything();
+            say("EXPAND walk " + (capped ? "cap" : "stalled") + " at " + at.toShortString() + " -> tp fallback to " + walkTo.toShortString());
+            run("tp @p " + (walkTo.getX() + 0.5) + " " + walkTo.getY() + " " + (walkTo.getZ() + 0.5));
+            state = 2; wait = 0;
+            return;
+        }
+        if (!b.getCustomGoalProcess().isActive()) b.getCustomGoalProcess().setGoalAndPath(new baritone.api.pathing.goals.GoalXZ(walkTo.getX(), walkTo.getZ()));
+        if ((ticks - walkStart) % 600 == 0) say("EXPAND walking at " + at.toShortString() + " dist=" + (int) Math.sqrt(dx * dx + dz * dz));
     }
 
     private void finish(Minecraft mc, String result) {
