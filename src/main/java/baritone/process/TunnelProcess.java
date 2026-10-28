@@ -45,7 +45,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private boolean restoreBreakFromAbove, restoreAllowInventory, resumeEdge;
     private int pickWait;
     private Map<String, Integer> lastNeeds = Map.of();
-    private boolean copperMissed; // Ostinato: a copper kit ask came back unmet; fall back to iron/stone
+    // Ostinato: kit pieces (pickaxe, sword, helmet, ...) whose copper ask came back unmet; only those fall back to
+    // iron/stone. run73 made the copper pick, sword, helmet, chest and legs, but the soft budget ran out on the boots,
+    // and the old single flag then switched every piece (and all later pick upgrades) to iron.
+    private final java.util.Set<String> copperMissed = new java.util.HashSet<>();
 
     public TunnelProcess(Baritone baritone) {
         super(baritone);
@@ -71,6 +74,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         resumeEdge = false;
         pickWait = 0;
         bed = null;
+        copperMissed.clear();
+        pickAskMisses = 0;
         // Ostinato: ToolSet only scans the hotbar. A pick crafted into the main inventory left the builder mining stone
         // by hand; allowInventory lets InventoryBehavior swap the best stone tool into the hotbar.
         if (!Baritone.settings().allowInventory.value) {
@@ -299,9 +304,11 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (before.containsKey("bed") && !now.containsKey("bed") && bed != null) {
             System.out.println("TUNNELS bed spawn set near " + bed.toShortString());
         }
-        if (!copperMissed && before.keySet().stream().anyMatch(k -> k.contains("copper_") && now.containsKey(k))) {
-            copperMissed = true;
-            System.out.println("TUNNELS copper kit unmet " + before + "; falling back to iron/stone");
+        for (String k : before.keySet()) {
+            int i = k.indexOf("copper_");
+            if (i >= 0 && now.containsKey(k) && copperMissed.add(k.substring(i + 7))) {
+                System.out.println("TUNNELS copper " + k.substring(i + 7) + " unmet; that piece falls back to iron/stone");
+            }
         }
         if (pickAsked) {
             pickAsked = false;
@@ -347,16 +354,15 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         }
         // Ostinato: no pick at all is pickGate's job (hard); here only the iron upgrade / worn spare (soft).
         // Ostinato: copper first (copper ore is everywhere in 26.3); once a copper ask comes back unmet, iron/stone.
-        String tier = copperMissed ? "iron" : "copper";
-        if (picks > 0 && (ironPicks == 0 || bestPick < 0.15)) n.put(tier + "_pickaxe", ironPicks + 1);
-        if (shovels == 0) n.put(copperMissed ? "stone_shovel" : "copper_shovel", 1);
-        if (swords == 0) n.put(copperMissed ? "stone_sword" : "copper_sword", 1);
+        if (picks > 0 && (ironPicks == 0 || bestPick < 0.15)) n.put(tier("pickaxe", "iron") + "_pickaxe", ironPicks + 1);
+        if (shovels == 0) n.put(tier("shovel", "stone") + "_shovel", 1);
+        if (swords == 0) n.put(tier("sword", "stone") + "_sword", 1);
         if (food < 6) n.put("food", 20);
         if (torches < 8) n.put("torch", 16);
-        if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:" + tier + "_helmet", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:" + tier + "_chestplate", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:" + tier + "_leggings", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:" + tier + "_boots", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:" + tier("helmet", "iron") + "_helmet", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:" + tier("chestplate", "iron") + "_chestplate", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:" + tier("leggings", "iron") + "_leggings", 1);
+        if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:" + tier("boots", "iron") + "_boots", 1);
         BlockPos f = face();
         if (bed == null || horiz(bed, f) > BED_RANGE) {
             BlockPos placed = phase == Phase.PROVISION && lastNeeds.containsKey("bed") ? bedNear(ctx.playerFeet(), 5) : null;
@@ -369,6 +375,11 @@ public final class TunnelProcess extends BaritoneProcessHelper {
             }
         }
         return n;
+    }
+
+    /** Ostinato: copper first; a piece whose copper ask came back unmet uses {@code fallback}. */
+    private String tier(String piece, String fallback) {
+        return copperMissed.contains(piece) ? fallback : "copper";
     }
 
     private BlockPos bedNear(BlockPos c, int r) {
