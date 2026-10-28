@@ -63,6 +63,7 @@ Commands in Baritone:
 - `find` to search through Baritone's cache and attempt to find the location of the block.
 - `surface` or `top` to tell Baritone to head towards the closest surface-like area, this can be the surface or highest available air space.
 - `version` to get the version of Baritone you're running
+- `allblocks start` (needs TenorClef) to collect one of every obtainable item into labeled chests and place every placeable block on a grid, in survival and without commands. `allblocks status` shows obtained / placed / skipped / unsupported / stuck / remaining, `allblocks report` lists what will not complete and why, `allblocks stop` stops (progress is saved per world, `start` resumes). See TenorClef's `docs/guides/allblocks.md` for the layout.
 - `damn` daniel
 
 All the settings and documentation are <a href="https://github.com/cabaletta/baritone/blob/master/src/api/java/baritone/api/Settings.java">here</a>. If you find HTML easier to read than Javadoc, you can look <a href="https://baritone.leijurv.com/baritone/api/Settings.html#field.detail">here</a>.
