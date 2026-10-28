@@ -21,7 +21,7 @@ import java.util.stream.Stream;
  */
 public class AllBlocksCommand extends Command {
 
-    private static final List<String> ACTIONS = Arrays.asList("start", "status", "stop", "report", "reset");
+    private static final List<String> ACTIONS = Arrays.asList("start", "status", "stop", "report", "reset", "tour");
 
     public AllBlocksCommand(IBaritone baritone) {
         super(baritone, "allblocks");
@@ -49,7 +49,8 @@ public class AllBlocksCommand extends Command {
             case "stop", "cancel" -> result = runner.stop();
             case "report" -> result = runner.report(args.hasAny() ? args.getAs(Integer.class) : 20);
             case "reset" -> result = runner.reset();
-            default -> throw new CommandInvalidTypeException(args.consumed(), "start [x y z] [retry], status, stop, report [n] or reset");
+            case "tour" -> result = runner.tour();
+            default -> throw new CommandInvalidTypeException(args.consumed(), "start [x y z] [retry], status, stop, report [n], reset or tour");
         }
         for (String line : result.split("\n")) logDirect(line);
     }
@@ -84,6 +85,7 @@ public class AllBlocksCommand extends Command {
                 "> allblocks status - obtained / placed / skipped / remaining",
                 "> allblocks report [n] - unsupported and skipped entries with the reason and failing code path",
                 "> allblocks stop - stop; progress is kept",
-                "> allblocks reset - forget this world's progress");
+                "> allblocks reset - forget this world's progress",
+                "> allblocks tour - walk to the chest-room and grid views (for screenshots)");
     }
 }

@@ -22,6 +22,11 @@ public interface IAllBlocksRunner {
     /** Forgets the saved progress for this world (the chests and the grid stay in the world). */
     String reset();
 
+    /** Walks to the chest-room and grid views for screenshots. */
+    default String tour() {
+        return "allblocks: tour is not supported by " + name();
+    }
+
     default String name() {
         return getClass().getSimpleName();
     }
