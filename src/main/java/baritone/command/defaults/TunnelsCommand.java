@@ -55,9 +55,10 @@ public class TunnelsCommand extends Command {
     @Override
     public List<String> getLongDesc() {
         return Arrays.asList(
-                "Digs an endless seeded 3D maze of 3 wide, 3 high tunnels from where you stand: straight runs, T and cross",
-                "junctions, and ramps between levels. Dig only. One torch per junction and about every 32 blocks.",
-                "Before each tunnel it checks the survival kit (pickaxe, food, torches, iron armor) and keeps a bed within 96",
+                "Digs an endless seeded 3D maze of 3 wide, 3 high tunnels on a 4-block grid (1-block walls) from where you",
+                "stand: straight runs, T and cross junctions, and 3 wide stairs between levels 4 apart. Dig only. Torches",
+                "only at junctions and stair ends.",
+                "Before each tunnel it checks the survival kit (pickaxe, food, torches, copper or iron armor) and keeps a bed within 96",
                 "blocks of the dig face for spawn; TenorClef gathers anything missing.",
                 "",
                 "Usage:",

@@ -59,8 +59,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (ctx.player() == null) return "No world";
         BlockPos feet = ctx.playerFeet();
         entryTop = feet;
-        // Ostinato: root node 16 blocks east and 16 down from where the command was used; an entry ramp leads there.
-        plan = new TunnelPlan(seed, feet.getX() + 16, feet.getY() - 16, feet.getZ());
+        // Ostinato: root node 17 blocks east and 16 down from where the command was used; an entry stair leads there
+        // (16 steps need 17 columns). The stair cuts through the node just west of the root, so that node is blocked.
+        plan = new TunnelPlan(seed, feet.getX() + 17, feet.getY() - 16, feet.getZ());
+        plan.block(new TunnelPlan.Node(-1, 0, 0));
         phase = Phase.ENTRY;
         tries = edgesDone = abandoned = provisions = 0;
         // Ostinato: soft kit (armor, torches, food, bed, iron upgrade) waits NEED_BACKOFF edges so digging starts at once;
@@ -167,10 +169,9 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         cells = c;
         BlockPos torch = null;
         if (e != null) {
-            // Ostinato: torch rule (TunnelPlan): far node on every TORCH_EVERY-th edge of depth, else the near node when it
-            // is a junction. The builder only places it when a torch is in the inventory, and never breaks one.
-            if (e.depth() % TunnelPlan.TORCH_EVERY == 0) torch = plan.center(e.to());
-            else if (plan.torchAt(e.from())) torch = plan.center(e.from());
+            // Ostinato: torch rule (TunnelPlan): only the near node, when it is a junction or a ramp end. The builder only
+            // places it when a torch is in the inventory, and never breaks one.
+            if (plan.torchAt(e.from())) torch = plan.center(e.from());
         }
         TunnelSchematic s = TunnelSchematic.of(c, torch);
         String name = "tunnel-" + (e == null ? "entry" : plan.center(e.to()).toShortString().replace(" ", ""));
@@ -238,7 +239,9 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         int heldStone = 0;
         var inv = ctx.player().getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) if (inv.getItem(i).is(Items.STONE_PICKAXE)) heldStone += inv.getItem(i).getCount();
-        need.put("stone_pickaxe", heldStone + 1 + Math.min(pickAskMisses, 2));
+        // Ostinato: +2 (a fresh pick and a spare). A stone pick lasts ~2 edges, and every ask can mean a trip up for logs;
+        // one table visit for two picks halves the trips.
+        need.put("stone_pickaxe", heldStone + 2 + Math.min(pickAskMisses, 2));
         pickAsked = true;
         lastNeeds = need;
         ITunnelProvisioner p = TunnelProvisioners.get();
