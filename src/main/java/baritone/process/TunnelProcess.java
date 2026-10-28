@@ -4,17 +4,24 @@ import baritone.Baritone;
 import baritone.api.maze.ITunnelProvisioner;
 import baritone.api.maze.TunnelProvisioners;
 import baritone.api.pathing.goals.Goal;
+import baritone.api.pathing.goals.GoalNear;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
+import baritone.api.utils.RotationUtils;
 import baritone.maze.TunnelPlan;
 import baritone.maze.TunnelSchematic;
 import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,7 +38,7 @@ import java.util.Set;
  */
 public final class TunnelProcess extends BaritoneProcessHelper {
 
-    public static final int BED_RANGE = 96, NEED_BACKOFF = 8, MAX_TRIES = 3;
+    public static final int BED_RANGE = 96, NEED_BACKOFF = 8, MAX_TRIES = 3, DIG_STALL_TICKS = 2400, TORCH_TICKS = 200;
 
     private enum Phase { OFF, ENTRY, NEXT, DIG, PROVISION }
 
@@ -44,6 +51,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     private String summary = "idle";
     private boolean restoreBreakFromAbove, restoreAllowInventory, resumeEdge;
     private int pickWait;
+    // Ostinato: junction torch placed by this process after its node is dug (the builder never placed one: run76 sat 3 h
+    // in DIG next to a torch cell with every block already air). digSolid/digStall: no-progress watchdog on the builder.
+    private BlockPos torchAt;
+    private int torchTicks, digTicks, digSolid, digStall;
     private Map<String, Integer> lastNeeds = Map.of();
     // Ostinato: kit pieces (pickaxe, sword, helmet, ...) whose copper ask came back unmet; only those fall back to
     // iron/stone. run73 made the copper pick, sword, helmet, chest and legs, but the soft budget ran out on the boots,
@@ -75,6 +86,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         pickWait = 0;
         bed = null;
         copperMissed.clear();
+        torchAt = null;
         pickAskMisses = 0;
         // Ostinato: ToolSet only scans the hotbar. A pick crafted into the main inventory left the builder mining stone
         // by hand; allowInventory lets InventoryBehavior swap the best stone tool into the hotbar.
@@ -123,7 +135,23 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (phase == Phase.OFF || ctx.player() == null) return false;
         if (phase == Phase.DIG) {
             if (baritone.getBuilderProcess().isActive()) {
-                if (bestPickLeft() > 0) return false;
+                if (bestPickLeft() > 0) {
+                    if (++digTicks % 20 != 0) return false;
+                    int solid = stillSolid();
+                    if (solid < digSolid) {
+                        digSolid = solid;
+                        digStall = 0;
+                        return false;
+                    }
+                    if ((digStall += 20) < DIG_STALL_TICKS) return false;
+                    // Ostinato: no block cleared for DIG_STALL_TICKS. Leave DIG first (cancel-before-state), then stop
+                    // only the builder and let finishEdge retry or abandon the edge.
+                    System.out.println("TUNNELS dig stalled " + DIG_STALL_TICKS / 20 + "s solid=" + solid + "; stopping builder");
+                    phase = edge == null ? Phase.ENTRY : Phase.NEXT;
+                    baritone.getBuilderProcess().onLostControl();
+                    finishEdge();
+                    return true;
+                }
                 // Ostinato: pick broke (or was never there) mid-edge. Stop the builder instead of finishing by fist; the
                 // gate in onTick gets a pick, then the same edge resumes without spending a retry.
                 // Ostinato: leave DIG before cancelling and stop only the builder. cancelEverything() here re-entered
@@ -147,6 +175,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        if (phase == Phase.NEXT && torchAt != null) {
+            PathingCommand c = placeTorch();
+            if (c != null) return c;
+        }
         if ((phase == Phase.ENTRY || phase == Phase.NEXT) && pickGate()) {
             // waiting for a pickaxe (provision in flight or retry pending); never dig without one
         } else if (phase == Phase.ENTRY) {
@@ -172,18 +204,41 @@ public final class TunnelProcess extends BaritoneProcessHelper {
 
     private void startDig(TunnelPlan.Edge e, Set<BlockPos> c, BlockPos unused, String kind) {
         cells = c;
-        BlockPos torch = null;
-        if (e != null) {
-            // Ostinato: torch rule (TunnelPlan): only the near node, when it is a junction or a ramp end. The builder only
-            // places it when a torch is in the inventory, and never breaks one.
-            if (plan.torchAt(e.from())) torch = plan.center(e.from());
-        }
-        TunnelSchematic s = TunnelSchematic.of(c, torch);
+        digTicks = digStall = 0;
+        digSolid = Integer.MAX_VALUE;
+        TunnelSchematic s = TunnelSchematic.of(c, null); // Ostinato: dig only; torches are placeTorch()'s job
         String name = "tunnel-" + (e == null ? "entry" : plan.center(e.to()).toShortString().replace(" ", ""));
         baritone.getBuilderProcess().build(name, s, s.origin);
         phase = Phase.DIG;
         summary = "Digging " + name;
-        System.out.println("TUNNELS dig " + kind + " " + name + " cells=" + c.size() + " torch=" + (torch == null ? "-" : torch.toShortString()));
+        System.out.println("TUNNELS dig " + kind + " " + name + " cells=" + c.size());
+    }
+
+    /**
+     * Ostinato: one floor torch at {@link #torchAt} (a node centre, floor block under it): walk within reach, hold a torch,
+     * click the top of the floor block. Null when done or given up (no torch, cell not air, TORCH_TICKS spent), so the
+     * maze never waits on a torch.
+     */
+    private PathingCommand placeTorch() {
+        BlockPos t = torchAt;
+        var at = ctx.world().getBlockState(t);
+        boolean done = at.is(Blocks.TORCH);
+        if (done || !at.isAir() || ++torchTicks > TORCH_TICKS
+                || !baritone.getInventoryBehavior().throwaway(false, st -> st.is(Items.TORCH), true)) {
+            System.out.println("TUNNELS torch " + (done ? "placed " : "skipped ") + t.toShortString() + " ticks=" + torchTicks);
+            torchAt = null;
+            torchTicks = 0;
+            return null;
+        }
+        Vec3 hit = Vec3.atCenterOf(t.below()).add(0, 0.5, 0);
+        if (ctx.playerHead().distanceTo(hit) > 4.0) return new PathingCommand(new GoalNear(t, 1), PathingCommandType.SET_GOAL_AND_PATH);
+        baritone.getInventoryBehavior().throwaway(true, st -> st.is(Items.TORCH), true);
+        baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), hit, ctx.playerRotations()), true);
+        if (torchTicks % 5 == 0 && ctx.player().getMainHandItem().is(Items.TORCH)) {
+            ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND,
+                    new BlockHitResult(hit, Direction.UP, t.below(), false));
+        }
+        return new PathingCommand((Goal) null, PathingCommandType.REQUEST_PAUSE);
     }
 
     private int stillSolid() {
@@ -206,6 +261,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (edge == null) {
             if (solid > 0) System.out.println("TUNNELS entry left solid=" + solid + " (continuing)");
             plan.markDug(new TunnelPlan.Node(0, 0, 0), null, 0);
+            if (plan.torchAt(new TunnelPlan.Node(0, 0, 0))) torchAt = plan.center(new TunnelPlan.Node(0, 0, 0));
             System.out.println("TUNNELS root dug " + plan.center(new TunnelPlan.Node(0, 0, 0)).toShortString());
         } else if (solid > 0) {
             abandoned++;
@@ -213,6 +269,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
             System.out.println("TUNNELS abandon " + plan.center(edge.to()).toShortString() + " solid=" + solid);
         } else {
             plan.markDug(edge.to(), edge.from(), edge.depth());
+            // Ostinato: torch rule (TunnelPlan): a node that became a junction or a ramp end. The bot stands in it now.
+            if (plan.torchAt(edge.to())) torchAt = plan.center(edge.to());
             edgesDone++;
             edgesSinceNeedFail++;
         }
