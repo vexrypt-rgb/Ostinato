@@ -310,8 +310,11 @@ public final class TunnelProcess extends BaritoneProcessHelper {
                 pickAskMisses++; // Ostinato: hard pick ask returned with no usable pick; next ask escalates the count
                 System.out.println("TUNNELS pick ask unmet (no usable pickaxe after provision) misses=" + pickAskMisses);
             }
+        } else if (!now.isEmpty()) {
+            // Ostinato: only a soft ask backs the soft kit off. Hard pick asks (every ~2 edges with stone picks) also reset
+            // this, so run72 reached 10+ edges without ever asking for copper, armor, torches or a bed.
+            edgesSinceNeedFail = 0; // back off; dig on and ask again later
         }
-        if (!now.isEmpty()) edgesSinceNeedFail = 0; // back off; dig on and ask again later
         System.out.println("TUNNELS provision done left=" + now);
         lastNeeds = now;
         phase = Phase.NEXT;
