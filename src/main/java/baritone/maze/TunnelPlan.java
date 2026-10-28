@@ -90,16 +90,22 @@ public final class TunnelPlan {
                 if (n.gx - cameFrom.gx == DIRS[i][0] && n.gz - cameFrom.gz == DIRS[i][1]) ahead = i;
             }
         }
-        int grown = 0;
+        // Ostinato: roll the ramp before the straight edges. A ramp needs its mid node free, and straight-ahead (80%)
+        // used to reserve it first, so run77 dug 30 edges without one. Try all four ways; flip up/down at the level bounds.
+        int r = roll(n, 7), ramp = 0;
+        if (r < 12) {
+            int dy = r < 6 ? -1 : 1;
+            if (n.gy + dy < MIN_LEVEL || n.gy + dy > MAX_LEVEL) dy = -dy;
+            int i0 = roll(n, 8) % 4;
+            for (int k = 0; k < 4 && ramp == 0; k++) {
+                int i = (i0 + k) % 4;
+                ramp = addRamp(n, DIRS[i][0], dy, DIRS[i][1], d);
+            }
+        }
+        int grown = ramp;
         for (int i = 0; i < 4; i++) {
             int chance = ahead < 0 ? 70 : i == ahead ? 80 : (i + 2) % 4 == ahead ? 0 : 35;
             if (roll(n, i) < chance) grown += add(n, new Node(n.gx + DIRS[i][0], n.gy, n.gz + DIRS[i][1]), d);
-        }
-        int r = roll(n, 7), ramp = 0;
-        if (r < 12) {
-            int i = roll(n, 8) % 4, dy = r < 6 ? -1 : 1;
-            ramp = addRamp(n, DIRS[i][0], dy, DIRS[i][1], d);
-            grown += ramp;
         }
         if (grown >= 2 || ramp > 0) torchNodes.add(n);
         if (frontier.isEmpty()) {
