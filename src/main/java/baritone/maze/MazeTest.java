@@ -647,7 +647,11 @@ public final class MazeTest implements AbstractGameEventListener {
     // container step timed out. Provisioning is a short list of stages (picks, then wood); each asks TenorClef only when low.
     private int provisionStage, provisionGainTick;
     private int provisionBest; // Ostinato: run98 best stage metric (pick durability for stage 0, planks for wood)
-    private static final int WOOD_MIN_PLANKS = 64; // 16 logs: barrel + slabs + sticks for two picks, with slack
+    // Ostinato: run105. 64 covered the barrel and picks but not the cladding: yellow_office and hub take ~105 planks of
+    // floor/wall (yellow concrete is not obtainable, so walls are planks too) plus the barrel. Each wood room then made a
+    // second wood trip from the dug room (surface-for / return-home, 2-5 min); the surface trip here takes ~1 min more.
+    // Wood left over (a pipes room) carries to the next room, so nothing is wasted.
+    private static final int WOOD_MIN_PLANKS = 128;
 
     private int woodPlanks(Minecraft mc, int[] logs) {
         int planks = 0;
