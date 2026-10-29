@@ -695,7 +695,10 @@ public final class MazeTest implements AbstractGameEventListener {
         int[] stone = {0}, logs = {0};
         int dur = pickDurability(mc, stone), planks = woodPlanks(mc, logs);
         String have = "durability=" + dur + " planks=" + planks;
-        if (++wait % 600 == 0) say("PROVISION waiting " + have + " tenorclef=" + tc);
+        // Ostinato: run99. Wood went silent at planks=10 for 2 min (no path, no mining, no chat) and the line only said
+        // "Mine And Collect"; the sub-task chain and feet say whether it idles, wanders or walks to a far log.
+        if (++wait % 600 == 0) say("PROVISION waiting " + have + " feet=" + mc.player.blockPosition().toShortString()
+                + " tenorclef=" + (tc.length() > 120 ? tc.substring(0, 120) : tc) + " chain=" + tenorChain());
         // Ostinato: run93. "@get log 16" reached 48 planks then sat 3+ min on an unreachable log (1M-node path searches).
         // A stage that gains nothing for 2 min ends with what it has.
         // Ostinato: run98. It compared the whole have-string, and durability drops with every block mined: the wood stage
