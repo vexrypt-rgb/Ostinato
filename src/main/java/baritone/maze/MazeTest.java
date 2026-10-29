@@ -583,7 +583,7 @@ public final class MazeTest implements AbstractGameEventListener {
         if (++wait % 600 == 0) say("PROVISION waiting durability=" + dur + " tenorclef=" + tc);
         if ((wait > 100 && tc.startsWith("idle")) || wait > 6000) {
             say("PROVISION done durability=" + dur + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : ""));
-            if (wait > 6000) { try { Object ex = Class.forName("adris.altoclef.AltoClef").getMethod("getCommandExecutor").invoke(null); ex.getClass().getMethod("execute", String.class).invoke(ex, "@stop"); } catch (Throwable ignored) { } }
+            if (wait > 6000) { try { Class<?> ac = Class.forName("adris.altoclef.AltoClef"); Object mod = ac.getMethod("getInstance").invoke(null); Object chain = ac.getMethod("getUserTaskChain").invoke(mod); chain.getClass().getMethod("cancel", ac).invoke(chain, mod); } catch (Throwable t) { say("PROVISION cancel failed " + t); } }
             state = 2; wait = 120;
         }
     }
