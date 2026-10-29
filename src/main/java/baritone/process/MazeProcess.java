@@ -103,6 +103,24 @@ public final class MazeProcess extends BaritoneProcessHelper {
      */
     public Outcome buildHere() {
         Report report = prepare(true);
+        return accept(report);
+    }
+
+    // Ostinato: run94 expand. MazeTest's nextRoom picked cell -5,1 (hub) and walked there, but prepare() spiralled from
+    // the feet to the first sealable cell and built -6,0 (yellow_office). nextRoom now dry-runs the seal check for its
+    // target at the Y it will use, and this builds exactly that cell (placeOpen around it only if it no longer seals).
+    private int[] forcedCell;
+
+    public Outcome buildAt(int cellX, int cellZ, int preferredY) {
+        forcedCell = new int[]{cellX, cellZ, preferredY};
+        try {
+            return accept(prepare(true));
+        } finally {
+            forcedCell = null;
+        }
+    }
+
+    private Outcome accept(Report report) {
         if (report.error != null) {
             return Outcome.fail(report.error);
         }
@@ -314,7 +332,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         }
         int minY = ctx.world().getMinY();
         int maxY = ctx.world().getMaxY();
-        int preferred = ctx.playerFeet().y - 16;
+        int preferred = forcedCell != null ? forcedCell[2] : ctx.playerFeet().y - 16;
         int limit = maxY - MazePlanner.SIZE_Y - MazeSeed.COVER;
         if (preferred > limit) {
             preferred = limit;
@@ -322,13 +340,23 @@ public final class MazeProcess extends BaritoneProcessHelper {
         if (preferred < minY) {
             preferred = minY;
         }
-        int cellX = MazeSeed.cellOf(ctx.playerFeet().x);
-        int cellZ = MazeSeed.cellOf(ctx.playerFeet().z);
-        MazePlanner.Attempt attempt = MazePlanner.placeOpen(
-                Baritone.settings().mazeSeed.value,
-                cellX, cellZ, preferred, minY, maxY,
-                new MazeWorldProbe(ctx.world()),
-                map, MazePlanner.SEARCH_RADIUS);
+        int cellX = forcedCell != null ? forcedCell[0] : MazeSeed.cellOf(ctx.playerFeet().x);
+        int cellZ = forcedCell != null ? forcedCell[1] : MazeSeed.cellOf(ctx.playerFeet().z);
+        MazePlanner.Attempt attempt = null;
+        if (forcedCell != null && !map.claimed(cellX, cellZ)) {
+            attempt = MazePlanner.place(Baritone.settings().mazeSeed.value, cellX, cellZ, preferred, minY, maxY,
+                    new MazeWorldProbe(ctx.world()));
+            if (!attempt.ok()) {
+                attempt = null;
+            }
+        }
+        if (attempt == null) {
+            attempt = MazePlanner.placeOpen(
+                    Baritone.settings().mazeSeed.value,
+                    cellX, cellZ, preferred, minY, maxY,
+                    new MazeWorldProbe(ctx.world()),
+                    map, MazePlanner.SEARCH_RADIUS);
+        }
         if (!attempt.ok()) {
             return Report.error(attempt.refusal == null ? "No sealed room nearby" : attempt.refusal);
         }

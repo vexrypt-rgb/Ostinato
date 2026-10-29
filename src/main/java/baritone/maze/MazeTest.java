@@ -63,6 +63,7 @@ public final class MazeTest implements AbstractGameEventListener {
     private int roomsDone, failStreak;
     private final java.util.List<String> roomLog = new java.util.ArrayList<>();
     private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
+    private int[] nextCell; // Ostinato: run94 expand target cellX, cellZ, preferredY from nextRoom's dry run
 
     private MazeTest(Baritone b) {
         this.b = b;
@@ -147,7 +148,8 @@ public final class MazeTest implements AbstractGameEventListener {
                 String ms = System.getProperty("ostinato.mazetest.mazeSeed");
                 if (ms != null) Baritone.settings().mazeSeed.value = Long.parseLong(ms);
                 say("mazeSeed=" + Baritone.settings().mazeSeed.value);
-                var out = b.getMazeProcess().buildHere();
+                // Ostinato: run94. An expand room builds the cell nextRoom dry-ran (null on room 1 and when no candidate sealed).
+                var out = nextCell != null ? b.getMazeProcess().buildAt(nextCell[0], nextCell[1], nextCell[2]) : b.getMazeProcess().buildHere();
                 say("build " + (out.ok() ? "ok: " + out.message : "refused: " + out.error)
                         + " gamemode=" + mc.gameMode.getPlayerMode().getName());
                 if (!out.ok()) {
@@ -174,6 +176,18 @@ public final class MazeTest implements AbstractGameEventListener {
                 }
                 if (wait > TIMEOUT_TICKS) {
                     verify(mc);
+                    // Ostinato: run91. A dig timeout (hand-mining with no pick) ended a forever run outright; only a verify FAIL
+                    // got the failStreak second chance. In forever mode it is a FAILed room like any other: stop the builder,
+                    // log ROOM-RESULT, and the next room (with pick provisioning first) goes on unless two fail in a row.
+                    if (FOREVER && b.getMazeProcess().lastBuilt() != null) {
+                        say("dig timeout after " + wait + " ticks -> room FAIL, forever continues");
+                        b.getMazeProcess().cancel();
+                        b.getPathingBehavior().cancelEverything();
+                        state = 6;
+                        wait = 0;
+                        enterRoom(mc);
+                        return;
+                    }
                     finish(mc, "FAIL timeout");
                     return;
                 }
@@ -505,34 +519,51 @@ public final class MazeTest implements AbstractGameEventListener {
         java.util.Set<String> built = new java.util.HashSet<>();
         for (String r : roomLog) built.add(r.split("@")[0]);
         if (FOREVER && built.size() >= 3) built.retainAll(java.util.Set.of(roomLog.get(roomLog.size() - 1).split("@")[0])); // Ostinato: forever: all themes seen -> restart rotation, just avoid repeating the last one
-        int[] pick = null;
+        java.util.List<int[]> cands = new java.util.ArrayList<>();
         // Ostinato: 2-cell steps so the planner's search radius cannot fold the new room back into the last one.
-        for (int ring = 2; ring <= 12 && pick == null; ring += 2) {
-            for (int dx = -ring; dx <= ring && pick == null; dx += 2) for (int dz = -ring; dz <= ring && pick == null; dz += 2) {
+        for (int ring = 2; ring <= 12; ring += 2) {
+            for (int dx = -ring; dx <= ring; dx += 2) for (int dz = -ring; dz <= ring; dz += 2) {
                 if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
                 int x = from.cellX + dx, z = from.cellZ + dz;
                 if (cellsDone.contains(((long) x << 32) ^ (z & 0xffffffffL))) continue;
                 MazeTheme t = MazeTheme.forCell(seed, x, z);
-                if (!t.stubbed && !built.contains(t.id)) pick = new int[]{x, z};
+                if (!t.stubbed && !built.contains(t.id)) cands.add(new int[]{x, z});
             }
         }
-        if (pick == null) pick = new int[]{from.cellX + 2, from.cellZ}; // every theme seen: keep growing east
+        cands.add(new int[]{from.cellX + 2, from.cellZ}); // every theme seen: keep growing east
+        // Ostinato: run94. The target cell was not the built cell: buildHere() spiralled from the feet to the first cell that
+        // seals, so cell -5,1 (hub) was walked to and -6,0 (yellow_office) was built. Dry-run the seal check for each
+        // candidate at the Y the build will use (surface - 16), walk to the first that seals, and build exactly that cell.
+        MinecraftServer s = mc.getSingleplayerServer();
+        int[] pick = null; int top = 0, tried = 0; String why = ""; nextCell = null;
+        for (int[] c : cands) {
+            if (tried >= 8) break;
+            tried++;
+            int cbx = c[0] * MazeSeed.CELL + MazeSeed.CELL / 2, cbz = c[1] * MazeSeed.CELL + MazeSeed.CELL / 2;
+            int[] r;
+            try {
+                r = s.submit(() -> {
+                    ServerLevel lvl = s.overworld();
+                    for (int ccx = (c[0] * MazeSeed.CELL) >> 4; ccx <= (c[0] * MazeSeed.CELL + MazeSeed.CELL - 1) >> 4; ccx++)
+                        for (int ccz = (c[1] * MazeSeed.CELL) >> 4; ccz <= (c[1] * MazeSeed.CELL + MazeSeed.CELL - 1) >> 4; ccz++) lvl.getChunk(ccx, ccz);
+                    int h = lvl.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, cbx, cbz);
+                    int pref = Math.max(lvl.getMinY(), Math.min(h - 16, lvl.getMaxY() - MazePlanner.SIZE_Y - MazeSeed.COVER));
+                    MazePlanner.Attempt a = MazePlanner.place(seed, c[0], c[1], pref, lvl.getMinY(), lvl.getMaxY(), new MazeWorldProbe(lvl));
+                    return new int[]{h, a.ok() ? 1 : 0, pref};
+                }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception ex) {
+                say("EXPAND failed to load cell " + c[0] + "," + c[1] + ": " + ex);
+                continue;
+            }
+            if (pick == null) { pick = c; top = r[0]; nextCell = null; } // fallback: the first candidate, planner picks near it
+            if (r[1] == 1) { pick = c; top = r[0]; nextCell = new int[]{c[0], c[1], r[2]}; break; }
+            why += " " + c[0] + "," + c[1] + "=no-seal";
+        }
+        if (pick == null) return false;
         MazeTheme want = MazeTheme.forCell(seed, pick[0], pick[1]);
         int bx = pick[0] * MazeSeed.CELL + MazeSeed.CELL / 2, bz = pick[1] * MazeSeed.CELL + MazeSeed.CELL / 2;
-        MinecraftServer s = mc.getSingleplayerServer();
-        int top;
-        try {
-            top = s.submit(() -> {
-                ServerLevel lvl = s.overworld();
-                lvl.getChunk(bx >> 4, bz >> 4);
-                return lvl.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
-            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (Exception ex) {
-            say("EXPAND failed to load cell " + pick[0] + "," + pick[1] + ": " + ex);
-            return false;
-        }
         say("EXPAND room " + (roomsDone + 1) + "/" + ROOMS_CAP + " -> cell " + pick[0] + "," + pick[1] + " theme=" + want.id
-                + " surface=" + bx + "," + top + "," + bz + " built=" + built);
+                + " surface=" + bx + "," + top + "," + bz + " built=" + built + " dryrun=" + (nextCell != null ? "seals" : "none") + " tried=" + tried + why);
         run("effect clear @p night_vision");
         // Ostinato: walk there with the kit and everything farmed so far (was: tp). A survival bot has to cross the ground.
         walkTo = new BlockPos(bx, top, bz);
