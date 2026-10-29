@@ -358,12 +358,16 @@ public final class MazeTest implements AbstractGameEventListener {
             Object mod = Class.forName("adris.altoclef.AltoClef").getMethod("getInstance").invoke(null);
             Object chain = mod.getClass().getMethod("getUserTaskChain").invoke(mod);
             Object task = chain.getClass().getMethod("getCurrentTask").invoke(chain);
-            StringBuilder sb = new StringBuilder();
+            // The deepest task says what is actually happening; it keeps 160 chars, the ones above it 60.
+            java.util.List<String> names = new java.util.ArrayList<>();
             for (int d = 0; task != null && d < 8; d++) {
                 task = task.getClass().getMethod("getSub").invoke(task);
-                if (task == null) break;
-                String n = String.valueOf(task).replace('\n', ' ');
-                sb.append(d == 0 ? "" : " / ").append(n, 0, Math.min(60, n.length()));
+                if (task != null) names.add(String.valueOf(task).replace('\n', ' '));
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int k = 0; k < names.size(); k++) {
+                String n = names.get(k);
+                sb.append(k == 0 ? "" : " / ").append(n, 0, Math.min(k == names.size() - 1 ? 160 : 60, n.length()));
             }
             return sb.length() == 0 ? "-" : sb.toString();
         } catch (Throwable t) {
