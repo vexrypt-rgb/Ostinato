@@ -567,7 +567,8 @@ public final class MazeTest implements AbstractGameEventListener {
 
     // Ostinato: run92. Wood ran out across rooms too: room 2's kit had planks=1 logs=0, the barrel was skipped and the
     // container step timed out. Provisioning is a short list of stages (picks, then wood); each asks TenorClef only when low.
-    private int provisionStage;
+    private int provisionStage, provisionGainTick;
+    private String provisionHave = "";
     private static final int WOOD_MIN_PLANKS = 64; // 16 logs: barrel + slabs + sticks for two picks, with slack
 
     private int woodPlanks(Minecraft mc, int[] logs) {
@@ -610,15 +611,19 @@ public final class MazeTest implements AbstractGameEventListener {
                 Object ex = Class.forName("adris.altoclef.AltoClef").getMethod("getCommandExecutor").invoke(null);
                 ex.getClass().getMethod("execute", String.class).invoke(ex, cmd);
             } catch (Throwable t) { say("PROVISION no TenorClef " + t); provisionStage = 0; state = 2; wait = 120; return; }
-            provisionAsked = true; wait = 0;
+            provisionAsked = true; wait = 0; provisionHave = ""; provisionGainTick = 0;
             return;
         }
         int[] stone = {0}, logs = {0};
         String have = "durability=" + pickDurability(mc, stone) + " planks=" + woodPlanks(mc, logs);
         if (++wait % 600 == 0) say("PROVISION waiting " + have + " tenorclef=" + tc);
-        if ((wait > 100 && tc.startsWith("idle")) || wait > 6000) {
-            say("PROVISION stage " + provisionStage + " done " + have + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : ""));
-            if (wait > 6000) { try { Class<?> ac = Class.forName("adris.altoclef.AltoClef"); Object mod = ac.getMethod("getInstance").invoke(null); Object chain = ac.getMethod("getUserTaskChain").invoke(mod); chain.getClass().getMethod("cancel", ac).invoke(chain, mod); } catch (Throwable t) { say("PROVISION cancel failed " + t); } }
+        // Ostinato: run93. "@get log 16" reached 48 planks then sat 3+ min on an unreachable log (1M-node path searches).
+        // A stage that gains nothing for 2 min ends with what it has.
+        if (!have.equals(provisionHave)) { provisionHave = have; provisionGainTick = wait; }
+        boolean flat = wait - provisionGainTick > 2400;
+        if ((wait > 100 && tc.startsWith("idle")) || wait > 6000 || flat) {
+            say("PROVISION stage " + provisionStage + " done " + have + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : flat ? " (no gain 2min)" : ""));
+            if (wait > 6000 || flat) { try { Class<?> ac = Class.forName("adris.altoclef.AltoClef"); Object mod = ac.getMethod("getInstance").invoke(null); Object chain = ac.getMethod("getUserTaskChain").invoke(mod); chain.getClass().getMethod("cancel", ac).invoke(chain, mod); } catch (Throwable t) { say("PROVISION cancel failed " + t); } }
             provisionAsked = false; provisionStage++;
         }
     }
