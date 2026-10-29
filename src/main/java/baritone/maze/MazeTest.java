@@ -321,8 +321,9 @@ public final class MazeTest implements AbstractGameEventListener {
         String tc = tenorState();
         String line = "light=" + have[0] + "/" + want[0] + " container=" + have[1] + "/" + want[1] + " fill=" + have[2] + "/" + want[2]
                 + " seal=" + have[3] + "/" + want[3];
-        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " " + lightDesc(lvl) + " feet=" + mc.player.blockPosition().toShortString());
-        stuckWatch(mc, line, tc);
+        String ch = tenorChain(); // Ostinato: run98
+        say("FURNISH progress t=" + wait + " " + line + " tenorclef=" + tc + " " + lightDesc(lvl) + " feet=" + mc.player.blockPosition().toShortString() + " chain=" + ch);
+        stuckWatch(mc, line, tc + " chain=" + ch);
         // Ostinato: a filled container is part of the survival proof. An empty barrel is not a pass.
         boolean done = have[0] == want[0] && have[1] == want[1] && have[2] == want[2] && have[3] == want[3];
         if (done || wait > FURNISH_TIMEOUT || (wait > 400 && tc.startsWith("idle"))) {
@@ -340,9 +341,33 @@ public final class MazeTest implements AbstractGameEventListener {
         flatMoved = Math.max(flatMoved, Math.sqrt(p.distSqr(flatPos)));
         int flat = wait - flatSince;
         if (flat >= STUCK_TICKS && (flat - STUCK_TICKS) % 1200 == 0) {
-            String task = tc.length() > 160 ? tc.substring(0, 160) : tc;
+            // Ostinato: run98. The chain tail says which subtask is stuck; keep the top task short.
+            int ci = tc.indexOf(" chain=");
+            String top = ci < 0 ? tc : tc.substring(0, ci), task = (top.length() > 160 ? top.substring(0, 160) : top) + (ci < 0 ? "" : tc.substring(ci));
             say("STUCK-NOW furnish progress flat " + (flat / 1200) + "min (" + flat + " ticks) " + line + " maxMovedFromStart=" + (int) flatMoved
                     + (flatMoved < 4 ? " POSITION-STAGNANT" : " WANDERING") + " feet=" + p.toShortString() + " task=" + task);
+        }
+    }
+
+    /**
+     * Ostinato: run98. The user task's debug state alone said "Kit spare_pickaxe" for 3 min of "Failed, blacklisting and
+     * wandering" with no hint of what it was failing to reach. The sub-task chain below the user task, by reflection.
+     */
+    private static String tenorChain() {
+        try {
+            Object mod = Class.forName("adris.altoclef.AltoClef").getMethod("getInstance").invoke(null);
+            Object chain = mod.getClass().getMethod("getUserTaskChain").invoke(mod);
+            Object task = chain.getClass().getMethod("getCurrentTask").invoke(chain);
+            StringBuilder sb = new StringBuilder();
+            for (int d = 0; task != null && d < 8; d++) {
+                task = task.getClass().getMethod("getSub").invoke(task);
+                if (task == null) break;
+                String n = String.valueOf(task).replace('\n', ' ');
+                sb.append(d == 0 ? "" : " / ").append(n, 0, Math.min(60, n.length()));
+            }
+            return sb.length() == 0 ? "-" : sb.toString();
+        } catch (Throwable t) {
+            return "?";
         }
     }
 
