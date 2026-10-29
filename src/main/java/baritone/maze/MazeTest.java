@@ -565,26 +565,61 @@ public final class MazeTest implements AbstractGameEventListener {
         return sum;
     }
 
+    // Ostinato: run92. Wood ran out across rooms too: room 2's kit had planks=1 logs=0, the barrel was skipped and the
+    // container step timed out. Provisioning is a short list of stages (picks, then wood); each asks TenorClef only when low.
+    private int provisionStage;
+    private static final int WOOD_MIN_PLANKS = 64; // 16 logs: barrel + slabs + sticks for two picks, with slack
+
+    private int woodPlanks(Minecraft mc, int[] logs) {
+        int planks = 0;
+        var inv = mc.player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            var st = inv.getItem(i);
+            if (st.isEmpty()) continue;
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (id.endsWith("_planks")) planks += st.getCount();
+            else if ((id.endsWith("_log") || id.endsWith("_stem")) && !id.startsWith("stripped")) { planks += 4 * st.getCount(); logs[0] += st.getCount(); }
+        }
+        return planks;
+    }
+
+    /** The command for the current stage, or null when that stage is already satisfied. */
+    private String provisionCommand(Minecraft mc) {
+        if (provisionStage == 0) {
+            int[] stone = {0};
+            int dur = pickDurability(mc, stone);
+            if (dur >= PICK_DURABILITY_MIN) { say("PROVISION picks ok durability=" + dur); return null; }
+            say("PROVISION picks low durability=" + dur);
+            return "@get stone_pickaxe " + (stone[0] + 2);
+        }
+        int[] logs = {0};
+        int planks = woodPlanks(mc, logs);
+        if (planks >= WOOD_MIN_PLANKS) { say("PROVISION wood ok planks=" + planks); return null; }
+        say("PROVISION wood low planks=" + planks + " logs=" + logs[0]);
+        return "@get log " + (logs[0] + (WOOD_MIN_PLANKS - planks + 3) / 4);
+    }
+
     private void provisionTick(Minecraft mc) {
-        int[] stone = {0};
-        int dur = pickDurability(mc, stone);
         String tc = tenorState();
         if (!provisionAsked) {
-            if (dur >= PICK_DURABILITY_MIN) { say("PROVISION picks ok durability=" + dur); state = 2; wait = 120; return; }
-            String cmd = "@get stone_pickaxe " + (stone[0] + 2);
-            say("PROVISION picks low durability=" + dur + " -> " + cmd);
+            if (provisionStage > 1) { provisionStage = 0; state = 2; wait = 120; return; }
+            String cmd = provisionCommand(mc);
+            if (cmd == null) { provisionStage++; return; }
+            say("PROVISION stage " + provisionStage + " -> " + cmd);
             try {
                 Object ex = Class.forName("adris.altoclef.AltoClef").getMethod("getCommandExecutor").invoke(null);
                 ex.getClass().getMethod("execute", String.class).invoke(ex, cmd);
-            } catch (Throwable t) { say("PROVISION no TenorClef " + t); state = 2; wait = 120; return; }
+            } catch (Throwable t) { say("PROVISION no TenorClef " + t); provisionStage = 0; state = 2; wait = 120; return; }
             provisionAsked = true; wait = 0;
             return;
         }
-        if (++wait % 600 == 0) say("PROVISION waiting durability=" + dur + " tenorclef=" + tc);
+        int[] stone = {0}, logs = {0};
+        String have = "durability=" + pickDurability(mc, stone) + " planks=" + woodPlanks(mc, logs);
+        if (++wait % 600 == 0) say("PROVISION waiting " + have + " tenorclef=" + tc);
         if ((wait > 100 && tc.startsWith("idle")) || wait > 6000) {
-            say("PROVISION done durability=" + dur + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : ""));
+            say("PROVISION stage " + provisionStage + " done " + have + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : ""));
             if (wait > 6000) { try { Class<?> ac = Class.forName("adris.altoclef.AltoClef"); Object mod = ac.getMethod("getInstance").invoke(null); Object chain = ac.getMethod("getUserTaskChain").invoke(mod); chain.getClass().getMethod("cancel", ac).invoke(chain, mod); } catch (Throwable t) { say("PROVISION cancel failed " + t); } }
-            state = 2; wait = 120;
+            provisionAsked = false; provisionStage++;
         }
     }
 
@@ -598,7 +633,7 @@ public final class MazeTest implements AbstractGameEventListener {
         if (dx * dx + dz * dz <= 16) {
             b.getPathingBehavior().cancelEverything();
             say("EXPAND walked to " + at.toShortString() + " in " + (ticks - walkStart) + " ticks");
-            state = 31; wait = 0; provisionAsked = false;
+            state = 31; wait = 0; provisionAsked = false; provisionStage = 0;
             return;
         }
         if (at.distSqr(walkLast) > 9) { walkLast = at; walkLastTick = ticks; }
@@ -607,7 +642,7 @@ public final class MazeTest implements AbstractGameEventListener {
             b.getPathingBehavior().cancelEverything();
             say("EXPAND walk " + (capped ? "cap" : "stalled") + " at " + at.toShortString() + " -> tp fallback to " + walkTo.toShortString());
             run("tp @p " + (walkTo.getX() + 0.5) + " " + walkTo.getY() + " " + (walkTo.getZ() + 0.5));
-            state = 31; wait = 0; provisionAsked = false;
+            state = 31; wait = 0; provisionAsked = false; provisionStage = 0;
             return;
         }
         if (!b.getCustomGoalProcess().isActive()) b.getCustomGoalProcess().setGoalAndPath(new baritone.api.pathing.goals.GoalXZ(walkTo.getX(), walkTo.getZ()));
