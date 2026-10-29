@@ -117,6 +117,12 @@ public class MovementDiagonal extends Movement {
             return;
         }
         BlockState destInto = context.get(destX, y, destZ);
+        // Ostinato: run105. Gates and doors read walkable for any move, but only a traverse opens them; a diagonal into a
+        // closed one pushes its panel forever. Go straight through instead.
+        if (destInto.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock && !destInto.getValue(net.minecraft.world.level.block.FenceGateBlock.OPEN)
+                || destInto.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && !destInto.getValue(net.minecraft.world.level.block.DoorBlock.OPEN)) {
+            return;
+        }
         BlockState fromDown;
         boolean ascend = false;
         BlockState destWalkOn;
