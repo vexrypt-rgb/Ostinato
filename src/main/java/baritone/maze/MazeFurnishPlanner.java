@@ -79,7 +79,24 @@ public final class MazeFurnishPlanner {
                 steps.add(new Step(StepKind.SEAL, gap.x(), gap.y(), gap.z(), sealIds(plan.theme, plan.originY), List.of()));
             }
         }
-        return new MazeFurnishJob(plan.cellX, plan.cellZ, plan.theme.id, survival, steps);
+        // Ostinato: run100. The carved cells, so TenorClef can tell scaffolding left in the room from the room itself.
+        List<Integer> air = new ArrayList<>();
+        for (int x = 0; x < plan.sizeX; x++) {
+            for (int y = 0; y < plan.sizeY; y++) {
+                for (int z = 0; z < plan.sizeZ; z++) {
+                    if (plan.role(x, y, z) == BlockRole.AIR) {
+                        air.add(plan.originX + x);
+                        air.add(plan.originY + y);
+                        air.add(plan.originZ + z);
+                    }
+                }
+            }
+        }
+        int[] airCells = new int[air.size()];
+        for (int i = 0; i < airCells.length; i++) {
+            airCells[i] = air.get(i);
+        }
+        return new MazeFurnishJob(plan.cellX, plan.cellZ, plan.theme.id, survival, steps, airCells);
     }
 
     /**

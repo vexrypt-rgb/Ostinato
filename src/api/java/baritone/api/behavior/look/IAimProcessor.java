@@ -36,6 +36,19 @@ public interface IAimProcessor {
     Rotation peekRotation(Rotation desired);
 
     /**
+     * Ostinato: run100. Where the look settles once it gets to {@code desired}: aim noise and mouse steps, but not the
+     * per-tick turn cap that {@link #peekRotation} applies. Reach and placement checks ask "would the ray hit if I
+     * looked there", and with the 32 degree cap every block more than 32 degrees off the view read as unreachable,
+     * so nothing ever turned to it (a log at 1.1 blocks, a crafting table under the feet).
+     *
+     * @param desired The desired rotation
+     * @return The rotation the look ends on
+     */
+    default Rotation peekAim(Rotation desired) {
+        return peekRotation(desired);
+    }
+
+    /**
      * Returns a copy of this {@link IAimProcessor} which has its own internal state and is manually tickable.
      *
      * @return The forked processor

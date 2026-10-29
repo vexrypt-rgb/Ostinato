@@ -59,13 +59,23 @@ public final class MazeFurnishJob {
     /** False in creative: the schematic already placed lights and containers, so only fills are listed. */
     public final boolean survival;
     public final List<Step> steps;
+    /**
+     * Ostinato: run100. The room's carved cells as x,y,z triples, world coordinates. Anything solid in one of them was
+     * put there after the dig (pillar and bridge scaffolding), so the furnisher may mine it when it hides a cell.
+     */
+    public final int[] airCells;
 
     public MazeFurnishJob(int cellX, int cellZ, String themeId, boolean survival, List<Step> steps) {
+        this(cellX, cellZ, themeId, survival, steps, new int[0]);
+    }
+
+    public MazeFurnishJob(int cellX, int cellZ, String themeId, boolean survival, List<Step> steps, int[] airCells) {
         this.cellX = cellX;
         this.cellZ = cellZ;
         this.themeId = themeId;
         this.survival = survival;
         this.steps = List.copyOf(steps);
+        this.airCells = airCells.clone();
     }
 
     public List<Step> steps(StepKind kind) {
