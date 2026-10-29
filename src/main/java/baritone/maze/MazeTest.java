@@ -203,6 +203,7 @@ public final class MazeTest implements AbstractGameEventListener {
             }
             case 20 -> tunnelsTick(mc); // Ostinato: forever; never prints RESULT
             case 30 -> walkTick(mc); // Ostinato: expand walk to the next cell
+            case 31 -> provisionTick(mc); // Ostinato: picks for the next dig
             case 7 -> { if (++wait >= 20) startFurnish(mc); }
             case 8 -> furnishTick(mc);
             case 5, 6 -> shots(mc);
@@ -544,6 +545,49 @@ public final class MazeTest implements AbstractGameEventListener {
         return true;
     }
 
+    // Ostinato: run91. The kit is only given on room 1 now, and the room dig is Baritone's builder, which never makes a tool:
+    // room 2 wore the last pick out and hand-mined stone (1 block / 5-10s) into a 10-min FAIL timeout. Before each later
+    // dig, ask TenorClef for stone picks when less than two stone picks' worth of durability is left.
+    private boolean provisionAsked;
+    private static final int PICK_DURABILITY_MIN = 262;
+
+    private int pickDurability(Minecraft mc, int[] stonePicks) {
+        int sum = 0;
+        var inv = mc.player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            var st = inv.getItem(i);
+            if (st.isEmpty()) continue;
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath();
+            if (!id.endsWith("_pickaxe") || id.startsWith("wooden") || id.startsWith("golden")) continue;
+            sum += st.getMaxDamage() - st.getDamageValue();
+            if (id.equals("stone_pickaxe")) stonePicks[0] += st.getCount();
+        }
+        return sum;
+    }
+
+    private void provisionTick(Minecraft mc) {
+        int[] stone = {0};
+        int dur = pickDurability(mc, stone);
+        String tc = tenorState();
+        if (!provisionAsked) {
+            if (dur >= PICK_DURABILITY_MIN) { say("PROVISION picks ok durability=" + dur); state = 2; wait = 120; return; }
+            String cmd = "@get stone_pickaxe " + (stone[0] + 2);
+            say("PROVISION picks low durability=" + dur + " -> " + cmd);
+            try {
+                Object ex = Class.forName("adris.altoclef.AltoClef").getMethod("getCommandExecutor").invoke(null);
+                ex.getClass().getMethod("execute", String.class).invoke(ex, cmd);
+            } catch (Throwable t) { say("PROVISION no TenorClef " + t); state = 2; wait = 120; return; }
+            provisionAsked = true; wait = 0;
+            return;
+        }
+        if (++wait % 600 == 0) say("PROVISION waiting durability=" + dur + " tenorclef=" + tc);
+        if ((wait > 100 && tc.startsWith("idle")) || wait > 6000) {
+            say("PROVISION done durability=" + dur + " after " + wait + " ticks" + (wait > 6000 ? " (cap)" : ""));
+            if (wait > 6000) { try { Object ex = Class.forName("adris.altoclef.AltoClef").getMethod("getCommandExecutor").invoke(null); ex.getClass().getMethod("execute", String.class).invoke(ex, "@stop"); } catch (Throwable ignored) { } }
+            state = 2; wait = 120;
+        }
+    }
+
     private BlockPos walkTo, walkLast;
     private int walkStart, walkLastTick;
 
@@ -554,7 +598,7 @@ public final class MazeTest implements AbstractGameEventListener {
         if (dx * dx + dz * dz <= 16) {
             b.getPathingBehavior().cancelEverything();
             say("EXPAND walked to " + at.toShortString() + " in " + (ticks - walkStart) + " ticks");
-            state = 2; wait = 120;
+            state = 31; wait = 0; provisionAsked = false;
             return;
         }
         if (at.distSqr(walkLast) > 9) { walkLast = at; walkLastTick = ticks; }
@@ -563,7 +607,7 @@ public final class MazeTest implements AbstractGameEventListener {
             b.getPathingBehavior().cancelEverything();
             say("EXPAND walk " + (capped ? "cap" : "stalled") + " at " + at.toShortString() + " -> tp fallback to " + walkTo.toShortString());
             run("tp @p " + (walkTo.getX() + 0.5) + " " + walkTo.getY() + " " + (walkTo.getZ() + 0.5));
-            state = 2; wait = 0;
+            state = 31; wait = 0; provisionAsked = false;
             return;
         }
         if (!b.getCustomGoalProcess().isActive()) b.getCustomGoalProcess().setGoalAndPath(new baritone.api.pathing.goals.GoalXZ(walkTo.getX(), walkTo.getZ()));
