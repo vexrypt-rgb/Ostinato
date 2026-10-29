@@ -131,7 +131,12 @@ public final class MazeTest implements AbstractGameEventListener {
         switch (state) {
             case 2 -> {
                 if (++wait < 200) return;
-                setup(mc);
+                // Ostinato: run96, problem 4. Room 1 was dug straight down from spawn with only the kit (no wood), so its
+                // furnish climbed back out for sticks and the barrel (run93 "Surfacing for stick" planks=0 logs=0). Gather
+                // the wood on the surface first, like every expand room; setup runs again after it, keeping that wood.
+                boolean woodFirst = roomsDone == 0 && !TUNNELS && !room1Provisioned;
+                setup(mc, !woodFirst);
+                if (woodFirst) { room1Provisioned = true; state = 31; wait = 0; provisionAsked = false; provisionStage = 0; return; }
                 state = 3;
                 wait = 0;
             }
@@ -407,7 +412,10 @@ public final class MazeTest implements AbstractGameEventListener {
             say("fullbright: no value field");
         } catch (Throwable t) { say("fullbright failed " + t); }
     }
-    private void setup(Minecraft mc) {
+    private boolean room1Provisioned; private int setupRoom = -1; // Ostinato: run96 room 1 wood before the dig
+    private void setup(Minecraft mc, boolean caveGuard) {
+        boolean firstSetup = setupRoom != roomsDone; // Ostinato: run96 kit and torch kit once per room
+        setupRoom = roomsDone;
         noPauseOnLostFocus(mc);
         fullbright(mc);
         BlockPos p = mc.player.blockPosition();
@@ -420,7 +428,7 @@ public final class MazeTest implements AbstractGameEventListener {
         run("time set day");
         run("gamemode survival @p");
         // Ostinato: the starter kit is only for the first room; later rooms keep what the bot carried and farmed.
-        if (roomsDone == 0) {
+        if (roomsDone == 0 && firstSetup) {
             run("clear @p");
             run("give @p iron_pickaxe");
             run("give @p iron_shovel");
@@ -429,8 +437,8 @@ public final class MazeTest implements AbstractGameEventListener {
         } else say("setup: keeping inventory for room " + (roomsDone + 1));
         // Ostinato: harness-only light kit (-Dostinato.mazetest.lightKit, default true). Survival rooms plan glowstone lights,
         // which a fresh overworld cannot supply; this lets the furnish leg exercise light placement + seals.
-        if (!"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p torch 16"); // Ostinato: torch light kit
-        if (FILL) {
+        if (firstSetup && !"false".equals(System.getProperty("ostinato.mazetest.lightKit"))) run("give @p torch 16"); // Ostinato: torch light kit
+        if (FILL && caveGuard) {
             int x0 = MazeSeed.cellOf(p.getX()) * MazeSeed.CELL, z0 = MazeSeed.cellOf(p.getZ()) * MazeSeed.CELL;
             int top = p.getY() - 2, bottom = p.getY() - 40;
             int mid = (top + bottom) / 2;
