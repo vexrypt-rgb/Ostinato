@@ -1197,9 +1197,16 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         }
         boolean allowSameLevel = !(ctx.world().getBlockState(pos.above()).getBlock() instanceof AirBlock);
         BlockState current = ctx.world().getBlockState(pos);
+        // Ostinato: run105. The player standing in the target made placementPlausible false for every face, so the goal fell
+        // back to GoalPlace (stand on top, pillar). In a 2-high tunnel with a protected ceiling that never works, and the
+        // path to a side stand crosses the target, flipping the goal mid-walk: rooms 6 and 7 left a seal open after 6 min of
+        // walk in / stall / wander. The player can step out of the way; only other entities make the cell implausible.
+        BlockState desired = bcc.getSchematic(pos.getX(), pos.getY(), pos.getZ(), current);
+        boolean plausible = desired != null && (desired.getCollisionShape(ctx.world(), pos).isEmpty()
+                || ctx.world().isUnobstructed(ctx.player(), desired.getCollisionShape(ctx.world(), pos).move(pos.getX(), pos.getY(), pos.getZ())));
         for (Direction facing : Movement.HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP) {
             //noinspection ConstantConditions
-            if (MovementHelper.canPlaceAgainst(ctx, pos.relative(facing)) && placementPlausible(pos, bcc.getSchematic(pos.getX(), pos.getY(), pos.getZ(), current))) {
+            if (MovementHelper.canPlaceAgainst(ctx, pos.relative(facing)) && plausible) {
                 return new GoalAdjacent(pos, pos.relative(facing), allowSameLevel);
             }
         }
