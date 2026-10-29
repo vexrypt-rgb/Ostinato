@@ -2664,7 +2664,8 @@ public final class Settings {
 
     /**
      * Ostinato: maze map file of claimed cells and containers that must not be refilled.
-     * Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room.
+     * Relative paths are inside the current world's baritone data (per save or server, per dimension), so claims never
+     * outlive their world. A shared file is how several bots avoid digging the same room.
      */
     public final Setting<String> mazeMapFile = new Setting<>("maze-map.txt");
 

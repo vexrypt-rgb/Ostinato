@@ -376,7 +376,12 @@ public final class MazeProcess extends BaritoneProcessHelper {
         }
         Path path = Path.of(raw);
         if (!path.isAbsolute()) {
-            path = baritone.getDirectory().resolve(raw);
+            // Ostinato: run96. The map lived in the game's baritone directory, so claims outlived the world they were
+            // made in: every mazetest run makes a fresh world, and 172 stale claims sent room 1 five cells from spawn
+            // (a 150-block shaft, dig timeout) and made buildAt skip its sealed target -2,-3 as "claimed". A relative map
+            // now lives with the world (singleplayer save / server folder, per dimension), like Baritone's cache.
+            var world = baritone.getWorldProvider().getCurrentWorld();
+            path = (world != null ? world.directory : baritone.getDirectory()).resolve(raw);
         }
         return path.normalize();
     }
