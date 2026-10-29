@@ -604,6 +604,16 @@ public final class MazeTest implements AbstractGameEventListener {
         return sum;
     }
 
+    private static int itemCount(Minecraft mc, String path) {
+        int n = 0;
+        var inv = mc.player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            var st = inv.getItem(i);
+            if (!st.isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).getPath().equals(path)) n += st.getCount();
+        }
+        return n;
+    }
+
     // Ostinato: run92. Wood ran out across rooms too: room 2's kit had planks=1 logs=0, the barrel was skipped and the
     // container step timed out. Provisioning is a short list of stages (picks, then wood); each asks TenorClef only when low.
     private int provisionStage, provisionGainTick;
@@ -630,6 +640,10 @@ public final class MazeTest implements AbstractGameEventListener {
             int dur = pickDurability(mc, stone);
             if (dur >= PICK_DURABILITY_MIN) { say("PROVISION picks ok durability=" + dur); return null; }
             say("PROVISION picks low durability=" + dur);
+            // Ostinato: run97. Owner rule: copper tools before stone. Held ingots (the copper armor kit's leftovers) make a
+            // copper pick in one craft; stone stays the fallback, since smelting raw copper first would stall the dig.
+            int ingots = itemCount(mc, "copper_ingot");
+            if (ingots >= 3) return "@get copper_pickaxe " + (itemCount(mc, "copper_pickaxe") + Math.min(2, ingots / 3));
             return "@get stone_pickaxe " + (stone[0] + 2);
         }
         int[] logs = {0};
