@@ -60,7 +60,7 @@ public final class MazeTest implements AbstractGameEventListener {
     // Ostinato: -Dostinato.mazetest.mode=tunnels runs #maze.tunnels (dig-only forever, survival kit + bed spawn) instead of rooms.
     private static final boolean TUNNELS = "tunnels".equals(System.getProperty("ostinato.mazetest.mode"));
     private int tunnelEdges = -1, tunnelFlat;
-    private int roomsDone;
+    private int roomsDone, failStreak;
     private final java.util.List<String> roomLog = new java.util.ArrayList<>();
     private final java.util.Set<Long> cellsDone = new java.util.HashSet<>();
 
@@ -489,9 +489,13 @@ public final class MazeTest implements AbstractGameEventListener {
         roomLog.add(entry);
         if (done != null) cellsDone.add(((long) done.cellX << 32) ^ (done.cellZ & 0xffffffffL));
         say("ROOM-RESULT " + roomsDone + "/" + ROOMS_CAP + " " + entry + " ticks=" + ticks);
-        if (state == 5 && (FOREVER || roomsDone < ROOMS) && done != null && nextRoom(mc, done)) return;
+        // Ostinato: run90. Forever mode keeps expanding past one failed room (2 cells short of 133 ended the run before the
+        // walk to room 2 was ever exercised). The FAIL stays in ROOM-RESULT/roomLog; two failed rooms in a row still stop.
+        failStreak = state == 5 ? 0 : failStreak + 1;
+        boolean go = state == 5 || (FOREVER && state == 6 && failStreak < 2);
+        if (go && (FOREVER || roomsDone < ROOMS) && done != null && nextRoom(mc, done)) return;
         String summary = " rooms=" + roomsDone + "/" + ROOMS_CAP + " themes=" + roomLog.stream().map(r -> r.split("@")[0]).distinct().toList() + " " + roomLog;
-        finish(mc, (state == 5 && !FOREVER && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : "FAIL verify") + (ROOMS != 1 ? summary : ""));
+        finish(mc, (state == 5 && !FOREVER && roomsDone >= ROOMS ? "PASS" : state == 5 ? "FAIL expand" : failStreak >= 2 ? "FAIL verify x2" : "FAIL verify") + (ROOMS != 1 ? summary : ""));
     }
 
     /** Ostinato: expand mode. Moves the player to the surface over the next cell and restarts the room loop there. */
