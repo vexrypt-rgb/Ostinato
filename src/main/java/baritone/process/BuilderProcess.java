@@ -452,21 +452,58 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
 
     private boolean shafting;
 
+    // Ostinato: run107. Run106 room 6 sat 10 min at -249,117,-279 in its own 1-wide entry hole: toBreak flickered between
+    // an interior block "reachable" only through the hole (the aim swung between the hole's sides, never clicked) and a
+    // path whose ascend into the hole never moved. Every found target reset stallTicks, so the breakers below never ran.
+    // Progress is the feet moving or the incorrect count dropping; without it for NO_PROGRESS_TICKS the flickering target
+    // is dropped and the breakers run as if nothing were reachable.
+    private static final int NO_PROGRESS_TICKS = 300;
+    private int noProgressTicks;
+    private int progressIncorrect = -1;
+    private BetterBlockPos progressFeet;
+    /** Targets the watchdog dropped from these feet; skipped until the feet move, so the flicker does not come back. */
+    private final Set<BetterBlockPos> droppedTargets = new HashSet<>();
+    private BetterBlockPos droppedFeet;
+
     private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayerWithStall(BuilderCalculationContext bcc) {
         digUnderFeet = false;
         shafting = false;
-        Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
         BetterBlockPos feet = ctx.playerFeet();
+        if (!feet.equals(droppedFeet)) {
+            droppedTargets.clear();
+            droppedFeet = feet;
+        }
+        Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
+        int incorrect = incorrectPositions == null ? -1 : incorrectPositions.size();
+        if (!feet.equals(progressFeet) || incorrect < progressIncorrect) {
+            noProgressTicks = 0;
+            progressFeet = feet;
+        } else {
+            noProgressTicks++;
+        }
+        progressIncorrect = incorrect;
+        boolean noProgress = noProgressTicks > NO_PROGRESS_TICKS;
+        if (noProgress && r.isPresent()) {
+            if (noProgressTicks == NO_PROGRESS_TICKS + 1 || noProgressTicks % 200 == 0) {
+                System.out.println("MAZETEST dig stall breaker: no progress for " + noProgressTicks + " ticks, dropping " + r.get().first() + " feet=" + feet + " incorrect=" + incorrect);
+            }
+            droppedTargets.add(r.get().first());
+            r = Optional.empty();
+            stallFeet = feet;
+            stallTicks = Math.max(stallTicks, 2 * STALL_TICKS);
+        }
         if (r.isPresent() || !feet.equals(stallFeet)) {
             stallTicks = 0;
             stallFeet = feet;
         } else {
             stallTicks++;
-            if (stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
+            if (stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value && !noProgress) {
                 digUnderFeet = true;
                 r = toBreakNearPlayer(bcc);
                 digUnderFeet = false;
                 if (r.isPresent() && (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0)) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
+            }
+            if (stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
                 if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
                     // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
                     // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
@@ -563,6 +600,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                     BlockState curr = bcc.bsi.get0(x, y, z);
                     if (!(curr.getBlock() instanceof AirBlock) && !(curr.getBlock() == Blocks.WATER || curr.getBlock() == Blocks.LAVA) && !valid(curr, desired, false)) {
                         BetterBlockPos pos = new BetterBlockPos(x, y, z);
+                        if (droppedTargets.contains(pos)) continue; // Ostinato: run107, the watchdog gave up on it from here
                         Optional<Rotation> rot = RotationUtils.reachable(ctx, pos, ctx.playerController().getBlockReachDistance());
                         if (rot.isPresent()) {
                             return Optional.of(new Pair<>(pos, rot.get()));

@@ -29,6 +29,18 @@ public interface IMazeFurnisher {
      */
     boolean furnish(MazeFurnishJob job);
 
+    /**
+     * Ostinato: run107. True while a job this furnisher took is still being worked on. {@code #maze.backrooms.connected}
+     * digs the next segment only after this goes false.
+     */
+    default boolean busy() {
+        return false;
+    }
+
+    /** Ostinato: run107. Drops the job in hand, if any (a furnish that ran past its time limit). */
+    default void cancel() {
+    }
+
     default String name() {
         return getClass().getSimpleName();
     }

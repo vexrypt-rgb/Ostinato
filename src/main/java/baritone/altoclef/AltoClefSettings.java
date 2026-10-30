@@ -74,6 +74,23 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
         }
     }
 
+    // Ostinato: run107. TenorClef's BotBehaviour clears and refills _breakAvoiders on every state change, so a predicate
+    // Ostinato put there would vanish on the next task push. #maze.backrooms.connected keeps the finished complex whole
+    // while the builder digs the next segment through this slot instead; TenorClef never touches it.
+    public interface CellGuard {
+        boolean test(int x, int y, int z);
+    }
+
+    private volatile CellGuard ostinatoGuard;
+
+    public void setOstinatoGuard(CellGuard guard) {
+        ostinatoGuard = guard;
+    }
+
+    public CellGuard ostinatoGuard() {
+        return ostinatoGuard;
+    }
+
     public void configurePlaceBucketButDontFall(boolean allow) {
         synchronized (propertiesMutex) {
             _dontPlaceBucketButStillFall = allow;
@@ -104,6 +121,8 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
     // The x,y,z forms are asked per block by the pathfinder: with nothing registered they answer without a BlockPos.
 
     public boolean shouldAvoidBreaking(int x, int y, int z) {
+        CellGuard guard = ostinatoGuard;
+        if (guard != null && guard.test(x, y, z)) return true;
         synchronized (breakMutex) {
             if (_blocksToAvoidBreaking.isEmpty() && _breakAvoiders.isEmpty()) return false;
             return shouldAvoidBreaking(new BlockPos(x, y, z));
@@ -111,6 +130,8 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
     }
 
     public boolean shouldAvoidBreaking(BlockPos pos) {
+        CellGuard guard = ostinatoGuard;
+        if (guard != null && guard.test(pos.getX(), pos.getY(), pos.getZ())) return true;
         synchronized (breakMutex) {
             if (_blocksToAvoidBreaking.contains(pos))
                 return true;
