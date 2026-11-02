@@ -1032,6 +1032,8 @@ public final class MazeProcess extends BaritoneProcessHelper {
     private Drive drive = Drive.OFF;
     private int driveTicks, holdTicks, failures, furnishTries, rechecks, segmentsDone;
     private boolean sawBusy;
+    /** Ostinato: 2026-10-30. Ticks the furnisher has been unable to answer {@code busy()} during this drive. */
+    private int busyUnknownTicks;
     private int lastDriveTick = Integer.MIN_VALUE;
     private ConnectedPlan.Segment startedSegment;
     private volatile MazeFurnishJob lastJob;
@@ -1143,12 +1145,28 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 drive = Drive.FURNISH;
                 driveTicks = 0;
                 sawBusy = false;
+                busyUnknownTicks = 0;
             }
             case FURNISH -> {
-                boolean busy = furnisherBusy();
-                if (busy) sawBusy = true;
+                Boolean busy = furnisherBusy();
                 boolean timedOut = driveTicks > FURNISH_LIMIT;
-                if (!timedOut && (busy || !sawBusy && driveTicks < 200)) return;
+                if (busy == null) {
+                    busyUnknownTicks++;
+                } else {
+                    busyUnknownTicks = 0;
+                    if (busy) sawBusy = true;
+                }
+                if (!timedOut) {
+                    // Ostinato: 2026-10-30. Three states, not two.
+                    //   TRUE  -> the job is still in hand, wait.
+                    //   FALSE -> idle. Wait only for the first 10 s, so a just-started furnisher is not raced.
+                    //   null  -> it cannot answer. Wait the same 10 s grace, measured from when it stopped answering.
+                    // The old code folded null into FALSE, and `busy || !sawBusy && driveTicks < 200` is false once
+                    // sawBusy has been set by any earlier successful call, so an unreadable furnisher started the next
+                    // segment's dig immediately while the job was still being worked on.
+                    if (Boolean.TRUE.equals(busy)) return;
+                    if (busy == null ? busyUnknownTicks < 200 : (!sawBusy && driveTicks < 200)) return;
+                }
                 if (timedOut) cancelFurnisher();
                 segmentsDone++;
                 failures = 0;
@@ -1178,13 +1196,25 @@ public final class MazeProcess extends BaritoneProcessHelper {
         });
     }
 
-    private static boolean furnisherBusy() {
+    /**
+     * The furnisher's busy state: {@code TRUE}/{@code FALSE}, or {@code null} when it cannot answer at all.
+     *
+     * <p>Ostinato: 2026-10-30. {@code null} is a real answer, not a failure. A furnisher built against an
+     * {@code IMazeFurnisher} without {@code busy()} inherits the {@code default { return false; }} and reports "idle"
+     * forever, which is indistinguishable from a finished job; a reflective proxy whose handler has no {@code busy}
+     * case throws from the call instead. Both mean "unknown", and the caller applies a bounded grace to them. Returning
+     * {@code false} here conflated "finished" with "cannot tell", which is the direction that starts the next dig early.
+     *
+     * <p>{@link LinkageError} is caught as well as {@link RuntimeException}: a version-mismatched proxy raises
+     * {@link AbstractMethodError}, which is an {@code Error} and used to escape this method and abort the whole tick.
+     */
+    private static Boolean furnisherBusy() {
         IMazeFurnisher f = MazeFurnishers.get();
-        if (f == null) return false;
+        if (f == null) return Boolean.FALSE;
         try {
-            return f.busy();
-        } catch (RuntimeException e) {
-            return false; // a furnisher older than busy(): fall back to the 10 s grace
+            return f.busy() ? Boolean.TRUE : Boolean.FALSE;
+        } catch (RuntimeException | LinkageError e) {
+            return null;
         }
     }
 
