@@ -21,6 +21,7 @@ import baritone.api.maze.MazeFurnishJob.Step;
 import baritone.api.maze.MazeFurnishJob.StepKind;
 import baritone.maze.BlockProbe.BlockKind;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -49,6 +50,13 @@ public final class ConnectedPlan {
     public static final int ROOM = 7;
     /** Floor difference one tunnel may climb: 10 columns door to door, 1 per column, a landing at each end. */
     public static final int MAX_RISE = 8;
+    /**
+     * Ostinato: run112. How many grid steps past a room the ring search will still place the next one. A blocked
+     * neighbour is crossed by a longer corridor instead of ending the expand.
+     */
+    public static final int MAX_SPAN = 4;
+    /** Air pocket larger than this is a cave, not a prior room. Biggest room interior is well under it. */
+    private static final int POCKET_CAP = 2500;
     /** Ostinato: 2026-11-02. Tallest room box of any {@link RoomVariant}, for the world-height clamps. */
     public static final int MAX_HEIGHT = 9;
     public static final int EAST = 0, SOUTH = 1, WEST = 2, NORTH = 3;
@@ -272,6 +280,35 @@ public final class ConnectedPlan {
             return Set.copyOf(failed);
         }
 
+        /**
+         * The room {@code r}'s door in {@code dir} opens onto: the next room that way, up to {@link #MAX_SPAN} cells,
+         * that opens back. A room in between that does not face this way breaks the link.
+         */
+        public Room linked(Room r, int dir) {
+            if (r == null || !r.door(dir)) return null;
+            for (int s = 1; s <= MAX_SPAN; s++) {
+                Room n = room(r.gx + DIR[dir][0] * s, r.gz + DIR[dir][1] * s);
+                if (n == null) continue;
+                return n.door(opposite(dir)) ? n : null;
+            }
+            return null;
+        }
+
+        /** True when a corridor already runs through this grid cell, so it is not a place for another room. */
+        public boolean tunnelCrosses(int gx, int gz) {
+            for (Room r : rooms.values()) {
+                for (int d = EAST; d <= SOUTH; d++) {
+                    Room n = linked(r, d);
+                    if (n == null) continue;
+                    int steps = d == EAST ? n.gx - r.gx : n.gz - r.gz;
+                    for (int s = 1; s < steps; s++) {
+                        if (r.gx + DIR[d][0] * s == gx && r.gz + DIR[d][1] * s == gz) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         public int originX(int gx) {
             return anchorX + gx * PITCH;
         }
@@ -327,7 +364,8 @@ public final class ConnectedPlan {
             Set<Long> out = new LinkedHashSet<>();
             // Ostinato: 2026-11-02. Door wall to door wall of the two variants; the lane is the cells' shared column 3.
             int wallA = dir == EAST ? boxX(a) + a.variant.sizeX - 1 : boxZ(a) + a.variant.sizeZ - 1;
-            int run = runBetween(a.variant, b.variant, dir); // door column of a (t = 0) to door column of b (t = run)
+            int span = Math.max(1, dir == EAST ? b.gx - a.gx : b.gz - a.gz); // Ostinato: run112, rooms more than one cell apart
+            int run = runBetween(a.variant, b.variant, dir, span); // door column of a (t = 0) to door column of b (t = run)
             int feetA = a.originY + 2, feetB = b.originY + 2;
             int rise = feetB - feetA, up = Math.abs(rise), lo = Math.min(feetA, feetB);
             int ax = originX(a.gx), az = originZ(a.gz);
@@ -351,8 +389,8 @@ public final class ConnectedPlan {
             for (Room r : rooms.values()) {
                 for (int d = EAST; d <= SOUTH; d++) {
                     if (!r.door(d)) continue;
-                    Room n = room(r.gx + DIR[d][0], r.gz + DIR[d][1]);
-                    if (n != null && n.door(opposite(d))) out.add(tunnelAir(r, n, d));
+                    Room n = linked(r, d);
+                    if (n != null) out.add(tunnelAir(r, n, d));
                 }
             }
             return out;
@@ -378,18 +416,39 @@ public final class ConnectedPlan {
         }
     }
 
-    /** Ostinato: 2026-11-02. Columns from {@code a}'s door wall to {@code b}'s, {@code b} toward {@code dir} (EAST or SOUTH). */
+    /** Ostinato: 2026-11-02. Columns from {@code a}'s door wall to {@code b}'s, {@code b} one cell toward {@code dir} (EAST or SOUTH). */
     static int runBetween(RoomVariant a, RoomVariant b, int dir) {
-        return dir == EAST ? PITCH + b.offX - a.offX - a.sizeX + 1 : PITCH + b.offZ - a.offZ - a.sizeZ + 1;
+        return runBetween(a, b, dir, 1);
+    }
+
+    /** Same, when {@code b} sits {@code span} cells toward {@code dir}. Span 1 is the adjacent tunnel. */
+    static int runBetween(RoomVariant a, RoomVariant b, int dir, int span) {
+        int pitch = PITCH * Math.max(1, span);
+        return dir == EAST ? pitch + b.offX - a.offX - a.sizeX + 1 : pitch + b.offZ - a.offZ - a.sizeZ + 1;
+    }
+
+    /** Door-to-door columns, swapping the pair so {@code dir} is read as EAST or SOUTH. */
+    static int runFor(RoomVariant parent, RoomVariant child, int dir, int span) {
+        return dir == WEST || dir == NORTH ? runBetween(child, parent, opposite(dir), span) : runBetween(parent, child, dir, span);
     }
 
     /**
      * Ostinato: 2026-11-02. Floor difference the tunnel between two variants can climb: one per column with a landing at
      * each end, so two big rooms side by side (a short tunnel) stay nearly level. {@code dir} points parent to child.
+     * Span 1 stays inside {@link #MAX_RISE}. A longer corridor (run112) may climb the whole stair run, past that cap.
      */
     public static int maxRise(RoomVariant parent, RoomVariant child, int dir) {
-        int run = dir == EAST || dir == SOUTH ? runBetween(parent, child, dir) : runBetween(child, parent, opposite(dir));
-        return Math.max(0, Math.min(MAX_RISE, run - 2));
+        return maxRise(parent, child, dir, 1);
+    }
+
+    public static int maxRise(RoomVariant parent, RoomVariant child, int dir, int span) {
+        int climb = Math.max(0, runFor(parent, child, dir, span) - 2);
+        return span <= 1 ? Math.min(MAX_RISE, climb) : climb;
+    }
+
+    /** Stair limit with the cap off, so a short adjacent tunnel can still step a little past {@link #MAX_RISE}. */
+    static int stretchRise(RoomVariant parent, RoomVariant child, int dir, int span) {
+        return Math.max(0, runFor(parent, child, dir, Math.max(1, span)) - 2);
     }
 
     // ---- one new room and its tunnel ------------------------------------------------------------------------------
@@ -589,7 +648,13 @@ public final class ConnectedPlan {
     }
 
     public static Segment join(Complex before, Set<Long> oldAir, Room parent, int dir, int originY) {
-        return new Segment(before, oldAir, parent, dir, parent.gx + DIR[dir][0], parent.gz + DIR[dir][1], originY);
+        return join(before, oldAir, parent, dir, originY, 1);
+    }
+
+    /** Joins {@code parent} to the room {@code span} cells toward {@code dir}. Span 1 is the neighbour. */
+    public static Segment join(Complex before, Set<Long> oldAir, Room parent, int dir, int originY, int span) {
+        int s = Math.max(1, span);
+        return new Segment(before, oldAir, parent, dir, parent.gx + DIR[dir][0] * s, parent.gz + DIR[dir][1] * s, originY);
     }
 
     /**
@@ -779,8 +844,21 @@ public final class ConnectedPlan {
 
     // ---- choosing the next room ----------------------------------------------------------------------------------
 
-    /** A room the dry run sealed: build {@code gx, gz} at {@code originY}, joined to its neighbour toward {@code -dir}. */
-    public record Choice(int gx, int gz, int originY, int parentDir, int tried, String why) {}
+    /**
+     * A room the dry run can build: {@code gx, gz} at {@code originY}, joined toward {@code -parentDir}.
+     * {@code span} is 1 for the neighbour, or more when the corridor crosses blocked cells to a farther one.
+     * {@code why} names the cells that did not seal, each with its first breach and the depth window.
+     */
+    public record Choice(int gx, int gz, int originY, int parentDir, int tried, String why, int span) {
+        public Choice {
+            if (span < 1) span = 1;
+            if (why == null) why = "";
+        }
+
+        public Choice(int gx, int gz, int originY, int parentDir, int tried, String why) {
+            this(gx, gz, originY, parentDir, tried, why, 1);
+        }
+    }
 
     /** Origin Y for a room under {@code surfaceY}: the backrooms rule (16 under the ground), clamped to the world. */
     public static int preferredY(int surfaceY, int minY, int maxY) {
@@ -825,67 +903,277 @@ public final class ConnectedPlan {
     /**
      * Ostinato: the next room. Free neighbours of the newest room first (a winding path, short walks between digs), then
      * of older rooms. Each candidate's depth starts at the backrooms depth under its own ground and is kept within
-     * {@link #MAX_RISE} of its parent, so the joining tunnel can climb it. {@code surface} gives the ground height.
+     * what the joining tunnel can climb. {@code surface} gives the ground height.
      * A neighbour that seals at no fully loaded depth is marked failed in {@code c}. Ostinato: run111. Those marks used
      * to stick, so the next call tried nothing and reported none free. When this call finds no seal, the older marks
      * are dropped and the search runs once more, which reaches the neighbours of earlier rooms. A breach that includes
      * an unloaded cell is not a failure.
+     * <p>
+     * Ostinato: run112. A breach that is prior-run carved air or our own structure is joined (the seal pass closes it)
+     * or left for a cleaner depth. When every immediate neighbour still fails, the search walks a widening ring,
+     * span 2 through {@link #MAX_SPAN}: a longer corridor through the blocked cell, with a stair rise past
+     * {@link #MAX_RISE}, until a sealed room is found. Forever-expand does not stop on the four adjacent cells.
      */
     public static Choice next(Complex c, BlockProbe probe, IntBinaryOperator surface, int minY, int maxY, int maxTries) {
         Set<Long> before = new HashSet<>(c.failed);
-        Choice ch = search(c, probe, surface, minY, maxY, maxTries);
-        if (ch.parentDir() >= 0 || before.isEmpty()) return ch;
-        if (ch.tried() == 0) c.failed.clear(); // every neighbour was already marked; probe them again
-        else c.failed.removeAll(before); // keep this call's new marks, retry the older frontier
-        Choice again = search(c, probe, surface, minY, maxY, maxTries);
-        if (again.parentDir() >= 0) return again;
-        String why = (ch.why() + " " + again.why()).trim();
-        return new Choice(0, 0, 0, -1, ch.tried() + again.tried(), why);
+        Choice ch = search(c, probe, surface, minY, maxY, maxTries, 1, 1);
+        if (ch.parentDir() >= 0) return ch;
+        if (!before.isEmpty()) {
+            if (ch.tried() == 0) c.failed.clear(); // every neighbour was already marked; probe them again
+            else c.failed.removeAll(before); // keep this call's new marks, retry the older frontier
+            Choice again = search(c, probe, surface, minY, maxY, maxTries, 1, 1);
+            if (again.parentDir() >= 0) return again;
+            ch = new Choice(0, 0, 0, -1, ch.tried() + again.tried(), (ch.why() + " " + again.why()).trim(), 1);
+        }
+        // The adjacent ring is closed. Look further before giving up.
+        Choice far = search(c, probe, surface, minY, maxY, Math.max(maxTries, 4 * (MAX_SPAN - 1)), 2, MAX_SPAN);
+        if (far.parentDir() >= 0) {
+            return new Choice(far.gx(), far.gz(), far.originY(), far.parentDir(), ch.tried() + far.tried(),
+                    (ch.why() + " " + far.why()).trim(), far.span());
+        }
+        return new Choice(0, 0, 0, -1, ch.tried() + far.tried(), (ch.why() + " " + far.why()).trim(), 1);
     }
 
-    private static Choice search(Complex c, BlockProbe probe, IntBinaryOperator surface, int minY, int maxY, int maxTries) {
+    /**
+     * Rooms {@code minSpan}..{@code maxSpan} steps from a built room, newest parent first. Span 1 is the adjacent
+     * neighbour. A taken choice has {@code parentDir >= 0}.
+     */
+    private static Choice search(Complex c, BlockProbe probe, IntBinaryOperator surface, int minY, int maxY, int maxTries,
+                                 int minSpan, int maxSpan) {
         Set<Long> oldAir = c.air();
         List<Room> order = new ArrayList<>(c.rooms());
         java.util.Collections.reverse(order);
         StringBuilder why = new StringBuilder();
         int tried = 0;
-        for (Room parent : order) {
-            int start = (int) Long.remainderUnsigned(MazeSeed.mix(c.seed ^ SALT, parent.gx * 31 + tried, parent.gz), 4);
-            for (int i = 0; i < 4; i++) {
-                int dir = (start + i) & 3;
-                int gx = parent.gx + DIR[dir][0], gz = parent.gz + DIR[dir][1];
-                if (c.room(gx, gz) != null || c.failed(gx, gz)) continue;
-                if (tried >= maxTries) return new Choice(0, 0, 0, -1, tried, why.toString().trim());
-                tried++;
-                int pref = preferredY(surface.applyAsInt(c.originX(gx) + 3, c.originZ(gz) + 3), minY, maxY);
-                if (probe.get(c.originX(gx) + 3, pref, c.originZ(gz) + 3) == BlockKind.UNKNOWN) {
-                    why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
-                    continue; // not loaded yet: try again another time, never remembered as a failure
-                }
-                int rise = maxRise(parent.variant, variant(c.seed, gx, gz), dir); // Ostinato: 2026-11-02, per tunnel length
-                boolean unloaded = false;
-                boolean sealed = false;
-                int sealedY = pref;
-                for (int y : depths(pref, parent.originY - rise, parent.originY + rise, minY, maxY)) {
-                    Segment s = join(c, oldAir, parent, dir, y);
-                    List<Long> holes = breaches(s, probe, false);
-                    if (holes.isEmpty()) {
-                        sealed = true;
-                        sealedY = y;
-                        break;
+        for (int span = minSpan; span <= maxSpan; span++) {
+            for (Room parent : order) {
+                int start = (int) Long.remainderUnsigned(MazeSeed.mix(c.seed ^ SALT, parent.gx * 31 + span, parent.gz), 4);
+                for (int i = 0; i < 4; i++) {
+                    int dir = (start + i) & 3;
+                    int gx = parent.gx + DIR[dir][0] * span, gz = parent.gz + DIR[dir][1] * span;
+                    if (!corridorFree(c, parent, dir, span, gx, gz)) continue;
+                    if (tried >= maxTries) return new Choice(0, 0, 0, -1, tried, why.toString().trim(), span);
+                    tried++;
+                    int pref = preferredY(surface.applyAsInt(c.originX(gx) + 3, c.originZ(gz) + 3), minY, maxY);
+                    if (probe.get(c.originX(gx) + 3, pref, c.originZ(gz) + 3) == BlockKind.UNKNOWN) {
+                        why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
+                        continue; // not loaded yet: try again another time, never remembered as a failure
                     }
-                    if (unloadedBreach(probe, holes)) unloaded = true;
+                    RoomVariant child = variant(c.seed, gx, gz);
+                    List<Integer> ys = depthWindow(parent, child, dir, span, pref, minY, maxY);
+                    int[] window = depthSpan(ys);
+                    Integer clean = null, ours = null, cross = null;
+                    Long blocked = null;
+                    boolean unloaded = false;
+                    for (int y : ys) {
+                        Segment s = join(c, oldAir, parent, dir, y, span);
+                        List<Long> holes = breaches(s, probe, false);
+                        if (holes.isEmpty()) {
+                            clean = y;
+                            break; // nearest fully sealed depth
+                        }
+                        if (unloadedBreach(probe, holes)) {
+                            unloaded = true;
+                            continue;
+                        }
+                        long[] bad = new long[1];
+                        int fit = rate(probe, s, parent.gx, parent.gz, gx, gz, span, holes, bad);
+                        if (fit == FIT_OURS && ours == null) ours = y;
+                        else if (fit == FIT_CROSS && cross == null) cross = y;
+                        else if (fit == FIT_BLOCKED && blocked == null) blocked = bad[0];
+                    }
+                    if (clean != null) return new Choice(gx, gz, clean, dir, tried, why.toString().trim(), span);
+                    if (ours != null) return new Choice(gx, gz, ours, dir, tried, why.toString().trim(), span);
+                    if (cross != null) return new Choice(gx, gz, cross, dir, tried, why.toString().trim(), span);
+                    if (unloaded) {
+                        // A chunk edge is not proof. Still note a cave we did see at some other depth.
+                        if (blocked != null) logBreach(why, gx, gz, span, blocked, probe, window[0], window[1]);
+                        why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
+                        continue;
+                    }
+                    if (ys.isEmpty() || blocked == null) {
+                        why.append(' ').append(gx).append(',').append(gz).append("=no-seal depths=none");
+                        c.fail(gx, gz);
+                        continue;
+                    }
+                    c.fail(gx, gz); // water, lava or open caves at every depth the tunnel can climb to
+                    logBreach(why, gx, gz, span, blocked, probe, window[0], window[1]);
                 }
-                if (sealed) return new Choice(gx, gz, sealedY, dir, tried, why.toString().trim());
-                if (unloaded) {
-                    why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
-                    continue; // a chunk edge is not a cave; the cell stays free for the next dry run
-                }
-                c.fail(gx, gz); // water, lava or open caves at every depth the tunnel can climb to
-                why.append(' ').append(gx).append(',').append(gz).append("=no-seal");
             }
         }
-        return new Choice(0, 0, 0, -1, tried, why.toString().trim());
+        return new Choice(0, 0, 0, -1, tried, why.toString().trim(), minSpan);
+    }
+
+    /** No room, failure mark or existing corridor occupies the cell, and nothing stands in the straight line to it. */
+    private static boolean corridorFree(Complex c, Room parent, int dir, int span, int gx, int gz) {
+        if (c.room(gx, gz) != null || c.failed(gx, gz) || c.tunnelCrosses(gx, gz)) return false;
+        for (int s = 1; s < span; s++) {
+            int ix = parent.gx + DIR[dir][0] * s, iz = parent.gz + DIR[dir][1] * s;
+            if (c.room(ix, iz) != null || c.tunnelCrosses(ix, iz)) return false;
+        }
+        return true;
+    }
+
+    /** Depths the tunnel can stair to: the capped window first, then anything {@link #stretchRise} adds past it. */
+    private static List<Integer> depthWindow(Room parent, RoomVariant child, int dir, int span, int pref, int minY, int maxY) {
+        int near = maxRise(parent.variant, child, dir, span);
+        int far = stretchRise(parent.variant, child, dir, span);
+        List<Integer> ys = new ArrayList<>(depths(pref, parent.originY - near, parent.originY + near, minY, maxY));
+        if (far > near) {
+            for (int y : depths(pref, parent.originY - far, parent.originY + far, minY, maxY)) {
+                if (y < parent.originY - near || y > parent.originY + near) ys.add(y);
+            }
+        }
+        return ys;
+    }
+
+    private static int[] depthSpan(List<Integer> ys) {
+        if (ys.isEmpty()) return new int[]{0, 0};
+        int lo = ys.get(0), hi = ys.get(0);
+        for (int y : ys) {
+            lo = Math.min(lo, y);
+            hi = Math.max(hi, y);
+        }
+        return new int[]{lo, hi};
+    }
+
+    /** {@code gx,gz=no-seal [span=N] x,y,z:KIND depths=lo..hi} so a log can tell water from carved air. */
+    private static void logBreach(StringBuilder why, int gx, int gz, int span, long hole, BlockProbe probe, int lo, int hi) {
+        why.append(' ').append(gx).append(',').append(gz).append("=no-seal");
+        if (span > 1) why.append(" span=").append(span);
+        BlockKind kind = probe.get(x(hole), y(hole), z(hole));
+        why.append(' ').append(x(hole)).append(',').append(y(hole)).append(',').append(z(hole));
+        why.append(':').append(kind.name());
+        why.append(" depths=").append(lo).append("..").append(hi);
+    }
+
+    private static final int FIT_BLOCKED = 1, FIT_OURS = 2, FIT_CROSS = 3;
+
+    /**
+     * A loaded breach list. Ours: every destination hole is prior carved air or foreign structure, so it can be sealed.
+     * Cross: span &gt; 1 and the only holes are air in the cells the corridor passes through. Blocked: fluid, or a cave
+     * on the room itself. {@code bad[0]} is the first blocking cell.
+     */
+    private static int rate(BlockProbe probe, Segment s, int pgx, int pgz, int cgx, int cgz, int span, List<Long> holes, long[] bad) {
+        boolean ours = false, cross = false;
+        for (long h : holes) {
+            BlockKind kind = probe.get(x(h), y(h), z(h));
+            if (span > 1 && onCorridor(s.before, pgx, pgz, cgx, cgz, h) && kind != BlockKind.FLUID) {
+                cross = true; // air in the blocked cell the long corridor is allowed to cross and seal
+                continue;
+            }
+            if (kind == BlockKind.FLUID || !priorCarved(probe, s, h)) {
+                bad[0] = h;
+                return FIT_BLOCKED;
+            }
+            ours = true;
+        }
+        if (ours) return FIT_OURS;
+        if (cross) return FIT_CROSS;
+        bad[0] = holes.get(0);
+        return FIT_BLOCKED;
+    }
+
+    /** Grid cell of {@code h} sits strictly between the parent and the child, on the straight corridor. */
+    private static boolean onCorridor(Complex c, int pgx, int pgz, int cgx, int cgz, long h) {
+        int hx = Math.floorDiv(x(h) - c.anchorX, PITCH);
+        int hz = Math.floorDiv(z(h) - c.anchorZ, PITCH);
+        if (pgx == cgx) {
+            int lo = Math.min(pgz, cgz), hi = Math.max(pgz, cgz);
+            return hx == pgx && hz > lo && hz < hi;
+        }
+        if (pgz == cgz) {
+            int lo = Math.min(pgx, cgx), hi = Math.max(pgx, cgx);
+            return hz == pgz && hx > lo && hx < hi;
+        }
+        return false;
+    }
+
+    /**
+     * True when this breach is air we carved (a prior run, or our own structure) rather than a cave or water.
+     * Structure that belongs to the segment being planned does not count: that would make every neighbour of a
+     * furnished room look like ours.
+     */
+    private static boolean priorCarved(BlockProbe probe, Segment s, long hole) {
+        int hx = x(hole), hy = y(hole), hz = z(hole);
+        BlockKind kind = probe.get(hx, hy, hz);
+        if (kind == BlockKind.FLUID) return foreignStructure(probe, s, hx, hy, hz) || nearStructure(probe, s, hole);
+        if (kind != BlockKind.AIR) return false;
+        if (s.isAir(hole) || s.after.inBuild(hole)) return true;
+        if (foreignStructure(probe, s, hx, hy, hz) || nearStructure(probe, s, hole)) return true;
+        return roomShapedPocket(probe, s, hole);
+    }
+
+    /** A structure block that is not part of the complex already on the map. */
+    private static boolean foreignStructure(BlockProbe probe, Segment s, int x, int y, int z) {
+        long k = key(x, y, z);
+        if (s.planned(k) || s.oldAir.contains(k)) return false;
+        return probe.structure(x, y, z);
+    }
+
+    /** Structure within 10 blocks, ignoring the complex we are already building. Adjacent hits return first. */
+    private static boolean nearStructure(BlockProbe probe, Segment s, long hole) {
+        int x0 = x(hole), y0 = y(hole), z0 = z(hole);
+        for (int r = 1; r <= 10; r++) {
+            int yLo = Math.max(-4, -r), yHi = Math.min(4, r);
+            for (int dy = yLo; dy <= yHi; dy++) {
+                for (int dx = -r; dx <= r; dx++) {
+                    for (int dz = -r; dz <= r; dz++) {
+                        if (Math.max(Math.abs(dx), Math.max(Math.abs(dy), Math.abs(dz))) != r) continue;
+                        if (foreignStructure(probe, s, x0 + dx, y0 + dy, z0 + dz)) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A closed air pocket the size and shape of a room: not open to the sky or a cave system, and not a one-block
+     * gap. Planned cells are walls, so the flood stays in the world outside the complex.
+     */
+    private static boolean roomShapedPocket(BlockProbe probe, Segment s, long start) {
+        ArrayDeque<Long> q = new ArrayDeque<>();
+        Set<Long> seen = new HashSet<>();
+        q.add(start);
+        seen.add(start);
+        int minX = x(start), maxX = minX, minY = y(start), maxY = minY, minZ = z(start), maxZ = minZ;
+        while (!q.isEmpty()) {
+            if (seen.size() > POCKET_CAP) return false;
+            long k = q.poll();
+            int cx = x(k), cy = y(k), cz = z(k);
+            minX = Math.min(minX, cx);
+            maxX = Math.max(maxX, cx);
+            minY = Math.min(minY, cy);
+            maxY = Math.max(maxY, cy);
+            minZ = Math.min(minZ, cz);
+            maxZ = Math.max(maxZ, cz);
+            for (int[] f : FACES) {
+                long n = offset(k, f[0], f[1], f[2]);
+                if (seen.contains(n) || s.planned(n)) continue;
+                BlockKind kind = probe.get(x(n), y(n), z(n));
+                if (kind == BlockKind.AIR) {
+                    seen.add(n);
+                    q.add(n);
+                } else if (kind == BlockKind.FLUID || kind == BlockKind.UNKNOWN) {
+                    return false;
+                }
+            }
+        }
+        int dx = maxX - minX + 1, dy = maxY - minY + 1, dz = maxZ - minZ + 1;
+        if (seen.size() < 20 || dy > MAX_HEIGHT || dx > PITCH || dz > PITCH) return false;
+        return seen.size() * 2 >= dx * dy * dz;
+    }
+
+    /** True when the segment can be built: sealed, or only prior carved air / a corridor crossing a blocked cell. */
+    public static boolean buildable(Segment s, BlockProbe probe) {
+        List<Long> holes = breaches(s, probe, false);
+        if (holes.isEmpty()) return true;
+        if (unloadedBreach(probe, holes)) return false;
+        if (s.parent == null) return false;
+        int span = Math.abs(s.room.gx - s.parent.gx) + Math.abs(s.room.gz - s.parent.gz);
+        int fit = rate(probe, s, s.parent.gx, s.parent.gz, s.room.gx, s.room.gz, span, holes, new long[1]);
+        return fit == FIT_OURS || fit == FIT_CROSS;
     }
 
     /** True when a breach cell was not loaded. That depth is not proof the neighbour can never seal. */

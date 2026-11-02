@@ -37,8 +37,10 @@ public class ConnectedVariantTest {
         for (int i = 1; i < n; i++) {
             ConnectedPlan.Choice ch = ConnectedPlan.next(c, STONE, (x, z) -> 64, -64, 320, 64);
             assertTrue("no choice at room " + i + ": " + ch.why(), ch.parentDir() >= 0);
-            ConnectedPlan.Room parent = c.room(ch.gx() - ConnectedPlan.dx(ch.parentDir()), ch.gz() - ConnectedPlan.dz(ch.parentDir()));
-            ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), parent, ch.parentDir(), ch.originY());
+            int span = ch.span();
+            ConnectedPlan.Room parent = c.room(ch.gx() - ConnectedPlan.dx(ch.parentDir()) * span, ch.gz() - ConnectedPlan.dz(ch.parentDir()) * span);
+            assertNotNull(parent);
+            ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), parent, ch.parentDir(), ch.originY(), span);
             assertTrue(ConnectedPlan.breaches(s, STONE, false).isEmpty());
             rings.addAll(s.ring);
             c = s.after;
@@ -403,5 +405,143 @@ public class ConnectedVariantTest {
         assertEquals(0, c.failedCells().size());
         assertTrue(ch.why(), ch.why().contains("unloaded"));
         assertFalse(ch.why().contains("none"));
+    }
+
+    private static ConnectedPlan.Complex oneRoom() {
+        ConnectedPlan.First first = ConnectedPlan.firstRoom(0, 0, 0, 40, -64, 320, STONE, new ArrayList<>());
+        assertNotNull(first);
+        ConnectedPlan.Complex c = first.complex();
+        c.put(ConnectedPlan.first(c, 0, 0, first.originY()).room);
+        return c;
+    }
+
+    /** Air filling a neighbour pitch. {@code fluidWest} makes the west pitch fluid instead, so the log names both. */
+    private static BlockProbe neighbourFill(ConnectedPlan.Complex c, BlockKind fill, boolean fluidWest) {
+        ConnectedPlan.Room parent = c.rooms().get(0);
+        return (x, y, z) -> {
+            for (int dir = 0; dir < 4; dir++) {
+                int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                int x0 = c.originX(gx), z0 = c.originZ(gz);
+                if (x >= x0 && x < x0 + ConnectedPlan.PITCH && z >= z0 && z < z0 + ConnectedPlan.PITCH) {
+                    if (fluidWest && dir == ConnectedPlan.WEST) return BlockKind.FLUID;
+                    return fill;
+                }
+            }
+            return BlockKind.SOLID;
+        };
+    }
+
+    /**
+     * Ostinato: run112. Every adjacent pitch is open (one of them fluid). The log names the first breach and the depth
+     * window, and the next room is a farther cell reached by a corridor through the blocked neighbour.
+     */
+    @Test
+    public void breachNamesKindAndDepthAndCrossesToAFartherCell() {
+        ConnectedPlan.Complex c = oneRoom();
+        BlockProbe world = neighbourFill(c, BlockKind.AIR, true);
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, world, (x, z) -> 64, -64, 320, 12);
+        assertTrue(ch.why(), ch.parentDir() >= 0);
+        assertTrue("span " + ch.span() + " " + ch.why(), ch.span() >= 2);
+        assertTrue(ch.why(), ch.why().contains(":AIR"));
+        assertTrue(ch.why(), ch.why().contains(":FLUID"));
+        assertTrue(ch.why(), ch.why().matches("(?s).* -?\\d+,-?\\d+,-?\\d+:AIR depths=-?\\d+\\.\\.-?\\d+.*"));
+        assertTrue(ch.why(), ch.why().matches("(?s).* -?\\d+,-?\\d+,-?\\d+:FLUID depths=-?\\d+\\.\\.-?\\d+.*"));
+        ConnectedPlan.Room parent = c.room(ch.gx() - ConnectedPlan.dx(ch.parentDir()) * ch.span(),
+                ch.gz() - ConnectedPlan.dz(ch.parentDir()) * ch.span());
+        assertNotNull(parent);
+        assertEquals(ch.span(), Math.abs(ch.gx() - parent.gx()) + Math.abs(ch.gz() - parent.gz()));
+        // The west pitch is fluid all the way down, so the corridor must leave through some other door.
+        assertFalse(ch.gx() == parent.gx() - ch.span() && ch.gz() == parent.gz());
+        ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), parent, ch.parentDir(), ch.originY(), ch.span());
+        assertFalse(ConnectedPlan.breaches(s, world, false).isEmpty());
+        assertTrue(ConnectedPlan.buildable(s, world));
+        assertEquals(1, s.after.tunnels().size());
+        assertEquals(s.tunnel, new HashSet<>(s.after.tunnels().get(0)));
+        assertTrue(ConnectedPlan.maxRise(RoomVariant.SMALL_OFFICE, RoomVariant.SMALL_OFFICE, ConnectedPlan.EAST, 2) > ConnectedPlan.MAX_RISE);
+    }
+
+    /**
+     * Ostinato: run112. The neighbour pitches are carved air framed by our own blocks (a prior run in this world).
+     * That is joined in place instead of being a permanent no-seal.
+     */
+    @Test
+    public void priorCarvedAirIsJoinedInPlace() {
+        ConnectedPlan.Complex c = oneRoom();
+        ConnectedPlan.Room parent = c.rooms().get(0);
+        BlockProbe carved = new BlockProbe() {
+            @Override
+            public BlockKind get(int x, int y, int z) {
+                for (int dir = 0; dir < 4; dir++) {
+                    int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                    int x0 = c.originX(gx), z0 = c.originZ(gz);
+                    if (x < x0 || x >= x0 + ConnectedPlan.PITCH || z < z0 || z >= z0 + ConnectedPlan.PITCH) continue;
+                    boolean frame = x == x0 || x == x0 + ConnectedPlan.PITCH - 1 || z == z0 || z == z0 + ConnectedPlan.PITCH - 1;
+                    return frame ? BlockKind.SOLID : BlockKind.AIR;
+                }
+                return BlockKind.SOLID;
+            }
+
+            @Override
+            public boolean structure(int x, int y, int z) {
+                for (int dir = 0; dir < 4; dir++) {
+                    int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                    int x0 = c.originX(gx), z0 = c.originZ(gz);
+                    if (x < x0 || x >= x0 + ConnectedPlan.PITCH || z < z0 || z >= z0 + ConnectedPlan.PITCH) continue;
+                    return x == x0 || x == x0 + ConnectedPlan.PITCH - 1 || z == z0 || z == z0 + ConnectedPlan.PITCH - 1;
+                }
+                return false;
+            }
+        };
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, carved, (x, z) -> 64, -64, 320, 12);
+        assertTrue(ch.why(), ch.parentDir() >= 0);
+        assertEquals(ch.why(), 1, ch.span());
+        assertEquals(1, Math.abs(ch.gx() - parent.gx()) + Math.abs(ch.gz() - parent.gz()));
+        ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), parent, ch.parentDir(), ch.originY(), ch.span());
+        assertFalse("the carved room should still touch the shell", ConnectedPlan.breaches(s, carved, false).isEmpty());
+        assertTrue(ConnectedPlan.buildable(s, carved));
+    }
+
+    /**
+     * Ostinato: run112. Adjacent cells are open around every depth a one-cell tunnel can stair, and the cell beyond
+     * them is open in that same band. The longer corridor crosses the blocked neighbour and sets the new room past
+     * {@link ConnectedPlan#MAX_RISE}, where that farther cell is solid.
+     */
+    @Test
+    public void longerCorridorReachesPastMaxRise() {
+        ConnectedPlan.Complex c = oneRoom();
+        ConnectedPlan.Room parent = c.rooms().get(0);
+        int span1 = 0, span2 = Integer.MAX_VALUE;
+        for (int dir = 0; dir < 4; dir++) {
+            int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+            span1 = Math.max(span1, ConnectedPlan.stretchRise(parent.variant(), ConnectedPlan.variant(c.seed, gx, gz), dir, 1));
+            int fx = parent.gx() + ConnectedPlan.dx(dir) * 2, fz = parent.gz() + ConnectedPlan.dz(dir) * 2;
+            span2 = Math.min(span2, ConnectedPlan.stretchRise(parent.variant(), ConnectedPlan.variant(c.seed, fx, fz), dir, 2));
+        }
+        // Taller than a room, and past every adjacent stair, but still inside the two-cell stair.
+        int band = Math.max(span1, ConnectedPlan.MAX_HEIGHT) + 1;
+        assertTrue("span2 climb " + span2 + " band " + band, span2 > band);
+        int py = parent.originY();
+        BlockProbe banded = (x, y, z) -> {
+            int gx = Math.floorDiv(x - c.anchorX, ConnectedPlan.PITCH);
+            int gz = Math.floorDiv(z - c.anchorZ, ConnectedPlan.PITCH);
+            int manhattan = Math.abs(gx - parent.gx()) + Math.abs(gz - parent.gz());
+            if (manhattan == 1) return BlockKind.AIR; // blocked neighbour, every depth
+            if (manhattan == 2 && (gx == parent.gx() || gz == parent.gz())) {
+                if (Math.abs(y - py) <= band) return BlockKind.AIR;
+            }
+            return BlockKind.SOLID;
+        };
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, banded, (x, z) -> 64, -64, 320, 16);
+        assertTrue(ch.why(), ch.parentDir() >= 0);
+        assertTrue("span " + ch.span() + " " + ch.why(), ch.span() >= 2);
+        int capped = ConnectedPlan.maxRise(parent.variant(), ConnectedPlan.variant(c.seed, ch.gx(), ch.gz()), ch.parentDir(), 1);
+        assertTrue("rise " + (ch.originY() - py) + " cap " + capped + " " + ch.why(), Math.abs(ch.originY() - py) > capped);
+        assertTrue(ch.why(), ch.why().contains(":AIR"));
+        assertTrue(ch.why(), ch.why().contains("depths="));
+        ConnectedPlan.Room from = c.room(ch.gx() - ConnectedPlan.dx(ch.parentDir()) * ch.span(),
+                ch.gz() - ConnectedPlan.dz(ch.parentDir()) * ch.span());
+        ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), from, ch.parentDir(), ch.originY(), ch.span());
+        assertTrue(ch.why(), ConnectedPlan.buildable(s, banded));
+        assertTrue("room should sit past the cave band", Math.abs(s.room.originY() - py) > band);
     }
 }

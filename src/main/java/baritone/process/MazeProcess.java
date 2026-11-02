@@ -546,17 +546,19 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 level.getMinY(), level.getMaxY(), CONNECTED_TRIES);
     }
 
-    /** Chunk columns of every free neighbour, including ones already marked, so a retry sees the real blocks. */
+    /** Chunk columns of the ring the search can reach, including cells already marked, so a retry sees the real blocks. */
     private static void preloadFrontier(net.minecraft.server.level.ServerLevel level, ConnectedPlan.Complex c) {
         for (ConnectedPlan.Room parent : c.rooms()) {
             for (int dir = 0; dir < 4; dir++) {
-                int gx = parent.gx() + ConnectedPlan.dx(dir);
-                int gz = parent.gz() + ConnectedPlan.dz(dir);
-                if (c.room(gx, gz) != null) continue;
-                int x0 = c.originX(gx) - 2, x1 = c.originX(gx) + ConnectedPlan.PITCH + 2;
-                int z0 = c.originZ(gz) - 2, z1 = c.originZ(gz) + ConnectedPlan.PITCH + 2;
-                for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
-                    for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) level.getChunk(cx, cz);
+                for (int span = 1; span <= ConnectedPlan.MAX_SPAN; span++) {
+                    int gx = parent.gx() + ConnectedPlan.dx(dir) * span;
+                    int gz = parent.gz() + ConnectedPlan.dz(dir) * span;
+                    if (c.room(gx, gz) != null) break;
+                    int x0 = c.originX(gx) - 2, x1 = c.originX(gx) + ConnectedPlan.PITCH + 2;
+                    int z0 = c.originZ(gz) - 2, z1 = c.originZ(gz) + ConnectedPlan.PITCH + 2;
+                    for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
+                        for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) level.getChunk(cx, cz);
+                    }
                 }
             }
         }
@@ -705,13 +707,19 @@ public final class MazeProcess extends BaritoneProcessHelper {
             if (choice.parentDir() < 0) {
                 return new Planned(null, null, null, "No neighbour seals (" + choice.tried() + " tried):" + (choice.why().isEmpty() ? " none free" : " " + choice.why()));
             }
-            ConnectedPlan.Room parent = c.room(choice.gx() - ConnectedPlan.dx(choice.parentDir()), choice.gz() - ConnectedPlan.dz(choice.parentDir()));
+            int span = choice.span();
+            ConnectedPlan.Room parent = c.room(choice.gx() - ConnectedPlan.dx(choice.parentDir()) * span,
+                    choice.gz() - ConnectedPlan.dz(choice.parentDir()) * span);
             if (parent == null || c.room(choice.gx(), choice.gz()) != null) return new Planned(null, null, null, "Stale choice " + choice);
-            seg = ConnectedPlan.join(c, c.air(), parent, choice.parentDir(), choice.originY());
-            if (forced != null && !ConnectedPlan.breaches(seg, probe, false).isEmpty()) {
+            seg = ConnectedPlan.join(c, c.air(), parent, choice.parentDir(), choice.originY(), span);
+            if (forced != null && !ConnectedPlan.breaches(seg, probe, false).isEmpty() && !ConnectedPlan.buildable(seg, probe)) {
                 return new Planned(null, null, null, "Room " + choice.gx() + "," + choice.gz() + " no longer seals");
             }
+            if (!choice.why().isEmpty()) {
+                System.out.println("MAZETEST CONNECTED frontier " + choice.gx() + "," + choice.gz() + " span=" + span + " " + choice.why());
+            }
             where = "joined " + dirName(choice.parentDir()) + " of " + parent.gx() + "," + parent.gz()
+                    + (span > 1 ? " span " + span : "")
                     + " (rise " + (choice.originY() - parent.originY()) + ")";
         }
         Entry entry = null;
