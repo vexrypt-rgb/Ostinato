@@ -1,0 +1,10 @@
+2026-10-30; final targeted verification on Java 25 / Minecraft 26.3
+baritone.pathing.kinematic.PlayerSimTest: tests=13 failures=0 errors=0 skipped=0
+baritone.pathing.physics.PhysicsPathfinderTest: tests=3 failures=0 errors=0 skipped=0
+baritone.physics.mc.PpeRegionTest: tests=5 failures=0 errors=0 skipped=0
+baritone.physics.PpeBench: tests=1 failures=0 errors=0 skipped=0
+baritone.physics.PpeCoreTest: tests=23 failures=0 errors=0 skipped=0
+baritone.physics.PpeSchedulerTest: tests=14 failures=0 errors=0 skipped=0
+baritone.physics.PpeVanillaTest: tests=1 failures=0 errors=0 skipped=0
+TOTAL tests=60 failures=0 errors=0 skipped=0
+PpeVanillaTest includes 600 deterministic collision comparisons against the actual Minecraft method.

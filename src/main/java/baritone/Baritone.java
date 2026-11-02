@@ -82,6 +82,7 @@ public class Baritone implements IBaritone {
     private final SwarmBehavior swarmBehavior;
     private final FreecamBehavior freecamBehavior;
     private final InputOverrideHandler inputOverrideHandler;
+    private final baritone.gracenote.GraceNote graceNote; // Ostinato: Grace Note emergency survival
 
     private final FollowProcess followProcess;
     private final MineProcess mineProcess;
@@ -100,6 +101,8 @@ public class Baritone implements IBaritone {
     private final PveProcess pveProcess;
     private final baritone.process.BastionProcess bastionProcess;
     private final baritone.health.HealthEstimator healthEstimator; // Ostinato: health estimator
+    private final baritone.threat.ThreatService threatAssessment;
+    private final baritone.physics.mc.PredictivePhysics predictivePhysics; // Ostinato: predictive physics engine
     private final baritone.spectate.SpectateLearner spectateLearner; // Ostinato: spectator learning
     private final baritone.spectate.ServerSpectate serverSpectate; // Ostinato: auto-spectate
 
@@ -128,6 +131,8 @@ public class Baritone implements IBaritone {
 
         {
             this.lookBehavior         = this.registerBehavior(LookBehavior::new);
+            // Ostinato: before the path executor, so what Grace Note detects it can hold on the same tick
+            this.graceNote            = this.registerBehavior(baritone.gracenote.GraceNote::new);
             this.pathingBehavior      = this.registerBehavior(PathingBehavior::new);
             this.inventoryBehavior    = this.registerBehavior(InventoryBehavior::new);
             this.inputOverrideHandler = this.registerBehavior(InputOverrideHandler::new);
@@ -135,12 +140,15 @@ public class Baritone implements IBaritone {
             this.swarmBehavior        = this.registerBehavior(SwarmBehavior::new);
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
             this.healthEstimator      = this.registerBehavior(baritone.health.HealthEstimator::new); // Ostinato
+            this.predictivePhysics    = this.registerBehavior(baritone.physics.mc.PredictivePhysics::new); // Ostinato
+            this.threatAssessment = this.registerBehavior(baritone.threat.ThreatService::new);
             this.spectateLearner      = this.registerBehavior(baritone.spectate.SpectateLearner::new); // Ostinato
             this.serverSpectate       = this.registerBehavior(baritone.spectate.ServerSpectate::new); // Ostinato: auto-spectate
         }
 
         this.pathingControlManager = new PathingControlManager(this);
         {
+            this.pathingControlManager.registerProcess(this.graceNote.process()); // Ostinato: holds other processes off during a maneuver
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
@@ -171,6 +179,7 @@ public class Baritone implements IBaritone {
         this.selectionManager = new SelectionManager(this);
         this.commandManager = new CommandManager(this);
         this.gameEventHandler.registerEventListener(new baritone.gui.OstinatoGui(this));
+        this.gameEventHandler.registerEventListener(this.graceNote.lateListener()); // Ostinato: last, so its press sees the tick as the keybinds will
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -198,6 +207,21 @@ public class Baritone implements IBaritone {
     @Override
     public baritone.health.HealthEstimator getHealthEstimator() {
         return this.healthEstimator;
+    }
+
+    @Override
+    public baritone.api.threat.IThreatAssessment getThreatAssessment() { return threatAssessment; }
+
+    // Ostinato: Grace Note
+    @Override
+    public baritone.gracenote.GraceNote getGraceNote() {
+        return this.graceNote;
+    }
+
+    // Ostinato: predictive physics engine
+    @Override
+    public baritone.physics.mc.PredictivePhysics getPredictivePhysics() {
+        return this.predictivePhysics;
     }
 
     // Ostinato: spectator learning

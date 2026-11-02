@@ -1,0 +1,22 @@
+2026-10-30; Windows; Intel i5-1145G7; Java 25; warmed headless synthetic workload
+BENCH baseline (empty op)                      n 20000 | us avg      0.1 p50      0.1 p95      0.1 p99      0.2 max    219.8 |      0.0 KB/op cpu      0.8 us/op | gc 0 (0 ms) | null
+BENCH fall 30 inline, cold                     n  5000 | us avg     62.2 p50     42.2 p95     73.7 p99    292.0 max  42203.2 |      4.1 KB/op cpu     40.6 us/op | gc 0 (0 ms) | OK EXACT h31
+BENCH fall 30 inline, repeated (cache)         n 20000 | us avg      3.9 p50      1.9 p95      2.4 p99      7.8 max   8016.0 |      2.4 KB/op cpu      2.3 us/op | gc 1 (4 ms) | OK EXACT h31
+BENCH sprint-jump 100 ticks SCREENING          n  3000 | us avg    191.3 p50    173.6 p95    347.8 p99    892.4 max   3639.7 |      3.0 KB/op cpu    156.3 us/op | gc 0 (0 ms) | OK EXACT h100
+BENCH sprint-jump 100 ticks STANDARD           n  3000 | us avg    183.7 p50    159.3 p95    300.2 p99    532.6 max  58358.0 |      4.2 KB/op cpu    140.6 us/op | gc 0 (0 ms) | OK EXACT h100
+BENCH sprint-jump 100 ticks HIGH               n  3000 | us avg    176.9 p50    172.0 p95    338.0 p99    620.5 max   3316.9 |      7.7 KB/op cpu    161.5 us/op | gc 0 (0 ms) | OK EXACT h100
+BENCH arrow 60 ticks                           n  5000 | us avg     25.5 p50     13.4 p95     21.5 p99     92.7 max  12701.9 |      3.5 KB/op cpu     12.5 us/op | gc 0 (0 ms) | PARTIAL EXACT h23
+BENCH primed TNT 80 + blast SCREENING          n  1000 | us avg     94.9 p50     73.1 p95    158.2 p99    293.4 max   1978.8 |      3.4 KB/op cpu     93.8 us/op | gc 0 (0 ms) | OK EXACT h80
+BENCH explosion 4 vs 50 targets SCREENING      n  1000 | us avg    293.6 p50    291.9 p95    544.3 p99    934.7 max   2820.0 |     12.4 KB/op cpu    281.3 us/op | gc 0 (0 ms) | OK EXACT h0
+BENCH primed TNT 80 + blast HIGH               n  1000 | us avg    622.1 p50    531.0 p95    919.1 p99   1269.1 max   2268.1 |     18.1 KB/op cpu    609.4 us/op | gc 0 (0 ms) | OK BOUNDED h80
+BENCH explosion 4 vs 50 targets HIGH           n  1000 | us avg    998.3 p50    884.9 p95   1685.1 p99   4071.3 max  11291.7 |     21.4 KB/op cpu    906.3 us/op | gc 0 (0 ms) | OK BOUNDED h0
+BENCH sprint-jump 100 among 200 boats          n  3000 | us avg    345.5 p50    199.9 p95    815.2 p99   3442.8 max  25993.4 |     13.6 KB/op cpu    177.1 us/op | gc 0 (0 ms) | OK APPROXIMATE h100
+BENCH 5 consumers x 3 same world               submit 15/tick us p50 59.6 p99 3165.8 max 10788.9
+BENCH   telemetry                              req 3000 (inline 0, async 3000) done 3 cancel 0 expired 0 rejected 0 degraded 0 | cache 2985 dedup 12 | sections captured 0 reused 0 invalidated 0 | queue 0 (max 3) worker 3.4% main 0.00ms | compute us p50 569 p95 866 p99 866 max 866 | wait us p50 43338 p95 43338 p99 43338 max 43338 | tick us p50 0 p95 0 p99 0 max 0 over 0
+BENCH 5 consumers x 3 changing world           submit 15/tick us p50 93.7 p99 5709.8 max 6591.9
+BENCH   telemetry                              req 3000 (inline 0, async 3000) done 600 cancel 0 expired 0 rejected 0 degraded 0 | cache 65 dedup 2335 | sections captured 0 reused 0 invalidated 0 | queue 0 (max 3) worker 3.3% main 0.00ms | compute us p50 76 p95 455 p99 2170 max 5008 | wait us p50 569 p95 8280 p99 12938 max 21059 | tick us p50 0 p95 0 p99 0 max 0 over 0
+BENCH idle worker (2 s)                        worker cpu 0.000 ms/s, alloc 0.0 KB/s
+BENCH sustained 16/tick + 1 inline             main us/tick p50 166.3 p95 1348.7 p99 3149.9 max 4907.6 | worker cpu -0.0% alloc -0.0 MB/s | gc 0 (0 ms)
+BENCH   telemetry                              req 3400 (inline 200, async 3200) done 3400 cancel 0 expired 0 rejected 0 degraded 0 | cache 0 dedup 0 | sections captured 0 reused 0 invalidated 0 | queue 0 (max 32) worker 4.8% main 0.00ms | compute us p50 39 p95 186 p99 2713 max 19433 | wait us p50 1389 p95 12938 p99 39485 max 67933 | tick us p50 0 p95 0 p99 0 max 0 over 0
+BENCH sustained 96/tick + 1 inline             main us/tick p50 249.1 p95 1389.0 p99 2048.6 max 3191.0 | worker cpu 5.5% alloc 2.0 MB/s | gc 1 (2 ms)
+BENCH   telemetry                              req 19400 (inline 200, async 19200) done 13361 cancel 0 expired 0 rejected 6039 degraded 2051 | cache 0 dedup 0 | sections captured 0 reused 0 invalidated 0 | queue 0 (max 64) worker 7.3% main 0.00ms | compute us p50 39 p95 149 p99 291 max 6285 | wait us p50 1736 p95 8280 p99 16173 max 58298 | tick us p50 0 p95 0 p99 0 max 0 over 0
