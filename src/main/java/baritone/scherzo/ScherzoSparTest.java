@@ -40,6 +40,32 @@ public final class ScherzoSparTest implements AbstractGameEventListener {
     private final int[] result = new int[3];
     private long ttkSum; private int ttkN; private double dmgSum; private long swingSum, hitSum;
 
+    /** Ostinato: -Dostinato.spartest.strafe=true: the zombie's goals are removed and it is scripted to circle the bot. */
+    private static final boolean STRAFE = Boolean.getBoolean("ostinato.spartest.strafe");
+    private int zTick, side = 1, flipAt = 30, swingCd;
+    private final java.util.Random script = new java.util.Random(71007); // same script sequence in both modes
+
+    /**
+     * Server thread. Faces the bot, holds ~2 blocks while strafing (side flips every 20-45 ticks), jumps every ~18
+     * ticks on the ground, and hits when within 2.8 blocks (player-like reach; 2.0 never landed through sword knockback) on a 20-tick cooldown. Driven once per client tick, so one
+     * step can land on 0 or 2 server ticks under load: a rough scripted mover, not a player.
+     */
+    private void strafe(Zombie z, net.minecraft.server.level.ServerPlayer p) {
+        zTick++;
+        if (zTick >= flipAt) { side = -side; flipAt = zTick + 20 + script.nextInt(26); }
+        double dx = p.getX() - z.getX(), dz = p.getZ() - z.getZ(), d = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) (Math.atan2(dz, dx) * 180 / Math.PI) - 90f;
+        z.setYRot(yaw); z.setYHeadRot(yaw); z.yBodyRot = yaw;
+        float forward = d > 2.6 ? 1f : d < 1.6 ? -0.6f : 0.15f; // Ostinato: close in after sword knockback
+        z.getMoveControl().strafe(forward, side * 0.9f);
+        if (z.onGround() && zTick % 18 == 0) z.getJumpControl().jump();
+        if (swingCd > 0) swingCd--;
+        if (d < 2.8 && Math.abs(p.getY() - z.getY()) < 1.5 && swingCd == 0) {
+            z.doHurtTarget((net.minecraft.server.level.ServerLevel) z.level(), p);
+            swingCd = 20;
+        }
+    }
+
     private ScherzoSparTest(Baritone b) { this.baritone = b; }
 
     public static void install(Baritone b) {
@@ -78,7 +104,7 @@ public final class ScherzoSparTest implements AbstractGameEventListener {
                 var z = server.overworld().getEntity(tid);
                 if (p != null) { pHp = p.getHealth(); pDead = p.isDeadOrDying(); }
                 if (tid != targetId) return; // a poll queued for the previous round's zombie
-                if (z instanceof Zombie zz) { zHp = zz.getHealth(); zDead = zz.isDeadOrDying(); } else zDead = true;
+                if (z instanceof Zombie zz) { zHp = zz.getHealth(); zDead = zz.isDeadOrDying(); if (STRAFE && p != null && !zDead) strafe(zz, p); } else zDead = true;
             });
             if (zHp < lastZHp - 0.01f) hits++;
             lastZHp = zHp;
@@ -90,8 +116,8 @@ public final class ScherzoSparTest implements AbstractGameEventListener {
             result[end.equals("WIN") ? 0 : end.equals("LOSS") ? 1 : 2]++;
             if (end.equals("WIN")) { ttkSum += ticks; ttkN++; }
             dmgSum += taken; swingSum += swings; hitSum += hits;
-            log(String.format(java.util.Locale.ROOT, "ROUND %d %s ticks=%d taken=%.1f hits=%d swings=%d zombieHp=%.1f mode=%s",
-                    round + 1, end, ticks, taken, hits, swings, Math.max(0, zHp), System.getProperty("ostinato.scherzo", "observe")));
+            log(String.format(java.util.Locale.ROOT, "ROUND %d %s ticks=%d taken=%.1f hits=%d swings=%d zombieHp=%.1f mode=%s%s",
+                    round + 1, end, ticks, taken, hits, swings, Math.max(0, zHp), System.getProperty("ostinato.scherzo", "observe"), STRAFE ? " opp=strafe" : " opp=chase"));
             if (++round >= rounds) {
                 log(String.format(java.util.Locale.ROOT, "SUMMARY mode=%s rounds=%d win=%d loss=%d timeout=%d meanTtkWin=%.1f meanTaken=%.2f hits=%d swings=%d",
                         System.getProperty("ostinato.scherzo", "observe"), rounds, result[0], result[1], result[2],
@@ -132,6 +158,7 @@ public final class ScherzoSparTest implements AbstractGameEventListener {
             zombie.setPersistenceRequired();
             zombie.setPos(0.5, 250, 6.5);
             level.addFreshEntity(zombie);
+            if (STRAFE) { zombie.removeFreeWill(); zTick = 0; side = 1; flipAt = 30; swingCd = 0; } // Ostinato: scripted mover, no goals
             zombie.setTarget(p);
             targetId = zombie.getId();
             zHp = 60;
