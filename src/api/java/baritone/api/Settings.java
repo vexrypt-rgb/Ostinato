@@ -2268,6 +2268,120 @@ public final class Settings {
     public final Setting<Boolean> kinematicTrace = new Setting<>(false);
 
     /**
+     * Presto: predictive checks on kinematic travel. Each driven tick the kinematic simulation's one-tick prediction is
+     * compared with what the player really did; when it keeps missing (or the server moves the player), long-jump
+     * stretches Baritone's parkour can take are handed to it and needless hops are skipped until the prediction holds
+     * again. Gap takeoffs are also flown in the predictive physics engine first (see prestoPhysicsCheck). Off by default.
+     */
+    public final Setting<Boolean> presto = new Setting<>(false);
+
+    /**
+     * With presto on: before a gap jump is pressed, fly the same takeoff in the predictive physics engine (current
+     * version's physics) and take a later takeoff, or Baritone's parkour, when it lands short, lower or hurt.
+     */
+    public final Setting<Boolean> prestoPhysicsCheck = new Setting<>(true);
+
+    /**
+     * With presto on: log Presto's trust changes and vetoes, and a PRESTO counter line to stdout every 600 driven ticks.
+     */
+    public final Setting<Boolean> prestoDebug = new Setting<>(false);
+
+    /**
+     * Legato: any-angle walking on flat ground. Runs of plain walking moves (no gaps, jumps, mining, placing, climbing,
+     * swimming or doors) are joined into straight lines at any angle where the whole player box, with a safety margin,
+     * fits along the line over solid, ordinary floor. Off by default.
+     */
+    public final Setting<Boolean> legato = new Setting<>(false);
+
+    /**
+     * With legato on: straighten the finished path (join walking runs into straight lines after the search).
+     */
+    public final Setting<Boolean> legatoSmoothing = new Setting<>(true);
+
+    /**
+     * With legato on: experimental any-angle search (Theta*) on flat walking moves, so the search itself finds
+     * straight lines. Falls back to the normal search everywhere else.
+     */
+    public final Setting<Boolean> legatoSearch = new Setting<>(false);
+
+    /**
+     * With legato on: log the lines Legato makes and refuses, and a LEGATO counter line when a path is made.
+     */
+    public final Setting<Boolean> legatoDebug = new Setting<>(false);
+
+    /**
+     * Experimental: let the kinematic travel driver steer 2-by-1 knight moves (MovementLine) as it does straight and
+     * diagonal walks, instead of handing each one to Baritone's own movement. Only lines whose whole rectangle is
+     * plain ground (full, ordinary floor; nothing in the way; no fluid, door, climbable or hazard). Off: unchanged.
+     */
+    public final Setting<Boolean> kinematicLine = new Setting<>(false);
+
+    /**
+     * Cadenza: task-aware positioning. Mining, opening a container and building pick the cell to stand in by where the
+     * block can actually be reached and seen from (the same pick ray the crosshair uses), with a safe floor, instead of
+     * walking into or right next to the block. The search weighs travel against what is left to do from each cell.
+     * Off: the old goals, unchanged.
+     */
+    public final Setting<Boolean> cadenza = new Setting<>(false);
+
+    /**
+     * With cadenza on: at most this many of the nearest targets get positioning goals per goal update; the rest keep
+     * their old goals.
+     */
+    public final Setting<Integer> cadenzaMaxTargets = new Setting<>(8);
+
+    /**
+     * With cadenza on: prefer cells that reach several targets at once (mine several ores, place several blocks from
+     * one spot). Order is unchanged: the process still does the reachable targets nearest first.
+     */
+    public final Setting<Boolean> cadenzaShortHorizon = new Setting<>(false);
+
+    /**
+     * With cadenza on: also position Builder placements. Off by default: the live A/B measured placement laps 1.14-1.30x
+     * slower than the stock goal (Cadenza does not model the yaw turn left after arrival).
+     */
+    public final Setting<Boolean> cadenzaBuilder = new Setting<>(false);
+
+    /**
+     * With cadenza on: charge the camera turn left after arriving (yaw and pitch from the arrival heading to the aim, in
+     * ticks at the aim processor's per-tick cap) when choosing where to stand, and act first on the reachable target
+     * that needs the least turn. Experimental, off by default.
+     */
+    public final Setting<Boolean> cadenzaTurnAware = new Setting<>(false);
+
+    /**
+     * With cadenza on: price a standing cell by the whole batch of supplied targets (everything reachable from it done
+     * there in one sweep, every other target charged a reposition and the walk to the nearest) instead of by its single
+     * best target. Mining and Builder placements may be done in any order. Implies cadenzaTurnAware. Experimental, off
+     * by default.
+     */
+    public final Setting<Boolean> cadenzaBatch = new Setting<>(false);
+
+    /**
+     * With cadenza on: log each positioning goal and why a target got no cell.
+     */
+    public final Setting<Boolean> cadenzaDebug = new Setting<>(false);
+
+    /**
+     * Maestro: plan with an action-aware search instead of the usual A*. Same moves and move costs, but the search also
+     * knows which way the bot is heading and charges for turning, so it prefers routes the bot can keep its sprint and
+     * line through. Falls back to the usual A* when it finds nothing. Off: the usual planner, unchanged.
+     */
+    public final Setting<Boolean> maestro = new Setting<>(false);
+
+    /**
+     * With maestro on: ticks charged for turning around (180 degrees); a turn of angle a costs this * 6 * (a/180)^2,
+     * so a right angle costs 1.5 ticks at 1.0 and going straight costs nothing.
+     */
+    public final Setting<Double> maestroTurnCost = new Setting<>(1.0);
+
+    /**
+     * With maestro on: the most search states (cell and heading) one search may create before it stops with its best
+     * partial path, as a timed-out search does. 0 means no cap.
+     */
+    public final Setting<Integer> maestroMaxStates = new Setting<>(1_500_000);
+
+    /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.
      * Codes: M01 kinematic stuck, M02 off path, M03 movement timeout, M04 movement failed.
      */

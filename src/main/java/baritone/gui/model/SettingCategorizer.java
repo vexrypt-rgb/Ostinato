@@ -58,7 +58,7 @@ public final class SettingCategorizer {
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
                 "travelStack", "simTravel",
                 "nativeAcceleration", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
-                "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
+                "allowNeos", "kinematicTrace", "presto", "prestoPhysicsCheck", "prestoDebug", "legato", "legatoSmoothing", "legatoSearch", "legatoDebug", "kinematicLine", "cadenza", "cadenzaMaxTargets", "cadenzaShortHorizon", "cadenzaBuilder", "cadenzaTurnAware", "cadenzaBatch", "cadenzaDebug", "maestro", "maestroTurnCost", "maestroMaxStates", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost", "fastMode", "fastModeMinHealth");
         put(m, PATHING, "seedPlanning", "seedPlanningSeed", "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival", "blocksToAvoidStandingOn");
