@@ -147,3 +147,44 @@ For TenorClef (Grok's side): five new theme ids reach `MazeFurnishJob.theme`; an
 default. New clad ids: diorite/polished_diorite/calcite, tuff, birch/spruce planks. No `water` step unless the flag
 is set. Rooms are larger: an 13x13 warehouse is roughly 3x the cladding of a classic room, so expect longer furnishes.
 Not done: farming room (needs water + tilling in the furnisher), interior props.
+
+## 2026-11-02: TenorClef survival palette (Grok Build, furnisher slice)
+
+No client launched. Jar not swapped. TenorClef `main` commit `761a9dd3952fa57883bb56219c99d51f98a8aa2b` (local, not pushed). Jar built by `:26.3:build` with tests (347 tests, 0 failures): `C:\Users\redfa\Documents\MinecraftDev\TenorClef-main\versions\26.3\build\libs\altoclef-26.3-0.27.0.jar`. Do not copy it into mods. The coordinator does the proof run. No Ostinato Java was edited in this slice.
+
+Claude's palettes should name ids from the list below. A step's `blockIds` are Minecraft path ids, best first; the furnisher gathers and places the first one it can obtain. Room size is the `airCells` box. Nothing in TenorClef assumes 7x7. Footprints from 5x5 through 13x5 and 11x11, clear height 4 to 6, are accepted. Log: `MAZETEST FURNISH room-bounds span=XxZ clear=H`.
+
+### Place these
+
+Whites, best first: `polished_diorite`, `diorite`, `calcite`. Polished diorite is a 2x2 craft from diorite the dig already finds. Calcite is real overworld stone but it generates in geodes, so list it after the diorite ids.
+
+Also: `polished_andesite`, `andesite`, `polished_granite`, `granite`, `tuff`, `cobblestone`, `stone`, `sandstone`, `dirt`, `sand`. `smooth_stone` smelts and is slow; do not clad a whole room with it.
+
+Wood: `oak_planks`, `spruce_planks`, `birch_planks`, `jungle_planks`, `acacia_planks`, `dark_oak_planks`, `mangrove_planks`, `cherry_planks`, `stripped_oak_log`, `stripped_spruce_log`, `stripped_birch_log`, `stripped_jungle_log`, `stripped_acacia_log`, `stripped_dark_oak_log`, `stripped_mangrove_log`, `stripped_cherry_log`, `barrel`, `chest`.
+
+Maintenance: `iron_bars`, `chain`, `lantern`, `lightning_rod`, `cut_copper`, `cut_copper_slab`, `cut_copper_stairs`. `copper_block` costs 9 ingots; use it as an accent, not a wall.
+
+Pool: `water`. The gather asks for one `water_bucket`. The bot places a source in each cell that is still dry, refilling the bucket, and treats flowing water as done.
+
+Farm: `farmland`, `wheat`, `sugar_cane`.
+
+Light: `torch`. Containers: `barrel`, `chest`.
+
+### Do not name these
+
+If a step lists them, they are dropped and `polished_diorite`, `diorite`, `calcite` are appended (calcite stays behind the diorite ids). Quartz is a real catalogue task and it forces the Nether. Prismarine and sea lanterns are monument loot. White concrete is a dye factory.
+
+`quartz`, `quartz_block`, `smooth_quartz`, `quartz_bricks`, `quartz_pillar`, `chiseled_quartz_block`, `quartz_slab`, `quartz_stairs`, `smooth_quartz_slab`, `smooth_quartz_stairs`, `white_concrete`, `white_concrete_powder`, `prismarine`, `prismarine_bricks`, `dark_prismarine`, `prismarine_slab`, `prismarine_stairs`, `prismarine_wall`, `sea_lantern`.
+
+`yellow_concrete` is not rewritten. It is not in the catalogue, so an older yellow-office list still falls through to terracotta or planks. Nether woods are not supported.
+
+### How to write the steps
+
+- `water`, `wheat`, and `sugar_cane` are LIGHT steps on the air cell. `farmland` is a LIGHT step on the soil cell.
+- Put water steps before sugar cane. Cane is planted by clicking the top of the dirt or sand under the air cell, and that soil needs water beside it.
+- Put farmland steps before wheat. A wheat step above dirt hoes, then plants `wheat_seeds`. A wheat step above stone does not place dirt; send a farmland step for that soil (stone gets dirt, then a hoe).
+- Clear height 6 is in reach. The click measures the nearest point on the block (vanilla 4.5) and the stand search goes 8 blocks down. The horizontal ring stays at ±4, which is reach, not room width.
+- A decorated pot can be placed as a block. Filling it is still unsupported.
+- Kit order is copper, then iron already in hand, then stone. A missing tool does not start an iron hunt. One copper-tool attempt per client session (3600 ticks), then stone (`MAZETEST FURNISH skip-copper-tool`). Copper armor was already first. A copper axe counts when stripping logs; with no axe held, stripping still crafts a wooden axe.
+
+`#maze.backrooms` and the Konami activation are unchanged. `rooms=0`, the swarm map format, the sealed shell, and tunnel connections are unchanged.

@@ -163,3 +163,4 @@ Fixes: Ostinato 539ec526 per-piece copper fallback; TenorClef cfa32701 bed exemp
 2026-10-29 19:18 run107 relaunched by Claude (first launch lost mode=connected to arg splitting; Ostinato 9d0e141c, TenorClef 983cf317). Claude owns it; do NOT launch another client.
 2026-10-29 19:27 Claude: backrooms work PAUSED by owner. run107 client stopped (pid 15264). No client running. Daemons 14180/12988 left alone.
 [2026-11-02] Claude (generator slice): room variants + 5 themes committed locally (e721f3016, f3ade7e60); MAZE ROOM log line added. No client launched; coordinator does the proof run.
+[2026-11-02] Grok Build (TenorClef furnisher): survival palette, variable room bounds, pool and farm placement. TenorClef 761a9dd3952fa57883bb56219c99d51f98a8aa2b local only, not pushed. Jar versions\26.3\build\libs\altoclef-26.3-0.27.0.jar NOT swapped. No client launched; coordinator does the proof run. Do NOT launch another client.
