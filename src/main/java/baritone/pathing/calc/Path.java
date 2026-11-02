@@ -25,7 +25,16 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Helper;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
+import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.Moves;
+import baritone.pathing.movement.movements.MovementDiagonal;
+import baritone.pathing.movement.movements.MovementLine;
+import baritone.pathing.movement.movements.MovementStraight;
+import baritone.pathing.movement.movements.MovementTraverse;
+import baritone.pathing.legato.LegatoFeasibility;
+import baritone.pathing.legato.LegatoSmoother;
+import baritone.pathing.legato.LegatoStats;
+import baritone.Baritone;
 import baritone.pathing.path.CutoffPath;
 import baritone.utils.pathing.PathBase;
 import com.google.common.collect.Lists;
@@ -56,9 +65,9 @@ class Path extends PathBase {
      * The blocks on the path. Guaranteed that path.get(0) equals start and
      * path.get(path.size()-1) equals end
      */
-    private final List<BetterBlockPos> path;
+    private List<BetterBlockPos> path;
 
-    private final List<Movement> movements;
+    private List<Movement> movements;
 
     private final List<PathNode> nodes;
 
@@ -117,7 +126,9 @@ class Path extends PathBase {
         }
         for (int i = 0; i < path.size() - 1; i++) {
             double cost = nodes.get(i + 1).cost - nodes.get(i).cost;
-            Movement move = runBackwards(path.get(i), path.get(i + 1), cost);
+            Movement move = nodes.get(i + 1).legato
+                    ? straight(path.get(i), path.get(i + 1), cost)
+                    : runBackwards(path.get(i), path.get(i + 1), cost);
             if (move == null) {
                 return true;
             } else {
@@ -125,6 +136,18 @@ class Path extends PathBase {
             }
         }
         return false;
+    }
+
+    /** Ostinato Legato: an any-angle search edge; null (path cut here) if the line no longer holds. */
+    private Movement straight(BetterBlockPos src, BetterBlockPos dest, double cost) {
+        Movement move = new MovementStraight(context.getBaritone(), src, dest);
+        double c = move.calculateCost(context);
+        if (c >= ActionCosts.COST_INF) {
+            Helper.HELPER.logDebug("Legato line became impossible during calculation " + src + " " + dest);
+            return null;
+        }
+        move.override(Math.min(c, cost));
+        return move;
     }
 
     private Movement runBackwards(BetterBlockPos src, BetterBlockPos dest, double cost) {
@@ -182,9 +205,80 @@ class Path extends PathBase {
             }
             return res;
         }
-        // more post processing here
+        if (context.legatoSmooth) {
+            smooth();
+        }
         sanityCheck();
         return this;
+    }
+
+    /**
+     * Ostinato Legato: replaces runs of plain flat walking moves with straight lines where the swept player box fits
+     * (see {@link LegatoSmoother}). Every other move is kept exactly; positions stay one more than the moves.
+     */
+    private void smooth() {
+        long t0 = System.nanoTime();
+        int n = movements.size();
+        if (n < 2) {
+            return;
+        }
+        boolean[] eligible = new boolean[n];
+        for (int i = 0; i < n; i++) {
+            Movement m = movements.get(i);
+            eligible[i] = (m instanceof MovementTraverse || m instanceof MovementDiagonal || m instanceof MovementLine
+                    || m instanceof MovementStraight) && m.getSrc().y == m.getDest().y && m.getCost() < ActionCosts.COST_INF
+                    && nothingToBreakOrPlace(m);
+        }
+        LegatoFeasibility.Result check = new LegatoFeasibility.Result();
+        List<BetterBlockPos> positions = path;
+        List<Movement> moves = movements;
+        LegatoSmoother.Plan plan = LegatoSmoother.smooth(new LegatoSmoother.Route() {
+            public int moves() { return n; }
+            public int x(int p) { return positions.get(p).x; }
+            public int y(int p) { return positions.get(p).y; }
+            public int z(int p) { return positions.get(p).z; }
+            public boolean eligible(int m) { return eligible[m]; }
+            public double cost(int m) { return moves.get(m).getCost(); }
+        }, (x0, y, z0, x1, z1) -> LegatoFeasibility.evaluate(context, x0, y, z0, x1, z1, check).cost);
+        if (plan.unchanged()) {
+            LegatoStats.smoothed(0, 0, System.nanoTime() - t0);
+            return;
+        }
+        List<BetterBlockPos> newPath = new ArrayList<>(plan.size);
+        List<Movement> newMoves = new ArrayList<>(plan.size - 1);
+        newPath.add(path.get(0));
+        for (int k = 1; k < plan.size; k++) {
+            int step = plan.move[k - 1];
+            if (step >= 0) {
+                newPath.add(path.get(step + 1));
+                newMoves.add(movements.get(step));
+                continue;
+            }
+            BetterBlockPos a = newPath.get(k - 1);
+            BetterBlockPos b = new BetterBlockPos(plan.x[k], plan.y[k], plan.z[k]);
+            MovementStraight line = new MovementStraight(context.getBaritone(), a, b);
+            line.override(line.calculateCost(context));
+            line.checkLoadedChunk(context);
+            newPath.add(b);
+            newMoves.add(line);
+            if (Baritone.settings().legatoDebug.value) {
+                Helper.HELPER.logDebug("Legato line " + a + " -> " + b);
+            }
+        }
+        LegatoStats.smoothed(plan.lines, plan.replaced, System.nanoTime() - t0);
+        path = newPath;
+        movements = newMoves;
+    }
+
+    /** A plain walk: nothing in the way to mine and solid ground at the end (no bridge block to place). Reads only. */
+    private boolean nothingToBreakOrPlace(Movement m) {
+        for (net.minecraft.core.BlockPos p : m.toBreakAll()) {
+            if (!MovementHelper.canWalkThrough(context.bsi, p.getX(), p.getY(), p.getZ())) {
+                return false;
+            }
+        }
+        BetterBlockPos d = m.getDest();
+        return MovementHelper.canWalkOn(context.bsi, d.x, d.y - 1, d.z);
     }
 
     @Override

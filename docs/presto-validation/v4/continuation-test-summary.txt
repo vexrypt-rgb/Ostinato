@@ -1,0 +1,14 @@
+204 suites {'tests': 1285, 'failures': 0, 'errors': 0, 'skipped': 15}
+{'name': 'baritone.bastion.DamageBudgetTest', 'tests': '5', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T14:58:45.809Z', 'hostname': '8___', 'time': '0.002'}
+{'name': 'baritone.behavior.SilentLookGateTest', 'tests': '3', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T14:58:45.856Z', 'hostname': '8___', 'time': '0.008'}
+{'name': 'baritone.pathing.kinematic.KinematicTurnTest', 'tests': '2', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T14:59:18.602Z', 'hostname': '8___', 'time': '0.001'}
+{'name': 'baritone.pathing.kinematic.PrestoBench', 'tests': '1', 'skipped': '1', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:23.160Z', 'hostname': '8___', 'time': '0.001'}
+{'name': 'baritone.pathing.kinematic.PrestoTest', 'tests': '32', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:23.165Z', 'hostname': '8___', 'time': '0.006'}
+{'name': 'baritone.pathing.kinematic.SimTravelAtGoalTest', 'tests': '5', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:23.199Z', 'hostname': '8___', 'time': '0.004'}
+{'name': 'baritone.pathing.kinematic.TakeoffSlewTest', 'tests': '3', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:23.203Z', 'hostname': '8___', 'time': '0.946'}
+{'name': 'baritone.pathing.movement.movements.ParkourFourGapTest', 'tests': '3', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:46.831Z', 'hostname': '8___', 'time': '0.003'}
+{'name': 'baritone.pathing.movement.WalkGateTest', 'tests': '2', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:46.416Z', 'hostname': '8___', 'time': '0.001'}
+{'name': 'baritone.pathing.physics.PhysicsTurnGateTest', 'tests': '3', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:46.898Z', 'hostname': '8___', 'time': '0.003'}
+{'name': 'baritone.physics.PpeBudgetTest', 'tests': '4', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:48.270Z', 'hostname': '8___', 'time': '0.237'}
+{'name': 'baritone.physics.PredictorWarmUpTest', 'tests': '3', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:48.774Z', 'hostname': '8___', 'time': '0.046'}
+{'name': 'baritone.physics.PrestoCrossModelTest', 'tests': '4', 'skipped': '0', 'failures': '0', 'errors': '0', 'timestamp': '2026-10-31T15:01:48.823Z', 'hostname': '8___', 'time': '0.02'}

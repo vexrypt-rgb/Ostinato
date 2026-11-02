@@ -279,6 +279,11 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         if (driven >= 0) {
             if (driven != pathPosition) {
+                for (int k = pathPosition; k < driven && k < path.movements().size(); k++) {
+                    if (path.movements().get(k) instanceof baritone.pathing.movement.movements.MovementStraight) {
+                        baritone.pathing.legato.LegatoStats.straightDone(); // Ostinato Legato: a straight driven to its end
+                    }
+                }
                 pathPosition = driven;
                 ticksOnCurrent = 0;
                 drivenOnCurrent = 0;
@@ -287,6 +292,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // Only the look-ahead movers: the others (mining, a long fall) hold a position for as long as the work takes.
                 Baritone.settings().movementFault.value.accept("M01", lastDriver + " held " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " for " + drivenOnCurrent + " ticks, handing back to Baritone");
                 PathViz.get().stuck(ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), "M01 " + lastDriver + " held a movement"); // Ostinato path viz
+                legatoFailed(movement);
                 drivenOnCurrent = 0;
                 driverRest = DRIVER_REST;
                 lastDriver = Driver.BARITONE;
@@ -338,6 +344,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             if (ticksAway > MAX_TICKS_AWAY) {
                 logDebug("Too far away from path for too long, cancelling path");
                 Baritone.settings().movementFault.value.accept("M02", "off path for too long at " + ctx.playerFeet());
+                legatoFailed(pathPosition < path.movements().size() ? path.movements().get(pathPosition) : null);
                 cancel();
                 return false;
             }
@@ -347,6 +354,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (possiblyOffPath(status, MAX_MAX_DIST_FROM_PATH)) { // ok, stop right away, we're way too far.
             logDebug("too far from path");
             Baritone.settings().movementFault.value.accept("M02", "too far from path at " + ctx.playerFeet());
+            legatoFailed(pathPosition < path.movements().size() ? path.movements().get(pathPosition) : null);
             cancel();
             return false;
         }
@@ -458,6 +466,9 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (movementStatus == SUCCESS) {
             CostCalibration.record(movement.calibrationKey(), currentMovementOriginalCostEstimate, ticksOnCurrent);
             //System.out.println("Movement done, next path");
+            if (movement instanceof baritone.pathing.movement.movements.MovementStraight) {
+                baritone.pathing.legato.LegatoStats.straightDone(); // Ostinato Legato: a straight walked to its end
+            }
             pathPosition++;
             onChangeInPathPosition();
             onTick();
@@ -475,11 +486,20 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // this is why we cache cost at the beginning, and don't recalculate for this comparison every tick
                 logDebug("This movement has taken too long (" + ticksOnCurrent + " ticks, expected " + currentMovementOriginalCostEstimate + ") " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + ". Cancelling.");
                 Baritone.settings().movementFault.value.accept("M03", movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " took " + ticksOnCurrent + " ticks");
+                legatoFailed(movement);
                 cancel();
                 return true;
             }
         }
         return canCancel; // movement is in progress, but if it reports cancellable, PathingBehavior is good to cut onto the next path
+    }
+
+    /** Ostinato Legato: a straight line that stalled, timed out or left the path is not planned again for a while. */
+    private void legatoFailed(IMovement movement) {
+        if (movement instanceof baritone.pathing.movement.movements.MovementStraight) {
+            ((baritone.pathing.movement.movements.MovementStraight) movement).failed(ctx.playerFeet());
+            baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
+        }
     }
 
     private Pair<Double, BlockPos> closestPathPos(IPath path) {
@@ -1075,6 +1095,16 @@ public class PathExecutor implements IPathExecutor, Helper {
      */
     public Driver getLastDriver() {
         return lastDriver;
+    }
+
+    /** Ostinato Presto v4.1: the sim driver, for the live harness's trace. */
+    public SimTravel sim() {
+        return sim;
+    }
+
+    /** Ostinato Presto v4.1: this path's kinematic controller, for its trace snapshot (status only). */
+    public KinematicController kinematic() {
+        return kinematic;
     }
 
     /**

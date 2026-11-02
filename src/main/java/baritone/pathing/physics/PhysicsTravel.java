@@ -126,16 +126,27 @@ public final class PhysicsTravel {
                 }
             }
         }
-        PhysicsPathfinder.Action a = plan.get(step++);
+        PhysicsPathfinder.Action a = plan.get(step);
+        // Set yaw now: the look behaviour applies a tick late, and the plan assumes this tick's yaw.
+        ctx.player().setYRot(a.yaw);
+        baritone.getLookBehavior().updateTarget(new Rotation(a.yaw, 0), false);
+        if (real.onGround && offPlan(baritone.getLookBehavior().getAimProcessor().peekRotation(new Rotation(a.yaw, 0)).getYaw(), a.yaw)) {
+            // Ostinato Presto v4: the move this tick goes the aim processor's way, at most 32° a tick from the last
+            // sent yaw, not the plan's. Turn in place first: with the keys down the walk went out sideways
+            // (presto-v4-fix4 laps 2, 5: a lap started facing back, the yaw swung through south, z 0.5 to 1.15 in four
+            // ticks, off the one-wide walkway). The plan step waits; the drift check replans if the turn cost it.
+            baritone.getInputOverrideHandler().clearAllKeys();
+            predicted.copyFrom(real);
+            predicted.tick(a.yaw, false, false, false);
+            return pathPosition;
+        }
+        step++;
         viz.actualPoint(real.x, real.y, real.z);
         viz.physTick(real.x, real.y, real.z, real.vx, real.vy, real.vz, real.onGround, real.climbable(), a.yaw,
                 (a.forward ? PathViz.IN_W : 0) | (a.sprint ? PathViz.IN_SPRINT : 0) | (a.jump ? PathViz.IN_JUMP : 0));
         predicted.copyFrom(real);
         predicted.tick(a.yaw, a.forward, a.sprint, a.jump);
         jumpTicks = predicted.jumpTicks;
-        // Set yaw now: the look behaviour applies a tick late, and the plan assumes this tick's yaw.
-        ctx.player().setYRot(a.yaw);
-        baritone.getLookBehavior().updateTarget(new Rotation(a.yaw, 0), false);
         baritone.getInputOverrideHandler().clearAllKeys();
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, a.forward);
         baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, a.sprint);
@@ -146,6 +157,17 @@ public final class PhysicsTravel {
             if (path.positions().get(i).equals(feet)) return Math.min(i, moves.size() - 1);
         }
         return pathPosition;
+    }
+
+    /** Beyond this the yaw the move uses is not the plan's: {@link #offPlan}. */
+    static final float TURN_GATE = 45f;
+
+    /** Whether a move at {@code moveYaw} is too far off the plan's {@code planYaw} to press forward on. */
+    public static boolean offPlan(float moveYaw, float planYaw) {
+        float d = (moveYaw - planYaw) % 360f;
+        if (d > 180f) d -= 360f;
+        if (d < -180f) d += 360f;
+        return Math.abs(d) > TURN_GATE;
     }
 
     private int drop() {

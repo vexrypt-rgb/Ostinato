@@ -76,6 +76,41 @@ public final class TakeoffController {
         return Math.abs(d) < within;
     }
 
+    /** Ostinato (Presto v4): furthest across the approach line a plain takeoff's plan may settle from the landing centre. */
+    static final double MAX_LATERAL = 0.5;
+
+    /** How far across the approach line the plan {@code js} last ran settles from the landing block's centre. */
+    static double lateralMiss(JumpSearch js) {
+        PlayerSim s = js.sim();
+        return Math.abs(js.dirX != 0 ? s.z - (js.destZ + 0.5) : s.x - (js.destX + 0.5));
+    }
+
+    /** Ostinato (Presto v4): how far to either side of the real start a plain takeoff's plan must still land from. */
+    static final double SHIFT = 0.05;
+
+    /**
+     * Whether a plain takeoff may fly the plan {@code js} just found from {@code start}: it settles with the centre over
+     * the landing block, and still does from the start shifted {@link #SHIFT} across the line either way. The capped
+     * 1-gap plans one block back swing a metre off the line in the air and turn back late; from z 0.4 one landed and
+     * from z 0.5 it fell (TakeoffSlewTest), so live, where the run-up starts anywhere in a decimetre, it is a coin toss.
+     * Leaves {@code js} describing the plan from {@code start}.
+     */
+    static boolean takeable(JumpSearch js, PlayerSim start) {
+        int[] p = js.plan.clone();
+        PlayerSim probe = new PlayerSim(start.world());
+        boolean ok = true;
+        for (double d : new double[]{-SHIFT, SHIFT}) {
+            probe.copyFrom(start);
+            if (js.dirX != 0) {
+                probe.z += d;
+            } else {
+                probe.x += d;
+            }
+            ok &= js.run(probe, p, js.jumped, js.airTicks, null) && lateralMiss(js) <= MAX_LATERAL;
+        }
+        return js.run(start, p, js.jumped, js.airTicks, null) && lateralMiss(js) <= MAX_LATERAL && ok;
+    }
+
     private void reset(IMovement mv) {
         current = mv;
         js = null;
@@ -204,21 +239,42 @@ public final class TakeoffController {
             js.destX = dest.x;
             js.destY = dest.y;
             js.destZ = dest.z;
+            // Ostinato (Presto v4): the plan is flown through a look that turns at most 32° a tick, so search with that
+            // cap from the yaw the movement uses now. Searched with the look snapping, the course's one-wide 1-gap got a
+            // run-up 30° off the line and a 90° turn in the air to brake; capped, the turn came three ticks late and the
+            // landing went off the side of the walkway (presto-v4-trace1: 6 of 16 laps fell at z 1.30, TakeoffSlewTest).
+            js.slewYaw = true;
+            js.faceYaw = ctx.playerRotations().getYaw();
             boolean found;
             if (jump != null) {
                 js.side = jump.frame()[4];
                 System.arraycopy(jump.plan(), 0, js.plan, 0, JumpSearch.DIMS);
                 found = js.search(real, true) || js.search(real, false);
+                if (!found) {
+                    // a template keeps MovementJump's rule: no capped plan, fly the snap one rather than give up the jump
+                    js.slewYaw = false;
+                    System.arraycopy(jump.plan(), 0, js.plan, 0, JumpSearch.DIMS);
+                    found = js.search(real, true) || js.search(real, false);
+                }
             } else {
                 js.side = 1;
                 js.plan[0] = 1; // straight ahead, no turn
                 js.plan[3] = JumpSearch.O1_STRAIGHT;
+                // a plain parkour jump with no plan the capped look can fly is handed back below, to the movement's own
+                // run and jump, rather than flown off the side
                 found = js.search(real, false);
+                // JumpSearch counts a landing that holds the box by a sliver; across the line that is the edge of a
+                // one-wide walkway, and the capped 1-gap plan settled at z 1.29 on a block ending at 1.0. Only take a
+                // plain jump whose landing has the body's centre over the block, from a start a little to either side too
+                if (found && !takeable(js, real)) {
+                    found = false;
+                }
             }
             if (Baritone.settings().kinematicTrace.value) {
                 StringBuilder plan = new StringBuilder();
                 for (int k : js.plan) plan.append(k);
-                System.out.printf("KTRACE takeoff search found=%b plan=%s edge=%.3f%n", found, plan, js.edge);
+                System.out.printf("KTRACE takeoff search found=%b plan=%s edge=%.3f slew=%b face=%.1f from=%.3f,%.3f,%.3f v=%.4f,%.4f%n", found, plan, js.edge,
+                        js.slewYaw, js.faceYaw, real.x, real.y, real.z, real.vx, real.vz);
             }
             if (!found) {
                 if (jump != null) {
@@ -230,8 +286,13 @@ public final class TakeoffController {
             }
             running = true;
             PositionSync.sync(ctx.player());
-        } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {
-            js.search(real, true); // drifted off the plan: look for a nearby one, else fly it anyway
+        } else {
+            if (js.slewYaw) {
+                js.faceYaw = ctx.playerRotations().getYaw(); // run() resims from this tick: the cap starts at the look we have now
+            }
+            if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {
+                js.search(real, true); // drifted off the plan: look for a nearby one, else fly it anyway
+            }
         }
         int fwd = js.input(js.plan, js.jumped, js.airTicks);
         boolean press = js.jump(js.plan, real, js.jumped);

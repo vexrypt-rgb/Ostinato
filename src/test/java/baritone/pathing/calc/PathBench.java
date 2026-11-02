@@ -129,6 +129,7 @@ public final class PathBench {
     public static Finder finder(String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("astar")) return ASTAR;
         if (spec.startsWith("wa:")) return weighted(Double.parseDouble(spec.substring(3)));
+        if (spec.equals("maestro")) return (s, g, c) -> new MaestroPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, 1); // Ostinato Maestro
         if (spec.startsWith("hpa")) { // hpa[:factor[:radius]]; a fresh SectionGraph per query = cold cache (worst case)
             String[] p = spec.split(":");
             double factor = p.length > 1 ? Double.parseDouble(p[1]) : 0;
@@ -232,6 +233,11 @@ public final class PathBench {
             }
         }
         return out;
+    }
+
+    /** Ostinato: the raw search (no route reuse, no client logging), for tests outside this package. */
+    public static Optional<IPath> plan(AbstractNodeCostSearch f) {
+        return f.calculate0(TIMEOUT_MS, TIMEOUT_MS);
     }
 
     public static Result run(Query q, Finder finder) {
