@@ -22,15 +22,19 @@ import baritone.api.pathing.goals.*;
 import baritone.api.process.IGetToBlockProcess;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
+import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.BlockOptionalMeta;
 import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
+import baritone.pathing.cadenza.Cadenza;
+import baritone.pathing.cadenza.CadenzaSession;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -47,6 +51,9 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
 
     private int tickCount = 0;
     private int arrivalTickCount = 0;
+    /** Ostinato Cadenza: positioning memo and the open in progress (used only with the cadenza setting). */
+    private final CadenzaSession cadenza = new CadenzaSession();
+    private BetterBlockPos debugCell;
 
     public GetToBlockProcess(Baritone baritone) {
         super(baritone);
@@ -92,7 +99,8 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             }
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
-        Goal goal = new GoalComposite(knownLocations.stream().map(this::createGoal).toArray(Goal[]::new));
+        Goal goal = Baritone.settings().cadenza.value && rightClickOnArrival(gettingTo.getBlock()) ? cadenzaGoal()
+                : new GoalComposite(knownLocations.stream().map(this::createGoal).toArray(Goal[]::new));
         if (calcFailed) {
             if (Baritone.settings().blacklistClosestOnFailure.value) {
                 logDirect("Unable to find any path to " + gettingTo + ", blacklisting presumably unreachable closest instances...");
@@ -182,6 +190,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         knownLocations = null;
         start = null;
         blacklist = null;
+        cadenza.reset();
         baritone.getInputOverrideHandler().clearAllKeys();
     }
 
@@ -209,24 +218,74 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         return new GoalGetToBlock(pos);
     }
 
+    /**
+     * Ostinato Cadenza: stand where the nearest containers can actually be opened from (reach and line of sight)
+     * instead of merely next to them. A chest under a solid block keeps its old goal (the block must go first), as does
+     * any container Cadenza finds no cell for and every one past cadenzaMaxTargets.
+     */
+    private Goal cadenzaGoal() {
+        CalculationContext context = new GetToBlockCalculationContext(false);
+        double reach = ctx.playerController().getBlockReachDistance();
+        double eye = ctx.player().getEyeHeight(Pose.STANDING);
+        int max = Baritone.settings().cadenzaMaxTargets.value;
+        BetterBlockPos feet = ctx.playerFeet();
+        List<BlockPos> byDistance = new ArrayList<>(knownLocations);
+        byDistance.sort(Comparator.comparingDouble(feet::distSqr));
+        List<Cadenza.Target> targets = new ArrayList<>();
+        List<Goal> extras = new ArrayList<>();
+        for (BlockPos pos : byDistance) {
+            boolean covered = blockOnTopMustBeRemoved(gettingTo.getBlock()) && MovementHelper.isBlockNormalCube(baritone.bsi.get0(pos.above()));
+            if (!covered && targets.size() < max) {
+                targets.add(new Cadenza.Target(Cadenza.Kind.USE, pos, reach, eye, false));
+            } else {
+                extras.add(createGoal(pos));
+            }
+        }
+        return cadenza.goal(context, targets, Cadenza.Forbidden.NONE, Baritone.settings().cadenzaShortHorizon.value, r -> {
+            if (Baritone.settings().cadenzaDebug.value) {
+                logDirect("Cadenza: no cell for " + r.target + " (" + r.status + "), old goal kept");
+            }
+            extras.add(createGoal(r.target.pos));
+        }, extras);
+    }
+
     private boolean rightClick() {
+        boolean useCadenza = Baritone.settings().cadenza.value;
         for (BlockPos pos : knownLocations) {
             Optional<Rotation> reachable = RotationUtils.reachable(ctx, pos, ctx.playerController().getBlockReachDistance());
             if (reachable.isPresent()) {
                 baritone.getLookBehavior().updateTarget(reachable.get(), true);
+                if (useCadenza) {
+                    cadenza.attempt(pos, 20);
+                }
                 if (knownLocations.contains(ctx.getSelectedBlock().orElse(null))) {
                     baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true); // TODO find some way to right click even if we're in an ESC menu
                     System.out.println(ctx.player().containerMenu);
                     if (!(ctx.player().containerMenu instanceof InventoryMenu)) {
+                        if (useCadenza) {
+                            cadenza.confirm(); // the container is open
+                        }
                         return true;
                     }
                 }
                 if (arrivalTickCount++ > 20) {
                     logDirect("Right click timed out");
+                    if (useCadenza) {
+                        cadenza.fail();
+                    }
                     return true;
                 }
                 return false; // trying to right click, will do it next tick or so
             }
+        }
+        if (useCadenza && cadenza.inCandidate(ctx.playerFeet())) {
+            // the planned cell does not work live: drop it after a few ticks and replan, instead of giving up here
+            if (Baritone.settings().cadenzaDebug.value && !ctx.playerFeet().equals(debugCell)) {
+                debugCell = ctx.playerFeet();
+                logDirect("Cadenza: cannot reach " + knownLocations + " from " + debugCell + " eye " + ctx.player().getEyePosition(1.0F));
+            }
+            cadenza.nothingReachable(ctx.playerFeet(), ctx.player().onGround());
+            return false;
         }
         logDirect("Arrived but failed to right click open");
         return true;
