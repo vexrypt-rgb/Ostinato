@@ -2668,6 +2668,42 @@ public final class Settings {
      */
     public final Setting<String> mazeMapFile = new Setting<>("maze-map.txt");
 
+    /**
+     * Ostinato: master switch for Secondo, the companion that follows Primo.
+     * Off, {@code #secondo} can bind a player but pathing is unchanged.
+     */
+    public final Setting<Boolean> secondoEnabled = new Setting<>(false);
+
+    /**
+     * Ostinato: GoalNear range, in blocks, around Primo while following.
+     * This does not change {@link #followRadius}. Clamped to 0..16 when used.
+     */
+    public final Setting<Integer> secondoFollowDistance = new Setting<>(4);
+
+    /**
+     * Ostinato: when on, and {@link #secondoEnabled} is on, path next to a block Primo is breaking
+     * and onto a nearby drop. The break click itself is not issued in v1.
+     */
+    public final Setting<Boolean> secondoAssist = new Setting<>(false);
+
+    /** Ostinato: a break farther than this from Secondo is ignored and follow continues. Clamped to 1..32. */
+    public final Setting<Integer> secondoAssistRadius = new Setting<>(6);
+
+    /** Ostinato: GoalNear range around the block Primo is breaking. Clamped to 0..8. */
+    public final Setting<Integer> secondoAssistStand = new Setting<>(2);
+
+    /** Ostinato: when assist is on, path onto a dropped item within {@link #secondoPickupRadius}. */
+    public final Setting<Boolean> secondoPickup = new Setting<>(true);
+
+    /** Ostinato: drops farther than this from Secondo are left alone. Clamped to 1..32. Used only while assist is on. */
+    public final Setting<Integer> secondoPickupRadius = new Setting<>(6);
+
+    /**
+     * Ostinato: when assist is on and Primo is fighting, stay on the follow GoalNear and record a combat request.
+     * v1 does not start {@code IPvpProcess}. Off, a fight is just follow.
+     */
+    public final Setting<Boolean> secondoCombatAssist = new Setting<>(false);
+
     // here be dragons
 
     Settings() {

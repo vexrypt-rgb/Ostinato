@@ -42,6 +42,10 @@ The pathing goal can be set to any of these options:
 
 And finally `GoalComposite`. `GoalComposite` is a list of other goals, any one of which satisfies the goal. For example, `mine diamond_ore` creates a `GoalComposite` of `GoalTwoBlocks`s for every diamond ore location it knows of.
 
+# Companion
+
+- **Secondo** (off by default) follows a primary player, Primo, and can path in to help. Chat: `#secondo follow`, `#secondo follow <name>`, `#secondo stop`. Design and the v1 limits: [docs/SECONDO.md](docs/SECONDO.md). While `secondoEnabled` is off, pathing is unchanged.
+
 # Future features
 
 Things it doesn't have yet

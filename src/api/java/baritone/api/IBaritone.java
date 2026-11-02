@@ -179,4 +179,7 @@ public interface IBaritone {
     default baritone.api.utils.IHealthEstimator getHealthEstimator() {
         return e -> new baritone.api.utils.HealthEstimate(e.getHealth(), e.getAbsorptionAmount(), e.getMaxHealth(), 1, 0, "synced");
     }
+
+    /** Ostinato: companion coordinator. Idle unless secondoEnabled and a follow session are both on. */
+    ISecondoProcess getSecondoProcess();
 }
