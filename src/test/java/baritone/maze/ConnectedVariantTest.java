@@ -1,0 +1,256 @@
+package baritone.maze;
+
+import baritone.api.maze.MazeFurnishJob.Step;
+import baritone.maze.BlockProbe.BlockKind;
+import org.junit.Test;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static baritone.maze.ConnectedPlan.key;
+import static baritone.maze.ConnectedPlan.offset;
+import static baritone.maze.ConnectedPlan.x;
+import static baritone.maze.ConnectedPlan.y;
+import static baritone.maze.ConnectedPlan.z;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+/** Ostinato: 2026-11-02, backrooms variants. Connected-mode room shapes, grown in a world of solid stone. */
+public class ConnectedVariantTest {
+
+    private static final int[][] FACES = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    private static final BlockProbe STONE = (x, y, z) -> BlockKind.SOLID;
+
+    /** A forever run: the first room, then {@code n - 1} more through {@link ConnectedPlan#next}. Rings kept per tunnel. */
+    private static ConnectedPlan.Complex grow(long seed, int n, Set<Long> rings) {
+        ConnectedPlan.First first = ConnectedPlan.firstRoom(seed, 0, 0, 40, -64, 320, STONE, new ArrayList<>());
+        assertNotNull(first);
+        ConnectedPlan.Complex c = first.complex();
+        c.put(ConnectedPlan.first(c, 0, 0, first.originY()).room);
+        for (int i = 1; i < n; i++) {
+            ConnectedPlan.Choice ch = ConnectedPlan.next(c, STONE, (x, z) -> 64, -64, 320, 64);
+            assertTrue("no choice at room " + i + ": " + ch.why(), ch.parentDir() >= 0);
+            ConnectedPlan.Room parent = c.room(ch.gx() - ConnectedPlan.dx(ch.parentDir()), ch.gz() - ConnectedPlan.dz(ch.parentDir()));
+            ConnectedPlan.Segment s = ConnectedPlan.join(c, c.air(), parent, ch.parentDir(), ch.originY());
+            assertTrue(ConnectedPlan.breaches(s, STONE, false).isEmpty());
+            rings.addAll(s.ring);
+            c = s.after;
+        }
+        return c;
+    }
+
+    @Test
+    public void everyVariantFitsItsCellAndTheDoorLane() {
+        for (RoomVariant v : RoomVariant.values()) {
+            assertTrue(v.id + " clear height", v.clearHeight() >= 4);
+            assertTrue(v.id + " fits", v.sizeY <= ConnectedPlan.MAX_HEIGHT);
+            // interior (1..size-2) holds the door columns, cell-relative 2..4
+            assertTrue(v.id + " lane x", v.offX + 1 <= 2 && v.offX + v.sizeX - 2 >= 4);
+            assertTrue(v.id + " lane z", v.offZ + 1 <= 2 && v.offZ + v.sizeZ - 2 >= 4);
+            for (RoomVariant w : RoomVariant.values()) {
+                assertTrue(v.id + "->" + w.id + " run", ConnectedPlan.runBetween(v, w, ConnectedPlan.EAST) >= 3);
+                assertTrue(v.id + "->" + w.id + " run", ConnectedPlan.runBetween(v, w, ConnectedPlan.SOUTH) >= 3);
+            }
+        }
+    }
+
+    @Test
+    public void classicIsTheOldFixedBox() {
+        long seed = 71006;
+        for (int doors = 0; doors < 16; doors++) {
+            RoomPlan now = ConnectedPlan.layout(seed, 3, -2, 48, 30, -32, doors);
+            RoomPlan old = ConnectedPlan.legacyLayout(seed, 3, -2, 48, 30, -32, doors);
+            assertEquals(old.fingerprint(), now.fingerprint());
+        }
+    }
+
+    @Test
+    public void foreverExpandPicksManyVariants() {
+        for (long seed : new long[]{0, 71006, 12345}) {
+            ConnectedPlan.Complex c = grow(seed, 30, new HashSet<>());
+            Set<String> combos = new HashSet<>();
+            for (ConnectedPlan.Room r : c.rooms()) {
+                RoomPlan p = c.plan(r);
+                combos.add(r.variant().id + "/" + p.theme.id + "/" + p.sizeX + "x" + p.sizeY + "x" + p.sizeZ);
+                assertFalse(r.variant() == RoomVariant.CLASSIC);
+            }
+            assertTrue("seed " + seed + " only " + combos, combos.size() >= 6);
+        }
+    }
+
+    @Test
+    public void growthIsSeedDeterministicAndSavesItsVariants() {
+        List<String> a = ConnectedPlan.save(grow(71006, 20, new HashSet<>()));
+        List<String> b = ConnectedPlan.save(grow(71006, 20, new HashSet<>()));
+        assertEquals(a, b);
+        ConnectedPlan.Complex back = ConnectedPlan.load(a);
+        assertEquals(a, ConnectedPlan.save(back));
+        // a map written before variants: five fields, read as CLASSIC
+        ConnectedPlan.Complex legacy = ConnectedPlan.load(List.of(ConnectedPlan.MAP_HEADER, "seed 5", "anchor 0 0", "room 0 0 30 1"));
+        assertEquals(RoomVariant.CLASSIC, legacy.room(0, 0).variant());
+        assertEquals(7, legacy.plan(legacy.room(0, 0)).sizeX);
+    }
+
+    @Test
+    public void clearHeightIsAtLeastFourEverywhere() {
+        ConnectedPlan.Complex c = grow(71006, 30, new HashSet<>());
+        for (ConnectedPlan.Room r : c.rooms()) {
+            RoomPlan p = c.plan(r);
+            for (int x = 0; x < p.sizeX; x++) {
+                for (int z = 0; z < p.sizeZ; z++) {
+                    if (p.role(x, 2, z) != BlockRole.AIR) continue;
+                    int clear = 0;
+                    for (int y = 2; y < p.sizeY && p.role(x, y, z) == BlockRole.AIR; y++) clear++;
+                    boolean door = x == 0 || z == 0 || x == p.sizeX - 1 || z == p.sizeZ - 1;
+                    assertTrue(r.variant().id + " at " + x + "," + z + " clear " + clear, clear >= (door ? 3 : 4));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void carvedSpaceIsSealedByPlannedSolids() {
+        Set<Long> rings = new HashSet<>();
+        ConnectedPlan.Complex c = grow(12345, 30, rings);
+        Set<Long> air = c.air();
+        for (long k : air) {
+            for (int[] f : FACES) {
+                long n = offset(k, f[0], f[1], f[2]);
+                if (air.contains(n)) continue;
+                BlockRole role = c.roleAt(n);
+                boolean planned = role != null && role != BlockRole.OUTSIDE && role.solid() || rings.contains(n);
+                assertTrue("air " + x(k) + "," + y(k) + "," + z(k) + " opens onto " + x(n) + "," + y(n) + "," + z(n), planned);
+            }
+        }
+    }
+
+    @Test
+    public void caveInAnLsCutCornerIsABreach() {
+        long seed = 0;
+        int gx = 0;
+        while (ConnectedPlan.variant(seed, gx, 0) != RoomVariant.L_OFFICE) gx++;
+        ConnectedPlan.Complex at = new ConnectedPlan.Complex(seed, -gx * ConnectedPlan.PITCH, 0);
+        ConnectedPlan.Segment s = ConnectedPlan.first(at, gx, 0, 30);
+        RoomPlan p = s.plan;
+        assertEquals(BlockRole.OUTSIDE, p.role(8, 3, 8));
+        assertEquals(BlockRole.WALL, p.role(6, 3, 8));
+        // a 1-block cave pocket in the cut corner, right behind the notch wall
+        int cx = p.originX + 7, cy = p.originY + 3, cz = p.originZ + 8;
+        BlockProbe cave = (x, y, z) -> x == cx && y == cy && z == cz ? BlockKind.AIR : BlockKind.SOLID;
+        assertFalse(ConnectedPlan.breaches(s, cave, false).isEmpty());
+        assertTrue(ConnectedPlan.breaches(s, STONE, false).isEmpty());
+    }
+
+    @Test
+    public void everyRoomIsReachableOnFoot() {
+        ConnectedPlan.Complex c = grow(71006, 30, new HashSet<>());
+        Set<Long> air = c.air();
+        Set<Long> containers = c.containers();
+        Set<Long> feet = new HashSet<>();
+        for (long k : air) {
+            long below = offset(k, 0, -1, 0);
+            if (!air.contains(below) && !containers.contains(k) && !containers.contains(below) && air.contains(offset(k, 0, 1, 0))) feet.add(k);
+        }
+        ConnectedPlan.Room first = c.rooms().get(0);
+        long start = -1;
+        for (long k : feet) if (c.roomAt(x(k), y(k), z(k)) == first) { start = k; break; }
+        Set<Long> seen = new HashSet<>();
+        ArrayDeque<Long> q = new ArrayDeque<>();
+        q.add(start);
+        seen.add(start);
+        while (!q.isEmpty()) {
+            long k = q.poll();
+            for (int[] d : ConnectedPlan.DIR) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    long n = offset(k, d[0], dy, d[1]);
+                    if (!feet.contains(n) || seen.contains(n)) continue;
+                    if (dy == 1 && !air.contains(offset(k, 0, 2, 0))) continue; // jump headroom
+                    if (dy == -1 && !air.contains(offset(n, 0, 2, 0))) continue;
+                    seen.add(n);
+                    q.add(n);
+                }
+            }
+        }
+        Map<ConnectedPlan.Room, Integer> reached = new HashMap<>();
+        for (long k : seen) {
+            ConnectedPlan.Room r = c.roomAt(x(k), y(k), z(k));
+            if (r != null) reached.merge(r, 1, Integer::sum);
+        }
+        for (ConnectedPlan.Room r : c.rooms()) {
+            assertTrue(r.variant().id + " at " + r.gx() + "," + r.gz() + " unreachable", reached.containsKey(c.room(r.gx(), r.gz())));
+        }
+        // and every door opens onto the tunnel beside its wall
+        for (ConnectedPlan.Room r : c.rooms()) {
+            RoomPlan p = c.plan(r);
+            for (int dir = 0; dir < 4; dir++) {
+                if (!r.door(dir)) continue;
+                int[] col = r.variant().doorColumn(dir, RoomVariant.LANE);
+                long door = key(p.originX + col[0], p.originY + 2, p.originZ + col[1]);
+                assertTrue(air.contains(door));
+                assertTrue(r.variant().id + " door " + dir, air.contains(offset(door, ConnectedPlan.dx(dir), 0, ConnectedPlan.dz(dir)))
+                        || air.contains(offset(door, ConnectedPlan.dx(dir), 1, ConnectedPlan.dz(dir)))
+                        || air.contains(offset(door, ConnectedPlan.dx(dir), -1, ConnectedPlan.dz(dir))));
+            }
+        }
+    }
+
+    @Test
+    public void bordersBlendTheNeighboursPalette() {
+        ConnectedPlan.Complex c = grow(71006, 30, new HashSet<>());
+        int blended = 0;
+        // rebuild each join and look for a clad step whose first id is the parent's
+        ConnectedPlan.Complex g = new ConnectedPlan.Complex(c.seed, c.anchorX, c.anchorZ);
+        for (ConnectedPlan.Room r : c.rooms()) {
+            if (g.isEmpty()) {
+                g.put(new ConnectedPlan.Room(r.gx(), r.gz(), r.originY(), 0, r.variant()));
+                continue;
+            }
+            for (int dir = 0; dir < 4; dir++) {
+                ConnectedPlan.Room parent = g.room(r.gx() - ConnectedPlan.dx(dir), r.gz() - ConnectedPlan.dz(dir));
+                if (parent == null || !r.door(ConnectedPlan.opposite(dir))) continue;
+                ConnectedPlan.Segment s = ConnectedPlan.join(g, g.air(), parent, dir, r.originY());
+                MazeTheme pt = s.after.plan(s.parent).theme;
+                if (pt != s.plan.theme) {
+                    for (Step st : ConnectedPlan.cladding(s)) {
+                        if (s.after.roomAt(st.x(), st.y(), st.z()) == s.room
+                                && !MazeFurnishPlanner.cladIds(s.plan.theme, BlockRole.WALL, s.plan.originY).get(0).equals(st.blockIds().get(0))
+                                && !MazeFurnishPlanner.cladIds(s.plan.theme, BlockRole.FLOOR, s.plan.originY).get(0).equals(st.blockIds().get(0))
+                                && !MazeFurnishPlanner.cladIds(s.plan.theme, BlockRole.CEILING, s.plan.originY).get(0).equals(st.blockIds().get(0))) {
+                            blended++;
+                        }
+                    }
+                }
+                g = s.after;
+                break;
+            }
+        }
+        assertTrue("no blended border cell", blended > 0);
+    }
+
+    @Test
+    public void newThemesHaveCladdingAndLoot() {
+        for (MazeTheme t : MazeTheme.values()) {
+            for (BlockRole role : new BlockRole[]{BlockRole.FLOOR, BlockRole.WALL, BlockRole.CEILING}) {
+                assertFalse(MazeFurnishPlanner.cladIds(t, role, 40).isEmpty());
+            }
+            for (LootPlanner.ContainerKind k : LootPlanner.ContainerKind.values()) {
+                assertFalse(LootPlanner.table(t, k).isEmpty());
+            }
+        }
+    }
+
+    @Test
+    public void roomLineHasTheHarnessFields() {
+        ConnectedPlan.Complex c = new ConnectedPlan.Complex(1, 0, 0);
+        ConnectedPlan.Room r = new ConnectedPlan.Room(2, -1, 30, 0, RoomVariant.LOBBY);
+        String line = c.plan(r).roomLine("dig");
+        assertEquals("MAZE ROOM variant=lobby theme=lobby size=11x9x11 cell=2,-1 phase=dig", line);
+    }
+}

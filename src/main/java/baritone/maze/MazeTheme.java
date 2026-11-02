@@ -27,7 +27,15 @@ public enum MazeTheme {
     YELLOW_OFFICE("yellow_office", "Yellow office", false),
     PIPES("pipes", "Pipes and utility", false),
     HUB("hub", "Office hub", false),
-    DEEP("deep", "Deep level", true);
+    DEEP("deep", "Deep level", true),
+    // Ostinato: 2026-11-02, backrooms variants. Connected mode only: picked through RoomVariant, never by forCell, so the
+    // backrooms grid and older connected maps keep the themes they were built with. Appended so ordinals (loot gate
+    // salt, fingerprints) of the four above do not move.
+    MONO_YELLOW("mono_yellow", "Mono-yellow hall", false),
+    POOLROOMS("poolrooms", "Poolrooms", false),
+    MAINTENANCE("maintenance", "Maintenance tunnels", false),
+    WAREHOUSE("warehouse", "Open warehouse", false),
+    LOBBY("lobby", "Empty lobby", false);
 
     public final String id;
     public final String displayName;

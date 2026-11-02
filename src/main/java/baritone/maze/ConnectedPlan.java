@@ -49,6 +49,8 @@ public final class ConnectedPlan {
     public static final int ROOM = 7;
     /** Floor difference one tunnel may climb: 10 columns door to door, 1 per column, a landing at each end. */
     public static final int MAX_RISE = 8;
+    /** Ostinato: 2026-11-02. Tallest room box of any {@link RoomVariant}, for the world-height clamps. */
+    public static final int MAX_HEIGHT = 9;
     public static final int EAST = 0, SOUTH = 1, WEST = 2, NORTH = 3;
     static final int[][] DIR = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
     private static final int[][] FACES = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
@@ -99,16 +101,37 @@ public final class ConnectedPlan {
         return MazeTheme.forCell(mazeSeed ^ SALT, gx, gz);
     }
 
+    /** Ostinato: 2026-11-02. The variant a fresh room in this cell is built as. Pure in seed and cell. */
+    public static RoomVariant variant(long mazeSeed, int gx, int gz) {
+        return RoomVariant.forCell(mazeSeed ^ SALT, gx, gz);
+    }
+
+    /** Ostinato: 2026-11-02. A room's theme: its variant's pick, or the old per-cell theme for a {@link RoomVariant#CLASSIC}. */
+    public static MazeTheme theme(long mazeSeed, Room r) {
+        return r.variant.theme(mazeSeed ^ SALT, r.gx, r.gz, theme(mazeSeed, r.gx, r.gz));
+    }
+
     // ---- rooms ----------------------------------------------------------------------------------------------------
 
-    /** One room. {@code doors} has bit {@code 1 << dir} for every wall that opens onto a tunnel. */
-    public record Room(int gx, int gz, int originY, int doors) {
+    /**
+     * One room. {@code doors} has bit {@code 1 << dir} for every wall that opens onto a tunnel. Ostinato: 2026-11-02,
+     * {@code variant} is its shape and size; a room without one (an older map) is {@link RoomVariant#CLASSIC}.
+     */
+    public record Room(int gx, int gz, int originY, int doors, RoomVariant variant) {
+        public Room {
+            if (variant == null) variant = RoomVariant.CLASSIC;
+        }
+
+        public Room(int gx, int gz, int originY, int doors) {
+            this(gx, gz, originY, doors, RoomVariant.CLASSIC);
+        }
+
         public boolean door(int dir) {
             return (doors & (1 << dir)) != 0;
         }
 
         public Room withDoor(int dir) {
-            return new Room(gx, gz, originY, doors | (1 << dir));
+            return new Room(gx, gz, originY, doors | (1 << dir), variant);
         }
     }
 
@@ -118,6 +141,34 @@ public final class ConnectedPlan {
      * whole. A door is 3 wide and 3 high in the middle of its wall; the wall cells under it become floor.
      */
     public static RoomPlan layout(long mazeSeed, int gx, int gz, int originX, int originY, int originZ, int doors) {
+        return layout(mazeSeed, new Room(gx, gz, originY, doors), originX, originZ);
+    }
+
+    /**
+     * Ostinato: 2026-11-02. A room of any {@link RoomVariant}: its box at {@code cellX + offX, cellZ + offZ}, a 3x3 door
+     * on the door lane of every open wall, and the feature block on one of the variant's loot spots. A
+     * {@link RoomVariant#CLASSIC} room comes out cell for cell as the fixed 7x7x7 layout did.
+     */
+    public static RoomPlan layout(long mazeSeed, Room r, int cellX, int cellZ) {
+        RoomVariant v = r.variant();
+        long roomSeed = roomSeed(mazeSeed, r.gx(), r.gz());
+        BlockRole[][][] roles = v.roles();
+        for (int dir = 0; dir < 4; dir++) {
+            if (!r.door(dir)) continue;
+            for (int w = 2; w <= 4; w++) {
+                int[] at = v.doorColumn(dir, w);
+                roles[at[0]][1][at[1]] = BlockRole.FLOOR;
+                for (int y = 2; y <= 4; y++) roles[at[0]][y][at[1]] = BlockRole.AIR;
+            }
+        }
+        List<int[]> spots = v.lootSpots();
+        int[] feature = spots.get((int) Long.remainderUnsigned(roomSeed, spots.size()));
+        if (roles[feature[0]][feature[1]][feature[2]] == BlockRole.AIR) roles[feature[0]][feature[1]][feature[2]] = BlockRole.FEATURE;
+        return new RoomPlan(r.gx(), r.gz(), mazeSeed, roomSeed, theme(mazeSeed, r), cellX + v.offX, r.originY(), cellZ + v.offZ, roles, v);
+    }
+
+    /** The fixed-box body {@link #layout} had before variants, kept for the CLASSIC equivalence test. */
+    static RoomPlan legacyLayout(long mazeSeed, int gx, int gz, int originX, int originY, int originZ, int doors) {
         long roomSeed = roomSeed(mazeSeed, gx, gz);
         BlockRole[][][] roles = new BlockRole[ROOM][ROOM][ROOM];
         for (int x = 0; x < ROOM; x++) {
@@ -230,7 +281,16 @@ public final class ConnectedPlan {
         }
 
         public RoomPlan plan(Room r) {
-            return layout(seed, r.gx, r.gz, originX(r.gx), r.originY, originZ(r.gz), r.doors);
+            return layout(seed, r, originX(r.gx), originZ(r.gz));
+        }
+
+        /** Room box corner in the world (Ostinato: 2026-11-02, the variant's offset inside its cell). */
+        public int boxX(Room r) {
+            return originX(r.gx) + r.variant.offX;
+        }
+
+        public int boxZ(Room r) {
+            return originZ(r.gz) + r.variant.offZ;
         }
 
         /** The room whose box holds this cell, or null. */
@@ -238,8 +298,9 @@ public final class ConnectedPlan {
             int gx = Math.floorDiv(x - anchorX, PITCH), gz = Math.floorDiv(z - anchorZ, PITCH);
             Room r = room(gx, gz);
             if (r == null) return null;
-            int rx = x - originX(gx), rz = z - originZ(gz), ry = y - r.originY;
-            return rx < ROOM && rz < ROOM && ry >= 0 && ry < ROOM ? r : null;
+            RoomVariant v = r.variant;
+            int rx = x - boxX(r), rz = z - boxZ(r), ry = y - r.originY;
+            return rx >= 0 && rz >= 0 && rx < v.sizeX && rz < v.sizeZ && ry >= 0 && ry < v.sizeY ? r : null;
         }
 
         /** Role of a cell inside some room box, or null outside every room. */
@@ -247,7 +308,13 @@ public final class ConnectedPlan {
             int x = x(k), y = y(k), z = z(k);
             Room r = roomAt(x, y, z);
             if (r == null) return null;
-            return plan(r).role(x - originX(r.gx), y - r.originY, z - originZ(r.gz));
+            return plan(r).role(x - boxX(r), y - r.originY, z - boxZ(r));
+        }
+
+        /** Ostinato: 2026-11-02. A room cell that is part of the build, not the cut corner of an L. */
+        boolean inBuild(long k) {
+            BlockRole r = roleAt(k);
+            return r != null && r != BlockRole.OUTSIDE;
         }
 
         /**
@@ -258,7 +325,9 @@ public final class ConnectedPlan {
          */
         public Set<Long> tunnelAir(Room a, Room b, int dir) {
             Set<Long> out = new LinkedHashSet<>();
-            int run = PITCH - ROOM + 1; // door column of a (t = 0) to door column of b (t = run)
+            // Ostinato: 2026-11-02. Door wall to door wall of the two variants; the lane is the cells' shared column 3.
+            int wallA = dir == EAST ? boxX(a) + a.variant.sizeX - 1 : boxZ(a) + a.variant.sizeZ - 1;
+            int run = runBetween(a.variant, b.variant, dir); // door column of a (t = 0) to door column of b (t = run)
             int feetA = a.originY + 2, feetB = b.originY + 2;
             int rise = feetB - feetA, up = Math.abs(rise), lo = Math.min(feetA, feetB);
             int ax = originX(a.gx), az = originZ(a.gz);
@@ -269,7 +338,7 @@ public final class ConnectedPlan {
                 int top = next > fy ? fy + 3 : fy + 2;
                 for (int w = -1; w <= 1; w++) {
                     for (int y = fy; y <= top; y++) {
-                        out.add(dir == EAST ? key(ax + ROOM - 1 + t, y, az + 3 + w) : key(ax + 3 + w, y, az + ROOM - 1 + t));
+                        out.add(dir == EAST ? key(wallA + t, y, az + RoomVariant.LANE + w) : key(ax + RoomVariant.LANE + w, y, wallA + t));
                     }
                 }
             }
@@ -307,6 +376,20 @@ public final class ConnectedPlan {
             }
             return out;
         }
+    }
+
+    /** Ostinato: 2026-11-02. Columns from {@code a}'s door wall to {@code b}'s, {@code b} toward {@code dir} (EAST or SOUTH). */
+    static int runBetween(RoomVariant a, RoomVariant b, int dir) {
+        return dir == EAST ? PITCH + b.offX - a.offX - a.sizeX + 1 : PITCH + b.offZ - a.offZ - a.sizeZ + 1;
+    }
+
+    /**
+     * Ostinato: 2026-11-02. Floor difference the tunnel between two variants can climb: one per column with a landing at
+     * each end, so two big rooms side by side (a short tunnel) stay nearly level. {@code dir} points parent to child.
+     */
+    public static int maxRise(RoomVariant parent, RoomVariant child, int dir) {
+        int run = dir == EAST || dir == SOUTH ? runBetween(parent, child, dir) : runBetween(child, parent, opposite(dir));
+        return Math.max(0, Math.min(MAX_RISE, run - 2));
     }
 
     // ---- one new room and its tunnel ------------------------------------------------------------------------------
@@ -401,7 +484,7 @@ public final class ConnectedPlan {
             this.before = before;
             this.oldAir = oldAir;
             this.dir = parentBefore == null ? -1 : dir;
-            this.room = new Room(gx, gz, originY, parentBefore == null ? 0 : 1 << opposite(dir));
+            this.room = new Room(gx, gz, originY, parentBefore == null ? 0 : 1 << opposite(dir), variant(before.seed, gx, gz));
             this.parent = parentBefore == null ? null : parentBefore.withDoor(dir);
             this.after = before.copy();
             after.put(room);
@@ -425,7 +508,7 @@ public final class ConnectedPlan {
                 lowest = Math.min(lowest, y(k) - 1);
                 for (int[] f : FACES) {
                     long n = offset(k, f[0], f[1], f[2]);
-                    if (!isAir(n) && after.roomAt(x(n), y(n), z(n)) == null) ring.add(n);
+                    if (!isAir(n) && !after.inBuild(n)) ring.add(n);
                 }
             }
             this.ring = ring;
@@ -491,13 +574,13 @@ public final class ConnectedPlan {
         }
 
         boolean planned(long k) {
-            return isAir(k) || ring.contains(k) || after.roomAt(x(k), y(k), z(k)) != null;
+            return isAir(k) || ring.contains(k) || after.inBuild(k); // Ostinato: an L's cut corner is world, and is checked
         }
 
         /** True for a shell cell with carved air right under it. */
         boolean ceiling(long k) {
             BlockRole r = after.roleAt(k);
-            return r != null ? r == BlockRole.CEILING : isAir(offset(k, 0, -1, 0));
+            return r != null && r != BlockRole.OUTSIDE ? r == BlockRole.CEILING : isAir(offset(k, 0, -1, 0));
         }
     }
 
@@ -563,6 +646,19 @@ public final class ConnectedPlan {
     public static List<Step> cladding(Segment s) {
         List<Step> steps = new ArrayList<>();
         MazeFurnishPlanner.addCladding(s.plan, steps);
+        RoomPlan parentPlan = s.parent == null ? null : s.after.plan(s.parent);
+        if (parentPlan != null && parentPlan.theme != s.plan.theme) {
+            // Ostinato: 2026-11-02, soft edges. Near the door to the parent, the parent's palette bleeds in.
+            for (int i = 0; i < steps.size(); i++) {
+                Step st = steps.get(i);
+                int pct = blendPct(s.plan, opposite(s.dir), st.x(), st.z());
+                if (pct > 0 && blendRoll(s.before.seed, st.x(), st.y(), st.z()) < pct) {
+                    BlockRole role = s.plan.role(st.x() - s.plan.originX, st.y() - s.plan.originY, st.z() - s.plan.originZ);
+                    steps.set(i, new Step(st.kind(), st.x(), st.y(), st.z(),
+                            blendIds(MazeFurnishPlanner.cladIds(parentPlan.theme, role, parentPlan.originY), st.blockIds()), st.contents()));
+                }
+            }
+        }
         if (s.parent != null) {
             RoomPlan pp = s.after.plan(s.parent);
             for (int x = 0; x < pp.sizeX; x++) {
@@ -578,8 +674,11 @@ public final class ConnectedPlan {
                             else if (s.newAir.contains(n)) touchesNew = true;
                         }
                         if (touchesNew && !touchesOld) {
-                            steps.add(new Step(StepKind.LIGHT, x(k), y(k), z(k),
-                                    MazeFurnishPlanner.cladIds(pp.theme, role, pp.originY), List.of()));
+                            List<String> ids = MazeFurnishPlanner.cladIds(pp.theme, role, pp.originY);
+                            if (pp.theme != s.plan.theme && blendRoll(s.before.seed, x(k), y(k), z(k)) < 50) {
+                                ids = blendIds(MazeFurnishPlanner.cladIds(s.plan.theme, role, s.plan.originY), ids); // Ostinato: soft edge
+                            }
+                            steps.add(new Step(StepKind.LIGHT, x(k), y(k), z(k), ids, List.of()));
                         }
                     }
                 }
@@ -592,6 +691,35 @@ public final class ConnectedPlan {
             steps.add(new Step(StepKind.LIGHT, x(k), y(k), z(k), s.palette.ids(role), List.of()));
         }
         return steps;
+    }
+
+    /**
+     * Ostinato: 2026-11-02. Chance (0..100) that a clad cell of {@code plan} takes the neighbour's palette: 60 in the
+     * wall with the door toward {@code dir}, 30 one column in, 15 two in, and only within 3 of the door lane.
+     */
+    static int blendPct(RoomPlan plan, int dir, int wx, int wz) {
+        RoomVariant v = plan.variant;
+        int rx = wx - plan.originX, rz = wz - plan.originZ;
+        int depth = switch (dir) {
+            case EAST -> plan.sizeX - 1 - rx;
+            case WEST -> rx;
+            case SOUTH -> plan.sizeZ - 1 - rz;
+            default -> rz;
+        };
+        int lateral = dir == EAST || dir == WEST ? rz + v.offZ : rx + v.offX; // cell-relative, like the lane
+        if (Math.abs(lateral - RoomVariant.LANE) > 3) return 0;
+        return depth == 0 ? 60 : depth == 1 ? 30 : depth == 2 ? 15 : 0;
+    }
+
+    static int blendRoll(long seed, int x, int y, int z) {
+        return (int) Long.remainderUnsigned(MazeSeed.mix(seed ^ SALT ^ 0xB1E4DL, x * 31 + y, z), 100);
+    }
+
+    /** The neighbour's ids first, then this room's own as the fallback the furnisher can always reach. */
+    static List<String> blendIds(List<String> neighbour, List<String> own) {
+        LinkedHashSet<String> out = new LinkedHashSet<>(neighbour);
+        out.addAll(own);
+        return List.copyOf(out);
     }
 
     // ---- the hidden way in ----------------------------------------------------------------------------------------
@@ -618,9 +746,14 @@ public final class ConnectedPlan {
     /** Interior columns of a room, nearest to {@code x, z} first: where an entry shaft may come down. */
     public static List<int[]> entryColumns(Complex c, Room r, int x, int z) {
         List<int[]> out = new ArrayList<>();
-        int ox = c.originX(r.gx), oz = c.originZ(r.gz);
-        for (int rx = 1; rx < ROOM - 1; rx++) {
-            for (int rz = 1; rz < ROOM - 1; rz++) out.add(new int[]{ox + rx, oz + rz});
+        RoomPlan plan = c.plan(r);
+        for (int rx = 1; rx < plan.sizeX - 1; rx++) {
+            for (int rz = 1; rz < plan.sizeZ - 1; rz++) {
+                // Ostinato: 2026-11-02. Only real floor: not into a pool, an L's cut corner or under a pillar.
+                if (plan.role(rx, 1, rz) == BlockRole.FLOOR && plan.role(rx, 2, rz) == BlockRole.AIR) {
+                    out.add(new int[]{plan.originX + rx, plan.originZ + rz});
+                }
+            }
         }
         out.sort(Comparator.comparingInt((int[] p) -> (p[0] - x) * (p[0] - x) + (p[1] - z) * (p[1] - z))
                 .thenComparingInt(p -> p[0]).thenComparingInt(p -> p[1]));
@@ -632,14 +765,15 @@ public final class ConnectedPlan {
     /** A standing torch needs a sturdy top under it: not open air, not a container, not the feature block. */
     public static boolean mountable(Complex c, Set<Long> open, Set<Long> containers, long k) {
         long below = offset(k, 0, -1, 0);
-        return !open.contains(below) && !containers.contains(below) && c.roleAt(below) != BlockRole.FEATURE;
+        BlockRole role = c.roleAt(below);
+        return !open.contains(below) && !containers.contains(below) && role != BlockRole.FEATURE && role != BlockRole.WATER;
     }
 
     /** Where a torch looks placed on purpose: the middle of a room's floor, or the centre lane of a tunnel. */
     public static boolean preferredTorch(Complex c, long k) {
         int x = x(k), y = y(k), z = z(k);
         Room r = c.roomAt(x, y, z);
-        if (r != null) return x - c.originX(r.gx) == 3 && z - c.originZ(r.gz) == 3 && y - r.originY == 2;
+        if (r != null) return x - c.boxX(r) == r.variant.sizeX / 2 && z - c.boxZ(r) == r.variant.sizeZ / 2 && y - r.originY == 2;
         return Math.floorMod(x - c.anchorX, PITCH) == 3 || Math.floorMod(z - c.anchorZ, PITCH) == 3;
     }
 
@@ -650,7 +784,7 @@ public final class ConnectedPlan {
 
     /** Origin Y for a room under {@code surfaceY}: the backrooms rule (16 under the ground), clamped to the world. */
     public static int preferredY(int surfaceY, int minY, int maxY) {
-        return Math.max(minY + 1, Math.min(surfaceY - 16, maxY - ROOM - MazeSeed.COVER - 1));
+        return Math.max(minY + 1, Math.min(surfaceY - 16, maxY - MAX_HEIGHT - MazeSeed.COVER - 1));
     }
 
     /** The first room: an empty complex anchored for it, and the room's origin Y. */
@@ -676,7 +810,7 @@ public final class ConnectedPlan {
     /** Ys from {@code pref} outward inside [lo, hi] and the world, downward first on a tie (rooms belong under ground). */
     static List<Integer> depths(int pref, int lo, int hi, int minY, int maxY) {
         lo = Math.max(lo, minY + 1);
-        hi = Math.min(hi, maxY - ROOM - MazeSeed.COVER - 1);
+        hi = Math.min(hi, maxY - MAX_HEIGHT - MazeSeed.COVER - 1);
         List<Integer> out = new ArrayList<>();
         if (lo > hi) return out;
         pref = Math.max(lo, Math.min(hi, pref));
@@ -713,7 +847,8 @@ public final class ConnectedPlan {
                     why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
                     continue; // not loaded yet: try again another time, never remembered as a failure
                 }
-                for (int y : depths(pref, parent.originY - MAX_RISE, parent.originY + MAX_RISE, minY, maxY)) {
+                int rise = maxRise(parent.variant, variant(c.seed, gx, gz), dir); // Ostinato: 2026-11-02, per tunnel length
+                for (int y : depths(pref, parent.originY - rise, parent.originY + rise, minY, maxY)) {
                     Segment s = join(c, oldAir, parent, dir, y);
                     if (breaches(s, probe, false).isEmpty()) return new Choice(gx, gz, y, dir, tried, why.toString().trim());
                 }
@@ -730,7 +865,8 @@ public final class ConnectedPlan {
         out.add(MAP_HEADER);
         out.add("seed " + Long.toUnsignedString(c.seed));
         out.add("anchor " + c.anchorX + " " + c.anchorZ);
-        for (Room r : c.rooms.values()) out.add("room " + r.gx + " " + r.gz + " " + r.originY + " " + r.doors);
+        // Ostinato: 2026-11-02. The variant id rides as a 6th field: older readers stop at the 5th, older files lack it (CLASSIC).
+        for (Room r : c.rooms.values()) out.add("room " + r.gx + " " + r.gz + " " + r.originY + " " + r.doors + " " + r.variant.id);
         for (long f : c.failed) out.add("fail " + (int) (f >> 32) + " " + (int) f);
         return out;
     }
@@ -754,7 +890,10 @@ public final class ConnectedPlan {
         }
         if (a == null) return null;
         Complex c = new Complex(seed, Integer.parseInt(a[1]), Integer.parseInt(a[2]));
-        for (String[] r : rooms) c.put(new Room(Integer.parseInt(r[1]), Integer.parseInt(r[2]), Integer.parseInt(r[3]), Integer.parseInt(r[4])));
+        for (String[] r : rooms) {
+            c.put(new Room(Integer.parseInt(r[1]), Integer.parseInt(r[2]), Integer.parseInt(r[3]), Integer.parseInt(r[4]),
+                    r.length > 5 ? RoomVariant.byId(r[5]) : RoomVariant.CLASSIC));
+        }
         for (String[] f : fails) c.fail(Integer.parseInt(f[1]), Integer.parseInt(f[2]));
         return c;
     }

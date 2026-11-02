@@ -306,6 +306,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             baritone.getBuilderProcess().build(name, new MazeSchematic(plan, loot, survival), new BlockPos(plan.originX, plan.originY, plan.originZ));
             handedToBuilder = name;
             lastBuilt = plan;
+            System.out.println(plan.roomLine("dig")); // Ostinato: 2026-11-02, harness room line
             furnishRoom = plan; // Ostinato: remembered for #maze furnish (TenorClef gather, light, loot, seal)
             furnishLoot = loot;
             furnishSegment = null;
@@ -410,6 +411,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             return Report.error(attempt.refusal == null ? "No sealed room nearby" : attempt.refusal);
         }
         List<LootPlanner.LootPlacement> loot = LootPlanner.plan(attempt.plan, map);
+        System.out.println(attempt.plan.roomLine("planned")); // Ostinato: 2026-11-02, harness room line
         String message = "Cell " + attempt.cellX + "," + attempt.cellZ
                 + " theme " + attempt.plan.theme.id
                 + " at " + attempt.plan.originX + " " + attempt.plan.originY + " " + attempt.plan.originZ
@@ -654,8 +656,9 @@ public final class MazeProcess extends BaritoneProcessHelper {
         ConnectedPlan.Segment seg = planned.segment;
         String where = planned.where + (planned.entry == null ? "" : ", way in at " + planned.entry.x() + "," + planned.entry.z());
         List<LootPlanner.LootPlacement> loot = LootPlanner.plan(seg.plan, map);
+        System.out.println(seg.plan.roomLine("planned")); // Ostinato: 2026-11-02, harness room line
         String message = "Connected room " + seg.room.gx() + "," + seg.room.gz() + " " + where
-                + " theme " + seg.plan.theme.id
+                + " theme " + seg.plan.theme.id + " variant " + seg.plan.variantId()
                 + " at " + seg.plan.originX + " " + seg.plan.originY + " " + seg.plan.originZ
                 + ", tunnel " + seg.tunnel.size() + " cells " + seg.palette.id
                 + ", " + loot.size() + " container" + (loot.size() == 1 ? "" : "s");
@@ -768,6 +771,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             Set<BlockPos> cells = new LinkedHashSet<>();
             for (long k : seg.newAir) cells.add(new BlockPos(ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k)));
             String name = "maze-connected-" + seg.room.gx() + "," + seg.room.gz();
+            System.out.println(seg.plan.roomLine("dig")); // Ostinato: 2026-11-02, harness room line
             dig(name, cells, seg);
             startedSegment = seg;
             lastBuilt = seg.plan;
@@ -829,12 +833,12 @@ public final class MazeProcess extends BaritoneProcessHelper {
     /** An interior column of the new room whose shaft is clear, nearest the bot first. Server thread. */
     private Entry entryFor(net.minecraft.world.level.Level level, MazeWorldProbe probe, ConnectedPlan.Segment seg) {
         RoomPlan plan = seg.plan;
-        int ceilingY = plan.originY + ConnectedPlan.ROOM - 1;
+        int ceilingY = plan.originY + plan.sizeY - 1; // Ostinato: 2026-11-02, variant height
         BlockPos feet = ctx.playerFeet();
         outer:
         for (int[] col : ConnectedPlan.entryColumns(seg.after, seg.room, feet.getX(), feet.getZ())) {
             int rx = col[0] - plan.originX, rz = col[1] - plan.originZ;
-            for (int ry = 2; ry < ConnectedPlan.ROOM - 1; ry++) {
+            for (int ry = 2; ry < plan.sizeY - 1; ry++) {
                 if (plan.role(rx, ry, rz) != BlockRole.AIR) continue outer; // never through the feature block
             }
             int ground = groundAt(level, col[0], col[1]);
