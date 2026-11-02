@@ -74,6 +74,9 @@ public final class SettingRanges {
         r(0, 10, 0.5, "randomLooking113");
         r(0, 5, 0.1, "mobAvoidanceCoefficient", "mobSpawnerAvoidanceCoefficient");
         r(0, 32, 1, "mobAvoidanceRadius", "followRadius");
+        r(1, 16, 1, "secondoFollowDistance"); // Ostinato
+        r(0, 8, 1, "secondoAssistStand"); // Ostinato
+        r(1, 32, 1, "secondoAssistRadius", "secondoPickupRadius"); // Ostinato
         r(0, 64, 1, "mobSpawnerAvoidanceRadius");
         r(0, 16, 0.5, "followOffsetDistance");
         r(-180, 180, 1, "followOffsetDirection");

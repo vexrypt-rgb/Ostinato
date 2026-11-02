@@ -71,7 +71,9 @@ public final class SettingCategorizer {
                 "overnightRaces", "overnightEveryBlockItem", "overnightDir", "overnightTimeoutMs",
                 "agentApi", "agentChat", "agentProvider", "agentBaseUrl", "agentModel", "agentApiKey",
                 "agentDryRun", "agentOwnerOnly", "agentOwner", "agentKeyFile", "agentOneSession", "agent429ToOllama",
-                "agentMemory", "agentTools", "agentRouteDir"); // Ostinato: testHarness, legit track, compass follow, gear choice, every-block race, agent API
+                "agentMemory", "agentTools", "agentRouteDir",
+                "secondoEnabled", "secondoFollowDistance", "secondoAssist", "secondoAssistRadius", "secondoAssistStand",
+                "secondoPickup", "secondoPickupRadius", "secondoCombatAssist"); // Ostinato: testHarness, legit track, compass follow, gear choice, every-block race, agent API, Secondo
         put(m, INTERFACE, "guiKeybind", "renderPathHud", "pathHudAnchor", "guiAccentColor", "guiTheme", "renderAcsHud", "acsHudAnchor", "acsHudOpacity", "acsHudScale");
         OVERRIDES = Collections.unmodifiableMap(m);
 
