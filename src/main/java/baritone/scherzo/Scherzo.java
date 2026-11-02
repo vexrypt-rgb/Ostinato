@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * Scherzo's hold on the game: one per fight process. Each fight tick it feeds the opponent's position to an
  * {@link OpponentModel}, settles the {@link PredictionAudit} against it, and builds the tick's {@link CombatSnapshot}.
  * <p>
- * Mode comes from {@code -Dostinato.scherzo=off|observe|live}, off by default (Ostinato: frozen until A/B). OFF does nothing at all. OBSERVE
+ * Mode comes from {@code -Dostinato.scherzo=off|observe|live}, observe by default (Ostinato: 2026-11-02 fixture A/B, Bombard needs Scherzo >= OBSERVE; LIVE melee gain unproven). OFF does nothing at all. OBSERVE
  * models and measures and moves no decision: the fight is exactly what it was without Scherzo. LIVE lets the fight
  * read the snapshot: the spear jab is aimed at, and judged against, where the server will have the opponent
  * ({@link #jab()}).
@@ -41,7 +41,7 @@ public final class Scherzo {
     private long ticks, nanos, maxNanos, fightTicks;
 
     public Scherzo() {
-        this(parse(System.getProperty("ostinato.scherzo", "off"))); // Ostinato: default off until a live fight A/B proves OBSERVE->LIVE gain
+        this(parse(System.getProperty("ostinato.scherzo", "observe"))); // Ostinato: default OBSERVE (telemetry only); LIVE stays opt-in until a melee A/B proves gain
     }
 
     public Scherzo(Mode mode) {
