@@ -126,7 +126,7 @@ public final class BombardLiveTest implements AbstractGameEventListener {
         } else if (state == 5 && --wait <= 0) {
             var server = mc.getSingleplayerServer();
             server.execute(() -> {
-                combatTnt = new PrimedTnt(server.overworld(), 0.5, rodFixture ? 254 : 250, rodFixture ? 4.5 : 3.5, null);
+                combatTnt = new PrimedTnt(server.overworld(), 0.5, rodFixture ? Double.parseDouble(System.getProperty("ostinato.bombardtest.rod.tntY", "254")) : 250, rodFixture ? 4.5 : 3.5, null); // Ostinato: rod fixture TNT height knob
                 combatTnt.setDeltaMovement(Vec3.ZERO);
                 combatTnt.setFuse(rodFixture ? 35 : 40);
                 server.overworld().addFreshEntity(combatTnt);

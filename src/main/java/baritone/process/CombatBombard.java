@@ -50,6 +50,7 @@ final class CombatBombard {
 
     /** Returns true only when these hands own this tick; every rejected candidate falls back to normal combat. */
     boolean tick(Player me, LivingEntity target) {
+        baritone.getPredictivePhysics().warmUp(); // Ostinato: once per JVM (background); later calls are one read
         long now = me.level().getGameTime();
         if (world != me.level() || now < lastTick) { nextEvaluation = now; lastTnt = -1; }
         // Ostinato: a one-tick gap (client tick without a combat pass, or a server time resync) used to drop a hooked rod as

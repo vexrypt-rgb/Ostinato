@@ -50,8 +50,10 @@ final class CombatBombardRod {
     private boolean run(Player me, LivingEntity target) {
         long now = me.level().getGameTime();
         if (world != me.level() || now < lastTick) { nextTry = now; attempted = -1; }
-        if (world != me.level() || player != me || foe != target || lastTick != now - 1)
-            drop(lastTick != now - 1 ? "TICK_GAP" : "CONTEXT_CHANGED");
+        // Ostinato: a cast in flight is tracked by entity + castAt timeout (12), so short client stalls must not drop it.
+        boolean gap = now < lastTick || now - lastTick > (selected >= 0 ? 12 : 1);
+        if (world != me.level() || player != me || foe != target || gap)
+            drop(gap ? "TICK_GAP" : "CONTEXT_CHANGED");
         world = me.level(); player = me; foe = target; lastTick = now;
         if (!observer.may(Primitive.ROD)) { drop("NOT_PERMITTED"); return false; }
         if (baritone.getGraceNote().holdsControl()) { drop("GRACE_NOTE"); return false; }

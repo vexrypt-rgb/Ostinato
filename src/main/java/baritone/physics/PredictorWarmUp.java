@@ -47,6 +47,11 @@ public final class PredictorWarmUp {
         Predictor p = new Predictor();
         BodyState body = BodyState.builder(BodyState.Type.PLAYER).pos(0.5, 64, 0.5).onGround(true).build();
         BodyState high = BodyState.builder(BodyState.Type.PLAYER).pos(0.5, 76, 0.5).vel(0, -0.5, 0).build();
+        // Ostinato: Bombard's rod/spear ask for TNT trajectories (HIGH / STANDARD with targets); warm that path too, or the
+        // first live TNT prediction is the cold one and misses its 2 ms deadline (seen at fuse 35 in BombardLiveTest).
+        BodyState tnt = BodyState.builder(BodyState.Type.PRIMED_TNT).pos(0.5, 68, 4.5).vel(0.02, 0.2, -0.02).size(0.98f, 0.98f, 0.15f)
+                .gravity(0.04).fuse(35, 4).flag(BodyState.POWER_ASSUMED, true).build();
+        BodyState foe = BodyState.builder(BodyState.Type.LIVING).pos(0.5, 64, 3.5).onGround(true).size(0.6f, 1.95f, 1.74f).build();
         for (int i = 0; i < runs; i++) {
             PredictionRequest r = PredictionRequest.trajectory(body, 40)
                     .input(new Input(1, 0, true, true, false, i % 2 == 0 ? -90 : 0, Float.NaN))
@@ -54,6 +59,9 @@ public final class PredictorWarmUp {
             p.run(r, t, r.fidelity, () -> false);
             PredictionRequest f = PredictionRequest.fall(high, 40).fidelity(Fidelity.SCREENING).reach(4.5f).build();
             p.run(f, t, f.fidelity, () -> false);
+            PredictionRequest b = PredictionRequest.trajectory(tnt, 40).targets(java.util.List.of(foe)) // Ostinato: TNT shape
+                    .fidelity(i % 2 == 0 ? Fidelity.HIGH : Fidelity.STANDARD).build();
+            p.run(b, t, b.fidelity, () -> false);
         }
     }
 
