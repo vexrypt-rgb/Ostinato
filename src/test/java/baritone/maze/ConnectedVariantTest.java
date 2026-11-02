@@ -333,4 +333,75 @@ public class ConnectedVariantTest {
             if (m.cell() == aboveFeature || m.cell() == maintenance || m.cell() == office) assertFalse(m.wall());
         }
     }
+
+    /** Ostinato: run111. Every neighbour already marked failed is probed again, instead of reporting none free. */
+    @Test
+    public void failedFrontierIsRetried() {
+        ConnectedPlan.Complex c = grow(0, 2, new HashSet<>());
+        int marks = 0;
+        for (ConnectedPlan.Room parent : c.rooms()) {
+            for (int dir = 0; dir < 4; dir++) {
+                int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                if (c.room(gx, gz) != null) continue;
+                c.fail(gx, gz);
+                marks++;
+            }
+        }
+        assertTrue(marks >= 4);
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, STONE, (x, z) -> 64, -64, 320, 12);
+        assertTrue(ch.why() + " tried=" + ch.tried(), ch.parentDir() >= 0);
+        assertTrue(ch.tried() > 0);
+    }
+
+    /** Ostinato: run111. Newest-room neighbours that are caves give way to an older room's neighbours. */
+    @Test
+    public void expansionFallsBackToOlderRooms() {
+        ConnectedPlan.Complex c = grow(0, 2, new HashSet<>());
+        ConnectedPlan.Room newest = c.rooms().get(c.rooms().size() - 1);
+        List<int[]> bad = new ArrayList<>();
+        List<int[]> good = new ArrayList<>();
+        for (ConnectedPlan.Room parent : c.rooms()) {
+            for (int dir = 0; dir < 4; dir++) {
+                int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                if (c.room(gx, gz) != null) continue;
+                (parent.equals(newest) ? bad : good).add(new int[]{gx, gz});
+            }
+        }
+        assertFalse(bad.isEmpty());
+        assertFalse(good.isEmpty());
+        for (int[] g : good) c.fail(g[0], g[1]);
+        BlockProbe carved = (x, y, z) -> {
+            for (int[] b : bad) {
+                int x0 = c.originX(b[0]), z0 = c.originZ(b[1]);
+                if (x >= x0 && x < x0 + ConnectedPlan.PITCH && z >= z0 && z < z0 + ConnectedPlan.PITCH) return BlockKind.AIR;
+            }
+            return BlockKind.SOLID;
+        };
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, carved, (x, z) -> 64, -64, 320, 12);
+        assertTrue(ch.why(), ch.parentDir() >= 0);
+        boolean forgiven = false;
+        for (int[] g : good) if (g[0] == ch.gx() && g[1] == ch.gz()) forgiven = true;
+        assertTrue("chose " + ch.gx() + "," + ch.gz() + " " + ch.why(), forgiven);
+    }
+
+    /** Ostinato: run111. Unknown stone beside a loaded centre is not saved as a permanent no-seal. */
+    @Test
+    public void unloadedBreachIsNotRemembered() {
+        ConnectedPlan.Complex c = grow(0, 1, new HashSet<>());
+        int pref = ConnectedPlan.preferredY(64, -64, 320);
+        BlockProbe probe = (x, y, z) -> {
+            for (ConnectedPlan.Room parent : c.rooms()) {
+                for (int dir = 0; dir < 4; dir++) {
+                    int gx = parent.gx() + ConnectedPlan.dx(dir), gz = parent.gz() + ConnectedPlan.dz(dir);
+                    if (x == c.originX(gx) + 3 && y == pref && z == c.originZ(gz) + 3) return BlockKind.SOLID;
+                }
+            }
+            return BlockKind.UNKNOWN;
+        };
+        ConnectedPlan.Choice ch = ConnectedPlan.next(c, probe, (x, z) -> 64, -64, 320, 12);
+        assertTrue(ch.parentDir() < 0);
+        assertEquals(0, c.failedCells().size());
+        assertTrue(ch.why(), ch.why().contains("unloaded"));
+        assertFalse(ch.why().contains("none"));
+    }
 }

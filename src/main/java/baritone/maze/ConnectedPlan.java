@@ -826,9 +826,24 @@ public final class ConnectedPlan {
      * Ostinato: the next room. Free neighbours of the newest room first (a winding path, short walks between digs), then
      * of older rooms. Each candidate's depth starts at the backrooms depth under its own ground and is kept within
      * {@link #MAX_RISE} of its parent, so the joining tunnel can climb it. {@code surface} gives the ground height.
-     * A neighbour that seals at no depth is marked failed in {@code c}, so it is not dry-run again once saved.
+     * A neighbour that seals at no fully loaded depth is marked failed in {@code c}. Ostinato: run111. Those marks used
+     * to stick, so the next call tried nothing and reported none free. When this call finds no seal, the older marks
+     * are dropped and the search runs once more, which reaches the neighbours of earlier rooms. A breach that includes
+     * an unloaded cell is not a failure.
      */
     public static Choice next(Complex c, BlockProbe probe, IntBinaryOperator surface, int minY, int maxY, int maxTries) {
+        Set<Long> before = new HashSet<>(c.failed);
+        Choice ch = search(c, probe, surface, minY, maxY, maxTries);
+        if (ch.parentDir() >= 0 || before.isEmpty()) return ch;
+        if (ch.tried() == 0) c.failed.clear(); // every neighbour was already marked; probe them again
+        else c.failed.removeAll(before); // keep this call's new marks, retry the older frontier
+        Choice again = search(c, probe, surface, minY, maxY, maxTries);
+        if (again.parentDir() >= 0) return again;
+        String why = (ch.why() + " " + again.why()).trim();
+        return new Choice(0, 0, 0, -1, ch.tried() + again.tried(), why);
+    }
+
+    private static Choice search(Complex c, BlockProbe probe, IntBinaryOperator surface, int minY, int maxY, int maxTries) {
         Set<Long> oldAir = c.air();
         List<Room> order = new ArrayList<>(c.rooms());
         java.util.Collections.reverse(order);
@@ -848,15 +863,37 @@ public final class ConnectedPlan {
                     continue; // not loaded yet: try again another time, never remembered as a failure
                 }
                 int rise = maxRise(parent.variant, variant(c.seed, gx, gz), dir); // Ostinato: 2026-11-02, per tunnel length
+                boolean unloaded = false;
+                boolean sealed = false;
+                int sealedY = pref;
                 for (int y : depths(pref, parent.originY - rise, parent.originY + rise, minY, maxY)) {
                     Segment s = join(c, oldAir, parent, dir, y);
-                    if (breaches(s, probe, false).isEmpty()) return new Choice(gx, gz, y, dir, tried, why.toString().trim());
+                    List<Long> holes = breaches(s, probe, false);
+                    if (holes.isEmpty()) {
+                        sealed = true;
+                        sealedY = y;
+                        break;
+                    }
+                    if (unloadedBreach(probe, holes)) unloaded = true;
+                }
+                if (sealed) return new Choice(gx, gz, sealedY, dir, tried, why.toString().trim());
+                if (unloaded) {
+                    why.append(' ').append(gx).append(',').append(gz).append("=unloaded");
+                    continue; // a chunk edge is not a cave; the cell stays free for the next dry run
                 }
                 c.fail(gx, gz); // water, lava or open caves at every depth the tunnel can climb to
                 why.append(' ').append(gx).append(',').append(gz).append("=no-seal");
             }
         }
         return new Choice(0, 0, 0, -1, tried, why.toString().trim());
+    }
+
+    /** True when a breach cell was not loaded. That depth is not proof the neighbour can never seal. */
+    private static boolean unloadedBreach(BlockProbe probe, List<Long> holes) {
+        for (long k : holes) {
+            if (probe.get(x(k), y(k), z(k)) == BlockKind.UNKNOWN) return true;
+        }
+        return false;
     }
 
     /** Text form of the complex for the per-world map file. */

@@ -538,9 +538,28 @@ public final class MazeProcess extends BaritoneProcessHelper {
     /** The next-room dry run against the level the probes read; call it through {@link #onServer}. */
     private ConnectedPlan.Choice nextChoice(ConnectedPlan.Complex c) {
         net.minecraft.world.level.Level level = probeLevel();
+        // Ostinato: run111. A neighbour's centre can be loaded while its shell still reads unknown, and that used to
+        // be saved as a permanent no-seal. Load the frontier columns first, the way the grid expand does.
+        if (level instanceof net.minecraft.server.level.ServerLevel server) preloadFrontier(server, c);
         return ConnectedPlan.next(c, new MazeWorldProbe(ctx.world()),
                 (x, z) -> level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR, x, z),
                 level.getMinY(), level.getMaxY(), CONNECTED_TRIES);
+    }
+
+    /** Chunk columns of every free neighbour, including ones already marked, so a retry sees the real blocks. */
+    private static void preloadFrontier(net.minecraft.server.level.ServerLevel level, ConnectedPlan.Complex c) {
+        for (ConnectedPlan.Room parent : c.rooms()) {
+            for (int dir = 0; dir < 4; dir++) {
+                int gx = parent.gx() + ConnectedPlan.dx(dir);
+                int gz = parent.gz() + ConnectedPlan.dz(dir);
+                if (c.room(gx, gz) != null) continue;
+                int x0 = c.originX(gx) - 2, x1 = c.originX(gx) + ConnectedPlan.PITCH + 2;
+                int z0 = c.originZ(gz) - 2, z1 = c.originZ(gz) + ConnectedPlan.PITCH + 2;
+                for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
+                    for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) level.getChunk(cx, cz);
+                }
+            }
+        }
     }
 
     /**
