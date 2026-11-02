@@ -20,6 +20,7 @@ package baritone.maze;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -53,6 +54,13 @@ public final class ConnectedLight {
 
     /** The planned torches and what the plan leaves dark (empty when the complex is safe). */
     public record Result(List<Long> torches, List<Long> dark, int targets, int pool, boolean exact) {}
+
+    /**
+     * Where a repair torch goes. {@code wall} is a side attachment (no sturdy top under the cell); otherwise it is a
+     * floor torch. Ostinato: run111. The reach model can report {@code dark-left=0} while the world block light is
+     * still 0, so a repair places one of these next to each measured dark cell instead of trusting that model.
+     */
+    public record Mount(long cell, boolean wall) {}
 
     /**
      * Cells a hostile mob could stand in: open cells (air minus containers) with something that is not open under them.
@@ -232,6 +240,103 @@ public final class ConnectedLight {
     private static boolean nonZero(long[] bits) {
         for (long b : bits) if (b != 0) return true;
         return false;
+    }
+
+    /**
+     * A floor torch can stand in {@code k}: the cell is open, the cell under it is not, and {@code sturdyBelow}
+     * accepts that block. A feature block counts when it has a sturdy top; {@link ConnectedPlan#mountable} does not.
+     */
+    public static boolean repairFloor(Set<Long> open, long k, LongPredicate sturdyBelow) {
+        if (!open.contains(k)) return false;
+        long below = offset(k, 0, -1, 0);
+        return !open.contains(below) && sturdyBelow.test(below);
+    }
+
+    /** A wall torch can stand in {@code k}: the cell is open and at least one side neighbour is not. */
+    public static boolean repairWall(Set<Long> open, long k) {
+        if (!open.contains(k)) return false;
+        for (int[] f : FACES) {
+            if (f[1] != 0) continue;
+            if (!open.contains(offset(k, f[0], 0, f[2]))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * A torch for each dark cell the world still reads as unlit. Prefers a floor torch in the dark cell, then on a
+     * neighbouring floor, then a wall torch in the dark cell itself, then the nearest of either within a few steps.
+     * One torch covers a dark cell at most two steps away through open air, so two adjacent dark cells share.
+     */
+    public static List<Mount> repairMounts(Set<Long> open, Collection<Long> dark, LongPredicate floorMount, LongPredicate wallMount) {
+        List<Long> cells = new ArrayList<>(dark);
+        cells.sort(Comparator.comparingInt(ConnectedPlan::y).thenComparingInt(ConnectedPlan::x).thenComparingInt(ConnectedPlan::z));
+        List<Mount> out = new ArrayList<>();
+        List<Long> placed = new ArrayList<>();
+        for (long d : cells) {
+            if (served(open, placed, d)) continue;
+            long spot = Long.MIN_VALUE;
+            boolean wall = false;
+            if (open.contains(d) && floorMount.test(d)) {
+                spot = d;
+            } else {
+                spot = nearest(open, d, floorMount, 1);
+            }
+            if (spot == Long.MIN_VALUE && open.contains(d) && wallMount.test(d)) {
+                spot = d;
+                wall = true;
+            }
+            if (spot == Long.MIN_VALUE) {
+                spot = nearest(open, d, floorMount, 4);
+            }
+            if (spot == Long.MIN_VALUE) {
+                spot = nearest(open, d, wallMount, 2);
+                wall = spot != Long.MIN_VALUE;
+            }
+            if (spot == Long.MIN_VALUE) continue;
+            placed.add(spot);
+            out.add(new Mount(spot, wall));
+        }
+        return out;
+    }
+
+    /** Dark cells still more than four open steps from any repair torch. */
+    public static int stillDark(Set<Long> open, Collection<Mount> mounts, Collection<Long> dark) {
+        List<Long> src = new ArrayList<>();
+        for (Mount m : mounts) src.add(m.cell());
+        Map<Long, Integer> lit = reach(open, src);
+        int n = 0;
+        for (long d : dark) {
+            Integer dist = lit.get(d);
+            if (dist == null || dist > 4) n++;
+        }
+        return n;
+    }
+
+    private static boolean served(Set<Long> open, List<Long> placed, long dark) {
+        if (placed.isEmpty()) return false;
+        Integer dist = reach(open, placed).get(dark);
+        return dist != null && dist <= 2;
+    }
+
+    /** Nearest open cell within {@code maxDist} that {@code ok} accepts, or {@link Long#MIN_VALUE}. */
+    private static long nearest(Set<Long> open, long start, LongPredicate ok, int maxDist) {
+        Map<Long, Integer> dist = new HashMap<>();
+        ArrayDeque<Long> queue = new ArrayDeque<>();
+        dist.put(start, 0);
+        queue.add(start);
+        while (!queue.isEmpty()) {
+            long k = queue.poll();
+            int d = dist.get(k);
+            if (open.contains(k) && ok.test(k)) return k;
+            if (d >= maxDist) continue;
+            for (int[] f : FACES) {
+                long n = offset(k, f[0], f[1], f[2]);
+                if (!open.contains(n) || dist.containsKey(n)) continue;
+                dist.put(n, d + 1);
+                queue.add(n);
+            }
+        }
+        return Long.MIN_VALUE;
     }
 
     /** The open set of a complex: its air minus the cells containers fill. */

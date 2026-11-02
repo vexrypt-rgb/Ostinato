@@ -253,4 +253,84 @@ public class ConnectedVariantTest {
         String line = c.plan(r).roomLine("dig");
         assertEquals("MAZE ROOM variant=lobby theme=lobby size=11x9x11 cell=2,-1 phase=dig", line);
     }
+
+    /** Ostinato: run111. A dark cell with no sturdy floor still gets a wall torch, and a missed mount stays dark. */
+    @Test
+    public void repairMountsPlansATorchBesideEachDarkCell() {
+        Set<Long> open = new HashSet<>();
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                open.add(key(x, 2, z));
+                open.add(key(x, 3, z));
+            }
+        }
+        long floorDark = key(1, 2, 1);
+        long wallDark = key(0, 3, 0); // open underneath, solid to the west
+        // Only the one floor cell is accepted, so the high cell cannot borrow a neighbour's floor and takes a wall torch.
+        java.util.function.LongPredicate floor = k -> k == floorDark && ConnectedLight.repairFloor(open, k, below -> true);
+        java.util.function.LongPredicate wall = k -> ConnectedLight.repairWall(open, k);
+        assertTrue(floor.test(floorDark));
+        assertFalse(floor.test(wallDark));
+        assertTrue(wall.test(wallDark));
+        List<Long> dark = List.of(floorDark, wallDark);
+        List<ConnectedLight.Mount> mounts = ConnectedLight.repairMounts(open, dark, floor, wall);
+        assertEquals(0, ConnectedLight.stillDark(open, mounts, dark));
+        boolean sawFloor = false, sawWall = false;
+        for (ConnectedLight.Mount m : mounts) {
+            if (m.cell() == floorDark) {
+                assertFalse(m.wall());
+                sawFloor = true;
+            }
+            if (m.cell() == wallDark) {
+                assertTrue(m.wall());
+                sawWall = true;
+            }
+        }
+        assertTrue(sawFloor);
+        assertTrue(sawWall);
+        List<ConnectedLight.Mount> none = ConnectedLight.repairMounts(open, List.of(wallDark), k -> false, k -> false);
+        assertTrue(none.isEmpty());
+        assertEquals(1, ConnectedLight.stillDark(open, none, List.of(wallDark)));
+    }
+
+    /**
+     * Ostinato: run111. maintenance@1,0 and the office left three spawn cells at block light 0. The reach model treats
+     * them as lit, and {@link ConnectedPlan#mountable} refuses the feature under one of them. A repair torch still goes
+     * on that sturdy top.
+     */
+    @Test
+    public void repairMountsTheRun111DarkCells() {
+        ConnectedPlan.Complex c = new ConnectedPlan.Complex(0, -38, -50);
+        c.put(new ConnectedPlan.Room(0, 0, 95, 1, RoomVariant.SMALL_OFFICE));
+        c.put(new ConnectedPlan.Room(1, 0, 88, 4, RoomVariant.MAINTENANCE));
+        Set<Long> open = ConnectedLight.open(c.air(), c.containers());
+        long aboveFeature = key(-21, 91, -41);
+        long maintenance = key(-21, 90, -42);
+        long office = key(-35, 97, -46);
+        assertTrue(open.contains(aboveFeature));
+        assertTrue(open.contains(maintenance));
+        assertTrue(open.contains(office));
+        assertEquals(BlockRole.FEATURE, c.roleAt(offset(aboveFeature, 0, -1, 0)));
+        assertFalse(ConnectedPlan.mountable(c, open, c.containers(), aboveFeature));
+        java.util.function.LongPredicate floor = k -> ConnectedLight.repairFloor(open, k, below -> c.roleAt(below) != BlockRole.WATER);
+        java.util.function.LongPredicate wall = k -> ConnectedLight.repairWall(open, k);
+        assertTrue(floor.test(aboveFeature));
+        assertTrue(floor.test(maintenance));
+        assertTrue(floor.test(office));
+        List<Long> dark = List.of(aboveFeature, maintenance, office);
+        // The two torches the furnish actually stood. The maintenance one sits in the tunnel, just outside the door.
+        List<Long> standing = List.of(key(-35, 97, -47), key(-23, 90, -47));
+        Set<Long> withTorches = new HashSet<>(open);
+        withTorches.addAll(standing);
+        ConnectedLight.Result model = ConnectedLight.plan(withTorches, standing,
+                k -> ConnectedPlan.mountable(c, withTorches, c.containers(), k), k -> ConnectedPlan.preferredTorch(c, k));
+        assertTrue(model.torches().isEmpty());
+        assertTrue(model.dark().isEmpty());
+        List<ConnectedLight.Mount> mounts = ConnectedLight.repairMounts(open, dark, floor, wall);
+        assertFalse(mounts.isEmpty());
+        assertEquals(0, ConnectedLight.stillDark(open, mounts, dark));
+        for (ConnectedLight.Mount m : mounts) {
+            if (m.cell() == aboveFeature || m.cell() == maintenance || m.cell() == office) assertFalse(m.wall());
+        }
+    }
 }

@@ -1194,13 +1194,35 @@ public final class MazeProcess extends BaritoneProcessHelper {
             }
             Set<Long> containers = c.containers();
             Set<Long> open = ConnectedLight.open(air, containers);
-            ConnectedLight.Result light = ConnectedLight.plan(open, torchesIn(level, air),
-                    k -> ConnectedPlan.mountable(c, open, containers, k), k -> ConnectedPlan.preferredTorch(c, k));
-            for (long k : light.torches()) {
-                steps.add(new MazeFurnishJob.Step(MazeFurnishJob.StepKind.LIGHT, ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k),
-                        MazeFurnishPlanner.lightIds(seg.plan.theme), List.of()));
+            // Ostinato: run111. The reach model can already call every spawn cell lit (new=0 dark-left=0) while the
+            // world block light is still 0. Measure the same cells the light check does, and place a torch by each one.
+            List<Long> measured = new ArrayList<>();
+            for (long k : ConnectedLight.spawnCells(open)) {
+                at.set(ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k));
+                if (!level.isLoaded(at)) continue;
+                if (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, at) == 0) measured.add(k);
             }
-            lastLight = "repair new=" + light.torches().size() + " dark-left=" + light.dark().size();
+            if (!measured.isEmpty()) {
+                List<ConnectedLight.Mount> mounts = ConnectedLight.repairMounts(open, measured,
+                        k -> ConnectedLight.repairFloor(open, k, below -> {
+                            BlockPos under = new BlockPos(ConnectedPlan.x(below), ConnectedPlan.y(below), ConnectedPlan.z(below));
+                            return level.isLoaded(under) && level.getBlockState(under).isFaceSturdy(level, under, Direction.UP);
+                        }),
+                        k -> ConnectedLight.repairWall(open, k));
+                for (ConnectedLight.Mount m : mounts) {
+                    List<String> ids = m.wall() ? List.of("wall_torch", "torch") : MazeFurnishPlanner.lightIds(seg.plan.theme);
+                    steps.add(new MazeFurnishJob.Step(MazeFurnishJob.StepKind.LIGHT, ConnectedPlan.x(m.cell()), ConnectedPlan.y(m.cell()), ConnectedPlan.z(m.cell()), ids, List.of()));
+                }
+                lastLight = "repair new=" + mounts.size() + " dark-left=" + ConnectedLight.stillDark(open, mounts, measured);
+            } else {
+                ConnectedLight.Result light = ConnectedLight.plan(open, torchesIn(level, air),
+                        k -> ConnectedPlan.mountable(c, open, containers, k), k -> ConnectedPlan.preferredTorch(c, k));
+                for (long k : light.torches()) {
+                    steps.add(new MazeFurnishJob.Step(MazeFurnishJob.StepKind.LIGHT, ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k),
+                            MazeFurnishPlanner.lightIds(seg.plan.theme), List.of()));
+                }
+                lastLight = "repair new=" + light.torches().size() + " dark-left=" + light.dark().size();
+            }
             return new MazeFurnishJob(seg.room.gx(), seg.room.gz(), seg.plan.theme.id, survival, steps, new int[0]);
         });
         IMazeFurnisher furnisher = MazeFurnishers.get();
