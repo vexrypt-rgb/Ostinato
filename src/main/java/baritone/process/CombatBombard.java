@@ -52,7 +52,10 @@ final class CombatBombard {
     boolean tick(Player me, LivingEntity target) {
         long now = me.level().getGameTime();
         if (world != me.level() || now < lastTick) { nextEvaluation = now; lastTnt = -1; }
-        if (world != me.level() || player != me || foe != target || lastTick != now - 1) cancel();
+        // Ostinato: a one-tick gap (client tick without a combat pass, or a server time resync) used to drop a hooked rod as
+        // "EXTERNAL" mid-reel. The rod tracks its cast by entity and castAt timeout, so it rides out short stalls; spear stays strict.
+        if (world != me.level() || player != me || foe != target) cancel(world != me.level() ? "WORLD" : player != me ? "PLAYER" : "TARGET");
+        else if (lastTick != now - 1) { if (now - lastTick > 12 || now < lastTick) rod.drop("TICK_GAP"); cancelSpear(); } // Ostinato: 3+ tick client stalls seen live; castAt timeout (12) bounds the rod
         world = me.level(); player = me; foe = target; lastTick = now;
         if (rod.tick(me, target)) return true;
         if (baritone.getGraceNote().holdsControl() || !observer.may(Primitive.SPEAR)) {
@@ -132,8 +135,10 @@ final class CombatBombard {
                 .fidelity(PredictionRequest.Fidelity.STANDARD).deadlineIn(2_000_000L).consumer("bombard-spear").build());
     }
 
-    void cancel() {
-        rod.drop("EXTERNAL");
+    void cancel() { cancel("EXTERNAL"); }
+
+    void cancel(String why) { // Ostinato: name the reason a hooked rod was dropped
+        rod.drop(why);
         cancelSpear();
     }
 

@@ -107,7 +107,8 @@ public final class BombardLiveTest implements AbstractGameEventListener {
                     zombie.setNoAi(true);
                     zombie.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
                     // Within the existing spear controller's walking radius, and within blast reach of z~17.7.
-                    zombie.setPos(0.5, 250, rodFixture ? 3.5 : 13.5);
+                    double[] zp = rodFixture ? java.util.Arrays.stream(System.getProperty("ostinato.bombardtest.rod.zombie", "0.5,3.5").split(",")).mapToDouble(Double::parseDouble).toArray() : new double[]{0.5, 13.5}; // Ostinato: rod fixture zombie x,z knob
+                    zombie.setPos(zp[0], 250, zp[1]);
                     level.addFreshEntity(zombie);
                     targetId = zombie.getId();
                     ready = true;

@@ -27,6 +27,9 @@ final class CombatBombardRod {
     private Object world, player, foe;
     private ImpulseAttempt effect;
     private int aimed = -1, aimTicks, retries;
+    // Ostinato: PPE path and index of the expected reel tick for the cast-time worthwhile check (null when reeling)
+    private float[] castPath;
+    private int castIndex = -1;
     private final java.util.Set<String> told = new java.util.HashSet<>();
 
     CombatBombardRod(Baritone b, Bombard observer, Scherzo scherzo, CombatInventory inventory,
@@ -125,6 +128,8 @@ final class CombatBombardRod {
             }
             String blocked = arcBlocked(me, tnt, eye, actualYaw, actualPitch, at);
             if (blocked != null) return reject(tnt, blocked);
+            // Ostinato: the pull happens at the reel, not now: hit tick + worst spawn delay + one tick to send the reel
+            castPath = trajectory.path; castIndex = Math.min(at + RodCast.LATE_MAX + 1, trajectory.path.length / 3 - 2);
         }
         Prediction future = scherzo.predict(tnt.getFuse());
         if (future == null || future.age() != 0 || future.confidence() == Prediction.Confidence.LOW || future.spread() > 1) {
@@ -133,10 +138,12 @@ final class CombatBombardRod {
             if (selected < 0) reject(tnt, why);
             drop(why); return false;
         }
-        double[] impulse = TntMechanics.rodPull(tnt.getX(), tnt.getY(), tnt.getZ(), me.getX(), me.getY(), me.getZ());
         try {
             var physics = baritone.getPredictivePhysics();
             BodyState body = physics.capture(tnt);
+            if (selected < 0 && castPath != null) body = atReel(body, castPath, castIndex); // Ostinato: forecast the pull where it will happen
+            castPath = null;
+            double[] impulse = TntMechanics.rodPull(body.x, body.y, body.z, me.getX(), me.getY(), me.getZ());
             var victim = physics.capture(target).toBuilder().pos(future.x(), future.y(), future.z()).build();
             var targets = List.of(physics.capture(me), victim);
             var before = CombatBombard.predict(physics, body, targets, me);
@@ -170,6 +177,16 @@ final class CombatBombardRod {
         } catch (IllegalArgumentException | IllegalStateException unavailable) {
             drop("UNAVAILABLE_" + unavailable.getClass().getSimpleName()); nextTry = now + 5; return false;
         }
+    }
+
+    /** Ostinato: TNT state at PPE path index j (vanilla PrimedTnt: gravity 0.04 before move, so v = displacement + 0.04 up). */
+    static BodyState atReel(BodyState now, float[] path, int j) {
+        if (j <= 0 || 3 * j + 5 >= path.length) return now;
+        double x = path[3 * j], y = path[3 * j + 1], z = path[3 * j + 2];
+        double dx = path[3 * j + 3] - x, dy = path[3 * j + 4] - y, dz = path[3 * j + 5] - z;
+        boolean ground = Math.abs(dy) < 1e-6 && Math.abs(path[3 * j + 1] - path[3 * j - 2]) < 1e-6;
+        return now.toBuilder().pos(x, y, z).vel(dx, ground ? 0 : dy + 0.04, dz).onGround(ground)
+                .fuse(Math.max(1, now.fuse - j), now.explosionPower).build();
     }
 
     /** Mean arc for the rotation actually held must not meet a block or another entity before the TNT. */
