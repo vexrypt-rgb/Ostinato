@@ -1,0 +1,2 @@
+GRACENOTE_IDLE_TICK samples=20000 p50_ns=100 p95_ns=200 p99_ns=200 max_ns=14100 bytes_per_tick=80.0
+GRACENOTE_EPISODE samples=5000 ticks=24 p50_us=2.200 p95_us=5.400 p99_us=9.400 max_us=39.200 (scripted world included)

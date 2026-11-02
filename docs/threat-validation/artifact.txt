@@ -1,0 +1,3 @@
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\fabric\build\libs\baritone-fabric-1.26.0-dirty.jar
+SHA256 ac1298629175e7e7edf9d5346971eb0fded2c848a666fd81577daa32de470c3b
+Verified Fabric metadata and threat API/service classes are packaged.
