@@ -36,6 +36,18 @@ public interface IAimProcessor {
     Rotation peekRotation(Rotation desired);
 
     /**
+     * Ostinato: the rotation the look settles at once it has finished turning toward {@code desired}: as
+     * {@link #peekRotation}, but without any per-tick turn limit. Reach checks use this, so a block behind the player
+     * counts as reachable (the look turns over the next ticks; callers click only once the crosshair is on it).
+     *
+     * @param desired The desired rotation to set
+     * @return The rotation the look ends at
+     */
+    default Rotation peekSettledRotation(Rotation desired) {
+        return peekRotation(desired);
+    }
+
+    /**
      * Returns a copy of this {@link IAimProcessor} which has its own internal state and is manually tickable.
      *
      * @return The forked processor

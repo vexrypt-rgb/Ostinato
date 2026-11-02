@@ -27,6 +27,7 @@ final class CombatMovement {
     java.util.function.ToIntBiFunction<Player, LivingEntity> push;
     /** Ostinato: ticks spent on a push side so far (for the fight log). */
     int pushTicks;
+    baritone.scherzo.ManeuverAdvice predictive;
     private baritone.pathing.kinematic.KinematicController kin;
 
     private final IPlayerContext ctx;
@@ -40,6 +41,14 @@ final class CombatMovement {
     }
 
     void steer(Player me, LivingEntity target, double dist, boolean chase, boolean critArmed) {
+        if (predictive != null && !chase && !critArmed && wtap <= 0 && dist <= 3.5) {
+            var choice = predictive.choose(me, target);
+            if (choice != null) {
+                if (choice.forward() != 0) hands.key(choice.forward() > 0 ? Input.MOVE_FORWARD : Input.MOVE_BACK);
+                if (choice.side() != 0) hands.key(choice.side() > 0 ? Input.MOVE_RIGHT : Input.MOVE_LEFT);
+                return;
+            }
+        }
         if (--strafeLeft <= 0) {
             strafeDir = rng.nextBoolean() ? 1 : -1;
             strafeLeft = 10 + rng.nextInt(20);

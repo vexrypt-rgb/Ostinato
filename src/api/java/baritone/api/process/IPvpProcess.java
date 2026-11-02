@@ -41,4 +41,12 @@ public interface IPvpProcess extends IBaritoneProcess {
 
     /** One-line human-readable counters, e.g. for chat. */
     String stats();
+
+    /** Ostinato (Bombard): what the fight's TNT layer may spend; {@link baritone.api.bombard.BombardPermit#DENY} until granted. */
+    default baritone.api.bombard.BombardPermit getBombardPermit() {
+        return baritone.api.bombard.BombardPermit.DENY;
+    }
+
+    /** Ostinato (Bombard): grant (or take back, with DENY) what the TNT layer may spend. Null is DENY. */
+    default void setBombardPermit(baritone.api.bombard.BombardPermit permit) {}
 }

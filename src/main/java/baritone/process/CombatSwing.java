@@ -14,6 +14,10 @@ import static baritone.process.CombatInventory.isSpear;
  */
 final class CombatSwing {
     private Vec3 kineticPos;
+    /** Ostinato (Scherzo): the predictive layer's word on a jab; {@link baritone.scherzo.JabAdvice#NONE} is the fight as it was. */
+    baritone.scherzo.JabAdvice advice = baritone.scherzo.JabAdvice.NONE;
+    /** What the client's own ray said at the last {@link #spearRayHits}, for the jab audit. */
+    boolean lastClientRay;
 
     /**
      * Where a sword or axe looks. The nearest point of the hitbox is its edge whenever we stand off-axis,
@@ -56,8 +60,17 @@ final class CombatSwing {
         if (!isSpear(st) || me.cannotAttackWithItem(st, 0)) return false;
         net.minecraft.world.item.component.AttackRange range = me.getAttackRangeWith(st);
         net.minecraft.world.phys.HitResult hit = range.getClosesetHit(me, 1.0f, e -> e == target);
-        if (!(hit instanceof net.minecraft.world.phys.EntityHitResult er) || er.getEntity() != target) return false;
-        double along = me.getEyePosition().distanceTo(er.getLocation());
-        return along >= SPEAR_JAB_LO && along <= SPEAR_JAB_HI;
+        lastClientRay = hit instanceof net.minecraft.world.phys.EntityHitResult er && er.getEntity() == target
+                && me.getEyePosition().distanceTo(er.getLocation()) >= SPEAR_JAB_LO && me.getEyePosition().distanceTo(er.getLocation()) <= SPEAR_JAB_HI;
+        // Ostinato (Scherzo): the server casts this ray against where it has the target, a round trip ahead of what we see
+        int said = advice.verdict(me, target, SPEAR_JAB_LO, SPEAR_JAB_HI);
+        if (said != 0) return said > 0;
+        return lastClientRay;
+    }
+
+    /** Ostinato (Scherzo): where a jab looks: the predictive layer's point when it has one, else the box's near point. */
+    Vec3 jabPoint(Player me, LivingEntity target) {
+        Vec3 at = advice.aim(me, target);
+        return at != null ? at : aimPoint(me, target);
     }
 }
