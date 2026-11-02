@@ -60,5 +60,6 @@ public final class TestHarness {
         baritone.pathing.legato.LegatoLiveTest.install(b);
         baritone.pathing.cadenza.CadenzaLiveTest.install(b);
         baritone.bombard.BombardLiveTest.install(b);
+        baritone.scherzo.ScherzoSparTest.install(b); // Ostinato: Scherzo LIVE/OBSERVE spar A/B harness
     }
 }
