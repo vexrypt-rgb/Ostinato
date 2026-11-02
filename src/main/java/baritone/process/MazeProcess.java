@@ -1314,10 +1314,13 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 releaseShell(); // Ostinato: run108 shell breach
                 segmentsDone++;
                 failures = 0;
-                int hold = watcher == null ? 0 : watcher.furnished(startedSegment, lastJob, timedOut);
-                if (drive == Drive.OFF) return; // the watcher ended the run
-                if (drive == Drive.FURNISH) return; // Ostinato: run108 shell breach, the watcher handed a repair job
+                // Ostinato: run110. drive was still FURNISH here, so the repair check always returned and the watcher was
+                // called every tick on the same segment (ROOM-RESULT 4700/inf, never a next room). Go to HOLD first; a repair
+                // job puts it back to FURNISH, stopConnected to OFF.
                 drive = Drive.HOLD;
+                holdTicks = 20;
+                int hold = watcher == null ? 0 : watcher.furnished(startedSegment, lastJob, timedOut);
+                if (drive != Drive.HOLD) return; // OFF: the watcher ended the run; FURNISH: it handed a repair job
                 holdTicks = Math.max(hold, 20);
             }
             case HOLD -> {
