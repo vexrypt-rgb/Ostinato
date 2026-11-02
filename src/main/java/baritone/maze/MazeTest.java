@@ -355,9 +355,19 @@ public final class MazeTest implements AbstractGameEventListener {
         public int furnished(ConnectedPlan.Segment seg, baritone.api.maze.MazeFurnishJob j, boolean timedOut) {
             boolean[] done = {false};
             String line = j == null ? "no job" : jobLine(mc, j, done);
-            segFurnished = done[0];
-            say("CONNECTED furnish verify " + line + (timedOut ? " (timed out)" : "") + " -> " + (segFurnished ? "PASS" : "FAIL"));
-            boolean lightOk = lightCheck(mc, seg);
+            if (repairs == 0) segFurnished = done[0]; // Ostinato: run108 shell breach, a repair job is checked by lightCheck alone
+            say("CONNECTED furnish verify " + line + (timedOut ? " (timed out)" : "") + " -> " + (done[0] ? "PASS" : "FAIL"));
+            java.util.Set<Long> leakCells = new java.util.HashSet<>();
+            boolean[] repairable = {false};
+            boolean lightOk = lightCheck(mc, seg, leakCells, repairable);
+            // Ostinato: run108 shell breach. Only leaks/dark with the shaft closed and no sky: seal and relight, then check again.
+            if (!lightOk && repairable[0] && repairs < 2) {
+                repairs++;
+                var rep = b.getMazeProcess().repairConnected(seg, leakCells);
+                say("LIGHT-REPAIR attempt=" + repairs + " " + (rep.ok() ? rep.message : "refused: " + rep.error));
+                if (rep.ok()) return 0;
+            }
+            repairs = 0;
             segmentsSeen++;
             boolean pass = segDug && segFurnished && lightOk;
             String entry = (seg.plan == null ? "?" : seg.plan.theme.id) + "@" + seg.room.gx() + "," + seg.room.gz() + "=" + (pass ? "PASS" : "FAIL");
@@ -387,7 +397,9 @@ public final class MazeTest implements AbstractGameEventListener {
      * The live proof for one segment, read on the server: every cell of the whole complex a hostile could spawn in has
      * block light, no air cell sees the sky, no complex air touches outside air or fluid, and the way in is closed.
      */
-    private boolean lightCheck(Minecraft mc, ConnectedPlan.Segment seg) {
+    private int repairs; // Ostinato: run108 shell breach, repair attempts on the current segment
+
+    private boolean lightCheck(Minecraft mc, ConnectedPlan.Segment seg, java.util.Set<Long> leakCells, boolean[] repairable) {
         ConnectedPlan.Complex c = seg.after;
         var entry = b.getMazeProcess().lastEntry();
         String r = onServer(mc, () -> {
@@ -420,6 +432,7 @@ public final class MazeTest implements AbstractGameEventListener {
                     if (!lvl.isLoaded(np)) continue;
                     var ns = lvl.getBlockState(np);
                     if (ns.isAir() || !ns.getFluidState().isEmpty()) {
+                        if (ns.isAir()) leakCells.add(n);
                         if (leaks++ < 3) ex.append(" leak=").append(np.toShortString()).append(ns.isAir() ? "" : ":fluid");
                     }
                 }
@@ -434,7 +447,10 @@ public final class MazeTest implements AbstractGameEventListener {
                 }
                 shaft = closed + "/" + total;
             }
-            boolean ok = dark == 0 && skyLit == 0 && leaks == 0 && (entry == null || shaft.startsWith(String.valueOf(entry.groundY() - entry.ceilingY() + 1) + "/"));
+            boolean shaftOk = entry == null || shaft.startsWith(String.valueOf(entry.groundY() - entry.ceilingY() + 1) + "/");
+            boolean ok = dark == 0 && skyLit == 0 && leaks == 0 && shaftOk;
+            // Ostinato: run108 shell breach. Air leaks and dark cells are fixable; sky light, fluid or an open shaft are not.
+            repairable[0] = !ok && shaftOk && skyLit == 0 && leakCells.size() == leaks;
             return (ok ? "PASS" : "FAIL") + " rooms=" + c.rooms().size() + " air=" + air.size() + " spawnCells=" + spawn.size() + " dark=" + dark
                     + " torches=" + torches + " skyLit=" + skyLit + " leaks=" + leaks + " shaft=" + shaft + " unloaded=" + unloaded + ex;
         });

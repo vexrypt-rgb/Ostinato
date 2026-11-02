@@ -1075,8 +1075,93 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     public void stopConnected() {
         if (drive == Drive.FURNISH) cancelFurnisher();
+        releaseShell(); // Ostinato: run108 shell breach
         drive = Drive.OFF;
         cancel();
+    }
+
+    // ---- Ostinato: run108 shell breach ------------------------------------------------------------------------------
+    //
+    // run108: the furnisher pathed out under room 1 (feet at y=84, below the floor) and broke the shell on the way, so
+    // the finished room leaked to outside air and a wall went dark. While a furnish job runs, every solid cell around
+    // the complex is guarded against breaking, except the cells the job itself clads and the way-in column.
+
+    private boolean shellGuardSet;
+
+    private void guardShell(ConnectedPlan.Segment seg) {
+        if (seg == null || seg.after == null) return;
+        Set<Long> air = seg.after.air();
+        Set<Long> shell = new HashSet<>();
+        for (long k : air) {
+            int x = ConnectedPlan.x(k), y = ConnectedPlan.y(k), z = ConnectedPlan.z(k);
+            for (long n : new long[]{ConnectedPlan.key(x + 1, y, z), ConnectedPlan.key(x - 1, y, z), ConnectedPlan.key(x, y + 1, z),
+                    ConnectedPlan.key(x, y - 1, z), ConnectedPlan.key(x, y, z + 1), ConnectedPlan.key(x, y, z - 1)}) {
+                if (!air.contains(n)) shell.add(n);
+            }
+        }
+        if (lastJob != null) {
+            for (MazeFurnishJob.Step st : lastJob.steps) shell.remove(ConnectedPlan.key(st.x(), st.y(), st.z()));
+        }
+        Entry e = lastEntry;
+        if (shell.isEmpty()) return;
+        AltoClefSettings.getInstance().setOstinatoGuard((x, y, z) -> !(e != null && x == e.x() && z == e.z())
+                && shell.contains(ConnectedPlan.key(x, y, z)));
+        shellGuardSet = true;
+        System.out.println("MAZETEST CONNECTED shell guard cells=" + shell.size());
+    }
+
+    private void releaseShell() {
+        if (!shellGuardSet) return;
+        AltoClefSettings.getInstance().setOstinatoGuard(null);
+        shellGuardSet = false;
+    }
+
+    /**
+     * Hands the furnisher a repair job for the segment just checked: SEAL on each leak cell (outside air touching
+     * complex air), then LIGHT wherever the light planner still finds dark open cells. The drive goes back to FURNISH
+     * and calls the watcher again when the furnisher lets go.
+     */
+    public Outcome repairConnected(ConnectedPlan.Segment seg, Set<Long> leaks) {
+        if (drive != Drive.HOLD && drive != Drive.FURNISH || seg == null || seg.plan == null) return Outcome.fail("no segment to repair");
+        boolean survival = ctx.player() != null && !ctx.player().getAbilities().instabuild;
+        MazeFurnishJob job = onServer(() -> {
+            net.minecraft.world.level.Level level = probeLevel();
+            ConnectedPlan.Complex c = seg.after;
+            List<MazeFurnishJob.Step> steps = new ArrayList<>();
+            List<Long> sorted = new ArrayList<>(leaks);
+            sorted.sort(Comparator.comparingInt(ConnectedPlan::y).thenComparingInt(ConnectedPlan::x).thenComparingInt(ConnectedPlan::z));
+            for (long k : sorted) {
+                steps.add(new MazeFurnishJob.Step(MazeFurnishJob.StepKind.SEAL, ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k),
+                        MazeFurnishPlanner.sealIds(seg.plan.theme, seg.plan.originY), List.of()));
+            }
+            Set<Long> air = new HashSet<>();
+            BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+            for (long k : c.air()) {
+                if (level.isLoaded(at.set(ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k)))) air.add(k);
+            }
+            Set<Long> containers = c.containers();
+            Set<Long> open = ConnectedLight.open(air, containers);
+            ConnectedLight.Result light = ConnectedLight.plan(open, torchesIn(level, air),
+                    k -> ConnectedPlan.mountable(c, open, containers, k), k -> ConnectedPlan.preferredTorch(c, k));
+            for (long k : light.torches()) {
+                steps.add(new MazeFurnishJob.Step(MazeFurnishJob.StepKind.LIGHT, ConnectedPlan.x(k), ConnectedPlan.y(k), ConnectedPlan.z(k),
+                        MazeFurnishPlanner.lightIds(seg.plan.theme), List.of()));
+            }
+            lastLight = "repair new=" + light.torches().size() + " dark-left=" + light.dark().size();
+            return new MazeFurnishJob(seg.room.gx(), seg.room.gz(), seg.plan.theme.id, survival, steps, new int[0]);
+        });
+        IMazeFurnisher furnisher = MazeFurnishers.get();
+        if (furnisher == null) return Outcome.fail("no furnisher registered");
+        lastJob = job;
+        if (!furnisher.furnish(job)) return Outcome.fail(furnisher.name() + " refused the repair job");
+        long lit = job.steps.stream().filter(st -> st.kind() == MazeFurnishJob.StepKind.LIGHT).count();
+        segmentsDone--; // the segment is counted again when the repair lets go
+        drive = Drive.FURNISH;
+        guardShell(seg);
+        driveTicks = 0;
+        sawBusy = false;
+        busyUnknownTicks = 0;
+        return Outcome.ok("sealed=" + leaks.size() + " lit=" + lit);
     }
 
     private Outcome nextSegment() {
@@ -1147,6 +1232,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 }
                 logDirect(out.message);
                 drive = Drive.FURNISH;
+                guardShell(seg); // Ostinato: run108 shell breach
                 driveTicks = 0;
                 sawBusy = false;
                 busyUnknownTicks = 0;
@@ -1172,10 +1258,12 @@ public final class MazeProcess extends BaritoneProcessHelper {
                     if (busy == null ? busyUnknownTicks < 200 : (!sawBusy && driveTicks < 200)) return;
                 }
                 if (timedOut) cancelFurnisher();
+                releaseShell(); // Ostinato: run108 shell breach
                 segmentsDone++;
                 failures = 0;
                 int hold = watcher == null ? 0 : watcher.furnished(startedSegment, lastJob, timedOut);
                 if (drive == Drive.OFF) return; // the watcher ended the run
+                if (drive == Drive.FURNISH) return; // Ostinato: run108 shell breach, the watcher handed a repair job
                 drive = Drive.HOLD;
                 holdTicks = Math.max(hold, 20);
             }
