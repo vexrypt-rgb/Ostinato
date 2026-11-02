@@ -12,7 +12,13 @@ public final class RodCast {
     /** Hook ticks searched; computeMargin reaches its 0.3 cap at tick 8. */
     public static final int MAX_TICKS = 8;
     /** PPE horizon needed: each hook tick k is also checked one tick late (send/spawn latency), plus one tick of aim lead. */
-    public static final int HORIZON = MAX_TICKS + 2;
+    public static final int HORIZON = MAX_TICKS + 3; // Ostinato: LATE_MAX (2) spawn delay plus one tick of aim lead
+    /**
+     * Ostinato: ticks between the client decision (PPE index 0) and the server hook's spawn. Traced 2026-11-02 in the
+     * rod fixture (BOMBARDTRACE): 1 or 2 depending on client/server tick phase, never 0. The old {0,1} window let
+     * a pitch that only hits at delay 0-1 through; at delay 2 the hook passed over the falling TNT.
+     */
+    public static final int LATE_MIN = 1, LATE_MAX = 2;
     /** Box shrink covering ~0.94% per-component launch noise over ~6 blocks plus PPE drift. */
     public static final double SHRINK = 0.08;
     private RodCast() {}
@@ -41,7 +47,7 @@ public final class RodCast {
     public static int hits(double ex, double ey, double ez, float yaw, float pitch, float[] tntPath, int stride, double shrink) {
         if (tntPath == null || stride != 1) return -1;
         int sure = -1;
-        for (int late = 0; late <= 1; late++) {
+        for (int late = LATE_MIN; late <= LATE_MAX; late++) { // Ostinato: measured spawn delay
             int at = first(ex, ey, ez, yaw, pitch, tntPath, late, shrink);
             if (at < 0) return -1;
             sure = Math.max(sure, at);

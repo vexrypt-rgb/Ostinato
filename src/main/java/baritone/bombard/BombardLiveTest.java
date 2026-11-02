@@ -140,6 +140,10 @@ public final class BombardLiveTest implements AbstractGameEventListener {
                 if (player != null) {
                     finalHealth = player.getHealth();
                     if (player.fishing != null && player.fishing.getHookedIn() == combatTnt) rodAttached = true;
+                    if (Boolean.getBoolean("ostinato.bombardtest.trace") && combatTnt != null) { // Ostinato: opt-in rod diagnosis trace (server side)
+                        var h = player.fishing;
+                        System.out.println(String.format(java.util.Locale.ROOT, "BOMBARDTRACE fuse=%d tnt=%.3f,%.3f,%.3f rot=%.1f/%.1f hook=%s", combatTnt.getFuse(), combatTnt.getX(), combatTnt.getY(), combatTnt.getZ(), player.getYRot(), player.getXRot(), h == null ? "-" : String.format(java.util.Locale.ROOT, "%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f ground=%s hooked=%s age=%d", h.getX(), h.getY(), h.getZ(), h.getDeltaMovement().x, h.getDeltaMovement().y, h.getDeltaMovement().z, h.onGround(), h.getHookedIn() == null ? "-" : h.getHookedIn().getType().toShortString(), h.tickCount)));
+                    }
                 }
             });
             if (--wait <= 0) {

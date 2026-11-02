@@ -947,6 +947,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
 
     @Override
     public void onLostControl() {
+        if (Boolean.getBoolean("ostinato.bombardtest.trace")) new Throwable("BOMBARDTRACE onLostControl").printStackTrace(System.out); // Ostinato: opt-in rod diagnosis
         bombardHands.cancel();
         outcome.interrupt("lost");
         remember(true);
