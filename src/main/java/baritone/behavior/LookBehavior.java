@@ -259,6 +259,9 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * 26 deg/tick at 40 deg, 33 at 90, 50 at 200; the default model reaches 54 at 90), and a jump of the aim point
      * by more than 25 deg is answered after 3 ticks (150 ms, that hand's fastest decile of reaction times).
      */
+    /** Ostinato: hand yaw speed cap, degrees per tick (was 60; user asked for 72). Bounds both humanStep and modelYawStep. */
+    static final float HAND_MAX_YAW = 72f;
+
     static final boolean FLICK_USER = "user".equals(System.getProperty("ostinato.flick"));
 
     /** Ostinato: the user-profile cap on one tick's turn for a move of {@code d} degrees still to go. */
@@ -272,7 +275,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     /** One tick of the hand's yaw (the same model as {@link #humanStep}), for rollouts: returns the new camera yaw, speed in outVel[0]. */
     public static float modelYawStep(float cam, float vel, float target, float[] outVel) {
         float dy = net.minecraft.util.Mth.wrapDegrees(target - cam);
-        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -HAND_MAX_YAW, HAND_MAX_YAW) : dy;
         float acc = 12f + Math.abs(dy) * 0.5f;
         float out = vel + net.minecraft.util.Mth.clamp(want - vel, -acc, acc);
         if (Math.abs(dy) <= 1.5f) out = dy;
@@ -296,7 +299,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
         float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
-        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -HAND_MAX_YAW, HAND_MAX_YAW) : dy;
         float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f) : dp;
         // acceleration limit scales with the size of the move: a flick may start hard, a nudge starts soft
         float accY = 12f + Math.abs(dy) * 0.5f, accP = 9f + Math.abs(dp) * 0.5f;
