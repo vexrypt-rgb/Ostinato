@@ -746,6 +746,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             descentStepTicks = 0;
             descentFeetY = Integer.MIN_VALUE;
             descentDug.clear();
+            descentBelowLoggedY = Integer.MIN_VALUE; // Ostinato: run109 descent stall
             phase = Phase.DESCEND;
             System.out.println("MAZETEST CONNECTED descent start column=" + entry.x() + "," + entry.z() + " ground=" + entry.groundY()
                     + " ceiling=" + entry.ceilingY() + " floor=" + entry.floorY());
@@ -824,6 +825,12 @@ public final class MazeProcess extends BaritoneProcessHelper {
     private List<LootPlanner.LootPlacement> descentLoot = List.of();
     private int descentTicks, descentStepTicks, descentFeetY;
     private final Map<Integer, Block> descentDug = new HashMap<>();
+    // Ostinato: run109 descent stall. Columns that failed twice are skipped on the next pick for the same room.
+    private final Set<Long> descentBlocked = new HashSet<>();
+    private String descentBlockedRoom;
+    private long descentFailColumn = Long.MIN_VALUE;
+    private int descentFailCount;
+    private int descentBelowLoggedY = Integer.MIN_VALUE;
 
     /** The last way in used this session, for the live harness; null when every segment was dug from inside. */
     public Entry lastEntry() {
@@ -835,8 +842,16 @@ public final class MazeProcess extends BaritoneProcessHelper {
         RoomPlan plan = seg.plan;
         int ceilingY = plan.originY + plan.sizeY - 1; // Ostinato: 2026-11-02, variant height
         BlockPos feet = ctx.playerFeet();
+        String room = seg.room.gx() + "," + seg.room.gz(); // Ostinato: run109 descent stall
+        if (!room.equals(descentBlockedRoom)) {
+            descentBlockedRoom = room;
+            descentBlocked.clear();
+            descentFailColumn = Long.MIN_VALUE;
+            descentFailCount = 0;
+        }
         outer:
         for (int[] col : ConnectedPlan.entryColumns(seg.after, seg.room, feet.getX(), feet.getZ())) {
+            if (descentBlocked.contains(ConnectedPlan.key(col[0], 0, col[1]))) continue; // Ostinato: run109 descent stall
             int rx = col[0] - plan.originX, rz = col[1] - plan.originZ;
             for (int ry = 2; ry < plan.sizeY - 1; ry++) {
                 if (plan.role(rx, ry, rz) != BlockRole.AIR) continue outer; // never through the feature block
@@ -892,7 +907,21 @@ public final class MazeProcess extends BaritoneProcessHelper {
             descentFeetY = feet.y;
             descentStepTicks = 0;
         }
+        // Ostinato: run109 descent stall. Say once per step what the bot stands on; above the computed ground it is
+        // something left in the column (a placed block, a log, a slab): it may go, and the guard must not keep it.
+        BlockPos under = feet.below();
+        BlockState underState = ctx.world().getBlockState(under);
+        if (descentBelowLoggedY != feet.y) {
+            descentBelowLoggedY = feet.y;
+            System.out.println("MAZETEST CONNECTED descent-below " + under.toShortString() + " " + underState.getBlock()
+                    + (under.getY() > e.groundY() ? " above-ground=" + e.groundY() : ""));
+        }
+        exemptShaftFromGuard(e);
         if (++descentStepTicks > DESCENT_STEP_TICKS) {
+            if (under.getY() > e.groundY()) {
+                blockDescentColumn(e); // could not break it: step off and pick another column
+                return abortDescent("no progress above ground at " + feet + " on " + underState.getBlock());
+            }
             return abortDescent("no progress at " + feet);
         }
         int fillY = feet.y + 2;
@@ -927,8 +956,12 @@ public final class MazeProcess extends BaritoneProcessHelper {
             return new PathingCommand((Goal) null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
         descentDug.put(below.getY(), bs.getBlock());
+        // Ostinato: run109 descent stall. Aim at the top of the block's real shape: a slab or carpet is not a full cube.
+        double topY = below.getY() + 1;
+        net.minecraft.world.phys.shapes.VoxelShape shape = bs.getShape(ctx.world(), below);
+        if (!shape.isEmpty()) topY = below.getY() + Math.max(0.05, shape.bounds().maxY - 0.05);
         Rotation rot = RotationUtils.calcRotationFromVec3d(ctx.playerHead(),
-                new Vec3(below.getX() + 0.5, below.getY() + 1, below.getZ() + 0.5), ctx.playerRotations());
+                new Vec3(below.getX() + 0.5, topY, below.getZ() + 0.5), ctx.playerRotations());
         baritone.getLookBehavior().updateTarget(rot, true);
         MovementHelper.switchToBestToolFor(ctx, bs);
         if (ctx.isLookingAt(below) || ctx.playerRotations().isReallyCloseTo(rot)) {
@@ -989,7 +1022,27 @@ public final class MazeProcess extends BaritoneProcessHelper {
         return dug.asItem();
     }
 
+    // Ostinato: run109 descent stall. The shaft column is the bot's own: no guard keeps a block in it.
+    private void exemptShaftFromGuard(Entry e) {
+        AltoClefSettings.CellGuard guard = AltoClefSettings.getInstance().ostinatoGuard();
+        if (guard == null || !guard.test(e.x(), ctx.playerFeet().y - 1, e.z())) return;
+        AltoClefSettings.getInstance().setOstinatoGuard((x, y, z) -> !(x == e.x() && z == e.z()) && guard.test(x, y, z));
+    }
+
+    // Ostinato: run109 descent stall. Never pick this column again for the room.
+    private void blockDescentColumn(Entry e) {
+        descentBlocked.add(ConnectedPlan.key(e.x(), 0, e.z()));
+        System.out.println("MAZETEST CONNECTED descent-blacklist column=" + e.x() + "," + e.z());
+    }
+
     private PathingCommand abortDescent(String why) {
+        Entry failed = descentEntry; // Ostinato: run109 descent stall, two fails at one column blacklist it
+        if (failed != null) {
+            long col = ConnectedPlan.key(failed.x(), 0, failed.z());
+            descentFailCount = col == descentFailColumn ? descentFailCount + 1 : 1;
+            descentFailColumn = col;
+            if (descentFailCount >= 2 && !descentBlocked.contains(col)) blockDescentColumn(failed);
+        }
         summary = "The way in failed: " + why;
         logDirect(summary);
         System.out.println("MAZETEST CONNECTED descent-fail " + why);
