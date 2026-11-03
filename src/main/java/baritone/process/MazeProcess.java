@@ -1184,6 +1184,19 @@ public final class MazeProcess extends BaritoneProcessHelper {
         }
         Entry e = lastEntry;
         if (shell.isEmpty()) return;
+        // Ostinato: run136 room 0,0. The repair job (one floor torch at -15,80,-69) armed the guard while the bot stood at
+        // -13,82,-69, OUTSIDE the room where it had just placed the ceiling lights from. Every way back in was a guarded
+        // shell cell, so every torch stand was unreachable (skip-light why=stuck x4, light 0/1, room FAIL). A player
+        // outside would dig back in; so may the bot. Any hole it makes is a leak the next light check seals.
+        if (ctx.player() != null) {
+            BetterBlockPos f = ctx.playerFeet();
+            boolean inside = air.contains(ConnectedPlan.key(f.x, f.y, f.z)) || air.contains(ConnectedPlan.key(f.x, f.y + 1, f.z))
+                    || air.contains(ConnectedPlan.key(f.x, f.y - 1, f.z)) || (e != null && f.x == e.x() && f.z == e.z());
+            if (!inside) {
+                System.out.println("MAZETEST CONNECTED shell guard skipped player-outside feet=" + f.x + "," + f.y + "," + f.z + " cells=" + shell.size());
+                return;
+            }
+        }
         AltoClefSettings.getInstance().setOstinatoGuard((x, y, z) -> !(e != null && x == e.x() && z == e.z())
                 && shell.contains(ConnectedPlan.key(x, y, z)));
         shellGuardSet = true;
