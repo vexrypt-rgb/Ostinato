@@ -594,6 +594,10 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     private static final int APPROACH_MAX_TICKS = 600;
     private BetterBlockPos approachTarget;
     private int approachTicks;
+    // Ostinato: run136. Stage 0 = GoalNear(t,2); stage 1 = GoalGetToBlock(t) (stand touching the block, so a face is visible).
+    private int approachStage;
+    private int approachArrivedTicks;
+    private int assembleNullRetries;
 
     // Ostinato: run119. Path next to an incorrect block the aim fallback gave up on, instead of re-aiming from the same spot.
     private PathingCommand approachDigFace(BuilderCalculationContext bcc, boolean calcFailed) {
@@ -605,16 +609,38 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         boolean done = st.getBlock() instanceof AirBlock || desired == null || valid(st, desired, false);
         boolean inReach = ctx.playerHead().distanceToSqr(t.x + 0.5, t.y + 0.5, t.z + 0.5) <= (reach - 1) * (reach - 1)
                 && RotationUtils.reachable(ctx, t, reach).isPresent();
-        if (done || inReach || calcFailed || ++approachTicks > APPROACH_MAX_TICKS) {
-            System.out.println("MAZETEST dig stall breaker: approach " + t + " ended done=" + done + " inReach=" + inReach + " calcFailed=" + calcFailed + " ticks=" + approachTicks + " feet=" + ctx.playerFeet());
+        Goal approachGoal = approachStage == 0 ? new GoalNear(t, 2) : new GoalGetToBlock(t);
+        // Ostinato: run136. Feet -32,77,-65 sat inside GoalNear(-33,78,-64, 2) for the whole 600-tick budget: the goal was
+        // already reached, the target's faces were occluded, nothing moved. Arrived without a face = this stand is useless.
+        boolean arrived = approachGoal.isInGoal(ctx.playerFeet());
+        approachArrivedTicks = arrived ? approachArrivedTicks + 1 : 0;
+        boolean dead = calcFailed || approachArrivedTicks > 40;
+        if (done || inReach || dead || ++approachTicks > APPROACH_MAX_TICKS) {
+            System.out.println("MAZETEST dig stall breaker: approach " + t + " ended done=" + done + " inReach=" + inReach + " calcFailed=" + calcFailed + " arrived=" + arrived + " stage=" + approachStage + " ticks=" + approachTicks + " feet=" + ctx.playerFeet());
             if (inReach) droppedTargets.remove(t);
+            if (!done && !inReach && approachStage == 0) {
+                // Ostinato: run136. Escalate to standing right against the block instead of giving up.
+                approachStage = 1; approachTicks = 0; approachArrivedTicks = 0;
+                System.out.println("MAZETEST dig stall breaker: approach escalate get-to-block " + t);
+                return new PathingCommand(new GoalGetToBlock(t), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+            }
             approachTarget = null;
+            approachStage = 0; approachArrivedTicks = 0;
             stallTicks = 0;
-            noProgressTicks = 0;
+            if (!done && !inReach) {
+                // Ostinato: run136. Both stands failed: tunnel toward it (forced shaft) on the next stall instead of idling.
+                droppedTargets.remove(t);
+                noProgressTicks = FORCE_SHAFT_TICKS + 1;
+                stallTicks = STALL_TICKS + 1;
+                stallFeet = ctx.playerFeet();
+                System.out.println("MAZETEST dig stall breaker: approach failed, forcing shaft toward " + t);
+            } else {
+                noProgressTicks = 0;
+            }
             return null;
         }
-        if (approachTicks == 1 || approachTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: approaching " + t + " feet=" + ctx.playerFeet() + " ticks=" + approachTicks);
-        return new PathingCommand(new GoalNear(t, 2), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+        if (approachTicks == 1 || approachTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: approaching " + t + " stage=" + approachStage + " feet=" + ctx.playerFeet() + " ticks=" + approachTicks);
+        return new PathingCommand(approachGoal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
     }
 
     private Optional<Pair<BetterBlockPos, Rotation>> mineShaftToward(BuilderCalculationContext bcc, BetterBlockPos feet, boolean force) {
@@ -1049,11 +1075,32 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                     layer++;
                     return onTick(calcFailed, isSafeToCancel, recursions + 1);
                 }
+                // Ostinato: run136. After a failed dig-face approach the builder found no goal, paused silently and sat
+                // 5+ min (no log, tenorclef idle). While incorrect blocks remain, walk up to the nearest one instead.
+                if (assembleNullRetries < 20 && incorrectPositions != null && approachTarget == null) {
+                    BetterBlockPos feetNow = ctx.playerFeet();
+                    BetterBlockPos near = null;
+                    double nd = Double.MAX_VALUE;
+                    for (BetterBlockPos p : incorrectPositions) {
+                        if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
+                        double d = feetNow.distSqr(p);
+                        if (d < nd) { nd = d; near = p; }
+                    }
+                    if (near != null) {
+                        assembleNullRetries++;
+                        droppedTargets.clear();
+                        approachTarget = near; approachStage = 1; approachTicks = 0; approachArrivedTicks = 0;
+                        System.out.println("MAZETEST dig stall breaker: no build goal, approaching nearest incorrect " + near + " retry=" + assembleNullRetries + " feet=" + feetNow);
+                        return new PathingCommand(new GoalGetToBlock(near), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+                    }
+                }
+                System.out.println("MAZETEST dig stall breaker: no build goal, pausing retries=" + assembleNullRetries);
                 logDirect("Unable to do it. Pausing. resume to resume, cancel to cancel");
                 paused = true;
                 return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
             }
         }
+        assembleNullRetries = 0; // Ostinato: run136
         updateMovement();
         return new PathingCommandContext(goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH, bcc);
     }
