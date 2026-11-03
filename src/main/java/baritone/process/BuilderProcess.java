@@ -534,7 +534,21 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                             droppedTargets.add(best);
                             aimTarget = null;
                         }
-                        r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
+                        Rotation aimRot = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations());
+                        // Ostinato: run116 long_hall stood 19 min aiming at blocks 2 away: the click only fired on-ground/safe-to-cancel
+                        // and the ray hit a different block. Retarget to whatever the ray hits (it is in the way) and force the swing.
+                        BetterBlockPos aimPos = best;
+                        HitResult hit = RayTraceUtils.rayTraceTowards(ctx.player(), aimRot, reach, false);
+                        if (hit instanceof BlockHitResult bhr && hit.getType() == HitResult.Type.BLOCK) {
+                            BetterBlockPos hp = new BetterBlockPos(bhr.getBlockPos());
+                            Block hb = bcc.bsi.get0(hp.x, hp.y, hp.z).getBlock();
+                            if (!hp.equals(best) && !(hb instanceof AirBlock) && hb != Blocks.BEDROCK && hp.y >= feet.y) {
+                                aimPos = hp;
+                                if (stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: ray blocked by " + hp + " clearing it toward " + best);
+                            }
+                        }
+                        r = Optional.of(new Pair<>(aimPos, aimRot));
+                        shafting = true;
                         if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
                     }
                 }
