@@ -23,6 +23,7 @@ import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalComposite;
 import baritone.api.pathing.goals.GoalGetToBlock;
+import baritone.api.pathing.goals.GoalNear;
 import baritone.api.process.IBuilderProcess;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
@@ -533,6 +534,11 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                             System.out.println("MAZETEST dig stall breaker: aim gave up on " + best + " feet=" + feet);
                             droppedTargets.add(best);
                             aimTarget = null;
+                            // Ostinato: run119 room2. Feet sat at -46,94,-15 for 20+ min cycling aim/give-up over targets 3-4
+                            // blocks away behind other blocks: the breaker cancels pathing every tick, so it never walks closer.
+                            // Hand off to a Baritone GoalNear next to the dig face so the next swing comes from a new stand.
+                            approachTarget = best;
+                            approachTicks = 0;
                         }
                         Rotation aimRot = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations());
                         // Ostinato: run116 long_hall stood 19 min aiming at blocks 2 away: the click only fired on-ground/safe-to-cancel
@@ -542,14 +548,28 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                         if (hit instanceof BlockHitResult bhr && hit.getType() == HitResult.Type.BLOCK) {
                             BetterBlockPos hp = new BetterBlockPos(bhr.getBlockPos());
                             Block hb = bcc.bsi.get0(hp.x, hp.y, hp.z).getBlock();
-                            if (!hp.equals(best) && !(hb instanceof AirBlock) && hb != Blocks.BEDROCK && hp.y >= feet.y) {
+                            BlockState hs = bcc.bsi.get0(hp.x, hp.y, hp.z);
+                            BlockState hDesired = bcc.getSchematic(hp.x, hp.y, hp.z, hs);
+                            if (!hp.equals(best) && hDesired != null && valid(hs, hDesired, false)) {
+                                // Ostinato: run118 room4 long_hall. The ray hit the finished z=9 wall; breaking it raised incorrect
+                                // 94->111, the builder replaced it, and the breaker broke it again for 10+ min. A correct schematic
+                                // block in the way means best is not reachable from here: drop it, never break built work.
+                                if (stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: ray hits built " + hp + ", dropping " + best);
+                                droppedTargets.add(best);
+                                aimTarget = null;
+                                aimPos = null;
+                                approachTarget = best; // Ostinato: run119, reach it from another side instead
+                                approachTicks = 0;
+                            } else if (!hp.equals(best) && !(hb instanceof AirBlock) && hb != Blocks.BEDROCK && hp.y >= feet.y) {
                                 aimPos = hp;
                                 if (stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: ray blocked by " + hp + " clearing it toward " + best);
                             }
                         }
-                        r = Optional.of(new Pair<>(aimPos, aimRot));
-                        shafting = true;
-                        if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
+                        if (aimPos != null) {
+                            r = Optional.of(new Pair<>(aimPos, aimRot));
+                            shafting = true;
+                        }
+                        if (aimPos != null && stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
                     }
                 }
             }
@@ -570,6 +590,32 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     private static final int AIM_GIVEUP_TICKS = 120;
     private BetterBlockPos aimTarget;
     private int aimTicks;
+
+    private static final int APPROACH_MAX_TICKS = 600;
+    private BetterBlockPos approachTarget;
+    private int approachTicks;
+
+    // Ostinato: run119. Path next to an incorrect block the aim fallback gave up on, instead of re-aiming from the same spot.
+    private PathingCommand approachDigFace(BuilderCalculationContext bcc, boolean calcFailed) {
+        if (approachTarget == null) return null;
+        BetterBlockPos t = approachTarget;
+        BlockState st = bcc.bsi.get0(t.x, t.y, t.z);
+        BlockState desired = bcc.getSchematic(t.x, t.y, t.z, st);
+        double reach = ctx.playerController().getBlockReachDistance();
+        boolean done = st.getBlock() instanceof AirBlock || desired == null || valid(st, desired, false);
+        boolean inReach = ctx.playerHead().distanceToSqr(t.x + 0.5, t.y + 0.5, t.z + 0.5) <= (reach - 1) * (reach - 1)
+                && RotationUtils.reachable(ctx, t, reach).isPresent();
+        if (done || inReach || calcFailed || ++approachTicks > APPROACH_MAX_TICKS) {
+            System.out.println("MAZETEST dig stall breaker: approach " + t + " ended done=" + done + " inReach=" + inReach + " calcFailed=" + calcFailed + " ticks=" + approachTicks + " feet=" + ctx.playerFeet());
+            if (inReach) droppedTargets.remove(t);
+            approachTarget = null;
+            stallTicks = 0;
+            noProgressTicks = 0;
+            return null;
+        }
+        if (approachTicks == 1 || approachTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: approaching " + t + " feet=" + ctx.playerFeet() + " ticks=" + approachTicks);
+        return new PathingCommand(new GoalNear(t, 2), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+    }
 
     private Optional<Pair<BetterBlockPos, Rotation>> mineShaftToward(BuilderCalculationContext bcc, BetterBlockPos feet, boolean force) {
         if (incorrectPositions == null || incorrectPositions.isEmpty()) return Optional.empty();
@@ -606,6 +652,8 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             Block b = st.getBlock();
             if (b instanceof AirBlock || b == Blocks.WATER || b == Blocks.LAVA || b == Blocks.BEDROCK) continue;
             if (st.getCollisionShape(ctx.world(), p).isEmpty()) continue;
+            BlockState pDesired = bcc.getSchematic(p.x, p.y, p.z, st);
+            if (pDesired != null && valid(st, pDesired, false)) continue; // Ostinato: run118, never shaft through built work
             Optional<Rotation> rot = RotationUtils.reachable(ctx, p, reach);
             // A 1-high crawl puts the eye inside the ceiling block, so the strict reach test misses the dirt we are looking at.
             if (rot.isEmpty() && p.x == feet.x && p.z == feet.z) {
@@ -921,6 +969,9 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             trim();
         }
 
+        // Ostinato: run119, walk to a stand within reach of a dig face the stall breaker could not hit from here.
+        PathingCommand approach = approachDigFace(bcc, calcFailed);
+        if (approach != null) return approach;
         Optional<Pair<BetterBlockPos, Rotation>> toBreak = toBreakNearPlayerWithStall(bcc);
         // Shafting is the crawl under the room: the stuck path is why we are here, so drop it and swing even if not onGround.
         if (toBreak.isPresent() && (shafting || (isSafeToCancel && ctx.player().onGround()))) {
