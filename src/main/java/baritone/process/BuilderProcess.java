@@ -469,13 +469,17 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         digUnderFeet = false;
         shafting = false;
         BetterBlockPos feet = ctx.playerFeet();
-        if (!feet.equals(droppedFeet)) {
+        // Ostinato: run113 room5 shuffled 72-75,79,124 for 15+ min; a 1-block step cleared the dropped set so the same
+        // blocked targets came straight back. Keep them until real progress (incorrect drops) or the feet move >=3 away.
+        int incNow = incorrectPositions == null ? -1 : incorrectPositions.size();
+        if (droppedFeet == null || feet.distSqr(droppedFeet) >= 9 || (progressIncorrect >= 0 && incNow < progressIncorrect)) {
             droppedTargets.clear();
             droppedFeet = feet;
         }
         Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
         int incorrect = incorrectPositions == null ? -1 : incorrectPositions.size();
-        if (!feet.equals(progressFeet) || incorrect < progressIncorrect) {
+        // Ostinato: run113, 1-block shuffles counted as progress; require a >=3 block move or fewer incorrect blocks.
+        if (progressFeet == null || feet.distSqr(progressFeet) >= 9 || incorrect < progressIncorrect) {
             noProgressTicks = 0;
             progressFeet = feet;
         } else {
@@ -504,6 +508,13 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 if (r.isPresent() && (stallTicks == STALL_TICKS + 1 || stallTicks % 100 == 0)) System.out.println("MAZETEST dig stall breaker: under-feet at " + r.get().first() + " feet=" + feet + " stall=" + stallTicks);
             }
             if (stallTicks > STALL_TICKS && Baritone.settings().breakFromAbove.value) {
+                // Ostinato: run113. Aim-nearest kept swinging at blocks 3-4 away behind other blocks; the shaft fallback
+                // needed the target >=4 up or >=6 away so it never ran. After FORCE_SHAFT_TICKS without progress, tunnel
+                // toward the nearest incorrect block first, whatever the geometry.
+                if (!r.isPresent() && noProgressTicks > FORCE_SHAFT_TICKS) {
+                    r = mineShaftToward(bcc, feet, true);
+                    shafting = r.isPresent();
+                }
                 if (!r.isPresent() && stallTicks > 2 * STALL_TICKS && incorrectPositions != null) {
                     // Ostinato: still nothing "reachable" (seen live: adjacent feet-level interior blocks never qualified).
                     // Aim at the nearest incorrect block within reach and swing; whatever the ray hits first is in the way anyway.
@@ -512,10 +523,17 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                     double bestD = Double.MAX_VALUE;
                     for (BetterBlockPos p : incorrectPositions) {
                         if (bcc.bsi.get0(p.x, p.y, p.z).getBlock() instanceof AirBlock) continue;
+                        if (droppedTargets.contains(p)) continue;
                         double d = ctx.playerHead().distanceToSqr(p.x + 0.5, p.y + 0.5, p.z + 0.5);
                         if (d < bestD && d <= reach * reach) { bestD = d; best = p; }
                     }
                     if (best != null) {
+                        if (best.equals(aimTarget)) aimTicks++; else { aimTarget = best; aimTicks = 0; }
+                        if (aimTicks > AIM_GIVEUP_TICKS) {
+                            System.out.println("MAZETEST dig stall breaker: aim gave up on " + best + " feet=" + feet);
+                            droppedTargets.add(best);
+                            aimTarget = null;
+                        }
                         r = Optional.of(new Pair<>(best, RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(best.x + 0.5, best.y + 0.5, best.z + 0.5), ctx.playerRotations())));
                         if (stallTicks == 2 * STALL_TICKS + 1 || stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: aimed at nearest " + best + " feet=" + feet + " stall=" + stallTicks);
                     }
@@ -525,7 +543,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             // search to the GoalBreak composite failed (P01). The dirt ceiling is not a schematic block, so
             // the old breaker never swung. Mine the first solid toward the nearest incorrect block.
             if (r.isEmpty() && stallTicks > STALL_TICKS) {
-                r = mineShaftToward(bcc, feet);
+                r = mineShaftToward(bcc, feet, false);
                 shafting = r.isPresent();
             }
         }
@@ -534,7 +552,12 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     }
 
     /** First solid block toward the nearest incorrect schematic block, when that block is out of the 5-block window. */
-    private Optional<Pair<BetterBlockPos, Rotation>> mineShaftToward(BuilderCalculationContext bcc, BetterBlockPos feet) {
+    private static final int FORCE_SHAFT_TICKS = 900;
+    private static final int AIM_GIVEUP_TICKS = 120;
+    private BetterBlockPos aimTarget;
+    private int aimTicks;
+
+    private Optional<Pair<BetterBlockPos, Rotation>> mineShaftToward(BuilderCalculationContext bcc, BetterBlockPos feet, boolean force) {
         if (incorrectPositions == null || incorrectPositions.isEmpty()) return Optional.empty();
         BetterBlockPos best = null;
         double bestD = Double.MAX_VALUE;
@@ -545,7 +568,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         }
         if (best == null) return Optional.empty();
         int dyGoal = best.y - feet.y;
-        if (dyGoal < 4 && bestD < 36) return Optional.empty();
+        if (!force && dyGoal < 4 && bestD < 36) return Optional.empty();
         int sx = Integer.signum(best.x - feet.x);
         int sz = Integer.signum(best.z - feet.z);
         BetterBlockPos[] candidates = dyGoal >= 4
@@ -558,7 +581,10 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 : new BetterBlockPos[] {
                     new BetterBlockPos(feet.x + sx, feet.y + 1, feet.z + sz),
                     new BetterBlockPos(feet.x + sx, feet.y, feet.z + sz),
-                    new BetterBlockPos(feet.x + sx, feet.y + 2, feet.z + sz) };
+                    new BetterBlockPos(feet.x + sx, feet.y + 2, feet.z + sz),
+                    new BetterBlockPos(feet.x + sx, feet.y + 1, feet.z),
+                    new BetterBlockPos(feet.x, feet.y + 1, feet.z + sz),
+                    new BetterBlockPos(feet.x, feet.y + 2, feet.z) };
         double reach = ctx.playerController().getBlockReachDistance();
         for (BetterBlockPos p : candidates) {
             if (p.y < feet.y) continue;
