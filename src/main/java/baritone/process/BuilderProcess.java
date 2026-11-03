@@ -597,6 +597,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     // Ostinato: run136. Stage 0 = GoalNear(t,2); stage 1 = GoalGetToBlock(t) (stand touching the block, so a face is visible).
     private int approachStage;
     private int approachArrivedTicks;
+    private final java.util.Map<BetterBlockPos, Integer> falseReachCounts = new java.util.HashMap<>(); // Ostinato: run137
     private int assembleNullRetries;
 
     // Ostinato: run119. Path next to an incorrect block the aim fallback gave up on, instead of re-aiming from the same spot.
@@ -609,7 +610,19 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         boolean done = st.getBlock() instanceof AirBlock || desired == null || valid(st, desired, false);
         boolean inReach = ctx.playerHead().distanceToSqr(t.x + 0.5, t.y + 0.5, t.z + 0.5) <= (reach - 1) * (reach - 1)
                 && RotationUtils.reachable(ctx, t, reach).isPresent();
-        Goal approachGoal = approachStage == 0 ? new GoalNear(t, 2) : new GoalGetToBlock(t);
+        // Ostinato: run137 lobby ceiling. Feet -51,86,-18 vs target -50,89,-18: distance+reachable() said inReach, approach ended,
+        // aim gave up, re-approach said inReach again - forever, never pillared. Distance is not a break. Reject inReach when the
+        // cell is >=4 above feet, or when this target already "ended inReach" once without being broken (and is >=2 above feet).
+        int dyFeet = t.y - ctx.playerFeet().y;
+        if (inReach && approachStage < 2 && (dyFeet >= 4 || dyFeet >= 2 && falseReachCounts.getOrDefault(t, 0) >= 1)) {
+            System.out.println("MAZETEST dig stall breaker: approach inReach rejected (false-positive) target=" + t + " feet=" + ctx.playerFeet() + " dy=" + dyFeet + " prevInReachEnds=" + falseReachCounts.getOrDefault(t, 0));
+            inReach = false;
+            approachStage = 2; approachTicks = 0; approachArrivedTicks = 0;
+            System.out.println("MAZETEST dig stall breaker: approach escalate pillar-for-ceiling target=" + t + " feet=" + ctx.playerFeet() + " stand=" + new BetterBlockPos(t.x, t.y - 2, t.z));
+        }
+        // Ostinato: run137. Stage 2 = GoalBlock right under the cell (feet t.y-2, head touching it); Baritone pillars/scaffolds up to it.
+        Goal approachGoal = approachStage == 0 ? new GoalNear(t, 2) : approachStage == 1 ? new GoalGetToBlock(t) : new GoalBlock(t.x, t.y - 2, t.z);
+        if (approachStage == 2) inReach = inReach && t.y - ctx.playerFeet().y <= 2; // Ostinato: only the real stand counts
         // Ostinato: run136. Feet -32,77,-65 sat inside GoalNear(-33,78,-64, 2) for the whole 600-tick budget: the goal was
         // already reached, the target's faces were occluded, nothing moved. Arrived without a face = this stand is useless.
         boolean arrived = approachGoal.isInGoal(ctx.playerFeet());
@@ -617,7 +630,14 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         boolean dead = calcFailed || approachArrivedTicks > 40;
         if (done || inReach || dead || ++approachTicks > APPROACH_MAX_TICKS) {
             System.out.println("MAZETEST dig stall breaker: approach " + t + " ended done=" + done + " inReach=" + inReach + " calcFailed=" + calcFailed + " arrived=" + arrived + " stage=" + approachStage + " ticks=" + approachTicks + " feet=" + ctx.playerFeet());
-            if (inReach) droppedTargets.remove(t);
+            if (inReach) { droppedTargets.remove(t); falseReachCounts.merge(t, 1, Integer::sum); } // Ostinato: run137 count inReach ends
+            if (done) falseReachCounts.remove(t);
+            if (!done && !inReach && approachStage == 1 && t.y - ctx.playerFeet().y >= 3) {
+                // Ostinato: run137. Get-to-block failed on a ceiling cell: stand under it (pillar) before forcing a shaft.
+                approachStage = 2; approachTicks = 0; approachArrivedTicks = 0;
+                System.out.println("MAZETEST dig stall breaker: approach escalate pillar-for-ceiling target=" + t + " feet=" + ctx.playerFeet() + " stand=" + new BetterBlockPos(t.x, t.y - 2, t.z));
+                return new PathingCommand(new GoalBlock(t.x, t.y - 2, t.z), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
+            }
             if (!done && !inReach && approachStage == 0) {
                 // Ostinato: run136. Escalate to standing right against the block instead of giving up.
                 approachStage = 1; approachTicks = 0; approachArrivedTicks = 0;
