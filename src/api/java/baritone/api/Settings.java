@@ -2669,6 +2669,13 @@ public final class Settings {
      */
     public final Setting<String> mazeMapFile = new Setting<>("maze-map.txt");
 
+    /**
+     * Ostinato: absolute room floor Y for maze levels. {@link Integer#MIN_VALUE} (default) keeps the backrooms rule,
+     * 16 under the ground. Set it to e.g. -40 to build rooms and tunnels in the deepslate band (y <= 8, bedrock ~-60).
+     * Clamped to the world; first room and every neighbour start their depth search here.
+     */
+    public final Setting<Integer> mazeDepthY = new Setting<>(Integer.MIN_VALUE);
+
     // here be dragons
 
     Settings() {

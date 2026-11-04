@@ -50,6 +50,9 @@ public final class ConnectedPlan {
     public static final int ROOM = 7;
     /** Floor difference one tunnel may climb: 10 columns door to door, 1 per column, a landing at each end. */
     public static final int MAX_RISE = 8;
+
+    /** Ostinato: absolute floor Y from setting mazeDepthY, or MIN_VALUE for 16 under the ground. Set by MazeProcess. */
+    public static volatile int depthOverride = Integer.MIN_VALUE;
     /**
      * Ostinato: run112. How many grid steps past a room the ring search will still place the next one. A blocked
      * neighbour is crossed by a longer corridor instead of ending the expand.
@@ -469,8 +472,10 @@ public final class ConnectedPlan {
         QUARRY("quarry", "andesite", List.of("andesite", "cobblestone"), List.of("cobblestone"), List.of("andesite", "cobblestone")),
         DEEPSLATE("deepslate", null, List.of("polished_deepslate", "cobbled_deepslate", "cobblestone"),
                 List.of("cobbled_deepslate", "cobblestone"), List.of("cobbled_deepslate", "cobblestone")),
-        TUFF("tuff", "tuff", List.of("cobbled_deepslate", "cobblestone"), List.of("tuff", "cobbled_deepslate", "cobblestone"),
-                List.of("cobbled_deepslate", "cobblestone"));
+        // Ostinato: tuff family. Tuff -> polished_tuff (2x2) -> tuff_bricks (2x2), crafted by TenorClef from tuff mined nearby.
+        TUFF("tuff", "tuff", List.of("polished_tuff", "tuff", "cobbled_deepslate", "cobblestone"),
+                List.of("tuff_bricks", "polished_tuff", "tuff", "cobbled_deepslate", "cobblestone"),
+                List.of("polished_tuff", "tuff_bricks", "cobbled_deepslate", "cobblestone"));
 
         public final String id;
         /** Stone that must be near the tunnel, or null when the dig itself yields the palette. */
@@ -498,7 +503,7 @@ public final class ConnectedPlan {
             int roll = (int) Long.remainderUnsigned(MazeSeed.mix(mazeSeed ^ SALT ^ 0x7A11E7L, gx * 2 + dir, gz), 100);
             List<TunnelPalette> order = new ArrayList<>();
             if (MazeFurnishPlanner.deepslateLayer(lowestFloorY)) {
-                if (roll >= 70) order.add(TUFF);
+                if (roll >= 50) order.add(TUFF); // Ostinato: half of deep tunnels try tuff bricks when tuff is near
                 order.add(DEEPSLATE);
             } else {
                 TunnelPalette first = roll < 35 ? COBBLE : roll < 55 ? ANDESITE : roll < 70 ? DIORITE : roll < 85 ? GRANITE : QUARRY;
@@ -862,7 +867,9 @@ public final class ConnectedPlan {
 
     /** Origin Y for a room under {@code surfaceY}: the backrooms rule (16 under the ground), clamped to the world. */
     public static int preferredY(int surfaceY, int minY, int maxY) {
-        return Math.max(minY + 1, Math.min(surfaceY - 16, maxY - MAX_HEIGHT - MazeSeed.COVER - 1));
+        // Ostinato: depthOverride (setting mazeDepthY) pins the level at an absolute Y, e.g. deepslate at -40.
+        int want = depthOverride != Integer.MIN_VALUE ? depthOverride : surfaceY - 16;
+        return Math.max(minY + 1, Math.min(want, maxY - MAX_HEIGHT - MazeSeed.COVER - 1));
     }
 
     /** The first room: an empty complex anchored for it, and the room's origin Y. */

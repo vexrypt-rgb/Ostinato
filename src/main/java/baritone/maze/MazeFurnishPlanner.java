@@ -272,7 +272,15 @@ public final class MazeFurnishPlanner {
                 case WALL -> List.of("diorite", "polished_diorite", "calcite");
                 default -> List.of("polished_diorite", "diorite");
             };
-            case MAINTENANCE -> switch (role) {
+            // Ostinato: tuff room palette. Maintenance rooms on the deepslate layer (mazeDepthY) clad in tuff bricks /
+            // polished tuff crafted by TenorClef from tuff mined around the room; raw tuff and cobbled deepslate fall back.
+            case MAINTENANCE -> deepslateLayer(originY)
+                    ? switch (role) {
+                        case FLOOR -> List.of("polished_tuff", "tuff", "cobbled_deepslate");
+                        case WALL -> List.of("tuff_bricks", "polished_tuff", "tuff", "cobbled_deepslate");
+                        default -> List.of("polished_tuff", "tuff_bricks", "tuff", "cobbled_deepslate");
+                    }
+                    : switch (role) {
                 case FLOOR -> List.of("cobblestone", "andesite");
                 case WALL -> List.of("andesite", "cobblestone", "tuff");
                 default -> List.of("polished_andesite", "andesite", "cobblestone");

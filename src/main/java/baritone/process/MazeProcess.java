@@ -382,7 +382,9 @@ public final class MazeProcess extends BaritoneProcessHelper {
         }
         int minY = ctx.world().getMinY();
         int maxY = ctx.world().getMaxY();
-        int preferred = forcedCell != null ? forcedCell[2] : ctx.playerFeet().y - 16;
+        int depthY = Baritone.settings().mazeDepthY.value; // Ostinato: deepslate levels
+        ConnectedPlan.depthOverride = depthY;
+        int preferred = forcedCell != null ? forcedCell[2] : depthY != Integer.MIN_VALUE ? depthY : ctx.playerFeet().y - 16;
         int limit = maxY - MazePlanner.SIZE_Y - MazeSeed.COVER;
         if (preferred > limit) {
             preferred = limit;
@@ -693,6 +695,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         MazeWorldProbe probe = new MazeWorldProbe(ctx.world());
         net.minecraft.world.level.Level level = probeLevel();
         int minY = level.getMinY(), maxY = level.getMaxY();
+        ConnectedPlan.depthOverride = Baritone.settings().mazeDepthY.value; // Ostinato: deepslate levels
         ConnectedPlan.Segment seg;
         String where;
         if (c == null || c.isEmpty()) {
