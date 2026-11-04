@@ -42,6 +42,7 @@ import baritone.pathing.path.PathExecutor;
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.PathingCommandContext;
+import baritone.utils.ToolSet;
 import baritone.utils.schematic.MapArtSchematic;
 import baritone.utils.schematic.SchematicSystem;
 import baritone.utils.schematic.SelectionSchematic;
@@ -459,12 +460,19 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     // Progress is the feet moving or the incorrect count dropping; without it for NO_PROGRESS_TICKS the flickering target
     // is dropped and the breakers run as if nothing were reachable.
     private static final int NO_PROGRESS_TICKS = 300;
+    // Ostinato: run141. Feet shuffled exactly 3 blocks (distSqr 9) between two stands, which cleared the dropped
+    // set and reset the stall timer, so the same occluded cell was re-aimed for 20 min. Five blocks is travel.
+    private static final int STALL_MOVE_SQR = 25;
     private int noProgressTicks;
     private int progressIncorrect = -1;
     private BetterBlockPos progressFeet;
     /** Targets the watchdog dropped from these feet; skipped until the feet move, so the flicker does not come back. */
     private final Set<BetterBlockPos> droppedTargets = new HashSet<>();
     private BetterBlockPos droppedFeet;
+    // Ostinato: run141. A reachable block was dropped after 15s of not walking, then the approach reported inReach
+    // and walked away before the crack finished. Hold left-click on this block until it breaks or the budget ends.
+    private BetterBlockPos commitBreak;
+    private int commitTicks;
 
     private Optional<Pair<BetterBlockPos, Rotation>> toBreakNearPlayerWithStall(BuilderCalculationContext bcc) {
         digUnderFeet = false;
@@ -473,14 +481,16 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         // Ostinato: run113 room5 shuffled 72-75,79,124 for 15+ min; a 1-block step cleared the dropped set so the same
         // blocked targets came straight back. Keep them until real progress (incorrect drops) or the feet move >=3 away.
         int incNow = incorrectPositions == null ? -1 : incorrectPositions.size();
-        if (droppedFeet == null || feet.distSqr(droppedFeet) >= 9 || (progressIncorrect >= 0 && incNow < progressIncorrect)) {
+        if (droppedFeet == null || feet.distSqr(droppedFeet) >= STALL_MOVE_SQR || (progressIncorrect >= 0 && incNow < progressIncorrect)) {
             droppedTargets.clear();
             droppedFeet = feet;
         }
+        Optional<Pair<BetterBlockPos, Rotation>> committed = committedSwing(bcc, feet);
+        if (committed != null) return committed;
         Optional<Pair<BetterBlockPos, Rotation>> r = toBreakNearPlayer(bcc);
         int incorrect = incorrectPositions == null ? -1 : incorrectPositions.size();
-        // Ostinato: run113, 1-block shuffles counted as progress; require a >=3 block move or fewer incorrect blocks.
-        if (progressFeet == null || feet.distSqr(progressFeet) >= 9 || incorrect < progressIncorrect) {
+        // Ostinato: run113, 1-block shuffles counted as progress. run141: a 3-block stand shuffle did too.
+        if (progressFeet == null || feet.distSqr(progressFeet) >= STALL_MOVE_SQR || incorrect < progressIncorrect) {
             noProgressTicks = 0;
             progressFeet = feet;
         } else {
@@ -488,14 +498,12 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         }
         progressIncorrect = incorrect;
         boolean noProgress = noProgressTicks > NO_PROGRESS_TICKS;
-        if (noProgress && r.isPresent()) {
-            if (noProgressTicks == NO_PROGRESS_TICKS + 1 || noProgressTicks % 200 == 0) {
-                System.out.println("MAZETEST dig stall breaker: no progress for " + noProgressTicks + " ticks, dropping " + r.get().first() + " feet=" + feet + " incorrect=" + incorrect);
-            }
-            droppedTargets.add(r.get().first());
-            r = Optional.empty();
-            stallFeet = feet;
-            stallTicks = Math.max(stallTicks, 2 * STALL_TICKS);
+        if (noProgress && r.isPresent() && commitBreak == null) {
+            // Ostinato: run141. This block is already in reach. Mine it; dropping it made the breaker aim through it.
+            commitBreak = r.get().first();
+            commitTicks = 0;
+            System.out.println("MAZETEST dig stall breaker: no progress for " + noProgressTicks + " ticks, mining " + commitBreak + " feet=" + feet + " incorrect=" + incorrect);
+            return committedSwing(bcc, feet);
         }
         if (r.isPresent() || !feet.equals(stallFeet)) {
             stallTicks = 0;
@@ -530,7 +538,8 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                     }
                     if (best != null) {
                         if (best.equals(aimTarget)) aimTicks++; else { aimTarget = best; aimTicks = 0; }
-                        if (aimTicks > AIM_GIVEUP_TICKS) {
+                        int aimBudget = Math.max(AIM_GIVEUP_TICKS, breakBudget(bcc.bsi.get0(best.x, best.y, best.z)));
+                        if (aimTicks > aimBudget) {
                             System.out.println("MAZETEST dig stall breaker: aim gave up on " + best + " feet=" + feet);
                             droppedTargets.add(best);
                             aimTarget = null;
@@ -561,8 +570,12 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                                 approachTarget = best; // Ostinato: run119, reach it from another side instead
                                 approachTicks = 0;
                             } else if (!hp.equals(best) && !(hb instanceof AirBlock) && hb != Blocks.BEDROCK && hp.y >= feet.y) {
-                                aimPos = hp;
-                                if (stallTicks % 100 == 0) System.out.println("MAZETEST dig stall breaker: ray blocked by " + hp + " clearing it toward " + best);
+                                // Ostinato: run141. The swing was aimed at best while the ray hit hp, so the crack
+                                // alternated and neither block broke. Commit to the block the crosshair actually hits.
+                                commitBreak = hp;
+                                commitTicks = 0;
+                                System.out.println("MAZETEST dig stall breaker: commit-occluder " + hp + " toward " + best + " feet=" + feet);
+                                return committedSwing(bcc, feet);
                             }
                         }
                         if (aimPos != null) {
@@ -583,6 +596,53 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         }
         stallDebug = "toBreak=" + r.map(p -> p.first().toString()).orElse("none") + " stall=" + stallTicks;
         return r;
+    }
+
+    /**
+     * Ostinato: run141. Swing at {@link #commitBreak} until it is gone or the break budget runs out.
+     * Null when nothing is committed (caller keeps going). A present value is the swing for this tick.
+     */
+    private Optional<Pair<BetterBlockPos, Rotation>> committedSwing(BuilderCalculationContext bcc, BetterBlockPos feet) {
+        if (commitBreak == null) return null;
+        BetterBlockPos t = commitBreak;
+        BlockState st = bcc.bsi.get0(t.x, t.y, t.z);
+        BlockState desired = bcc.getSchematic(t.x, t.y, t.z, st);
+        // A cell with no schematic entry is an occluder (the ray hit it on the way to the room). It still has to go.
+        boolean matchesPlan = desired != null && valid(st, desired, false);
+        boolean done = st.getBlock() instanceof AirBlock || st.getBlock() == Blocks.WATER || st.getBlock() == Blocks.LAVA
+                || matchesPlan || st.getBlock() == Blocks.BEDROCK;
+        if (done) {
+            commitBreak = null;
+            commitTicks = 0;
+            return null;
+        }
+        int budget = breakBudget(st);
+        if (++commitTicks > budget) {
+            System.out.println("MAZETEST dig stall breaker: commit-giveup " + t + " ticks=" + commitTicks + " budget=" + budget + " feet=" + feet);
+            droppedTargets.add(t);
+            falseReachCounts.merge(t, 1, Integer::sum);
+            commitBreak = null;
+            commitTicks = 0;
+            aimTarget = null;
+            aimTicks = 0;
+            return null;
+        }
+        double reach = ctx.playerController().getBlockReachDistance();
+        Optional<Rotation> rot = RotationUtils.reachable(ctx, t, reach);
+        if (rot.isEmpty()) {
+            rot = Optional.of(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(t.x + 0.5, t.y + 0.5, t.z + 0.5), ctx.playerRotations()));
+        }
+        shafting = true;
+        if (commitTicks == 1 || commitTicks % 40 == 0) {
+            System.out.println("MAZETEST dig stall breaker: commit-break " + t + " tick=" + commitTicks + "/" + budget + " feet=" + feet);
+        }
+        return Optional.of(new Pair<>(t, rot.get()));
+    }
+
+    /** Ticks to keep a stall swing going, from the best hotbar tool. Long enough that a bare hand finishes stone. */
+    private int breakBudget(BlockState st) {
+        double perTick = st == null ? 0 : new ToolSet(ctx.player()).getStrVsBlock(st);
+        return DigStallMath.budgetTicks(perTick);
     }
 
     /** First solid block toward the nearest incorrect schematic block, when that block is out of the 5-block window. */
@@ -630,8 +690,8 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         boolean dead = calcFailed || approachArrivedTicks > 40;
         if (done || inReach || dead || ++approachTicks > APPROACH_MAX_TICKS) {
             System.out.println("MAZETEST dig stall breaker: approach " + t + " ended done=" + done + " inReach=" + inReach + " calcFailed=" + calcFailed + " arrived=" + arrived + " stage=" + approachStage + " ticks=" + approachTicks + " feet=" + ctx.playerFeet());
-            if (inReach) { droppedTargets.remove(t); falseReachCounts.merge(t, 1, Integer::sum); } // Ostinato: run137 count inReach ends
             if (done) falseReachCounts.remove(t);
+            if (!done && inReach) falseReachCounts.merge(t, 1, Integer::sum); // Ostinato: run137 count inReach ends
             if (!done && !inReach && approachStage == 1 && t.y - ctx.playerFeet().y >= 3) {
                 // Ostinato: run137. Get-to-block failed on a ceiling cell: stand under it (pillar) before forcing a shaft.
                 approachStage = 2; approachTicks = 0; approachArrivedTicks = 0;
@@ -654,6 +714,22 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 stallTicks = STALL_TICKS + 1;
                 stallFeet = ctx.playerFeet();
                 System.out.println("MAZETEST dig stall breaker: approach failed, forcing shaft toward " + t);
+            } else if (inReach && !done) {
+                // Ostinato: run141. inReach used to reset the stall timer and walk off. The block is still there:
+                // mine it. After two of those, the face is a lie (ray blocked) — shaft past it instead of looping.
+                if (falseReachCounts.getOrDefault(t, 0) >= 3) {
+                    droppedTargets.add(t);
+                    commitBreak = null;
+                    commitTicks = 0;
+                    noProgressTicks = FORCE_SHAFT_TICKS + 1;
+                    stallTicks = STALL_TICKS + 1;
+                    stallFeet = ctx.playerFeet();
+                    System.out.println("MAZETEST dig stall breaker: in-reach gave up, shafting past " + t + " feet=" + ctx.playerFeet());
+                } else {
+                    commitBreak = t;
+                    commitTicks = 0;
+                    System.out.println("MAZETEST dig stall breaker: approach in-reach, mining " + t + " feet=" + ctx.playerFeet());
+                }
             } else {
                 noProgressTicks = 0;
             }

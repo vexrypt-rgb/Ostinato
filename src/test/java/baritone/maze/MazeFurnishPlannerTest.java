@@ -95,6 +95,25 @@ public class MazeFurnishPlannerTest {
     }
 
     @Test
+    public void shellUnderTheFloorIsSealedBeforeThatFloorIsClad() {
+        RoomPlan plan = roomWithLoot();
+        int x = plan.originX + 2, z = plan.originZ + 2, shellY = plan.originY;
+        assertEquals(BlockRole.SHELL, plan.role(2, 0, 2));
+        assertEquals(BlockRole.FLOOR, plan.role(2, 1, 2));
+        MazeFurnishJob job = MazeFurnishPlanner.plan(plan, List.of(), dug(plan, new int[]{x, shellY, z}), true);
+        int sealAt = -1, cladAt = -1;
+        List<Step> steps = job.steps;
+        for (int i = 0; i < steps.size(); i++) {
+            Step s = steps.get(i);
+            if (s.kind() == StepKind.SEAL && s.x() == x && s.y() == shellY && s.z() == z) sealAt = i;
+            if (s.kind() == StepKind.LIGHT && s.x() == x && s.y() == shellY + 1 && s.z() == z) cladAt = i;
+        }
+        assertTrue("shell hole missing from the job", sealAt >= 0);
+        assertTrue("floor cladding missing", cladAt >= 0);
+        assertTrue("seal at " + sealAt + " was not before cladding at " + cladAt, sealAt < cladAt);
+    }
+
+    @Test
     public void creativeOnlyFillsBecauseTheSchematicPlacedTheRest() {
         RoomPlan plan = roomWithLoot();
         List<LootPlacement> loot = LootPlanner.plan(plan, LootPlanner.PlacedLedger.EMPTY);

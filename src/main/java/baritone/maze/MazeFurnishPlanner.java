@@ -40,6 +40,26 @@ public final class MazeFurnishPlanner {
     public static MazeFurnishJob plan(RoomPlan plan, List<LootPlacement> loot, BlockProbe probe, boolean survival) {
         List<LootPlacement> containers = loot == null ? List.of() : loot;
         List<Step> steps = new ArrayList<>();
+        List<ShellSeal.BlockPos3> lateGaps = List.of();
+        if (survival && probe != null) {
+            List<ShellSeal.BlockPos3> gaps = new ArrayList<>(shellHoles(plan, probe));
+            for (ShellSeal.BlockPos3 gap : ShellSeal.maintenanceTargets(plan, probe)) {
+                if (!gaps.contains(gap)) gaps.add(gap);
+            }
+            // bottom up, so a shaft is closed from the room side first and the bot can pillar out over it
+            gaps.sort(Comparator.comparingInt(ShellSeal.BlockPos3::y)
+                    .thenComparingInt(ShellSeal.BlockPos3::x)
+                    .thenComparingInt(ShellSeal.BlockPos3::z));
+            lateGaps = new ArrayList<>();
+            // Ostinato: run141. Lobby shell holes at the room's y (air, cobble under them) were sealed after the
+            // floor cladding, so a cherry plank sat on the hole. The seal pass then stood in the cave below and
+            // skipped the cell (SEAL-LEFT-OPEN, seal 85/117 when the 40 min cap fired). Close a hole that this
+            // plan is about to cover before that cover is placed, while the cell above is still open.
+            for (ShellSeal.BlockPos3 gap : gaps) {
+                if (cappedByCladding(plan, gap)) steps.add(sealStep(plan, gap));
+                else lateGaps.add(gap);
+            }
+        }
         if (survival) {
             addCladding(plan, steps);
             for (int x = 0; x < plan.sizeX; x++) {
@@ -64,21 +84,7 @@ public final class MazeFurnishPlanner {
             }
             steps.add(new Step(StepKind.FILL, placement.x(), placement.y(), placement.z(), List.of(), contents));
         }
-        if (survival && probe != null) {
-            List<ShellSeal.BlockPos3> gaps = new ArrayList<>(shellHoles(plan, probe));
-            for (ShellSeal.BlockPos3 gap : ShellSeal.maintenanceTargets(plan, probe)) {
-                if (!gaps.contains(gap)) {
-                    gaps.add(gap);
-                }
-            }
-            // bottom up, so a shaft is closed from the room side first and the bot can pillar out over it
-            gaps.sort(Comparator.comparingInt(ShellSeal.BlockPos3::y)
-                    .thenComparingInt(ShellSeal.BlockPos3::x)
-                    .thenComparingInt(ShellSeal.BlockPos3::z));
-            for (ShellSeal.BlockPos3 gap : gaps) {
-                steps.add(new Step(StepKind.SEAL, gap.x(), gap.y(), gap.z(), sealIds(plan.theme, plan.originY), List.of()));
-            }
-        }
+        for (ShellSeal.BlockPos3 gap : lateGaps) steps.add(sealStep(plan, gap));
         // Ostinato: run100. The carved cells, so TenorClef can tell scaffolding left in the room from the room itself.
         List<Integer> air = new ArrayList<>();
         for (int x = 0; x < plan.sizeX; x++) {
@@ -97,6 +103,26 @@ public final class MazeFurnishPlanner {
             airCells[i] = air.get(i);
         }
         return new MazeFurnishJob(plan.cellX, plan.cellZ, plan.theme.id, survival, steps, airCells);
+    }
+
+    private static Step sealStep(RoomPlan plan, ShellSeal.BlockPos3 gap) {
+        return new Step(StepKind.SEAL, gap.x(), gap.y(), gap.z(), sealIds(plan.theme, plan.originY), List.of());
+    }
+
+    /** A hole this plan will not clad, sitting under a floor/wall/ceiling cell it will. */
+    private static boolean cappedByCladding(RoomPlan plan, ShellSeal.BlockPos3 gap) {
+        int lx = gap.x() - plan.originX;
+        int ly = gap.y() - plan.originY;
+        int lz = gap.z() - plan.originZ;
+        if (cladTarget(plan, lx, ly, lz)) return false;
+        return cladTarget(plan, lx, ly + 1, lz);
+    }
+
+    private static boolean cladTarget(RoomPlan plan, int x, int y, int z) {
+        if (!plan.inRelative(x, y, z)) return false;
+        BlockRole role = plan.role(x, y, z);
+        return (role == BlockRole.FLOOR || role == BlockRole.WALL || role == BlockRole.CEILING || role == BlockRole.WATER)
+                && touchesRoomAir(plan, x, y, z);
     }
 
     /**

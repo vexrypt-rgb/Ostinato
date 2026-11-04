@@ -861,6 +861,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
     private long descentFailColumn = Long.MIN_VALUE;
     private int descentFailCount;
     private int descentBelowLoggedY = Integer.MIN_VALUE;
+    private long descentSupportLogged = Long.MIN_VALUE; // Ostinato: run141 lip the bot is standing on
 
     /** The last way in used this session, for the live harness; null when every segment was dug from inside. */
     public Entry lastEntry() {
@@ -948,11 +949,14 @@ public final class MazeProcess extends BaritoneProcessHelper {
         }
         exemptShaftFromGuard(e);
         if (++descentStepTicks > DESCENT_STEP_TICKS) {
-            if (under.getY() > e.groundY()) {
+            // Ostinato: run141. Under-foot air means the shaft is already open and the bot is on the lip.
+            // Blacklisting that column made the next try pick a neighbour and dig a second hole.
+            if (!(underState.isAir() || underState.canBeReplaced()) && under.getY() > e.groundY()) {
                 blockDescentColumn(e); // could not break it: step off and pick another column
                 return abortDescent("no progress above ground at " + feet + " on " + underState.getBlock());
             }
-            return abortDescent("no progress at " + feet);
+            if (underState.isAir() || underState.canBeReplaced()) blockDescentColumn(e);
+            return abortDescent("no progress at " + feet + " on " + underState.getBlock());
         }
         int fillY = feet.y + 2;
         if (fillY >= e.ceilingY() && fillY <= e.groundY()) {
@@ -982,9 +986,25 @@ public final class MazeProcess extends BaritoneProcessHelper {
         if (!bs.getFluidState().isEmpty()) {
             return abortDescent("fluid under the shaft at " + below.toShortString());
         }
-        if (bs.isAir()) {
+        if (bs.isAir() || bs.canBeReplaced()) {
+            // Ostinato: run141. Feet stay on the column while the block under them is already air: the player is
+            // standing on a neighbour's top face. Mine that lip instead of waiting 20s and blacklisting the hole.
+            BlockPos support = descentStepTicks > 8 ? descentSupport(feet) : null;
+            if (support != null) {
+                if (descentSupportLogged != support.asLong()) {
+                    descentSupportLogged = support.asLong();
+                    System.out.println("MAZETEST CONNECTED descent-support " + support.toShortString() + " "
+                            + ctx.world().getBlockState(support).getBlock() + " feet=" + feet);
+                }
+                return mineDescentBlock(support, ctx.world().getBlockState(support));
+            }
             return new PathingCommand((Goal) null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
+        return mineDescentBlock(below, bs);
+    }
+
+    /** Ostinato: run141. Break one descent block. After a few ticks, a steep downward look counts as on target. */
+    private PathingCommand mineDescentBlock(BlockPos below, BlockState bs) {
         descentDug.put(below.getY(), bs.getBlock());
         // Ostinato: run109 descent stall. Aim at the top of the block's real shape: a slab or carpet is not a full cube.
         double topY = below.getY() + 1;
@@ -994,11 +1014,29 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 new Vec3(below.getX() + 0.5, topY, below.getZ() + 0.5), ctx.playerRotations());
         baritone.getLookBehavior().updateTarget(rot, true);
         MovementHelper.switchToBestToolFor(ctx, bs);
-        if (ctx.isLookingAt(below) || ctx.playerRotations().isReallyCloseTo(rot)) {
+        boolean looking = ctx.isLookingAt(below);
+        if (!looking && ctx.objectMouseOver() instanceof BlockHitResult hit && hit.getBlockPos().equals(below)) looking = true;
+        if (looking || ctx.playerRotations().isReallyCloseTo(rot) || (descentStepTicks > 10 && ctx.playerRotations().getPitch() > 60)) {
             baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
         }
-        summary = "Going down the hidden way in, y " + feet.y;
+        summary = "Going down the hidden way in, y " + ctx.playerFeet().y;
         return new PathingCommand((Goal) null, PathingCommandType.CANCEL_AND_SET_GOAL);
+    }
+
+    /** The solid neighbour the player is actually standing on when the shaft cell under the feet is already open. */
+    private BlockPos descentSupport(BetterBlockPos feet) {
+        net.minecraft.world.phys.AABB box = ctx.player().getBoundingBox();
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                at.set(feet.x + dx, feet.y - 1, feet.z + dz);
+                BlockState st = ctx.world().getBlockState(at);
+                if (st.isAir() || !st.getFluidState().isEmpty() || st.getCollisionShape(ctx.world(), at).isEmpty()) continue;
+                if (box.minY <= at.getY() + 1.05 && box.intersects(new net.minecraft.world.phys.AABB(at))) return at.immutable();
+            }
+        }
+        return null;
     }
 
     /** Puts a block into {@code fill}, the cell above the bot's head, against the block above it or a shaft wall. */
@@ -1113,7 +1151,9 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     private enum Drive { OFF, BUILD, FURNISH, HOLD }
 
-    private static final int FURNISH_LIMIT = 20 * 60 * 40;
+    // Ostinato: run141. The launcher sets furnishTimeoutTicks (108000). A hardcoded 40 min cancelled the lobby
+    // while seals were still landing (85/117). Use the same cap the harness was started with.
+    private static final int FURNISH_LIMIT = Integer.getInteger("ostinato.mazetest.furnishTimeoutTicks", 20 * 60 * 40);
     private static final int RETRY_TICKS = 20 * 30;
     private static final int MAX_FAILURES = 10;
     private Drive drive = Drive.OFF;
