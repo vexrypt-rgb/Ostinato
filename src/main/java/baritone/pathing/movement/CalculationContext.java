@@ -138,6 +138,9 @@ public class CalculationContext {
     public final double descendLandCost;
     /** Ostinato: momentumJumpCosts, see MovementParkour.momentumCost. */
     public final boolean momentumJumpCosts;
+    /** Ostinato Legato: straighten flat walking runs after the search / any-angle (Theta*) search on flat walking moves. */
+    public final boolean legatoSmooth;
+    public final boolean legatoSearch;
     public final double walkOnWaterOnePenalty;
     public final boolean allowWalkOnMagmaBlocks;
     public final BetterWorldBorder worldBorder;
@@ -251,6 +254,8 @@ public class CalculationContext {
         this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
         this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
         this.momentumJumpCosts = Baritone.settings().momentumJumpCosts.value; // Ostinato
+        this.legatoSmooth = Baritone.settings().legato.value && Baritone.settings().legatoSmoothing.value;
+        this.legatoSearch = Baritone.settings().legato.value && Baritone.settings().legatoSearch.value;
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         this.worldBorder = bsi.worldBorder;
@@ -371,6 +376,8 @@ public class CalculationContext {
         this.walkOffCost = tickAccurate ? TickCosts.WALK_OFF : ActionCosts.WALK_OFF_BLOCK_COST;
         this.descendLandCost = tickAccurate ? TickCosts.DESCEND_LAND : Math.max(ActionCosts.FALL_N_BLOCKS_COST[1], ActionCosts.CENTER_AFTER_FALL_COST);
         this.momentumJumpCosts = Baritone.settings().momentumJumpCosts.value; // Ostinato
+        this.legatoSmooth = Baritone.settings().legato.value && Baritone.settings().legatoSmoothing.value;
+        this.legatoSearch = Baritone.settings().legato.value && Baritone.settings().legatoSearch.value;
         this.walkOnWaterOnePenalty = Baritone.settings().walkOnWaterOnePenalty.value;
         this.allowWalkOnMagmaBlocks = Baritone.settings().allowWalkOnMagmaBlocks.value;
         // why cache these things here, why not let the movements just get directly from settings?

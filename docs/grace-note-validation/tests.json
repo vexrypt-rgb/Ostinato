@@ -1,0 +1,74 @@
+[
+  {
+    "suite": "baritone.gracenote.ForecastTrustTest",
+    "tests": 3,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.gracenote.GraceNoteBenchmark",
+    "tests": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.gracenote.GraceNoteCoreTest",
+    "tests": 39,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.mc.PpeRegionTest",
+    "tests": 5,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.PpeBench",
+    "tests": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.PpeCoreTest",
+    "tests": 24,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.PpeSchedulerTest",
+    "tests": 14,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.PpeVanillaTest",
+    "tests": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.physics.ThreatPredictionTest",
+    "tests": 2,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.threat.ThreatBenchmark",
+    "tests": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.threat.ThreatBridgeTest",
+    "tests": 1,
+    "failures": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "baritone.threat.ThreatRulesTest",
+    "tests": 24,
+    "failures": 0,
+    "skipped": 0
+  }
+]

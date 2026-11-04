@@ -1,0 +1,46 @@
+[
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\main\\java\\baritone\\gracenote\\ForecastTrust.java",
+    "Hash": "EB6A255ACC06D4C65123326BD971701A8ECE5C26980E543B65427181EAA6DAB6"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\main\\java\\baritone\\gracenote\\GraceNote.java",
+    "Hash": "B136712BA41B363516673BC12318831D897AE91DFBDD72121DFB8B7789B2BDDA"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\main\\java\\baritone\\gracenote\\GraceNoteCore.java",
+    "Hash": "5B9BD03402F691AC8B6DC97101F01FF109A1CA7DE7320960970C39CBD3B81F37"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\main\\java\\baritone\\gracenote\\GraceNoteLiveTest.java",
+    "Hash": "4F6BD0448E73E4A68A0F0BCAB2FB3981FBE75404006F3DBBB869C899208F8917"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\api\\java\\baritone\\api\\gracenote\\GraceNoteOutcome.java",
+    "Hash": "D44D8251E9FEE34E162E6AB06ADC97FBD56A3AD5F8D37BE4D93B5FAACDEF3858"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\api\\java\\baritone\\api\\gracenote\\GraceNotePolicy.java",
+    "Hash": "D5B880D90F59B999EE8B3458B31E1AAB42AE37877960310A66E7BE221630FA85"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\api\\java\\baritone\\api\\gracenote\\GraceNoteStatus.java",
+    "Hash": "C9ACEC652AC57BFC04D2430C3E0AE735528CEF49E2302E0B14AA34D7BE686662"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\api\\java\\baritone\\api\\gracenote\\IGraceNote.java",
+    "Hash": "45DBBA950C572F29E93E5FAACCA2FA88FA7A070B5C7BE00D4CD4A3A30FD5BBFD"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\test\\java\\baritone\\gracenote\\ForecastTrustTest.java",
+    "Hash": "26C40C3C8FD874E1C799FE1A45308BAE69B30EB5F9D9D560C03165D8B7C8951E"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\test\\java\\baritone\\gracenote\\GraceNoteBenchmark.java",
+    "Hash": "F2EA1AB1DC61A47581893F384467AFEF789177B01F439CD033F9D4D552733A14"
+  },
+  {
+    "Path": "C:\\Users\\redfa\\Documents\\MinecraftDev\\Ostinato-ppe\\src\\test\\java\\baritone\\gracenote\\GraceNoteCoreTest.java",
+    "Hash": "EA2DD5FF2FE39F26A07AFD904729DD1D46635785D83F6DB64BB8E31ED2CFC97A"
+  }
+]

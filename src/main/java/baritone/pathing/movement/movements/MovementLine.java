@@ -10,6 +10,7 @@ import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
 import baritone.pathing.movement.SurfaceSpeed;
+import baritone.pathing.legato.LegatoFeasibility;
 import baritone.utils.pathing.MutableMoveResult;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -77,9 +78,49 @@ public class MovementLine extends Movement {
         MutableMoveResult result = new MutableMoveResult();
         cost(context, src.x, src.y, src.z, dx, dz, result);
         if (result.y != dest.y || result.x != dest.x || result.z != dest.z) {
+            ground = "no line";
             return COST_INF;
         }
+        ground = plainReason(context);
         return result.cost;
+    }
+
+    /**
+     * Ostinato kinematic MovementLine: why the last cost check did or did not find the whole rectangle plain ground
+     * ({@link LegatoFeasibility#R_OK} when it did). Refreshed whenever the executor re-checks the cost, so a world
+     * change shows here on the next tick. Before any check: not plain.
+     */
+    private static final String UNCHECKED = "unchecked";
+    private volatile String ground = UNCHECKED;
+
+    /** Ostinato kinematic MovementLine: the driver's last decision on this line (KinematicLine), -1 none yet. */
+    public int kinematicDecision = -1;
+
+    /** Is the whole rectangle plain ground, as of the last cost check? (the kinematic driver may steer it) */
+    public boolean plainGround() {
+        return LegatoFeasibility.R_OK.equals(ground);
+    }
+
+    public String groundReason() {
+        return ground;
+    }
+
+    /** Has a cost check run on this line since it was built? */
+    public boolean groundChecked() {
+        return !UNCHECKED.equals(ground);
+    }
+
+    private String plainReason(CalculationContext context) {
+        LegatoFeasibility.Result r = new LegatoFeasibility.Result();
+        if (LegatoFeasibility.plainCell(context, src.x, src.y, src.z, r) != LegatoFeasibility.FEASIBLE) {
+            return r.reason;
+        }
+        for (int[] c : LineWalk.corridor(dx, dz)) {
+            if (LegatoFeasibility.plainCell(context, src.x + c[0], src.y, src.z + c[1], r) != LegatoFeasibility.FEASIBLE) {
+                return r.reason;
+            }
+        }
+        return LegatoFeasibility.R_OK;
     }
 
     /** A door, a gate, or a climb. MovementTraverse operates these; a line must not step on them. */

@@ -24,6 +24,7 @@ import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalComposite;
 import baritone.api.pathing.goals.GoalGetToBlock;
 import baritone.api.pathing.goals.GoalNear;
+import baritone.api.pathing.goals.TerminalCostGoal;
 import baritone.api.process.IBuilderProcess;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
@@ -35,6 +36,9 @@ import baritone.api.schematic.partition.SchematicCells;
 import baritone.api.utils.*;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
+import baritone.pathing.cadenza.Cadenza;
+import baritone.pathing.cadenza.CadenzaGoal;
+import baritone.pathing.cadenza.CadenzaSession;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
@@ -54,6 +58,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -94,6 +99,21 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
     private Vec3i origin;
     private int ticks;
     private boolean paused;
+    /** Ostinato Cadenza: positioning memo and the placement in progress (used only with the cadenza setting). */
+    private final CadenzaSession cadenza = new CadenzaSession();
+
+    /**
+     * Ostinato Cadenza v2 instrumentation (read by the live A/B only, changes nothing): what the last tick did about
+     * placing. NONE: nothing placeable from here; BLOCKED: placeable but not now (not safe to cancel, airborne, the
+     * post-break delay, interaction paused); ALIGN: turning toward it; CLICK: right-clicking; BREAK: breaking instead.
+     */
+    public enum PlacePhase { OTHER, BREAK, NONE, BLOCKED, ALIGN, CLICK }
+
+    public static volatile PlacePhase lastPlacePhase = PlacePhase.OTHER;
+    /** Degrees of yaw and pitch still to turn to the placement in view, as of the last tick that had one. */
+    public static volatile float lastPlaceYawErr, lastPlacePitchErr;
+    /** Why the last BLOCKED tick could not place: 1 not safe to cancel, 2 airborne, 4 post-break delay, 8 paused. */
+    public static volatile int lastPlaceBlocked;
     private int layer;
     private int numRepeats;
     private List<BlockState> approxPlaceable;
@@ -839,6 +859,13 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
 
     private Optional<Placement> searchForPlacables(BuilderCalculationContext bcc, List<BlockState> desirableOnHotbar) {
         BetterBlockPos center = ctx.playerFeet();
+        // Ostinato Cadenza v2: of everything placeable from here, the one the camera is already closest to (stock: the
+        // first in scan order, which can be behind the player while another is in front)
+        boolean leastTurn = Baritone.settings().cadenza.value && Baritone.settings().cadenzaBuilder.value
+                && (Baritone.settings().cadenzaTurnAware.value || Baritone.settings().cadenzaBatch.value);
+        Rotation look = ctx.playerRotations();
+        Placement best = null;
+        double bestTurn = Double.POSITIVE_INFINITY;
         for (int dx = -5; dx <= 5; dx++) {
             for (int dy = -5; dy <= 1; dy++) {
                 for (int dz = -5; dz <= 5; dz++) {
@@ -857,13 +884,25 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                         desirableOnHotbar.add(desired);
                         Optional<Placement> opt = possibleToPlace(desired, x, y, z, bcc.bsi);
                         if (opt.isPresent()) {
-                            return opt;
+                            if (!leastTurn) {
+                                return opt;
+                            }
+                            double turn = turnDegrees(look, opt.get().rot);
+                            if (turn < bestTurn) {
+                                bestTurn = turn;
+                                best = opt.get();
+                            }
                         }
                     }
                 }
             }
         }
-        return Optional.empty();
+        return Optional.ofNullable(best);
+    }
+
+    /** Ostinato Cadenza v2: the larger of the yaw and pitch turns between two looks (both axes turn at once). */
+    static double turnDegrees(Rotation from, Rotation to) {
+        return Math.max(Math.abs(net.minecraft.util.Mth.wrapDegrees(to.getYaw() - from.getYaw())), Math.abs(to.getPitch() - from.getPitch()));
     }
 
     public boolean placementPlausible(BlockPos pos, BlockState state) {
@@ -895,7 +934,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 double placeY = placeAgainstPos.y + aabb.minY * placementMultiplier.y + aabb.maxY * (1 - placementMultiplier.y);
                 double placeZ = placeAgainstPos.z + aabb.minZ * placementMultiplier.z + aabb.maxZ * (1 - placementMultiplier.z);
                 Rotation rot = RotationUtils.calcRotationFromVec3d(RayTraceUtils.inferSneakingEyePosition(ctx.player()), new Vec3(placeX, placeY, placeZ), ctx.playerRotations());
-                Rotation actualRot = baritone.getLookBehavior().getAimProcessor().peekAim(rot); // Ostinato: run100, uncapped (IAimProcessor.peekAim)
+                Rotation actualRot = baritone.getLookBehavior().getAimProcessor().peekAim(rot); // Ostinato: uncapped settle (IAimProcessor.peekAim)
                 HitResult result = RayTraceUtils.rayTraceTowards(ctx.player(), actualRot, ctx.playerController().getBlockReachDistance(), true);
                 if (result != null && result.getType() == HitResult.Type.BLOCK && ((BlockHitResult) result).getBlockPos().equals(placeAgainstPos) && ((BlockHitResult) result).getDirection() == against.getOpposite()) {
                     OptionalInt hotbar = hasAnyItemThatWouldPlace(toPlace, result, actualRot);
@@ -997,6 +1036,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
             return new PathingCommand(null, PathingCommandType.SET_GOAL_AND_PATH);
         }
         approxPlaceable = approxPlaceable(36);
+        lastPlacePhase = PlacePhase.OTHER;
         if (baritone.getInputOverrideHandler().isInputForcedDown(Input.CLICK_LEFT)) {
             ticks = 5;
         } else {
@@ -1118,20 +1158,48 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
                 }
                 baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
             }
+            lastPlacePhase = PlacePhase.BREAK;
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
         List<BlockState> desirableOnHotbar = new ArrayList<>();
         Optional<Placement> toPlace = searchForPlacables(bcc, desirableOnHotbar);
+        boolean useCadenza = Baritone.settings().cadenza.value && Baritone.settings().cadenzaBuilder.value;
+        if (useCadenza) {
+            BlockPos placing = cadenza.current();
+            if (placing != null && !MovementHelper.isReplaceable(placing.getX(), placing.getY(), placing.getZ(), bcc.bsi.get0(placing), bcc.bsi)) {
+                cadenza.confirm(); // the block is there
+            }
+            cadenza.tick();
+        }
+        if (toPlace.isPresent()) {
+            Rotation want = toPlace.get().rot, have = ctx.playerRotations();
+            lastPlaceYawErr = Math.abs(net.minecraft.util.Mth.wrapDegrees(want.getYaw() - have.getYaw()));
+            lastPlacePitchErr = Math.abs(want.getPitch() - have.getPitch());
+            lastPlacePhase = PlacePhase.BLOCKED; // until the branch below takes it
+            lastPlaceBlocked = (isSafeToCancel ? 0 : 1) | (ctx.player().onGround() ? 0 : 2) | (ticks <= 0 ? 0 : 4)
+                    | (AltoClefSettings.getInstance().isInteractionPaused() ? 8 : 0);
+        } else {
+            lastPlacePhase = PlacePhase.NONE;
+        }
         if (!AltoClefSettings.getInstance().isInteractionPaused() && toPlace.isPresent() && isSafeToCancel && ctx.player().onGround() && ticks <= 0) {
+            lastPlacePhase = PlacePhase.ALIGN;
+            if (useCadenza) {
+                cadenza.attempt(toPlace.get().placeAgainst.relative(toPlace.get().side), 40);
+            }
             Rotation rot = toPlace.get().rot;
             baritone.getLookBehavior().updateTarget(rot, true);
             ctx.player().getInventory().setSelectedSlot(toPlace.get().hotbarSelection);
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
             if ((ctx.isLookingAt(toPlace.get().placeAgainst) && ((BlockHitResult) ctx.objectMouseOver()).getDirection().equals(toPlace.get().side)) || ctx.playerRotations().isReallyCloseTo(rot)) {
                 baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
+                lastPlacePhase = PlacePhase.CLICK;
             }
             stopProtectItemOfMissing();
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+        }
+        if (useCadenza && toPlace.isEmpty() && isSafeToCancel && ticks <= 0) {
+            // standing in a planned placement cell with nothing placeable from it: drop the cell after a few ticks
+            cadenza.nothingReachable(ctx.playerFeet(), ctx.player().onGround());
         }
 
         if (!AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowInventory.value) {
@@ -1354,11 +1422,17 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         List<Goal> toBreak = new ArrayList<>();
         breakable.forEach(pos -> toBreak.add(breakGoal(pos, bcc)));
         List<Goal> toPlace = new ArrayList<>();
+        List<BetterBlockPos> placeNow = new ArrayList<>();
         placeable.forEach(pos -> {
             if (!placeable.contains(pos.below()) && !placeable.contains(pos.below(2))) {
-                toPlace.add(placementGoal(pos, bcc));
+                placeNow.add(pos);
             }
         });
+        if (Baritone.settings().cadenza.value && Baritone.settings().cadenzaBuilder.value && !placeNow.isEmpty()) {
+            Goal primary = cadenzaPlacementGoal(bcc, placeNow, sourceLiquids);
+            return new JankyGoalComposite(primary, new GoalComposite(toBreak.toArray(new Goal[0])));
+        }
+        placeNow.forEach(pos -> toPlace.add(placementGoal(pos, bcc)));
         sourceLiquids.forEach(pos -> toPlace.add(new GoalBlock(pos.above())));
 
         if (!toPlace.isEmpty()) {
@@ -1382,7 +1456,47 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         return new GoalComposite(toBreak.toArray(new Goal[0]));
     }
 
-    public static class JankyGoalComposite implements Goal {
+    /**
+     * Ostinato Cadenza: stand where the nearest placements can be made from (the sneaking eye sees a face to click
+     * within reach), instead of merely next to them. Placements past cadenzaMaxTargets, ones Cadenza finds no cell for
+     * and source liquids keep their old goals.
+     */
+    private Goal cadenzaPlacementGoal(BuilderCalculationContext bcc, List<BetterBlockPos> placeNow, List<BetterBlockPos> sourceLiquids) {
+        double reach = ctx.playerController().getBlockReachDistance();
+        double eye = ctx.player().getEyeHeight(Pose.CROUCHING);
+        int max = Baritone.settings().cadenzaMaxTargets.value;
+        BetterBlockPos feet = ctx.playerFeet();
+        List<BetterBlockPos> byDistance = new ArrayList<>(placeNow);
+        byDistance.sort(Comparator.comparingDouble(feet::distSqr));
+        List<Cadenza.Target> targets = new ArrayList<>();
+        List<Goal> extras = new ArrayList<>();
+        for (BetterBlockPos pos : byDistance) {
+            BlockState desired = bcc.getSchematic(pos.x, pos.y, pos.z, bcc.bsi.get0(pos));
+            if (targets.size() < max && desired != null && placementPlausible(pos, desired)) {
+                targets.add(new Cadenza.Target(Cadenza.Kind.PLACE, pos, reach, eye, false));
+            } else {
+                extras.add(placementGoal(pos, bcc));
+            }
+        }
+        sourceLiquids.forEach(pos -> extras.add(new GoalBlock(pos.above())));
+        // only cells searchForPlacables places from: within 5 sideways, the target 5 below to 1 above the feet, and at
+        // head height only under a block
+        Cadenza.CellFilter inSearchBox = (t, x, y, z) -> {
+            int dy = t.pos.y - y;
+            return Math.abs(t.pos.x - x) <= 5 && Math.abs(t.pos.z - z) <= 5 && dy >= -5 && dy <= 1
+                    && (dy < 1 || !(bcc.bsi.get0(t.pos.x, t.pos.y + 1, t.pos.z).getBlock() instanceof AirBlock));
+        };
+        return cadenza.goal(bcc, targets, Cadenza.Forbidden.NONE, inSearchBox, Baritone.settings().cadenzaShortHorizon.value,
+                CadenzaSession.liveOptions(CadenzaGoal.Ordering.ANY), r -> {
+            if (Baritone.settings().cadenzaDebug.value) {
+                logDirect("Cadenza: no cell for " + r.target + " (" + r.status + "), old goal kept");
+            }
+            extras.add(placementGoal(r.target.pos, bcc));
+        }, extras);
+    }
+
+    /** Ostinato: passes the primary goal's terminal costs (Cadenza) through; a plain primary charges nothing. */
+    public static class JankyGoalComposite implements TerminalCostGoal {
 
         private final Goal primary;
         private final Goal fallback;
@@ -1401,6 +1515,22 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         @Override
         public double heuristic(int x, int y, int z) {
             return primary.heuristic(x, y, z);
+        }
+
+        @Override
+        public double terminalCost(int x, int y, int z) {
+            if (primary instanceof TerminalCostGoal t && !fallback.isInGoal(x, y, z)) {
+                return t.terminalCost(x, y, z);
+            }
+            return 0;
+        }
+
+        @Override
+        public double terminalCost(int x, int y, int z, int fromX, int fromY, int fromZ) {
+            if (primary instanceof TerminalCostGoal t && !fallback.isInGoal(x, y, z)) {
+                return t.terminalCost(x, y, z, fromX, fromY, fromZ);
+            }
+            return 0;
         }
 
         @Override
@@ -1613,6 +1743,7 @@ public final class BuilderProcess extends BaritoneProcessHelper implements IBuil
         active = false;
         regionGuard = null;
         blockBreakHistory.clear();
+        cadenza.reset();
     }
 
     @Override

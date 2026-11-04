@@ -1,0 +1,453 @@
+/*
+ * Ostinato: new file (Legato). Not part of upstream Baritone.
+ */
+package baritone.pathing.legato;
+
+import baritone.Baritone;
+import baritone.api.event.events.PacketEvent;
+import baritone.api.event.events.PathEvent;
+import baritone.api.event.events.TickEvent;
+import baritone.api.event.events.type.EventState;
+import baritone.api.event.listener.AbstractGameEventListener;
+import baritone.api.pathing.goals.GoalBlock;
+import baritone.api.utils.input.Input;
+import baritone.pathing.RouteReuse;
+import baritone.pathing.calc.MaestroPathFinder;
+import baritone.pathing.kinematic.KinematicLine;
+import baritone.pathing.movement.movements.MovementLine;
+import baritone.pathing.movement.movements.MovementStraight;
+import baritone.utils.PlanStats;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.Blocks;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Opt-in live A/B of Legato in a fresh, disposable survival world (-Dostinato.legatotest=true with the test harness
+ * on). Never touches an existing save. Builds {@link LegatoCourse} high over spawn and walks each leg in four modes,
+ * Presto off throughout:
+ * <ul>
+ * <li>A: Legato off (the baseline);</li>
+ * <li>B: smoothing only;</li>
+ * <li>C: any-angle search only;</li>
+ * <li>D: both.</li>
+ * </ul>
+ * With -Dostinato.legatotest.arms=kline the four arms are the kinematic MovementLine experiment instead (Legato search
+ * off in all of them): A baseline; B kinematicLine; C Legato smoothing; D both. With arms=maestro: A baseline; B Legato
+ * smoothing; C Maestro; D Maestro and Legato smoothing (Legato search off throughout).
+ * <p>
+ * Each repetition walks every leg once per mode, the mode order rotated by repetition and leg (a Latin square), so
+ * no mode always goes first. Route reuse and the failed-line memory are cleared before every lap. Every row reports
+ * what was measured; the summary compares each lap with the baseline lap of the same leg and repetition.
+ */
+public final class LegatoLiveTest implements AbstractGameEventListener {
+    private static final int REPS = Integer.getInteger("ostinato.legatotest.reps", 5), TIMEOUT = 1500;
+    private static final String[] MODES = {"A", "B", "C", "D"};
+    /** The kinematic MovementLine experiment's arms (see the class comment), else Legato's own. */
+    private static final boolean KLINE = "kline".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** Ostinato Maestro: -Dostinato.legatotest.arms=maestro; A baseline, B Legato smoothing, C Maestro, D Maestro + smoothing. */
+    private static final boolean MAESTRO = "maestro".equals(System.getProperty("ostinato.legatotest.arms"));
+
+    private record Lap(int rep, LegatoCourse.Leg leg, int mode) {}
+
+    private final Baritone baritone;
+    private final List<Lap> laps = new ArrayList<>();
+    private final List<String> rows = new ArrayList<>();
+    /** Reached lap ticks by leg, repetition and mode. */
+    private final Map<String, Long> reached = new HashMap<>();
+    private int state, wait, index, step;
+    private volatile boolean ready;
+    /** The last lap did not end cleanly: rebuild the course before the next. */
+    private boolean dirty;
+    private long ticks, lapStart;
+    private BufferedWriter out;
+
+    private volatile int positionPackets;
+    private int calcs, driverChanges, rewinds, lastPathPos = -1, planned;
+    private String lastDriver = "";
+    private final Map<String, Integer> driverTicks = new TreeMap<>();
+    private double travelled, turned, lastX, lastZ;
+    private float lastYaw;
+    private long[] before;
+    private long alloc0, kinNs0;
+    /** Ticks on a MovementLine / a MovementStraight by who drove them, and why an accepted line was not steered. */
+    private final Map<String, Integer> lineTicks = new TreeMap<>(), straightTicks = new TreeMap<>(), lineDeclines = new TreeMap<>();
+    private final Map<String, Integer> faults = new TreeMap<>();
+    /** Ticks turning on the spot; plans dropped mid-lap; laps that left a key forced down. */
+    private int turnInPlace, cancels, stuckKeyLaps;
+    private boolean faultHooked;
+
+    private LegatoLiveTest(Baritone b) {
+        baritone = b;
+        for (int r = 0; r < REPS; r++) {
+            for (int l = 0; l < LegatoCourse.LEGS.size(); l++) {
+                for (int k = 0; k < MODES.length; k++) {
+                    laps.add(new Lap(r, LegatoCourse.LEGS.get(l), (k + r + l) % MODES.length));
+                }
+            }
+        }
+    }
+
+    public static void install(Baritone b) {
+        if (Boolean.getBoolean("ostinato.legatotest")) b.getGameEventHandler().registerEventListener(new LegatoLiveTest(b));
+    }
+
+    private synchronized void log(String message) {
+        System.out.println("LEGATOTEST " + message);
+        try {
+            if (out == null) {
+                out = Files.newBufferedWriter(Minecraft.getInstance().gameDirectory.toPath().resolve("legatotest-result.txt"),
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            }
+            out.write("LEGATOTEST " + message);
+            out.newLine();
+            out.flush();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    @Override
+    public void onReceivePacket(PacketEvent event) {
+        // the harness never teleports mid-lap, so every server position packet in a lap is a correction
+        if (event.getState() == EventState.PRE && event.getPacket() instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket) {
+            positionPackets++;
+        }
+    }
+
+    @Override
+    public void onPathEvent(PathEvent event) {
+        if (state == 4 && step == 1 && (event == PathEvent.CALC_STARTED || event == PathEvent.NEXT_SEGMENT_CALC_STARTED)) {
+            calcs++;
+        }
+        if (state == 4 && step == 1 && event == PathEvent.CANCELED) {
+            cancels++; // the world changed under the plan, or the executor gave up on it
+        }
+    }
+
+    @Override
+    public void onTick(TickEvent e) {
+        if (e.getState() != EventState.PRE) return;
+        Minecraft mc = Minecraft.getInstance();
+        ticks++;
+        if (state == 0 && mc.gui.screen() instanceof TitleScreen) {
+            state = 1;
+            mc.options.pauseOnLostFocus = false;
+            CreateWorldScreen.openFresh(mc, () -> {});
+            wait = 40;
+        } else if (state == 1 && --wait <= 0 && mc.gui.screen() instanceof CreateWorldScreen screen) {
+            screen.getUiState().setSeed(System.getProperty("ostinato.seed", "71006"));
+            for (var child : screen.children()) {
+                if (child instanceof Button button && button.getMessage().getString().contains("Create New World")) {
+                    state = 2;
+                    wait = 100;
+                    button.onPress(new net.minecraft.client.input.InputWithModifiers() {
+                        public int input() { return 0; }
+                        public int modifiers() { return 0; }
+                    });
+                    break;
+                }
+            }
+        } else if (state == 2 && mc.player != null && mc.getSingleplayerServer() != null && --wait <= 0) {
+            state = 3;
+            ready = false;
+            Baritone.settings().allowBreak.value = false;
+            Baritone.settings().allowPlace.value = false;
+            Baritone.settings().presto.value = false;
+            if (!faultHooked) {
+                faultHooked = true;
+                var inner = Baritone.settings().movementFault.value;
+                Baritone.settings().movementFault.value = (code, evidence) -> {
+                    if (state == 4) faults.merge(code, 1, Integer::sum);
+                    inner.accept(code, evidence);
+                };
+            }
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : "legato") + " laps=" + laps.size()
+                    + " reps=" + REPS + " legs=" + LegatoCourse.LEGS.size() + " order=latin");
+            server(mc, () -> {
+                // peaceful: the first run lost its last 28 laps to a creeper on the platform
+                mc.getSingleplayerServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
+                build(mc);
+                ServerPlayer p = player(mc);
+                p.getInventory().clearContent();
+                LegatoCourse.Leg first = LegatoCourse.LEGS.getFirst();
+                p.teleportTo(first.sx() + 0.5, LegatoCourse.F + 1, first.sz() + 0.5);
+            });
+            wait = 80;
+        } else if (state == 3 && ready && --wait <= 0) {
+            next(mc);
+        } else if (state == 4) {
+            lap(mc);
+        }
+    }
+
+    /** Lays the course down (server thread); again after any lap that did not end cleanly. */
+    private static void build(Minecraft mc) {
+        var level = mc.getSingleplayerServer().overworld();
+        int F = LegatoCourse.F;
+        for (int x = -2; x <= LegatoCourse.SIZE + 2; x++) {
+            for (int z = -2; z <= LegatoCourse.SIZE + 2; z++) {
+                for (int y = F - 1; y <= F + 6; y++) {
+                    level.setBlock(new BlockPos(x, y, z), LegatoCourse.solid(x, y, z) ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+        }
+    }
+
+    private static void mode(int mode) {
+        Baritone.settings().presto.value = false;
+        Baritone.settings().maestro.value = MAESTRO && mode >= 2;
+        if (MAESTRO) {
+            Baritone.settings().kinematicLine.value = false;
+            Baritone.settings().legato.value = mode == 1 || mode == 3;
+            Baritone.settings().legatoSmoothing.value = true; // its default; only legato switches it in
+            Baritone.settings().legatoSearch.value = false;
+            return;
+        }
+        if (KLINE) {
+            Baritone.settings().kinematicLine.value = mode == 1 || mode == 3;
+            Baritone.settings().legato.value = mode >= 2;
+            Baritone.settings().legatoSmoothing.value = mode >= 2;
+            Baritone.settings().legatoSearch.value = false;
+            return;
+        }
+        Baritone.settings().legato.value = mode != 0;
+        Baritone.settings().legatoSmoothing.value = mode == 1 || mode == 3;
+        Baritone.settings().legatoSearch.value = mode == 2 || mode == 3;
+    }
+
+    private void next(Minecraft mc) {
+        if (index >= laps.size()) {
+            finish();
+            return;
+        }
+        Lap l = laps.get(index);
+        mode(0);
+        String held = heldKeys();
+        if (!held.isEmpty()) {
+            stuckKeyLaps++;
+            log("keys still held after lap " + (index - 1) + ": " + held);
+        }
+        ready = false;
+        if (mc.player.isDeadOrDying()) {
+            mc.player.respawn();
+        }
+        boolean rebuild = dirty;
+        dirty = false;
+        server(mc, () -> {
+            if (rebuild) {
+                build(mc);
+                log("course rebuilt before lap " + index);
+            }
+            ServerPlayer p = player(mc);
+            p.setHealth(p.getMaxHealth());
+            p.getFoodData().setFoodLevel(20);
+            p.teleportTo(l.leg().sx() + 0.5, LegatoCourse.F + 1, l.leg().sz() + 0.5);
+            p.setDeltaMovement(0, 0, 0);
+            p.resetFallDistance();
+        });
+        state = 4;
+        step = 0;
+        wait = 30;
+    }
+
+    private void lap(Minecraft mc) {
+        if (!ready) return;
+        Lap l = laps.get(index);
+        var player = mc.player;
+        if (step == 0) {
+            if (--wait > 0) return;
+            mode(l.mode());
+            RouteReuse.clear();
+            LegatoFailures.clear();
+            // every lap starts facing +x, so the first turn is the same for every mode
+            player.setYRot(-90);
+            player.setXRot(0);
+            before = counters();
+            calcs = driverChanges = rewinds = planned = 0;
+            lastPathPos = -1;
+            lastDriver = "";
+            driverTicks.clear();
+            lineTicks.clear();
+            straightTicks.clear();
+            lineDeclines.clear();
+            faults.clear();
+            turnInPlace = cancels = 0;
+            travelled = turned = 0;
+            lastX = player.getX();
+            lastZ = player.getZ();
+            lastYaw = player.getYRot();
+            alloc0 = allocated();
+            kinNs0 = PlanStats.kinNs.get();
+            lapStart = ticks;
+            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(l.leg().gx(), LegatoCourse.F + 1, l.leg().gz()));
+            step = 1;
+            return;
+        }
+        double x = player.getX(), y = player.getY(), z = player.getZ();
+        double stepXZ = Math.hypot(x - lastX, z - lastZ), dYaw = Math.abs(Mth.wrapDegrees(player.getYRot() - lastYaw));
+        travelled += stepXZ;
+        turned += dYaw;
+        if (player.onGround() && stepXZ < 0.05 && dYaw > 1) turnInPlace++;
+        lastX = x;
+        lastZ = z;
+        lastYaw = player.getYRot();
+        var ex = baritone.getPathingBehavior().getCurrent();
+        String drv = ex == null ? "-" : ex.getLastDriver().toString();
+        driverTicks.merge(drv, 1, Integer::sum);
+        if (!drv.equals(lastDriver)) {
+            if (!lastDriver.isEmpty()) driverChanges++;
+            lastDriver = drv;
+        }
+        int pos = ex == null ? -1 : ex.getPosition();
+        if (pos >= 0 && lastPathPos >= 0 && pos < lastPathPos) rewinds++;
+        if (pos >= 0) lastPathPos = pos;
+        if (ex != null && planned == 0) planned = ex.getPath().positions().size();
+        if (ex != null && pos >= 0 && pos < ex.getPath().movements().size()) {
+            var mv = ex.getPath().movements().get(pos);
+            if (mv instanceof MovementLine line) {
+                lineTicks.merge(drv, 1, Integer::sum);
+                if (line.kinematicDecision == KinematicLine.ACCEPTED && !"KINEMATIC".equals(drv)) {
+                    String why = ex.kinematic().traceWhy;
+                    lineDeclines.merge(why == null ? "-" : why.replaceAll("[-0-9.E]+$", "").trim().replace(' ', '_'), 1, Integer::sum);
+                }
+            } else if (mv instanceof MovementStraight) {
+                straightTicks.merge(drv, 1, Integer::sum);
+            }
+        }
+        boolean there = Math.abs(x - (l.leg().gx() + 0.5)) < 0.8 && Math.abs(z - (l.leg().gz() + 0.5)) < 0.8 && player.onGround();
+        boolean fell = y < LegatoCourse.F + 0.5;
+        boolean died = player.isDeadOrDying();
+        long took = ticks - lapStart;
+        if (there || fell || died || took > TIMEOUT) {
+            baritone.getPathingBehavior().cancelEverything();
+            String held = heldKeys();
+            if (!held.isEmpty()) log("keys held right after cancel, lap " + index + ": " + held);
+            long[] d = counters();
+            for (int i = 0; i < d.length; i++) d[i] -= before[i];
+            String result = there ? "REACHED" : died ? "DIED" : fell ? "FELL" : "TIMEOUT";
+            dirty = !there;
+            String row = String.format(Locale.ROOT, "lap %d rep=%d leg=%s mode=%s result=%s ticks=%d travelled=%.2f turned=%.0f x=%.2f z=%.2f"
+                            + " planned=%d calcs=%d driverChanges=%d rewinds=%d posPackets=%d drivers=%s"
+                            + " evals=%d feasible=%d shortcuts=%d removed=%d theta=%d/%d straights=%d straightFails=%d evalUs=%d smoothUs=%d"
+                            + " kinNs=%d allocKB=%d lineTicks=%s straightTicks=%s turnInPlace=%d cancels=%d faults=%s"
+                            + " klineAccepted=%d klineOff=%d klineGround=%d klinePending=%d klineDowngrades=%d lineDeclines=%s",
+                    index, l.rep(), l.leg().name(), MODES[l.mode()], result, took, travelled, turned, x, z,
+                    planned, calcs, driverChanges, rewinds, d[0], driverTicks, d[1], d[2], d[3], d[4], d[6], d[5], d[7], d[8], d[9] / 1000, d[10] / 1000,
+                    PlanStats.kinNs.get() - kinNs0, (allocated() - alloc0) / 1024, lineTicks, straightTicks, turnInPlace, cancels, faults,
+                    d[11], d[12], d[13], d[14], d[15], lineDeclines);
+            rows.add(row);
+            log(row);
+            if (there) {
+                reached.put(l.leg().name() + "/" + l.rep() + "/" + l.mode(), took);
+            }
+            mode(0);
+            index++;
+            state = 3;
+            wait = 20;
+        }
+    }
+
+    private long[] counters() {
+        return new long[]{positionPackets, LegatoStats.evaluations(), LegatoStats.verdicts(LegatoFeasibility.FEASIBLE),
+                LegatoStats.shortcuts(), LegatoStats.movesRemoved(), LegatoStats.thetaChecks(), LegatoStats.thetaAccepts(),
+                LegatoStats.straightsDone(), LegatoStats.straightFails(), LegatoStats.evalNanos(), LegatoStats.smoothNanos(),
+                KinematicLine.decisions(KinematicLine.ACCEPTED), KinematicLine.decisions(KinematicLine.OFF),
+                KinematicLine.decisions(KinematicLine.GROUND), KinematicLine.decisions(KinematicLine.PENDING), KinematicLine.downgrades()};
+    }
+
+    /** Inputs the bot still forces down; after a cancel there must be none. */
+    private String heldKeys() {
+        StringBuilder b = new StringBuilder();
+        for (Input in : Input.values()) {
+            if (baritone.getInputOverrideHandler().isInputForcedDown(in)) b.append(b.length() == 0 ? "" : ",").append(in);
+        }
+        return b.toString();
+    }
+
+    private static long allocated() {
+        return ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean t ? t.getCurrentThreadAllocatedBytes() : 0;
+    }
+
+    private void finish() {
+        for (int m = 0; m < MODES.length; m++) {
+            String tag = " mode=" + MODES[m] + " ";
+            int n = 0, ok = 0;
+            List<Long> t = new ArrayList<>();
+            for (String r : rows) {
+                if (!r.contains(tag)) continue;
+                n++;
+                if (r.contains("result=REACHED")) {
+                    ok++;
+                    t.add(Long.parseLong(r.replaceAll(".* ticks=(\\d+) .*", "$1")));
+                }
+            }
+            Collections.sort(t);
+            log(String.format(Locale.ROOT, "summary mode=%s laps=%d reached=%d ticks median=%s mean=%.1f", MODES[m], n, ok,
+                    t.isEmpty() ? "-" : t.get(t.size() / 2), t.stream().mapToLong(Long::longValue).average().orElse(Double.NaN)));
+        }
+        // paired: each lap against the baseline lap of the same leg and repetition
+        for (LegatoCourse.Leg leg : LegatoCourse.LEGS) {
+            for (int m = 1; m < MODES.length; m++) {
+                List<Double> ratios = new ArrayList<>();
+                List<Long> base = new ArrayList<>(), arm = new ArrayList<>();
+                for (int r = 0; r < REPS; r++) {
+                    Long a = reached.get(leg.name() + "/" + r + "/0"), b = reached.get(leg.name() + "/" + r + "/" + m);
+                    if (a != null) base.add(a);
+                    if (b != null) arm.add(b);
+                    if (a != null && b != null) ratios.add(b / (double) a);
+                }
+                Collections.sort(ratios);
+                Collections.sort(base);
+                Collections.sort(arm);
+                log(String.format(Locale.ROOT, "paired leg=%s mode=%s pairs=%d medianA=%s median%s=%s medianRatio=%s ratios=%s", leg.name(), MODES[m],
+                        ratios.size(), base.isEmpty() ? "-" : base.get(base.size() / 2), MODES[m], arm.isEmpty() ? "-" : arm.get(arm.size() / 2),
+                        ratios.isEmpty() ? "-" : String.format(Locale.ROOT, "%.3f", ratios.get(ratios.size() / 2)), ratios));
+            }
+        }
+        log(LegatoStats.line());
+        if (MAESTRO) { // Ostinato Maestro: proof that arms C/D searched with Maestro, not only that the switch was on
+            log("maestro searches=" + MaestroPathFinder.searches.get() + " fallbacks=" + MaestroPathFinder.fallbacks.get()
+                    + " capped=" + MaestroPathFinder.capped.get() + " exceptions=" + MaestroPathFinder.exceptions.get());
+        }
+        log("keys stuck after " + stuckKeyLaps + " laps");
+        mode(0);
+        Baritone.settings().legatoSmoothing.value = true; // back to the default
+        state = 5;
+        if (Boolean.getBoolean("ostinato.legatotest.exit")) Minecraft.getInstance().stop();
+    }
+
+    private void server(Minecraft mc, Runnable r) {
+        mc.getSingleplayerServer().execute(() -> {
+            try {
+                r.run();
+            } catch (Throwable failure) {
+                log("FAIL setup " + failure);
+            } finally {
+                ready = true;
+            }
+        });
+    }
+
+    private static ServerPlayer player(Minecraft mc) {
+        return mc.getSingleplayerServer().getPlayerList().getPlayers().getFirst();
+    }
+}

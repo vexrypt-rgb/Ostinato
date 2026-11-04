@@ -77,6 +77,12 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
     private int duelOpenUntil, lastSeenTick;
     private float lastHealth = -1;
     private final PvpRecorder recorder = new PvpRecorder();
+    private final baritone.scherzo.Scherzo scherzo = new baritone.scherzo.Scherzo(); // Ostinato: predictive opponent model
+    /** Ostinato (Bombard): the TNT layer; a game listener of its own, so its watch on burning TNT outlives the fight. */
+    private final baritone.bombard.Bombard bombard;
+    private final CombatBombard bombardHands;
+    private boolean bombardLearningExcluded;
+    private boolean bombardFightActive;
     /** Short action token written to the PvP log this tick; set by {@link #decide}. */
     private String tickDec = "-";
 
@@ -86,6 +92,14 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
     public PvpProcess(Baritone baritone) {
         super(baritone);
         recall();
+        swing.advice = scherzo.jab(); // Ostinato (Scherzo): audited unless off, advised only when live
+        movement.predictive = new baritone.scherzo.ManeuverAdvice(scherzo);
+        bombard = new baritone.bombard.Bombard(baritone); // Ostinato (Bombard): off unless -Dostinato.bombard says otherwise
+        baritone.getGameEventHandler().registerEventListener(bombard);
+        bombardHands = new CombatBombard(baritone, bombard, scherzo, inv, new CombatBombard.Hands() {
+            public boolean select(Player me, int slot) { return PvpProcess.this.select(me, slot); }
+            public void look(Vec3 point) { PvpProcess.this.look(point); }
+        }, recorder::note);
     }
 
     public void attack(Predicate<LivingEntity> filter, String label) {
@@ -184,7 +198,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
         if (filter == null && enemies.isEmpty()) {
             outcome.interrupt("lost");
             remember(false);
-            recorder.end(me, "lost");
+            endFight(me, "lost");
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         float hp = me.getHealth() + me.getAbsorptionAmount();
@@ -200,7 +214,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
                 && me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).isEmpty()
                 && me.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).isEmpty())) {
             outcome.interrupt("lost");
-            if (recorder.active()) recorder.end(me, respawned ? "death" : "lost");
+            if (recorder.active()) endFight(me, respawned ? "death" : "lost");
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
@@ -218,7 +232,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
             if (prevTarget != null && prevTarget.isDeadOrDying()) recorder.markWin();
             outcome.interrupt("lost");
             remember(false);
-            recorder.end(me, "lost");
+            endFight(me, "lost");
             use(false);
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
@@ -264,10 +278,17 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
             recorder.begin(me, target, label);
             notedLag = -1;
         }
+        if (!bombardFightActive) {
+            bombard.fightStart();
+            bombardLearningExcluded = false;
+            bombardFightActive = true;
+        }
         if (tuneLag != notedLag) { // at the start of every fight and whenever the band moves
             recorder.note(lag.note());
             notedLag = tuneLag;
         }
+        scherzo.tick(me, target, tv(), lag.ticks()); // Ostinato (Scherzo): models and measures; moves nothing unless live
+        bombard.foe(target); // Ostinato (Bombard): blasts are forecast against the foe as well as us
         tickDec = "-";
         brokeNote = inv.noteBreaks(me);
         if (!brokeNote.isEmpty()) {
@@ -347,6 +368,12 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
             PathingCommand burnt = buckets.lava(me, target, dist, los, free);
             if (burnt != null) return burnt;
 
+            if (free && bombardHands.tick(me, target)) {
+                if (!bombardLearningExcluded) outcome.interrupt("bombard");
+                bombardLearningExcluded = true;
+                return decide("bombard");
+            }
+
             // crystals and anchors reach further than a sword, and blowing them is also how we clear a wall of them
             if (explosives.crystal(me, target)) {
                 if (dist <= DRIVE) movement.steer(me, target, dist, chase, melee.critArmed);
@@ -405,12 +432,14 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
                     tickDec + brokeNote, attacks);
             click.clickKind = '-';
             // after the tick's row, so a window's line is stamped with the tick that closed it
-            lag.tick(me.tickCount, target.getId(), target.hurtTime, target.hurtDuration, attacks != outcomeAttacks, target.isOnFire());
-            stakes(me);
-            outcome.tick(target.getId(), target instanceof Player, life(target), target.hurtTime, target.hurtDuration, life(me), seen,
-                    attacks != outcomeAttacks, tuneKit, policy.setting(), tuneLag);
-            outcomeAttacks = attacks;
-            if (tuner.urgent() || fights.urgent() || spsa.urgent()) remember(true); // a verdict is the one thing not to lose // Ostinato: spsa too
+            if (!bombardLearningExcluded) {
+                lag.tick(me.tickCount, target.getId(), target.hurtTime, target.hurtDuration, attacks != outcomeAttacks, target.isOnFire());
+                stakes(me);
+                outcome.tick(target.getId(), target instanceof Player, life(target), target.hurtTime, target.hurtDuration, life(me), seen,
+                        attacks != outcomeAttacks, tuneKit, policy.setting(), tuneLag);
+                outcomeAttacks = attacks;
+                if (tuner.urgent() || fights.urgent() || spsa.urgent()) remember(true); // a verdict is the one thing not to lose // Ostinato: spsa too
+            } else outcomeAttacks = attacks; // TNT effects cannot be credited to ACS's melee settings.
         }
     }
 
@@ -898,12 +927,34 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
         aimer.look(at, target == null ? 0 : tv().horizontalDistance());
     }
 
+    /** Ostinato (Scherzo, Bombard): the fight log is closed with their measure of the fight in it. */
+    private void endFight(Player me, String reason) {
+        bombardFightActive = false;
+        scherzo.fightEnd(recorder::note);
+        if (recorder.active()) bombard.fightEnd(recorder::note);
+        recorder.end(me, reason);
+    }
+
+    @Override
+    public baritone.api.bombard.BombardPermit getBombardPermit() { // Ostinato (Bombard)
+        return bombard.permit();
+    }
+
+    @Override
+    public void setBombardPermit(baritone.api.bombard.BombardPermit permit) { // Ostinato (Bombard)
+        bombard.permit(permit);
+    }
+
     @Override
     public void onLostControl() {
+        if (Boolean.getBoolean("ostinato.bombardtest.trace")) new Throwable("BOMBARDTRACE onLostControl").printStackTrace(System.out); // Ostinato: opt-in rod diagnosis
+        bombardHands.cancel();
         outcome.interrupt("lost");
         remember(true);
         outcomeMe = null;
-        recorder.end(ctx.player(), "lost");
+        endFight(ctx.player(), "lost");
+        scherzo.reset(); // Ostinato (Scherzo): whatever takes over, the path we watched is not the one we come back to
+        bombard.foe(null); // Ostinato (Bombard): the fight is over; the TNT it watches burn on and are still watched
         filter = null;
         enemies.clear();
         target = null;

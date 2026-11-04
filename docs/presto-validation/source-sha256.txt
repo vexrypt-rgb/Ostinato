@@ -1,0 +1,6 @@
+7a495ee5ece0ce9c61ba79c14eefe90affa97e54f95b1f1139f3253b8fbc1372  src/main/java/baritone/pathing/kinematic/Presto.java
+c62451bead729b64d9805eb2c4dd83daad6b74655363a60804020343641ca378  src/main/java/baritone/pathing/kinematic/KinematicController.java
+c816bd9ccd0a93aae3dac8727424370c33f4d1a0516d7e13dbfbf68a4d13dd64  src/main/java/baritone/behavior/PathingBehavior.java
+39bf403075f5b4aa873132501a9de1c96b7e6ca8adba10dbf0a54a808c2b2dc5  src/main/java/baritone/pathing/kinematic/PrestoLiveTest.java
+78f22347d67165806c523de07240e803877d4e496d8697dfb2af8ae8dd3d5af0  src/test/java/baritone/pathing/kinematic/PrestoTest.java
+ae541c5369a64c2d6f3697df587e265f529a9a415610685acb1ea08396d9766f  src/test/java/baritone/pathing/kinematic/PrestoBench.java

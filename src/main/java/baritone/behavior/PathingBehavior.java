@@ -17,6 +17,7 @@
 
 package baritone.behavior;
 
+import baritone.pathing.kinematic.KinematicController;
 import baritone.pathing.decide.PathDecisionMatrix;
 import baritone.pathing.calc.HierarchicalPathFinder;
 import baritone.pathing.calc.hierarchy.SectionGraph;
@@ -26,6 +27,7 @@ import baritone.utils.fault.FaultBook;
 import baritone.Baritone;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.event.events.*;
+import baritone.api.event.events.type.EventState;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalXZ;
@@ -35,6 +37,7 @@ import baritone.api.utils.Helper;
 import baritone.api.utils.PathCalculationResult;
 import baritone.api.utils.interfaces.IGoalRenderPos;
 import baritone.pathing.calc.AStarPathFinder;
+import baritone.pathing.calc.MaestroPathFinder;
 import baritone.pathing.calc.AbstractNodeCostSearch;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
@@ -71,6 +74,11 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     private boolean pauseRequestedLastTick;
     private boolean unpausedLastTick;
     private boolean pausedThisTick;
+    // Ostinato: Grace Note's emergency hold (see requestEmergencyHold): who asked this tick, and whether it held
+    private String emergencyOwner;
+    private boolean emergencyHeldThisTick;
+    // Packet callbacks may run on the network thread; consume the signal before client-thread auditing.
+    private volatile boolean prestoCorrection;
     private boolean cancelRequested;
     private boolean calcFailedLastTick;
 
@@ -169,12 +177,21 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         // Ostinato: install or clear the seed terrain predictor (setting seedPlanning, off by default)
         SeedPlanning.sync(ctx.minecraft(), event.getType() == TickEvent.Type.OUT ? null : ctx.world());
         if (event.getType() == TickEvent.Type.OUT) {
+            prestoCorrection = false;
+            KinematicController.invalidatePresto(ctx, false);
+            emergencyOwner = null; // Ostinato: no hold outlives the world it was asked in
+            emergencyHeldThisTick = false;
             secretInternalSegmentCancel();
             baritone.getPathingControlManager().cancelEverything();
             return;
         }
 
         expectedSegmentStart = pathStart();
+        if (prestoCorrection) {
+            prestoCorrection = false;
+            KinematicController.invalidatePresto(ctx, true);
+        }
+        KinematicController.audit(baritone); // Ostinato Presto: validate ownership before observing a landing
         baritone.getPathingControlManager().preTick();
         tickPath();
         ticksElapsedSoFar++;
@@ -190,6 +207,24 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     private void tickPath() {
         pausedThisTick = false;
+        emergencyHeldThisTick = false;
+        if (emergencyOwner != null) {
+            // Ostinato: an emergency hold stops the executor even mid-movement, where requestPause waits for a safe point:
+            // its owner has already decided the movement cannot be left to run (an unplanned fall). Asked again every
+            // tick it is still needed, so a forgotten request lasts one tick. Any ordinary pause asked for meanwhile is
+            // used up here rather than replayed a tick after the hold ends.
+            if (unpausedLastTick) {
+                logDebug("Emergency hold by " + emergencyOwner);
+                baritone.getInputOverrideHandler().clearAllKeys();
+                baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+            }
+            emergencyOwner = null;
+            pauseRequestedLastTick = false;
+            unpausedLastTick = false;
+            pausedThisTick = true;
+            emergencyHeldThisTick = true;
+            return;
+        }
         if (pauseRequestedLastTick && (safeToCancel || current != null && current.pausableNow())) {
             pauseRequestedLastTick = false;
             if (unpausedLastTick) {
@@ -412,6 +447,34 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         pauseRequestedLastTick = true;
     }
 
+    /**
+     * Ostinato: hold the path executor this tick whatever it is doing (see tickPath). For Grace Note only; it has to
+     * come before this behavior's tick, and it is asked for again each tick the hold is still wanted.
+     */
+    public void requestEmergencyHold(String owner) {
+        emergencyOwner = owner;
+        KinematicController.invalidatePresto(ctx, false);
+    }
+
+    @Override
+    public void onReceivePacket(PacketEvent event) {
+        if (event.getState() == EventState.PRE
+                && event.getPacket() instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket) {
+            prestoCorrection = true;
+        }
+    }
+
+    @Override
+    public void onWorldEvent(WorldEvent event) {
+        KinematicController.invalidatePresto(ctx, false);
+        prestoCorrection = false;
+    }
+
+    /** Ostinato: whether the executor was held by an emergency hold on the last tickPath. */
+    public boolean emergencyHeldThisTick() {
+        return emergencyHeldThisTick;
+    }
+
     public boolean cancelSegmentIfSafe() {
         if (isSafeToCancel()) {
             secretInternalSegmentCancel();
@@ -519,6 +582,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             }
             current = null;
             next = null;
+            KinematicController.invalidatePresto(ctx, false);
         }
         cancelRequested = true;
         // do everything BUT clear keys
@@ -526,6 +590,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     // just cancel the current path
     public void secretInternalSegmentCancel() {
+        KinematicController.invalidatePresto(ctx, false);
         queuePathEvent(PathEvent.CANCELED);
         synchronized (pathPlanLock) {
             getInProgress().ifPresent(AbstractNodeCostSearch::cancel);
@@ -864,6 +929,15 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         }
         if (hierarchical) { // Ostinato: opt-in hierarchical planner
             return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
+        }
+        if (Baritone.settings().maestro.value) { // Ostinato Maestro: opt-in action-aware planner (falls back to A* itself)
+            MaestroPathFinder maestro = new MaestroPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
+            synchronized (dead) {
+                if (!dead.isEmpty() && Objects.equals(deadGoal, goal)) {
+                    maestro.avoidDead(dead.clone());
+                }
+            }
+            return maestro;
         }
         AStarPathFinder astar = new AStarPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
         synchronized (dead) {

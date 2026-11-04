@@ -50,7 +50,7 @@ final class CombatClick {
 
     boolean hit(Player me, LivingEntity target) {
         boolean spearAim = isSpear(me.getMainHandItem());
-        Vec3 aim = spearAim ? aimPoint(me, target) : swing.swingPoint(me, target, targeting.velocity(target));
+        Vec3 aim = spearAim ? swing.jabPoint(me, target) : swing.swingPoint(me, target, targeting.velocity(target)); // Ostinato (Scherzo): jabPoint is aimPoint unless live
         hands.look(aim);
         double er = exactReach(me, target);
         boolean spear = isSpear(me.getMainHandItem());
@@ -60,6 +60,7 @@ final class CombatClick {
             if (!swing.spearRayHits(me, target)) return false;
             press(mc.options.keyAttack);
             hands.attacked();
+            swing.advice.sent(me, target, swing.lastClientRay); // Ostinato (Scherzo): the jab audit
             return true;
         }
         // 003156 mace medium: twelve dives came down on its head and none clicked. Falling 1.2 a tick past a target

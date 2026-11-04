@@ -1,0 +1,248 @@
+[
+  {
+    "suite": "adris.altoclef.agent.AgentJsonTest",
+    "tests": 7,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.685Z"
+  },
+  {
+    "suite": "adris.altoclef.agent.AgentRequestHandlerTest",
+    "tests": 10,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.750Z"
+  },
+  {
+    "suite": "adris.altoclef.benchmark.BenchmarkAggregationTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.777Z"
+  },
+  {
+    "suite": "adris.altoclef.benchmark.LiveBenchmarkSessionTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.817Z"
+  },
+  {
+    "suite": "adris.altoclef.benchmark.MockScenariosTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.846Z"
+  },
+  {
+    "suite": "adris.altoclef.butler.WhisperCheckerTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:49.851Z"
+  },
+  {
+    "suite": "adris.altoclef.compose.CompositionCompilerTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:50.144Z"
+  },
+  {
+    "suite": "adris.altoclef.compose.CompositionRunTest",
+    "tests": 9,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.897Z"
+  },
+  {
+    "suite": "adris.altoclef.core.CoreServicesTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.935Z"
+  },
+  {
+    "suite": "adris.altoclef.knowledge.KnowledgeFactCacheTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.944Z"
+  },
+  {
+    "suite": "adris.altoclef.knowledge.KnowledgeFactTest",
+    "tests": 9,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.952Z"
+  },
+  {
+    "suite": "adris.altoclef.maze.MazeArmorBudgetTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.963Z"
+  },
+  {
+    "suite": "adris.altoclef.maze.MazeFurnishPlanTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.973Z"
+  },
+  {
+    "suite": "adris.altoclef.movement.TravelTraceTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.988Z"
+  },
+  {
+    "suite": "adris.altoclef.planner.PlanExecutorTest",
+    "tests": 8,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:53.994Z"
+  },
+  {
+    "suite": "adris.altoclef.planner.PlanRunnerTaskTest",
+    "tests": 6,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:54.010Z"
+  },
+  {
+    "suite": "adris.altoclef.planner.SimplePlannerTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:54.018Z"
+  },
+  {
+    "suite": "adris.altoclef.sigil.SigilTest",
+    "tests": 7,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:54.030Z"
+  },
+  {
+    "suite": "adris.altoclef.swarm.SwarmCoordinatorTest",
+    "tests": 19,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:54.854Z"
+  },
+  {
+    "suite": "adris.altoclef.swarm.SwarmRuntimeLinkTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:54.920Z"
+  },
+  {
+    "suite": "adris.altoclef.tasks.speedrun.testrun2.core.SafeHeadingTest",
+    "tests": 8,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.661Z"
+  },
+  {
+    "suite": "adris.altoclef.tasks.speedrun.testrun2.fault.FaultBookTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.672Z"
+  },
+  {
+    "suite": "adris.altoclef.tasks.speedrun.testrun2.util.QueueWatchTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.696Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.GraceNoteTaskGateTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.701Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.RecoveryManagerTest",
+    "tests": 9,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.709Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.TaskFailureTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.715Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.TaskIntrospectionTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.717Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.TaskOutcomeTickTest",
+    "tests": 8,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.727Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.TaskPropagationTest",
+    "tests": 11,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.740Z"
+  },
+  {
+    "suite": "adris.altoclef.tasksystem.TaskResultMapperTest",
+    "tests": 7,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.746Z"
+  },
+  {
+    "suite": "adris.altoclef.threat.ThreatAssessorTest",
+    "tests": 13,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.753Z"
+  },
+  {
+    "suite": "adris.altoclef.threat.ThreatMonitorTest",
+    "tests": 5,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.767Z"
+  },
+  {
+    "suite": "adris.altoclef.trackers.CloseBlockScanCostTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:55.774Z"
+  },
+  {
+    "suite": "adris.altoclef.trackers.EntityTrackerFlattenTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:57.072Z"
+  },
+  {
+    "suite": "adris.altoclef.trackers.storage.ConversionSlotScanCostTest",
+    "tests": 1,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.108Z"
+  },
+  {
+    "suite": "adris.altoclef.trackers.storage.InventorySnapshotCostTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.287Z"
+  },
+  {
+    "suite": "adris.altoclef.util.helpers.HotbarEquipSelectorTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.975Z"
+  },
+  {
+    "suite": "adris.altoclef.util.helpers.NearbyPlacePenaltyTest",
+    "tests": 3,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.980Z"
+  },
+  {
+    "suite": "adris.altoclef.util.helpers.NearestBlockSelectorTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.984Z"
+  },
+  {
+    "suite": "adris.altoclef.util.helpers.ShoreStandSelectorTest",
+    "tests": 4,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.989Z"
+  },
+  {
+    "suite": "adris.altoclef.util.slots.PlayerSlotMappingTest",
+    "tests": 7,
+    "failures": 0,
+    "timestamp": "2026-10-30T17:12:58.997Z"
+  }
+]

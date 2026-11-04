@@ -40,11 +40,25 @@ public interface IAimProcessor {
      * per-tick turn cap that {@link #peekRotation} applies. Reach and placement checks ask "would the ray hit if I
      * looked there", and with the 32 degree cap every block more than 32 degrees off the view read as unreachable,
      * so nothing ever turned to it (a log at 1.1 blocks, a crafting table under the feet).
+     * Same result as {@link #peekSettledRotation}.
      *
      * @param desired The desired rotation
      * @return The rotation the look ends on
      */
     default Rotation peekAim(Rotation desired) {
+        return peekRotation(desired);
+    }
+
+    /**
+     * Ostinato: the rotation the look settles at once it has finished turning toward {@code desired}: as
+     * {@link #peekRotation}, but without any per-tick turn limit. Reach checks use this, so a block behind the player
+     * counts as reachable (the look turns over the next ticks; callers click only once the crosshair is on it).
+     * Same result as {@link #peekAim}.
+     *
+     * @param desired The desired rotation to set
+     * @return The rotation the look ends at
+     */
+    default Rotation peekSettledRotation(Rotation desired) {
         return peekRotation(desired);
     }
 

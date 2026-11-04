@@ -28,6 +28,9 @@ import baritone.api.utils.*;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
 import baritone.cache.CachedChunk;
+import baritone.pathing.cadenza.Cadenza;
+import baritone.pathing.cadenza.CadenzaGoal;
+import baritone.pathing.cadenza.CadenzaSession;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BaritoneProcessHelper;
@@ -35,6 +38,7 @@ import baritone.utils.BlockStateInterface;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.*;
@@ -60,6 +64,10 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     private GoalRunAway branchPointRunaway;
     private int desiredQuantity;
     private int tickCount;
+    /** Ostinato Cadenza: positioning memo and the interaction in progress (used only with the cadenza setting). */
+    private final CadenzaSession cadenza = new CadenzaSession();
+    /** Cadenza diagnostics: this tick's mining selection, and the last give-up (read by the live harness trace). */
+    public String cadenzaNote = "", cadenzaGaveUp = "";
 
     public MineProcess(Baritone baritone) {
         super(baritone);
@@ -123,7 +131,13 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 .filter(pos -> !(BlockStateInterface.get(ctx, pos).getBlock() instanceof AirBlock)) // after breaking a block, it takes mineGoalUpdateInterval ticks for it to actually update this list =(
                 .min(Comparator.comparingDouble(ctx.playerFeet().above()::distSqr));
         baritone.getInputOverrideHandler().clearAllKeys();
-        if (shaft.isPresent() && ctx.player().onGround()) {
+        if (Baritone.settings().cadenza.value) {
+            // Ostinato Cadenza: mine whatever known ore is reachable from where we stand (this covers the shaft case)
+            PathingCommand reach = cadenzaMine(curr, isSafeToCancel);
+            if (reach != null) {
+                return reach;
+            }
+        } else if (shaft.isPresent() && ctx.player().onGround()) {
             BlockPos pos = shaft.get();
             BlockState state = baritone.bsi.get0(pos);
             if (!MovementHelper.avoidBreaking(baritone.bsi, pos.getX(), pos.getY(), pos.getZ(), state)) {
@@ -149,6 +163,114 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     }
 
 
+    /**
+     * Ostinato Cadenza: the existing look + left-click mining (as the shaft case does it), for any known ore the live
+     * reach check accepts from here. Reports the interaction to the session: attempted, then confirmed once the block
+     * is gone, or failed (and blacklisted, never retried in a loop) when it runs past its budget.
+     */
+    private PathingCommand cadenzaMine(List<BlockPos> known, boolean isSafeToCancel) {
+        BlockPos current = cadenza.current();
+        if (current != null && !filter.has(baritone.bsi.get0(current))) {
+            cadenza.confirm(); // the block is gone: broken
+        }
+        BlockPos failed = cadenza.tick();
+        if (failed != null) {
+            logDirect("Cadenza: gave up mining " + failed + " (not broken within budget), blacklisting it");
+            cadenzaGaveUp = failed.toShortString() + " eye " + ctx.playerHead() + " selected " + ctx.getSelectedBlock().map(BlockPos::toShortString).orElse("-")
+                    + " reach " + RotationUtils.reachable(ctx, failed).isPresent();
+            if (Baritone.settings().cadenzaDebug.value) {
+                logDirect("Cadenza debug: gave up at eye " + ctx.playerHead() + " look " + ctx.playerRotations()
+                        + " selected " + ctx.getSelectedBlock().orElse(null) + " reach " + RotationUtils.reachable(ctx, failed)
+                        + " state " + baritone.bsi.get0(failed));
+            }
+            blacklist.add(failed);
+        }
+        if (!ctx.player().onGround() || !isSafeToCancel) {
+            cadenzaNote = !ctx.player().onGround() ? "air" : "unsafe";
+            return null;
+        }
+        BetterBlockPos feet = ctx.playerFeet();
+        BlockPos keep = cadenza.current();
+        int skipGone = 0, skipBlack = 0, skipFar = 0, skipRay = 0, skipThin = 0;
+        List<BlockPos> order = new ArrayList<>(known);
+        order.sort(Comparator.comparingInt((BlockPos p) -> p.equals(keep) ? 0 : 1).thenComparingDouble(feet::distSqr));
+        // Cadenza v2: of the reachable ores, the one the camera is closest to (v1: the nearest), the current one kept
+        boolean leastTurn = Baritone.settings().cadenzaTurnAware.value || Baritone.settings().cadenzaBatch.value;
+        Rotation look = ctx.playerRotations();
+        double reachSq = Math.pow(ctx.playerController().getBlockReachDistance() + 1, 2);
+        BlockPos chosen = null;
+        Optional<Rotation> chosenRot = Optional.empty();
+        double chosenTurn = Double.POSITIVE_INFINITY;
+        for (BlockPos pos : order) {
+            BlockState state = baritone.bsi.get0(pos);
+            if (!filter.has(state) || pos.equals(feet.below()) || blacklist.contains(pos)) {
+                if (blacklist.contains(pos)) skipBlack++;
+                else skipGone++;
+                continue; // not (or no longer) an ore, a drop location, or the block we stand on
+            }
+            if (MovementHelper.avoidBreaking(baritone.bsi, pos.getX(), pos.getY(), pos.getZ(), state)) {
+                continue;
+            }
+            if (leastTurn && ctx.playerHead().distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > reachSq) {
+                skipFar++;
+                continue; // cannot be in reach: skip the ray casts
+            }
+            Optional<Rotation> r = RotationUtils.reachable(ctx, pos);
+            if (r.isEmpty()) {
+                skipRay++;
+                continue;
+            }
+            if (!pos.equals(keep) && !steady(r.get(), pos)) {
+                skipThin++;
+                continue; // only a sliver of it in view from here: walk on to a cell it mines from
+            }
+            if (!leastTurn || pos.equals(keep)) {
+                chosen = pos;
+                chosenRot = r;
+                break;
+            }
+            double turn = Math.max(Math.abs(net.minecraft.util.Mth.wrapDegrees(r.get().getYaw() - look.getYaw())), Math.abs(r.get().getPitch() - look.getPitch()));
+            if (turn < chosenTurn) {
+                chosenTurn = turn;
+                chosen = pos;
+                chosenRot = r;
+            }
+        }
+        cadenzaNote = (chosen == null ? "none" : "mine " + chosen.toShortString()) + " known " + known.size() + " gone " + skipGone
+                + " black " + skipBlack + " far " + skipFar + " ray " + skipRay + " thin " + skipThin;
+        if (chosen != null) {
+            BlockPos pos = chosen;
+            BlockState state = baritone.bsi.get0(pos);
+            Optional<Rotation> rot = chosenRot;
+            baritone.getLookBehavior().updateTarget(rot.get(), true);
+            MovementHelper.switchToBestToolFor(ctx, ctx.world().getBlockState(pos));
+            if (ctx.isLookingAt(pos) || ctx.playerRotations().isReallyCloseTo(rot.get())) {
+                baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, true);
+            }
+            double breakTicks = MovementHelper.getMiningDurationTicks(new CalculationContext(baritone), pos.getX(), pos.getY(), pos.getZ(), state, true);
+            cadenza.attempt(pos, 60 + (long) Math.min(breakTicks, 600));
+            return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
+        }
+        cadenza.nothingReachable(feet, ctx.player().onGround());
+        return null;
+    }
+
+    /**
+     * Cadenza: whether the look {@code r} stays on {@code pos} when the live aim lands up to
+     * {@link Cadenza#AIM_TOLERANCE_DEG} off in yaw or pitch (a break restarts whenever the crosshair slips off).
+     */
+    private boolean steady(Rotation r, BlockPos pos) {
+        double reach = ctx.playerController().getBlockReachDistance();
+        float a = (float) Cadenza.AIM_TOLERANCE_DEG;
+        for (Rotation o : new Rotation[]{r.add(new Rotation(a, 0)), r.add(new Rotation(-a, 0)), r.add(new Rotation(0, a)), r.add(new Rotation(0, -a))}) {
+            net.minecraft.world.phys.HitResult h = RayTraceUtils.rayTraceTowards(ctx.player(), o.clamp(), reach, false);
+            if (!(h instanceof net.minecraft.world.phys.BlockHitResult b) || h.getType() != net.minecraft.world.phys.HitResult.Type.BLOCK || !b.getBlockPos().equals(pos)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void updateLoucaSystem() {
         Map<BlockPos, Long> copy = new HashMap<>(anticipatedDrops);
         ctx.getSelectedBlock().ifPresent(pos -> {
@@ -171,6 +293,13 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         mine(0, (BlockOptionalMetaLookup) null);
     }
 
+    /** Cadenza diagnostics: the interaction in progress and its give-up timer. */
+    public String cadenzaTrace() {
+        BlockPos c = cadenza.current();
+        return "cur " + (c == null ? "-" : c.toShortString()) + " t " + cadenza.elapsed() + "/" + cadenza.budget() + " blacklist " + blacklist.size()
+                + " sel " + cadenzaNote;
+    }
+
     @Override
     public String displayName0() {
         return "Mine " + filter;
@@ -188,7 +317,8 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             CalculationContext context = new CalculationContext(baritone);
             List<BlockPos> locs2 = prune(context, new ArrayList<>(locs), filter, Baritone.settings().mineMaxOreLocationsCount.value, blacklist, droppedItemsScan());
             // can't reassign locs, gotta make a new var locs2, because we use it in a lambda right here, and variables you use in a lambda must be effectively final
-            Goal goal = new GoalComposite(locs2.stream().map(loc -> coalesce(loc, locs2, context)).toArray(Goal[]::new));
+            Goal goal = Baritone.settings().cadenza.value ? cadenzaGoal(context, locs2, filter)
+                    : new GoalComposite(locs2.stream().map(loc -> coalesce(loc, locs2, context)).toArray(Goal[]::new));
             knownOreLocations = locs2;
             return new PathingCommand(goal, legit ? PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH : PathingCommandType.REVALIDATE_GOAL_AND_PATH);
         }
@@ -224,6 +354,47 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             };
         }
         return new PathingCommand(branchPointRunaway, PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+    }
+
+    /**
+     * Ostinato Cadenza: stand where the nearest ores can be mined from instead of walking into them. Up to
+     * cadenzaMaxTargets ores (nearest first) get positioning cells; an ore with no cell, every farther ore and every
+     * dropped item keeps its old goal, so nothing that was reachable before becomes unreachable.
+     */
+    private Goal cadenzaGoal(CalculationContext context, List<BlockPos> locs, BlockOptionalMetaLookup filter) {
+        int max = Baritone.settings().cadenzaMaxTargets.value;
+        boolean debug = Baritone.settings().cadenzaDebug.value;
+        double reach = ctx.playerController().getBlockReachDistance();
+        double eye = ctx.player().getEyeHeight(Pose.STANDING);
+        boolean drops = Baritone.settings().mineScanDroppedItems.value;
+        BetterBlockPos feet = ctx.playerFeet();
+        List<BlockPos> byDistance = new ArrayList<>(locs);
+        byDistance.sort(Comparator.comparingDouble(feet::distSqr));
+        List<Cadenza.Target> targets = new ArrayList<>();
+        List<Goal> extras = new ArrayList<>();
+        it.unimi.dsi.fastutil.longs.LongOpenHashSet ores = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (BlockPos loc : byDistance) {
+            boolean ore = context.bsi.worldContainsLoadedChunk(loc.getX(), loc.getZ()) && filter.has(context.get(loc.getX(), loc.getY(), loc.getZ()));
+            if (ore) {
+                ores.add(BetterBlockPos.longHash(loc.getX(), loc.getY(), loc.getZ()));
+            }
+            if (ore && targets.size() < max) {
+                targets.add(new Cadenza.Target(Cadenza.Kind.MINE, loc, reach, eye, drops));
+            } else {
+                extras.add(coalesce(loc, locs, context));
+            }
+        }
+        Goal goal = cadenza.goal(context, targets, (x, y, z) -> ores.contains(BetterBlockPos.longHash(x, y, z)), Cadenza.CellFilter.ALL,
+                Baritone.settings().cadenzaShortHorizon.value, CadenzaSession.liveOptions(CadenzaGoal.Ordering.ANY), r -> {
+                    if (debug) {
+                        logDirect("Cadenza: no cell for " + r.target + " (" + r.status + "), old goal kept");
+                    }
+                    extras.add(coalesce(r.target.pos, locs, context));
+                }, extras);
+        if (debug) {
+            logDebug(goal.toString());
+        }
+        return goal;
     }
 
     private void rescan(List<BlockPos> already, CalculationContext context) {
@@ -525,6 +696,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         this.branchPoint = null;
         this.branchPointRunaway = null;
         this.anticipatedDrops = new HashMap<>();
+        this.cadenza.reset();
         if (filter != null) {
             rescan(new ArrayList<>(), new CalculationContext(baritone));
         }

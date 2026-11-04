@@ -1,0 +1,9 @@
+2026-10-30; Minecraft 26.3 Fabric; Java 25; fresh world seed 71006; client heap 1024M
+PPETEST idle client tick n=200 us avg=2319.0 p95=3224.1 p99=3851.3 max=4983.6
+PPETEST active client tick (5 equivalent fall requests) n=200 us avg=3385.4 p95=3917.8 p99=7421.5 max=160640.0
+PPETEST capture + 5 inline calls n=200 us avg=1245.7 p95=880.1 p99=5088.8 max=158180.0
+PPETEST LIVE req 1000 (inline 1000, async 0) done 200 cancel 0 expired 0 rejected 0 degraded 0 | cache 800 dedup 0 | sections captured 7 reused 6993 invalidated 0 | queue 0 (max 0) worker 0.0% main 213.21ms | compute us p50 95 p95 149 p99 291 max 84425 | wait us p50 0 p95 0 p99 0 max 0 | tick us p50 291 p95 889 p99 5299 max 136815 over 200
+PPETEST stone PASS maxError=0.0 removed=true
+PPETEST slab PASS maxError=0.0 removed=true
+PPETEST slime PASS maxError=0.0 removed=true
+PPETEST RESULT PASS 3 surfaces x 80 vanilla TNT ticks; position/velocity and fuse

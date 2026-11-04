@@ -161,7 +161,7 @@ final class CombatSpear {
         if (spear >= 0 && !spearCommit && spearUseTicks == 0 && spearBand == 0 && los && spearCharged && inReach && slide < p.jabSlide && target.hurtTime <= 0
                 && me.getAttackStrengthScale(0f) >= 0.99f) {
             if (!hands.select(me, spear)) return hands.decide("swap");
-            Vec3 aim = aimPoint(me, target);
+            Vec3 aim = swing.jabPoint(me, target); // Ostinato (Scherzo): aimPoint unless live prediction leads it
             hands.look(aim);
             // 8 degrees is wider than a player hitbox at 3 blocks, so that gate clicked air.
             if (!swing.spearRayHits(me, target)) return hands.decide("spear_aim");

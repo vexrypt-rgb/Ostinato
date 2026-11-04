@@ -1,0 +1,81 @@
+> Task :buildSrc:compileJava UP-TO-DATE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :
+[Unimined] Plugin Version: 1.4.2-dabcdf3-SNAPSHOT
+Detected version 1.26.0-dirty
+[Unimined] Plugin Version: 1.4.2-dabcdf3-SNAPSHOT
+Detected version 1.26.0-dirty
+[Unimined/Minecraft ::main] Applying minecraft config for source set 'main'
+[Unimined/MinecraftDownloader] retrieving version metadata
+[Unimined/Minecraft ::main] Applying NoTransformMinecraftTransformer
+[Unimined/Minecraft ::main] Applying run configs
+
+> Configure project :fabric
+[Unimined/Minecraft :fabric:main] Applying minecraft config for source set 'main'
+[Unimined/MinecraftDownloader] retrieving version metadata
+[Unimined/Minecraft :fabric:main] Applying OfficialFabricMinecraftTransformer
+[Unimined/Minecraft :fabric:main] Applying run configs
+
+> Task :compileApiJava UP-TO-DATE
+> Task :processApiResources NO-SOURCE
+> Task :apiClasses UP-TO-DATE
+> Task :compileSchematica_apiJava UP-TO-DATE
+> Task :processSchematica_apiResources NO-SOURCE
+> Task :schematica_apiClasses UP-TO-DATE
+
+> Task :compileJava
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\src\main\java\baritone\process\elytra\NetherPathfinderContext.java:38: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\src\main\java\baritone\process\elytra\NetherPathfinderContext.java:55: warning: Unsafe is internal proprietary API and may be removed in a future release
+    private static final Unsafe UNSAFE;
+                         ^
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\src\main\java\baritone\process\elytra\NetherPathfinderContext.java:58: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Field f = Unsafe.class.getDeclaredField("theUnsafe");
+                      ^
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\src\main\java\baritone\process\elytra\NetherPathfinderContext.java:60: warning: Unsafe is internal proprietary API and may be removed in a future release
+            UNSAFE = (Unsafe) f.get(null);
+                      ^
+C:\Users\redfa\Documents\MinecraftDev\Ostinato-ppe\src\main\java\baritone\process\elytra\NetherPathfinderContext.java:326: warning: [removal] setMemory(long,long,byte) in Unsafe has been deprecated and marked for removal
+                    UNSAFE.setMemory(chunkPtr + (y0 * bytesInSection), bytesInSection, (byte) 0xFF);
+                          ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+5 warnings
+
+> Task :nativeHost
+ostinato-native: built windows-x86_64
+
+> Task :processResources UP-TO-DATE
+> Task :classes
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+> Task :test
+> Task :compileLaunchJava UP-TO-DATE
+> Task :processLaunchResources UP-TO-DATE
+> Task :launchClasses UP-TO-DATE
+> Task :fabric:compileJava NO-SOURCE
+> Task :fabric:processResources UP-TO-DATE
+> Task :fabric:classes UP-TO-DATE
+> Task :fabric:compileTestJava NO-SOURCE
+> Task :fabric:processTestResources NO-SOURCE
+> Task :fabric:testClasses UP-TO-DATE
+> Task :fabric:test NO-SOURCE
+
+[Incubating] Problems report is available at: file:///C:/Users/redfa/Documents/MinecraftDev/Ostinato-ppe/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 18s
+13 actionable tasks: 3 executed, 10 up-to-date

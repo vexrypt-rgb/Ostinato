@@ -1,0 +1,65 @@
+> Task :buildSrc:compileJava UP-TO-DATE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :
+[Unimined] Plugin Version: 1.4.2-dabcdf3-SNAPSHOT
+Detected version 1.26.0-dirty
+[Unimined] Plugin Version: 1.4.2-dabcdf3-SNAPSHOT
+Detected version 1.26.0-dirty
+[Unimined/Minecraft ::main] Applying minecraft config for source set 'main'
+[Unimined/MinecraftDownloader] retrieving version metadata
+[Unimined/Minecraft ::main] Applying NoTransformMinecraftTransformer
+[Unimined/Minecraft ::main] Applying run configs
+
+> Configure project :fabric
+[Unimined/Minecraft :fabric:main] Applying minecraft config for source set 'main'
+[Unimined/MinecraftDownloader] retrieving version metadata
+[Unimined/Minecraft :fabric:main] Applying OfficialFabricMinecraftTransformer
+[Unimined/Minecraft :fabric:main] Applying run configs
+
+> Task :compileApiJava UP-TO-DATE
+> Task :processApiResources NO-SOURCE
+> Task :apiClasses UP-TO-DATE
+> Task :compileSchematica_apiJava UP-TO-DATE
+> Task :processSchematica_apiResources NO-SOURCE
+> Task :schematica_apiClasses UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+
+> Task :nativeHost
+ostinato-native: built windows-x86_64
+
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+
+> Task :test
+
+PrestoBench > bookkeeping STANDARD_OUT
+    PRESTO-BENCH bookkeeping ns/tick min=14.9 median=15.3 max=22.1 samples=9 iterations=500000 observations=6999999
+
+> Task :compileLaunchJava UP-TO-DATE
+> Task :processLaunchResources UP-TO-DATE
+> Task :launchClasses UP-TO-DATE
+> Task :fabric:compileJava NO-SOURCE
+> Task :fabric:processResources UP-TO-DATE
+> Task :fabric:classes UP-TO-DATE
+> Task :fabric:compileTestJava NO-SOURCE
+> Task :fabric:processTestResources NO-SOURCE
+> Task :fabric:testClasses UP-TO-DATE
+> Task :fabric:test NO-SOURCE
+
+[Incubating] Problems report is available at: file:///C:/Users/redfa/Documents/MinecraftDev/Ostinato-ppe/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 4s
+13 actionable tasks: 2 executed, 11 up-to-date

@@ -1,0 +1,2 @@
+THREAT_SCORE_32 samples=5000 p50_us=11.900 p95_us=38.900 p99_us=51.900 max_us=10034.500 bytes_per_batch=21063.9
+Pure scoring only, excludes capture, LOS and PPE. 5000 warmed batches; each batch assesses 32 sources. Java 25, two active processors, 512 MiB test heap; workstation background load uncontrolled.
