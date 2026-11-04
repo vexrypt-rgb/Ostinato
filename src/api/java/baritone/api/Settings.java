@@ -950,6 +950,12 @@ public final class Settings {
     public final Setting<Boolean> physicalInput = new Setting<>(false);
 
     /**
+     * Ostinato: when on, the fall controller submits one complete key frame per tick
+     * to the input arbiter. Off, it writes keys directly, as before.
+     */
+    public final Setting<Boolean> inputArbitration = new Setting<>(false);
+
+    /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
      */
     public final Setting<Double> pathTieBreak = new Setting<>(0.0);

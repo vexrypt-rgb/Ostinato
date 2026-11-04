@@ -33,6 +33,7 @@ import baritone.process.*;
 import baritone.selection.SelectionManager;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.GuiClick;
+import baritone.utils.InputArbiter;
 import baritone.utils.InputOverrideHandler;
 import baritone.utils.PathingControlManager;
 import baritone.utils.player.BaritonePlayerContext;
@@ -82,6 +83,7 @@ public class Baritone implements IBaritone {
     private final SwarmBehavior swarmBehavior;
     private final FreecamBehavior freecamBehavior;
     private final InputOverrideHandler inputOverrideHandler;
+    private final InputArbiter inputArbiter = new InputArbiter(); // Ostinato: leases; idle unless inputArbitration
     private final baritone.gracenote.GraceNote graceNote; // Ostinato: Grace Note emergency survival
 
     private final FollowProcess followProcess;
@@ -242,6 +244,11 @@ public class Baritone implements IBaritone {
     @Override
     public InputOverrideHandler getInputOverrideHandler() {
         return this.inputOverrideHandler;
+    }
+
+    /** Ostinato: per-bot input leases. The fall controller reads this only when inputArbitration is on. */
+    public InputArbiter getInputArbiter() {
+        return this.inputArbiter;
     }
 
     @Override
