@@ -79,7 +79,24 @@ public final class MazeFurnishPlanner {
                 steps.add(new Step(StepKind.SEAL, gap.x(), gap.y(), gap.z(), sealIds(plan.theme, plan.originY), List.of()));
             }
         }
-        return new MazeFurnishJob(plan.cellX, plan.cellZ, plan.theme.id, survival, steps);
+        // Ostinato: run100. The carved cells, so TenorClef can tell scaffolding left in the room from the room itself.
+        List<Integer> air = new ArrayList<>();
+        for (int x = 0; x < plan.sizeX; x++) {
+            for (int y = 0; y < plan.sizeY; y++) {
+                for (int z = 0; z < plan.sizeZ; z++) {
+                    if (plan.role(x, y, z) == BlockRole.AIR) {
+                        air.add(plan.originX + x);
+                        air.add(plan.originY + y);
+                        air.add(plan.originZ + z);
+                    }
+                }
+            }
+        }
+        int[] airCells = new int[air.size()];
+        for (int i = 0; i < airCells.length; i++) {
+            airCells[i] = air.get(i);
+        }
+        return new MazeFurnishJob(plan.cellX, plan.cellZ, plan.theme.id, survival, steps, airCells);
     }
 
     /**
@@ -94,6 +111,9 @@ public final class MazeFurnishPlanner {
                     BlockRole role = plan.role(x, y, z);
                     if (!role.solid() || role == BlockRole.LIGHT || role == BlockRole.FEATURE) {
                         continue;
+                    }
+                    if (role == BlockRole.WATER && POOL_WATER) {
+                        continue; // Ostinato: 2026-11-02, a filled pool is fluid by design
                     }
                     int wx = plan.originX + x;
                     int wy = plan.originY + y;
@@ -155,7 +175,7 @@ public final class MazeFurnishPlanner {
             for (int x = 0; x < plan.sizeX; x++) {
                 for (int z = 0; z < plan.sizeZ; z++) {
                     BlockRole role = plan.role(x, y, z);
-                    if (role != BlockRole.FLOOR && role != BlockRole.WALL && role != BlockRole.CEILING) continue;
+                    if (role != BlockRole.FLOOR && role != BlockRole.WALL && role != BlockRole.CEILING && role != BlockRole.WATER) continue;
                     if (!touchesRoomAir(plan, x, y, z)) continue;
                     steps.add(new Step(StepKind.LIGHT, plan.originX + x, plan.originY + y, plan.originZ + z,
                             cladIds(plan.theme, role, plan.originY), List.of()));
@@ -175,6 +195,13 @@ public final class MazeFurnishPlanner {
         }
         return false;
     }
+
+    /**
+     * Ostinato: 2026-11-02, poolrooms. TenorClef's furnisher places blocks, not fluids, so by default a pool cell is
+     * clad as a pale tile basin floor. {@code -Dostinato.maze.water=true} asks for {@code water} there instead, for a
+     * furnisher that can empty a bucket into it (and leaves the cell out of the solid-shell holes).
+     */
+    public static final boolean POOL_WATER = Boolean.getBoolean("ostinato.maze.water");
 
     /** Ostinato: plank ids for logs near the room, most common first. Set by MazeProcess before planning; empty = unknown. */
     public static volatile List<String> woods = List.of();
@@ -205,6 +232,9 @@ public final class MazeFurnishPlanner {
     }
 
     public static List<String> cladIds(MazeTheme theme, BlockRole role, int originY) {
+        if (role == BlockRole.WATER) {
+            return POOL_WATER ? List.of("water") : List.of("diorite", "polished_diorite", "calcite"); // Ostinato: pool basin, raw diorite against the polished rim
+        }
         // Ostinato: survival picks the first id TenorClef can obtain, so cheap themed blocks (no smelting chains of
         // hundreds of stone) come first; the creative look (concrete, quartz, bricks) stays in MazeSchematic.
         return switch (theme) {
@@ -231,5 +261,39 @@ public final class MazeFurnishPlanner {
                         default -> List.of("cobbled_deepslate", "polished_deepslate");
                     }
                     : List.of("cobblestone", "andesite", "polished_andesite");
+            // Ostinato: 2026-11-02, connected-mode themes. Cheap and mineable first, like the four above.
+            case MONO_YELLOW -> switch (role) {
+                case FLOOR -> wood(0, "birch_planks", "oak_planks");
+                case WALL -> wood(0, "yellow_concrete", "yellow_terracotta", "birch_planks", "sandstone");
+                default -> wood(0, "birch_planks", "polished_diorite");
+            };
+            case POOLROOMS -> switch (role) {
+                case FLOOR -> List.of("polished_diorite", "diorite", "calcite");
+                case WALL -> List.of("diorite", "polished_diorite", "calcite");
+                default -> List.of("polished_diorite", "diorite");
+            };
+            // Ostinato: tuff room palette. Maintenance rooms on the deepslate layer (mazeDepthY) clad in tuff bricks /
+            // polished tuff crafted by TenorClef from tuff mined around the room; raw tuff and cobbled deepslate fall back.
+            case MAINTENANCE -> deepslateLayer(originY)
+                    ? switch (role) {
+                        case FLOOR -> List.of("polished_tuff", "tuff", "cobbled_deepslate");
+                        case WALL -> List.of("tuff_bricks", "polished_tuff", "tuff", "cobbled_deepslate");
+                        default -> List.of("polished_tuff", "tuff_bricks", "tuff", "cobbled_deepslate");
+                    }
+                    : switch (role) {
+                case FLOOR -> List.of("cobblestone", "andesite");
+                case WALL -> List.of("andesite", "cobblestone", "tuff");
+                default -> List.of("polished_andesite", "andesite", "cobblestone");
+            };
+            case WAREHOUSE -> switch (role) {
+                case FLOOR -> List.of("polished_andesite", "andesite", "cobblestone");
+                case WALL -> List.of("cobblestone", "andesite");
+                default -> wood(1, "spruce_planks", "oak_planks");
+            };
+            case LOBBY -> switch (role) {
+                case FLOOR -> wood(0, "oak_planks", "spruce_planks");
+                case WALL -> wood(1, "birch_planks", "sandstone", "oak_planks");
+                default -> List.of("polished_diorite", "diorite", "birch_planks");
+            };
         };
     }}

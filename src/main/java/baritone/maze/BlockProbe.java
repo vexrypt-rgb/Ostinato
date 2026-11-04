@@ -24,6 +24,14 @@ public interface BlockProbe {
 
     BlockKind get(int x, int y, int z);
 
+    /**
+     * True when the block is part of a built structure (this maze's cladding, or a prior run's), not natural ground.
+     * Default is false so a stone probe does not look furnished.
+     */
+    default boolean structure(int x, int y, int z) {
+        return false;
+    }
+
     /** What a block is, as far as "can a player see through this into the maze" cares. */
     enum BlockKind {
         AIR,

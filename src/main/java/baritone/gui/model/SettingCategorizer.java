@@ -49,7 +49,7 @@ public final class SettingCategorizer {
                 "incorrectSize", "distanceTrim", "mapArtMode", "startAtLayer", "layerOrder", "layerHeight", "skipFailedLayers",
                 "breakFromAbove", "goalBreakFromAbove", "placeIncorrectBlockPenaltyMultiplier",
                 "breakCorrectBlockPenaltyMultiplier", "backfill",
-                "mazeMode", "mazeSeed", "mazeMinActionDelay", "mazeMaxActionDelay", "mazeActionJitter", "mazeMapFile");
+                "mazeMode", "mazeSeed", "mazeMinActionDelay", "mazeMaxActionDelay", "mazeActionJitter", "mazeMapFile", "mazeDepthY");
         put(m, WATER_AIR, "allowDoorAirPockets", "allowBoats", "allowBoatFall", "maxFallHeightBoat", "walkOnWaterOnePenalty",
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater", "allowMountClutch", "allowSteeredFalls");

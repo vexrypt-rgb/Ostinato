@@ -34,7 +34,7 @@ public class MazeThemeTest {
 
     @Test
     public void catalogHasTheThreeRoomsAndAStubbedDeepLevel() {
-        assertEquals(4, MazeTheme.values().length);
+        assertEquals(9, MazeTheme.values().length); // Ostinato: 2026-11-02, five connected-mode themes appended
         Set<String> ids = new HashSet<>();
         for (MazeTheme theme : MazeTheme.values()) {
             assertTrue(ids.add(theme.id));
@@ -45,7 +45,8 @@ public class MazeThemeTest {
         assertFalse(MazeTheme.PIPES.stubbed);
         assertFalse(MazeTheme.HUB.stubbed);
         assertTrue(MazeTheme.DEEP.stubbed);
-        assertNull(MazeTheme.byId("poolrooms"));
+        assertSame(MazeTheme.POOLROOMS, MazeTheme.byId("poolrooms"));
+        assertNull(MazeTheme.byId("level_fun"));
     }
 
     @Test
@@ -61,7 +62,7 @@ public class MazeThemeTest {
                 counts.put(theme, counts.get(theme) + 1);
             }
         }
-        for (MazeTheme theme : MazeTheme.values()) {
+        for (MazeTheme theme : new MazeTheme[]{MazeTheme.YELLOW_OFFICE, MazeTheme.PIPES, MazeTheme.HUB, MazeTheme.DEEP}) {
             assertTrue(theme.id + " never appeared", counts.get(theme) > 0);
         }
         assertTrue(counts.get(MazeTheme.YELLOW_OFFICE) > counts.get(MazeTheme.PIPES));

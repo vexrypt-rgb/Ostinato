@@ -470,6 +470,15 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
         @Override
         public final Rotation peekRotation(final Rotation rotation) {
+            return peek(rotation, true);
+        }
+
+        @Override
+        public final Rotation peekAim(final Rotation rotation) {
+            return peek(rotation, false); // Ostinato: run100, see IAimProcessor.peekAim
+        }
+
+        private Rotation peek(final Rotation rotation, final boolean capped) {
             final Rotation prev = this.getPrevRotation();
 
             float desiredYaw = rotation.getYaw();
@@ -485,8 +494,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             desiredPitch += this.randomPitchOffset;
 
             return new Rotation(
-                    this.calculateMouseMove(prev.getYaw(), desiredYaw),
-                    this.calculateMouseMove(prev.getPitch(), desiredPitch)
+                    this.calculateMouseMove(prev.getYaw(), desiredYaw, capped),
+                    this.calculateMouseMove(prev.getPitch(), desiredPitch, capped)
             ).clamp();
         }
 
@@ -550,9 +559,10 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             return pitch;
         }
 
-        private float calculateMouseMove(float current, float target) {
+        private float calculateMouseMove(float current, float target, boolean capped) {
             // Shortest-path turn, capped so PvP aim tracks instead of snapping.
             float delta = net.minecraft.util.Mth.wrapDegrees(target - current);
+            if (!capped) return current + mouseToAngle(angleToMouse(delta)); // Ostinato: run100, peekAim
             float cap = 32f;
             try {
                 cap = Float.parseFloat(System.getProperty("ostinato.aim.deg", "32"));

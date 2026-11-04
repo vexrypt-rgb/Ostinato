@@ -96,10 +96,12 @@ public final class LootPlanner {
     }
 
     private static int[] candidate(RoomPlan plan, int nth) {
-        int start = (int) Long.remainderUnsigned(plan.roomSeed, MazePlanner.LOOT_SPOTS.length);
+        // Ostinato: 2026-11-02. The variant's spots (the fixed four for a backrooms or CLASSIC room).
+        List<int[]> spots = plan.lootSpots();
+        int start = (int) Long.remainderUnsigned(plan.roomSeed, spots.size());
         int found = 0;
-        for (int i = 0; i < MazePlanner.LOOT_SPOTS.length; i++) {
-            int[] spot = MazePlanner.LOOT_SPOTS[(start + i) % MazePlanner.LOOT_SPOTS.length];
+        for (int i = 0; i < spots.size(); i++) {
+            int[] spot = spots.get((start + i) % spots.size());
             if (plan.role(spot[0], spot[1], spot[2]) != BlockRole.AIR) {
                 continue;
             }
@@ -128,6 +130,24 @@ public final class LootPlanner {
             case DEEP -> gate < 75 ? new ContainerKind[0]
                     : gate < 92 ? new ContainerKind[]{ContainerKind.CHEST}
                     : new ContainerKind[]{ContainerKind.POT};
+            // Ostinato: 2026-11-02, connected-mode themes. Low rates, like the four above.
+            case MONO_YELLOW -> gate < 65 ? new ContainerKind[0]
+                    : gate < 92 ? new ContainerKind[]{ContainerKind.BARREL}
+                    : new ContainerKind[]{ContainerKind.POT};
+            case POOLROOMS -> gate < 60 ? new ContainerKind[0]
+                    : gate < 85 ? new ContainerKind[]{ContainerKind.BARREL}
+                    : gate < 95 ? new ContainerKind[]{ContainerKind.CHEST}
+                    : new ContainerKind[]{ContainerKind.POT};
+            case MAINTENANCE -> gate < 45 ? new ContainerKind[0]
+                    : gate < 80 ? new ContainerKind[]{ContainerKind.CHEST}
+                    : new ContainerKind[]{ContainerKind.BARREL};
+            case WAREHOUSE -> gate < 30 ? new ContainerKind[0]
+                    : gate < 70 ? new ContainerKind[]{ContainerKind.BARREL}
+                    : gate < 90 ? new ContainerKind[]{ContainerKind.BARREL, ContainerKind.CHEST}
+                    : new ContainerKind[]{ContainerKind.BARREL, ContainerKind.BARREL, ContainerKind.POT};
+            case LOBBY -> gate < 70 ? new ContainerKind[0]
+                    : gate < 92 ? new ContainerKind[]{ContainerKind.CHEST}
+                    : new ContainerKind[]{ContainerKind.POT};
         };
     }
 
@@ -138,7 +158,7 @@ public final class LootPlanner {
         for (int i = 0; i < stacks; i++) {
             String item = table[(int) Long.remainderUnsigned(MazeSeed.mix(roomSeed, index * 17 + i, kind.ordinal()), table.length)];
             int count = 1 + (int) Long.remainderUnsigned(MazeSeed.mix(roomSeed, i, 40 + kind.ordinal()), maxCount(theme, kind));
-            if (item.equals("diamond") || item.equals("emerald") || item.startsWith("music_disc") || item.endsWith("_pottery_sherd")) {
+            if (item.equals("diamond") || item.equals("emerald") || item.equals("heart_of_the_sea") || item.equals("saddle") || item.startsWith("music_disc") || item.endsWith("_pottery_sherd")) {
                 count = 1;
             }
             out.add(new LootStack(item, count));
@@ -185,6 +205,32 @@ public final class LootPlanner {
                 case CHEST -> new String[]{"diamond", "book", "music_disc_13", "prize_pottery_sherd", "emerald"};
                 case BARREL -> new String[]{"bread", "coal", "paper"};
                 case POT -> new String[]{"angler_pottery_sherd", "diamond", "gold_nugget"};
+            };
+            // Ostinato: 2026-11-02. Natural finds per theme: office junk, damp pool things, tools and parts, stock, lost-and-found.
+            case MONO_YELLOW -> switch (kind) {
+                case CHEST -> new String[]{"paper", "string", "cookie", "book"};
+                case BARREL -> new String[]{"paper", "stick", "bread", "string", "rotten_flesh"};
+                case POT -> new String[]{"arms_up_pottery_sherd", "gold_nugget", "paper"};
+            };
+            case POOLROOMS -> switch (kind) {
+                case CHEST -> new String[]{"prismarine_shard", "nautilus_shell", "kelp", "clay_ball", "glass_bottle"};
+                case BARREL -> new String[]{"kelp", "clay_ball", "glass_bottle", "sponge", "cod"};
+                case POT -> new String[]{"angler_pottery_sherd", "heart_of_the_sea", "prismarine_crystals"};
+            };
+            case MAINTENANCE -> switch (kind) {
+                case CHEST -> new String[]{"redstone", "iron_nugget", "copper_ingot", "lever", "tripwire_hook", "chain"};
+                case BARREL -> new String[]{"coal", "copper_ingot", "iron_nugget", "rail", "torch", "bucket"};
+                case POT -> new String[]{"miner_pottery_sherd", "iron_ingot", "redstone"};
+            };
+            case WAREHOUSE -> switch (kind) {
+                case CHEST -> new String[]{"iron_ingot", "leather", "name_tag", "lead", "saddle"};
+                case BARREL -> new String[]{"wheat", "potato", "carrot", "bread", "sugar_cane", "wheat_seeds", "string", "leather"};
+                case POT -> new String[]{"howl_pottery_sherd", "gold_nugget", "emerald"};
+            };
+            case LOBBY -> switch (kind) {
+                case CHEST -> new String[]{"book", "map", "compass", "clock", "paper", "emerald"};
+                case BARREL -> new String[]{"paper", "book", "cookie"};
+                case POT -> new String[]{"friend_pottery_sherd", "emerald", "clock"};
             };
         };
     }

@@ -2664,9 +2664,17 @@ public final class Settings {
 
     /**
      * Ostinato: maze map file of claimed cells and containers that must not be refilled.
-     * Relative paths are inside the baritone directory. A shared file is how several bots avoid digging the same room.
+     * Relative paths are inside the current world's baritone data (per save or server, per dimension), so claims never
+     * outlive their world. A shared file is how several bots avoid digging the same room.
      */
     public final Setting<String> mazeMapFile = new Setting<>("maze-map.txt");
+
+    /**
+     * Ostinato: absolute room floor Y for maze levels. {@link Integer#MIN_VALUE} (default) keeps the backrooms rule,
+     * 16 under the ground. Set it to e.g. -40 to build rooms and tunnels in the deepslate band (y <= 8, bedrock ~-60).
+     * Clamped to the world; first room and every neighbour start their depth search here.
+     */
+    public final Setting<Integer> mazeDepthY = new Setting<>(Integer.MIN_VALUE);
 
     /**
      * Ostinato: master switch for Secondo, the companion that follows Primo.

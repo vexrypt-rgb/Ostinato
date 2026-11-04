@@ -79,6 +79,7 @@ public final class DefaultCommands {
                 new PortalCommand(baritone),
                 new TunnelsCommand(baritone), // Ostinato: public #maze.tunnels
                 new MazeCommand(baritone), // Ostinato: underground maze, off unless mazeMode
+                new MazeConnectedCommand(baritone), // Ostinato: run107, backrooms joined by tunnels, hidden
                 new AutoSpectateCommand(baritone), // Ostinato: watch-only server spectating
                 new TimingsCommand(baritone), // Ostinato: planned vs real movement ticks
                 new TrainCommand(baritone), // Ostinato: headless training circuits

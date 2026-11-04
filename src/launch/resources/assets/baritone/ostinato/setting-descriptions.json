@@ -431,5 +431,6 @@
  "secondoAssistStand": "Ostinato: GoalNear range around the block Primo is breaking. Clamped to 0..8.",
  "secondoPickup": "Ostinato: when assist is on, path onto a dropped item within secondoPickupRadius.",
  "secondoPickupRadius": "Ostinato: drops farther than this from Secondo are left alone. Clamped to 1..32. Used only while assist is on.",
- "secondoCombatAssist": "Ostinato: when assist is on and Primo is fighting, stay on the follow GoalNear and record a combat request. v1 does not start PvP. Off, a fight is just follow."
+ "secondoCombatAssist": "Ostinato: when assist is on and Primo is fighting, stay on the follow GoalNear and record a combat request. v1 does not start PvP. Off, a fight is just follow.",
+ "mazeDepthY": "Ostinato: absolute room floor Y for maze levels. Integer#MIN_VALUE (default) keeps the backrooms rule, 16 under the ground. Set it to e.g. -40 to build rooms and tunnels in the deepslate band (y <= 8, bedrock ~-60). Clamped to the world; first room and every neighbour start their depth search here."
 }

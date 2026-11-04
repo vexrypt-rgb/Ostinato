@@ -98,6 +98,9 @@ public final class MazeSchematic extends AbstractSchematic {
         if (role == BlockRole.LIGHT) {
             return Blocks.TORCH.defaultBlockState(); // Ostinato: torches light the room
         }
+        if (role == BlockRole.WATER) {
+            return Blocks.WATER.defaultBlockState(); // Ostinato: 2026-11-02, poolrooms
+        }
         return switch (theme) {
             case YELLOW_OFFICE -> switch (role) {
                 case FLOOR -> Blocks.WOOL.yellow().defaultBlockState();
@@ -119,6 +122,32 @@ public final class MazeSchematic extends AbstractSchematic {
                 case FLOOR -> Blocks.POLISHED_DEEPSLATE.defaultBlockState();
                 case FEATURE -> Blocks.AMETHYST_BLOCK.defaultBlockState();
                 default -> Blocks.DEEPSLATE_BRICKS.defaultBlockState();
+            };
+            // Ostinato: 2026-11-02, connected-mode themes.
+            case MONO_YELLOW -> switch (role) {
+                case FLOOR -> Blocks.WOOL.yellow().defaultBlockState();
+                case WALL -> Blocks.CONCRETE.yellow().defaultBlockState();
+                default -> Blocks.SMOOTH_SANDSTONE.defaultBlockState();
+            };
+            case POOLROOMS -> switch (role) {
+                case FLOOR, WALL -> Blocks.SMOOTH_QUARTZ.defaultBlockState();
+                case FEATURE -> Blocks.PRISMARINE.defaultBlockState();
+                default -> Blocks.QUARTZ_BLOCK.defaultBlockState();
+            };
+            case MAINTENANCE -> switch (role) {
+                case FLOOR -> Blocks.COBBLESTONE.defaultBlockState();
+                case FEATURE -> Blocks.IRON_BLOCK.defaultBlockState();
+                default -> Blocks.ANDESITE.defaultBlockState();
+            };
+            case WAREHOUSE -> switch (role) {
+                case FLOOR -> Blocks.SMOOTH_STONE.defaultBlockState();
+                case CEILING -> Blocks.SPRUCE_PLANKS.defaultBlockState();
+                default -> Blocks.STONE_BRICKS.defaultBlockState();
+            };
+            case LOBBY -> switch (role) {
+                case FLOOR -> Blocks.OAK_PLANKS.defaultBlockState();
+                case WALL -> Blocks.BIRCH_PLANKS.defaultBlockState();
+                default -> Blocks.POLISHED_DIORITE.defaultBlockState();
             };
         };
     }
