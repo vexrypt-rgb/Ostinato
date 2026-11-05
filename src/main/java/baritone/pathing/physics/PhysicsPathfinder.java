@@ -98,6 +98,15 @@ public final class PhysicsPathfinder {
 
     /** Ostinato: plan in the native library when it is loaded ({@link NativePlanners}) and the search view is off; the answer is the same. */
     private boolean nativeSearch;
+    private int lastExpansions = -1;
+
+    /**
+     * Ostinato: nodes popped by the last Java {@link #plan}, or -1 when the native search answered or nothing ran.
+     * A counter only. It does not change what the search returns.
+     */
+    public int lastExpansions() {
+        return lastExpansions;
+    }
 
     public PhysicsPathfinder nativeSearch(boolean on) {
         this.nativeSearch = on;
@@ -106,6 +115,7 @@ public final class PhysicsPathfinder {
 
     /** Plans from {@code start} until standing within {@code radius} of the goal (null if none found), recording the explored edges when the search view is on. */
     public List<Action> plan(PlayerSim start, double gx, double gy, double gz, double radius) {
+        lastExpansions = -1;
         boolean rec = viz != null && viz.beginTree();
         if (nativeSearch && !rec) {
             NativePlanners.Steps r = NativePlanners.physicsPlan(world, start, gx, gy, gz, radius, maxNodes);
@@ -138,6 +148,7 @@ public final class PhysicsPathfinder {
         int expanded = 0;
         while (!open.isEmpty() && expanded++ < maxNodes) {
             Node n = open.poll();
+            lastExpansions = expanded;
             PlayerSim s = n.sim;
             if (s.onGround && sq(s.x - gx) + sq(s.y - gy) + sq(s.z - gz) <= radius * radius) {
                 return unwind(n);

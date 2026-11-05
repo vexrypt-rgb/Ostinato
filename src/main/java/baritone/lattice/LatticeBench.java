@@ -27,6 +27,7 @@ public final class LatticeBench {
     private static final double PROMISING = 0.7;
     private static final double DIVERGENCE_LIMIT = 0.25;
     private static final double TICK_RATIO = 1.15;
+    private static final double EXPANSION_RATIO = 3.0;
 
     public record Trial(String split, String id, int trial, String method, boolean success, int travelTicks,
                         int searchTicks, int expansions, double latencyMs, long allocBytes, double divergence) {
@@ -39,14 +40,19 @@ public final class LatticeBench {
     }
 
     public static Report run() {
+        return run(TRIALS);
+    }
+
+    /** Review fix: more trials only re-sample latency and allocation; the discrete columns must repeat. */
+    public static Report run(int trialCount) {
         List<Trial> trials = new ArrayList<>();
-        measure(LatticeCase.development(), trials);
+        measure(LatticeCase.development(), trials, trialCount);
         boolean promising = promising(trials);
         if (promising) {
-            measure(LatticeCase.heldOut(), trials);
+            measure(LatticeCase.heldOut(), trials, trialCount);
         }
         String[] judged = decide(trials);
-        String summary = summary(judged[0], judged[1], promising, trials);
+        String summary = summary(judged[0], judged[1], promising, trials, trialCount);
         return new Report(judged[0], judged[1], promising, List.copyOf(trials), summary);
     }
 
@@ -94,7 +100,9 @@ public final class LatticeBench {
         boolean heldDrop = heldOutDrop(trials, method, successes(trials, "dev", method), devN);
         double[] shared = sharedMedians(trials, method);
         boolean ticksOk = shared != null && shared[0] <= TICK_RATIO * shared[1];
-        if (ticksOk && expansionComparable() && !heldDrop && successes(trials, "dev", method) >= physics) {
+        double[] expansions = sharedExpansionMedians(trials, method);
+        boolean expansionsOk = expansions != null && expansions[0] <= EXPANSION_RATIO * expansions[1];
+        if (ticksOk && expansionsOk && !heldDrop && successes(trials, "dev", method) >= physics) {
             return new String[]{"CONTINUE", "lattice matches physics on shared dev solves inside the tick and expansion bounds"};
         }
         StringBuilder reason = new StringBuilder();
@@ -108,8 +116,11 @@ public final class LatticeBench {
                     "; shared median ticks %s %.1f vs physics %.1f (ratio %.3f, bound %.2f)",
                     method, shared[0], shared[1], shared[0] / shared[1], TICK_RATIO));
         }
-        if (!expansionComparable()) {
+        if (expansions == null) {
             reason.append("; baseline expansions are UNKNOWN, so the 3x expansion clause cannot pass");
+        } else if (!expansionsOk) {
+            reason.append(String.format(Locale.ROOT, "; shared median expansions %s %.1f vs physics %.1f exceed %.0fx",
+                    method, expansions[0], expansions[1], EXPANSION_RATIO));
         }
         if (!ticksOk) {
             reason.append("; tick bound missed");
@@ -175,9 +186,9 @@ public final class LatticeBench {
         return medianInt(ticks);
     }
 
-    private static void measure(List<LatticeCase> cases, List<Trial> out) {
+    private static void measure(List<LatticeCase> cases, List<Trial> out, int trialCount) {
         for (LatticeCase item : cases) {
-            for (int trial = 0; trial < TRIALS; trial++) {
+            for (int trial = 0; trial < trialCount; trial++) {
                 out.add(lattice(item, trial, "beam", LatticeSearch.Method.BEAM));
                 out.add(lattice(item, trial, "weighted", LatticeSearch.Method.WEIGHTED));
                 out.add(physics(item, trial));
@@ -206,8 +217,8 @@ public final class LatticeBench {
         PlayerSim body = new PlayerSim(item.world()).copyFrom(start.sim());
         long before = allocated();
         long t0 = System.nanoTime();
-        List<PhysicsPathfinder.Action> plan = new PhysicsPathfinder(item.world(), LatticeSearch.NODE_BUDGET)
-                .plan(body, item.goalX(), item.goalY(), item.goalZ(), LatticeSearch.RADIUS);
+        PhysicsPathfinder finder = new PhysicsPathfinder(item.world(), LatticeSearch.NODE_BUDGET);
+        List<PhysicsPathfinder.Action> plan = finder.plan(body, item.goalX(), item.goalY(), item.goalZ(), LatticeSearch.RADIUS);
         long nanos = System.nanoTime() - t0;
         long bytes = deltaBytes(before);
         int ticks = -1;
@@ -226,7 +237,7 @@ public final class LatticeBench {
         }
         boolean success = ticks >= 0;
         return new Trial(item.split(), item.id(), trial, "physics", success, success ? ticks : -1,
-                success ? ticks : -1, -1, nanos / 1_000_000d, bytes, Double.NaN);
+                success ? ticks : -1, finder.lastExpansions(), nanos / 1_000_000d, bytes, Double.NaN);
     }
 
     private static PlayerSimPhysics settled(LatticeCase item) {
@@ -244,9 +255,30 @@ public final class LatticeBench {
         return best / (double) n >= PROMISING;
     }
 
-    /** PhysicsPathfinder does not expose its expansion counter. */
-    private static boolean expansionComparable() {
-        return false;
+    /**
+     * Review fix: median expansions on shared dev solves, lattice then physics. Null when any shared physics row has
+     * no counter (-1), so old rows still read UNKNOWN. "Within 3x" is read one-sided: the lattice may not need more
+     * than 3x the baseline's expansions. A lattice expansion is one primitive node; a physics expansion is one popped
+     * node with HOLD ticks per child. The units are close but not identical.
+     */
+    static double[] sharedExpansionMedians(List<Trial> trials, String method) {
+        List<Integer> lattice = new ArrayList<>();
+        List<Integer> physics = new ArrayList<>();
+        for (String id : ids(trials, "dev")) {
+            Trial l = trial0(trials, "dev", id, method);
+            Trial p = trial0(trials, "dev", id, "physics");
+            if (l != null && p != null && l.success && p.success) {
+                if (p.expansions < 0 || l.expansions < 0) {
+                    return null;
+                }
+                lattice.add(l.expansions);
+                physics.add(p.expansions);
+            }
+        }
+        if (lattice.isEmpty()) {
+            return null;
+        }
+        return new double[]{medianInt(lattice), medianInt(physics)};
     }
 
     private static boolean heldOutDrop(List<Trial> trials, String method, int devSolved, int devN) {
@@ -348,9 +380,10 @@ public final class LatticeBench {
         return (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
     }
 
-    private static String summary(String decision, String reason, boolean heldOutRan, List<Trial> trials) {
+    private static String summary(String decision, String reason, boolean heldOutRan, List<Trial> trials, int trialCount) {
         StringBuilder text = new StringBuilder();
         text.append("decision: ").append(decision).append('\n');
+        text.append("status: PROVISIONAL. Tier-S on hand-built PlayerSim worlds; divergence replays the same model, so it is self-consistency only\n");
         text.append("reason: ").append(reason).append('\n');
         text.append("held-out ran: ").append(heldOutRan).append('\n');
         text.append("semantics: ").append(PlayerSimPhysics.SEMANTICS).append('\n');
@@ -360,10 +393,10 @@ public final class LatticeBench {
                 .append(" travel ticks. Yaw is an instantaneous PlayerSim input.\n");
         text.append("beam width: ").append(LatticeSearch.BEAM_WIDTH)
                 .append(" weight: ").append(LatticeSearch.WEIGHT).append('\n');
-        text.append("trials: ").append(TRIALS).append('\n');
+        text.append("trials: ").append(trialCount).append('\n');
         text.append("max divergence: ").append(divText(maxDivergence(trials))).append('\n');
         text.append("reproducible: ").append(reproducible(trials)).append('\n');
-        text.append("baseline expansions: UNKNOWN (PhysicsPathfinder does not expose the counter)\n");
+        text.append("baseline expansions: PhysicsPathfinder.lastExpansions (nodes popped; -1 means native search or no counter)\n");
         text.append("memory: thread allocated bytes, or -1 when ThreadMXBean allocation is unavailable\n");
         for (String split : List.of("dev", "held")) {
             if (ids(trials, split).isEmpty()) {
@@ -384,6 +417,7 @@ public final class LatticeBench {
         if (!heldOutRan) {
             text.append("held-out skipped: better dev success was below 0.7\n");
         }
+        text.append(LatticeStats.block(trials));
         return text.toString();
     }
 

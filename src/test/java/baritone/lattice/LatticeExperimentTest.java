@@ -123,6 +123,20 @@ public class LatticeExperimentTest {
         String[] tied = LatticeBench.decide(revise);
         assertEquals("REVISE", tied[0]);
         assertTrue(tied[1], tied[1].contains("UNKNOWN"));
+
+        // Review fix: with a baseline counter the 3x expansion clause is evaluated.
+        List<LatticeBench.Trial> counted = new ArrayList<>();
+        counted.add(row("beam", true, 18, 6, 0));
+        counted.add(row("weighted", true, 18, 8, 0));
+        counted.add(row("physics", true, 18, 2, Double.NaN));
+        assertEquals("CONTINUE", LatticeBench.decide(counted)[0]);
+        List<LatticeBench.Trial> costly = new ArrayList<>();
+        costly.add(row("beam", true, 18, 7, 0));
+        costly.add(row("weighted", true, 18, 9, 0));
+        costly.add(row("physics", true, 18, 2, Double.NaN));
+        String[] over = LatticeBench.decide(costly);
+        assertEquals("REVISE", over[0]);
+        assertTrue(over[1], over[1].contains("exceed 3x"));
     }
 
     @Test
@@ -149,7 +163,10 @@ public class LatticeExperimentTest {
             assertEquals("REJECT", first.decision());
         }
         assertTrue(List.of("CONTINUE", "REVISE", "PREFER SIMULATED A*", "REJECT").contains(first.decision()));
-        Path dir = project("docs/ostinato2/raw");
+        // Review fix: committed evidence under docs/ is written only on request (OSTINATO_WRITE_DOCS=1).
+        Path dir = "1".equals(System.getenv("OSTINATO_WRITE_DOCS"))
+                ? project("docs/ostinato2/raw")
+                : Paths.get("build", "ostinato2", "raw");
         LatticeBench.write(first, dir);
         String csv = Files.readString(dir.resolve("phase03-trials.csv")).replace("\r", "");
         assertTrue(csv.startsWith("split,id,trial,method,success,travelTicks,searchTicks,expansions,latencyMs,allocBytes,divergence\n"));
