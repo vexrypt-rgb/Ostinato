@@ -40,6 +40,11 @@ public final class PlayerSimPhysics implements PhysicsTransition {
         return copy;
     }
 
+    /** Records yaw for the next control. Does not tick and does not change position or velocity. */
+    public void face(float yaw) {
+        this.yaw = yaw;
+    }
+
     @Override
     public String semantics() {
         return SEMANTICS;

@@ -956,6 +956,13 @@ public final class Settings {
     public final Setting<Boolean> inputArbitration = new Setting<>(false);
 
     /**
+     * Ostinato: when on, the kinodynamic lattice experiment is allowed to run.
+     * Path execution, A*, and the kinematic controllers do not read this.
+     * The lattice benchmark calls the prototype directly, so the default stays off.
+     */
+    public final Setting<Boolean> latticeExperiment = new Setting<>(false);
+
+    /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
      */
     public final Setting<Double> pathTieBreak = new Setting<>(0.0);

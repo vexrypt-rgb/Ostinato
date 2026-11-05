@@ -451,5 +451,6 @@
  "maestro": "Maestro: plan with an action-aware search instead of the usual A*. Same moves and move costs, but the search also knows which way the bot is heading and charges for turning, so it prefers routes the bot can keep its sprint and line through. Falls back to the usual A* when it finds nothing. Off: the usual planner, unchanged.",
  "maestroTurnCost": "With maestro on: ticks charged for turning around (180 degrees); a turn of angle a costs this * 6 * (a/180)^2, so a right angle costs 1.5 ticks at 1.0 and going straight costs nothing.",
  "maestroMaxStates": "With maestro on: the most search states (cell and heading) one search may create before it stops with its best partial path, as a timed-out search does. 0 means no cap.",
- "inputArbitration": "Ostinato: when on, the fall controller submits one complete key frame per tick to the input arbiter. Off, it writes keys directly, as before."
+ "inputArbitration": "Ostinato: when on, the fall controller submits one complete key frame per tick to the input arbiter. Off, it writes keys directly, as before.",
+ "latticeExperiment": "Ostinato: when on, the kinodynamic lattice experiment is allowed to run. Path execution, A*, and the kinematic controllers do not read this. The lattice benchmark calls the prototype directly, so the default stays off."
 }

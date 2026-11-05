@@ -152,3 +152,28 @@ stock-astar NOT_EQUIVALENT planner-cost-not-PlayerSim executed=false reached=fal
 ```
 
 The two equivalent rows share the PlayerSim world, the settled start, and the budgets. PPE's 40 ticks are the held horizon, not a stop on the goal. Its cost 19 is the first recorded sample inside the goal column. Stock A* was not executed in this harness. The golden test above is the separate Phase 00 recheck. No live client.
+
+## Phase 03 lattice (2026-11-04, VERIFIED)
+
+From `Ostinato-combined` on `combine/main-maze-ppe`. No `java` or `javaw` before the build. BelowNormal. `OSTINATO_BENCH` unset. `-x nativeHost`. Offline, no daemon, max workers 2.
+
+```
+.\gradlew.bat --offline --no-daemon --max-workers=2 -x nativeHost test --tests baritone.lattice.LatticeExperimentTest --tests baritone.gui.SettingCatalogTest --tests baritone.pathing.physics.PhysicsPathfinderTest --tests baritone.contract.ComparisonHarnessTest
+```
+
+`BUILD SUCCESSFUL` in 31s. 13 tests, 0 failures, 0 errors, 0 skipped. No client.
+
+| Class | Tests | Fail | What |
+|---|---|---|---|
+| `LatticeExperimentTest` | 6 | 0 | Phase 03. Two full corpus runs, 1.509s for the bench test. Discrete columns matched |
+| `SettingCatalogTest` | 3 | 0 | `latticeExperiment` is categorized and described. Default in source is false |
+| `PhysicsPathfinderTest` | 3 | 0 | Unchanged class |
+| `ComparisonHarnessTest` | 1 | 0 | Phase 02 golden report still matches |
+
+Decision **REVISE**. Reason from `docs/ostinato2/raw/phase03-summary.txt`:
+
+```
+beam 12/12, weighted 12/12, physics 12/12, chosen beam, dev unique 0; shared median ticks beam 18.0 vs physics 17.5 (ratio 1.029, bound 1.15); baseline expansions are UNKNOWN, so the 3x expansion clause cannot pass; held-out beam 16/16, physics 14/16
+```
+
+Max divergence 0.000000. Three trials per case. The bench test ran the corpus twice and the discrete columns matched. Latency and allocated bytes are recorded per trial in `docs/ostinato2/raw/phase03-trials.csv` (252 data rows) and are not golden. Physics rows use expansions `-1` and divergence `na`. Physics missed held-out `gap-2-far` and `corner-long` inside node budget 1500. The lattice tick cap of 400 did not bind. Full suite was not run.
