@@ -249,6 +249,18 @@ public final class FallController {
                 && lease.holds(InputArbiter.Resource.CLICK);
     }
 
+    /**
+     * Ostinato: release the fall lease when the executor that owns this controller is cancelled or
+     * discarded. Without it the lease outlives the executor in the per-Baritone arbiter.
+     * No-op when no lease is held, which is always the case with the flag off.
+     */
+    public void release(Baritone baritone) {
+        if (lease != null) {
+            ticks = 0;
+            endLease(baritone, false);
+        }
+    }
+
     /** Release a lease taken while the flag was on. A tick that never wrote leaves the keyboard alone. */
     private void endLease(Baritone baritone, boolean failed) {
         Map<Input, Boolean> frame = FallInput.end(baritone.getInputArbiter(), lease, failed);

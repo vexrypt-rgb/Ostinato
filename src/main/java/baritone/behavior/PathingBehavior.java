@@ -467,6 +467,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
     @Override
     public void onWorldEvent(WorldEvent event) {
         KinematicController.invalidatePresto(ctx, false);
+        baritone.getInputArbiter().releaseAll(); // Ostinato: disconnect or world change ends every lease
         prestoCorrection = false;
     }
 
@@ -595,6 +596,10 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         synchronized (pathPlanLock) {
             getInProgress().ifPresent(AbstractNodeCostSearch::cancel);
             if (current != null) {
+                current.releaseInputLeases();
+                if (next != null) {
+                    next.releaseInputLeases();
+                }
                 current = null;
                 next = null;
                 baritone.getInputOverrideHandler().clearAllKeys();

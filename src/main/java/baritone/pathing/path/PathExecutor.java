@@ -1039,8 +1039,14 @@ public class PathExecutor implements IPathExecutor, Helper {
     private void cancel() {
         clearKeys();
         behavior.baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+        releaseInputLeases();
         pathPosition = path.length() + 3;
         failed = true;
+    }
+
+    /** Ostinato: give back any input lease this executor's controllers hold. No-op with inputArbitration off. */
+    public void releaseInputLeases() {
+        fall.release(behavior.baritone);
     }
 
     @Override
