@@ -617,7 +617,7 @@ public class MovementDescend extends Movement {
                 y += vy;
             }
             peak = Math.max(peak, y);
-            vy = (vy - 0.08) * 0.98;
+            vy = (vy - 0.08) * 0.98f;
         }
         return Math.max(1, ticks - Math.max(firstFall, 0));
     }

@@ -40,7 +40,7 @@ public final class OpponentModel {
         /** Vanilla 26.3 {@code LivingEntity.DEFAULT_BASE_GRAVITY}, verified. */
         public static final double GRAVITY = 0.08;
         /** Vanilla 26.3 {@code BASE_VERTICAL_AIR_DRAG}, applied after the gravity, verified. */
-        public static final double DRAG = 0.98;
+        public static final double DRAG = 0.98f;
         /** Vanilla 26.3 {@code BASE_JUMP_POWER}, verified. Jump Boost adds to it; that is not modelled. */
         public static final double JUMP = 0.42;
         /**

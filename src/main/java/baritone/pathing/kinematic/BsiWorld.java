@@ -70,6 +70,12 @@ public final class BsiWorld implements PlayerSim.World {
     }
 
     @Override
+    public float bounce(int x, int y, int z) {
+        var state = bsi.get0(x, y, z);
+        return state.is(net.minecraft.tags.BlockTags.SUPPRESSES_BOUNCE) ? 0 : state.getBlock().getBounceRestitution();
+    }
+
+    @Override
     public boolean water(int x, int y, int z) {
         return bsi.get0(x, y, z).getFluidState().is(net.minecraft.tags.FluidTags.WATER);
     }

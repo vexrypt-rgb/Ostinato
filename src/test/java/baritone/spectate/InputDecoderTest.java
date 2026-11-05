@@ -126,7 +126,12 @@ public class InputDecoderTest {
                 truth.vz = 0.4 * Math.sin(a);
                 kb = new double[]{truth.vx, truth.vy, truth.vz};
             }
-            truth.tickImpulse(yaw, 0.98 * as, 0.98 * af, sp, sp, jump);
+            if (analog) {
+                truth.tickImpulse(yaw, 0.98 * as, 0.98 * af, sp, sp, jump); // a stick: no square-movement correction
+            } else {
+                float[] k = PlayerSim.keyInput(fwd, str); // a 26.3 client's keys, diagonals at full length
+                truth.tickImpulse(yaw, k[0], k[1], sp, sp, jump);
+            }
             boolean send = irregular ? t - lastSent >= 2 || r.nextInt(3) == 0 : t % 2 == 0;
             if (send) {
                 lastSent = t;

@@ -8,8 +8,8 @@ import baritone.pathing.kinematic.PlayerSim;
 /** One tick of {@link PlayerSim}. Land travel has no sneak; a sneak tick is rejected rather than dropped. */
 public final class PlayerSimPhysics implements PhysicsTransition {
 
-    /** 1.16 land tick. Not 26.3, and not the predictive physics engine. */
-    public static final String SEMANTICS = "PlayerSim-1.16-land-tick";
+    /** 26.3 land tick (physics-263, DECISIONS D12). Not the predictive physics engine. */
+    public static final String SEMANTICS = "PlayerSim-26.3-land-tick";
 
     private final PlayerSim sim;
     private float yaw;

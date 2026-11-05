@@ -93,6 +93,21 @@ public final class ClientWorld implements PlayerSim.World {
         sim.onGround = ctx.player().onGround();
         sim.sprinting = ctx.player().isSprinting();
         sim.collidedH = ctx.player().horizontalCollision;
+        sim.minorCollision = ctx.player().minorHorizontalCollision;
+        readSupport(ctx, sim);
+    }
+
+    /** Loads the block the real player stands on (Entity.mainSupportingBlockPos), for a sim already given its onGround. */
+    public static void readSupport(IPlayerContext ctx, PlayerSim sim) {
+        BlockPos sup = ctx.player().mainSupportingBlockPos.orElse(null);
+        sim.supported = sup != null;
+        // Entity.onGroundNoBlocks is private; after a move it is exactly "on the ground with no supporting block"
+        sim.onGroundNoBlocks = sim.onGround && sup == null;
+        if (sup != null) {
+            sim.supX = sup.getX();
+            sim.supY = sup.getY();
+            sim.supZ = sup.getZ();
+        }
     }
 
     @Override
@@ -143,6 +158,13 @@ public final class ClientWorld implements PlayerSim.World {
     public boolean bouncy(int x, int y, int z) {
         pos.set(x, y, z);
         return ctx.world().getBlockState(pos).getBlock() == Blocks.SLIME_BLOCK;
+    }
+
+    @Override
+    public float bounce(int x, int y, int z) {
+        pos.set(x, y, z);
+        BlockState state = ctx.world().getBlockState(pos);
+        return state.is(net.minecraft.tags.BlockTags.SUPPRESSES_BOUNCE) ? 0 : state.getBlock().getBounceRestitution();
     }
 
     @Override

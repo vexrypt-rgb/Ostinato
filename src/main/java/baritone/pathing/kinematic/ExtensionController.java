@@ -147,9 +147,9 @@ public final class ExtensionController {
             double v = player.getDeltaMovement().x * sx + player.getDeltaMovement().z * sz;
             double vy = player.getDeltaMovement().y, y = player.getY(), land = along;
             for (int t = 0; t < 40 && (vy > 0 || y > dest.y); t++) {
-                vy = (vy - 0.08) * 0.98;
+                vy = (vy - 0.08) * 0.98f;
                 y += vy;
-                v *= 0.91;
+                v *= 0.91f;
                 land += v;
             }
             if (along < centre && land > centre) {
@@ -328,6 +328,21 @@ public final class ExtensionController {
                 }
 
                 @Override
+                public float bounce(int x, int y, int z) {
+                    return client.bounce(x, y, z);
+                }
+
+                @Override
+                public boolean cellBoxes(int x, int y, int z, java.util.List<double[]> out) {
+                    client.cellBoxes(x, y, z, out);
+                    for (int j = 0; j <= simExt; j++) {
+                        BetterBlockPos c = cell(simDest, simSx, simSz, -j).below();
+                        if (c.x == x && c.y == y && c.z == z) out.add(new double[]{x, y, z, x + 1, y + 1, z + 1});
+                    }
+                    return true;
+                }
+
+                @Override
                 public boolean water(int x, int y, int z) {
                     return client.water(x, y, z);
                 }
@@ -347,6 +362,7 @@ public final class ExtensionController {
         sim.collidedH = false;
         sim.jumpTicks = 0;
         ClientWorld.readEffects(ctx, sim);
+        ClientWorld.readSupport(ctx, sim);
         boolean left = false;
         for (int t = 0; t < 60; t++) {
             sim.tick(yaw, true, true, t == delay);

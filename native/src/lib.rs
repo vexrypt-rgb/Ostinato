@@ -44,7 +44,7 @@ fn guard(f: impl FnOnce() -> i32) -> i32 {
 ///
 /// # Safety
 /// `region` points to 6 ints (x0, y0, z0, nx, ny, nz); the other pointers to arrays as long as its cell count
-/// (`box_start` one longer, `factors` three per cell) and `boxes` to `n_boxes * 6` doubles.
+/// (`box_start` one longer, `factors` four per cell: slipperiness, speed, jump, bounce) and `boxes` to `n_boxes * 6` doubles.
 unsafe fn snap<'a>(region: *const i32, box_start: *const i32, boxes: *const f64, n_boxes: i32, flags: *const u8, factors: *const f32) -> Option<Snap<'a>> {
     if region.is_null() || box_start.is_null() || flags.is_null() || factors.is_null() || n_boxes < 0 || (n_boxes > 0 && boxes.is_null()) {
         return None;
@@ -73,17 +73,17 @@ unsafe fn snap<'a>(region: *const i32, box_start: *const i32, boxes: *const f64,
         box_start,
         boxes: if n_boxes == 0 { &[] } else { unsafe { slice::from_raw_parts(boxes, n_boxes as usize * 6) } },
         flags: unsafe { slice::from_raw_parts(flags, cells) },
-        factors: unsafe { slice::from_raw_parts(factors, cells * 3) },
+        factors: unsafe { slice::from_raw_parts(factors, cells * sim::FACTORS) },
         oob: AtomicBool::new(false),
     })
 }
 
 /// `TasBrute.search` over a snapshot.
 ///
-/// * `state`: 15 doubles, the start (see [`Sim::read`]).
+/// * `state`: 21 doubles, the start (see [`Sim::read`]).
 /// * `params`: yaw0, beam, maxTicks, maxTurn, allowBack, floorY, goalX, goalY, goalZ, grab, threads.
 /// * `turns`: `n_turns` floats.
-/// * out: up to `out_cap` ticks of yaw, input and jump, and the end state (15 doubles).
+/// * out: up to `out_cap` ticks of yaw, input and jump, and the end state (21 doubles).
 ///
 /// Returns the plan's tick count, or [`ERR_NONE`] (no plan), [`ERR_OUT_OF_REGION`] (needs a bigger snapshot),
 /// [`ERR_UNSUPPORTED`] (leave it to Java), [`ERR_TOO_SMALL`] (out buffers), [`ERR_BAD_ARGS`] or [`ERR_PANIC`].
@@ -244,7 +244,7 @@ pub unsafe extern "C" fn ost_sincos(x: *const f64, n: i32, out: *mut f64) -> i32
 
 /// `PhysicsPathfinder.plan` over a snapshot.
 ///
-/// * `state`: 15 doubles, the start. `params`: gx, gy, gz, radius, maxNodes.
+/// * `state`: 21 doubles, the start. `params`: gx, gy, gz, radius, maxNodes.
 /// * out: one action index per held step (see [`physics::actions`]), up to `out_cap`.
 ///
 /// Returns the step count, or [`ERR_NONE`], [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_TOO_SMALL`],
@@ -294,12 +294,12 @@ pub unsafe extern "C" fn ost_physics_plan(
 
 /// `JumpSearch.search` over the full grid (the local search stays in Java), on a snapshot.
 ///
-/// * `state`: 15 doubles, the start.
+/// * `state`: 21 doubles, the start.
 /// * `params`: approachYaw, dirX, dirZ, edge, destX, destY, destZ, side, bounceY, anyDest, noJump, grab,
 ///   standJump, carry, ledge, jumped, airTicks, slewYaw, faceYaw, threads (1 to 16: the grid is split over them),
 ///   local (only around the plan), anyLanding (the first plan that lands rather than the best).
 /// * `plan`: the search's 7 plan indices, read and written back.
-/// * `out`: ticks, miss, landSpeed, destX, destY, destZ and the sim's end state (15 doubles), written whatever the
+/// * `out`: ticks, miss, landSpeed, destX, destY, destZ and the sim's end state (21 doubles), written whatever the
 ///   answer, as the Java fields are.
 ///
 /// Returns 1 (found) or [`ERR_NONE`], or [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_BAD_ARGS`], [`ERR_PANIC`].
@@ -380,7 +380,7 @@ pub unsafe extern "C" fn ost_jump_search(
 
 /// `MomentumHop.find` over a snapshot.
 ///
-/// * `state`: 15 doubles, the start. `params`: yaw, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget.
+/// * `state`: 21 doubles, the start. `params`: yaw, dirX, dirZ, destX, destY, destZ, jumpedLastTick, budget.
 /// * out: the trail, `'J'` or `'.'` per tick, up to `out_cap`.
 ///
 /// Returns the trail's length, or [`ERR_NONE`], [`ERR_OUT_OF_REGION`], [`ERR_UNSUPPORTED`], [`ERR_TOO_SMALL`],

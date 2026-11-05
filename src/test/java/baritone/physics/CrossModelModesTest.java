@@ -1,7 +1,8 @@
 /*
- * Ostinato 2.0 Phase 04: PlayerSim (1.16 model) against PPE (26.3 living model) per movement mode. Not upstream Baritone.
+ * Ostinato 2.0 Phase 04: PlayerSim against PPE, both 26.3 living models, per movement mode. Not upstream Baritone.
  * Tier-S cross-model disagreement on identical hand-built terrain and held input. Neither side is the game, so this is
  * a bound on model disagreement, not on prediction error. Live ground truth comes from SIMTRACE runs (Tier-L).
+ * PPE reports positions as floats, so agreement is checked to half a float ulp of each PPE coordinate.
  */
 package baritone.physics;
 
@@ -35,7 +36,7 @@ public class CrossModelModesTest {
     record Scenario(String mode, Layout layout, double y0, boolean onGround, float forward, boolean sprint, boolean jump, int horizon) {
     }
 
-    record Outcome(String mode, int horizon, double maxOpen, double endOpen, double maxStepDelta, List<double[]> rows) {
+    record Outcome(String mode, int horizon, double maxOpen, double endOpen, double maxStepDelta, double maxUlps, List<double[]> rows) {
     }
 
     static final Layout FLOOR = (x, y, z) -> y < 64 ? Cell.STONE : Cell.AIR;
@@ -55,18 +56,19 @@ public class CrossModelModesTest {
     @Test
     public void everyModeRunsInBothModelsAndWritesTheTable() throws Exception {
         StringBuilder csv = new StringBuilder("mode,tick,simX,simY,simZ,ppeX,ppeY,ppeZ,openError,stepDelta\n");
-        StringBuilder summary = new StringBuilder("Tier-S cross-model: PlayerSim (1.16 model) vs PPE (26.3 living model), held input, identical terrain\n");
-        summary.append("mode,horizon,maxOpenError,endOpenError,maxStepDelta\n");
+        StringBuilder summary = new StringBuilder("Tier-S cross-model: PlayerSim (26.3 model) vs PPE (26.3 living model), held input, identical terrain\n");
+        summary.append("mode,horizon,maxOpenError,endOpenError,maxStepDelta,maxFloatUlps\n");
         for (Scenario s : scenarios()) {
             Outcome o = run(s);
             assertEquals(s.mode(), s.horizon(), o.rows().size() - 1);
             assertTrue(s.mode() + " " + o.maxOpen(), Double.isFinite(o.maxOpen()));
+            assertTrue(s.mode() + " differs from PPE by " + o.maxUlps() + " float ulps", o.maxUlps() <= 0.5 + 1e-3);
             for (int t = 0; t < o.rows().size(); t++) {
                 double[] r = o.rows().get(t);
-                csv.append(String.format(Locale.ROOT, "%s,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n", s.mode(), t,
+                csv.append(String.format(Locale.ROOT, "%s,%d,%.9f,%.9f,%.9f,%.9f,%.9f,%.9f,%.3e,%.3e%n", s.mode(), t,
                         r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]));
             }
-            summary.append(String.format(Locale.ROOT, "%s,%d,%.6f,%.6f,%.6f%n", s.mode(), s.horizon(), o.maxOpen(), o.endOpen(), o.maxStepDelta()));
+            summary.append(String.format(Locale.ROOT, "%s,%d,%.3e,%.3e,%.3e,%.3f%n", s.mode(), s.horizon(), o.maxOpen(), o.endOpen(), o.maxStepDelta(), o.maxUlps()));
         }
         Path dir = "1".equals(System.getenv("OSTINATO_WRITE_DOCS"))
                 ? project("docs/ostinato2/raw/review")
@@ -109,6 +111,7 @@ public class CrossModelModesTest {
         List<double[]> rows = new ArrayList<>();
         double maxOpen = 0;
         double maxStep = 0;
+        double maxUlps = 0;
         for (int t = 0; t < n; t++) {
             double[] a = simPath.get(t);
             double px = result.path[t * 3], py = result.path[t * 3 + 1], pz = result.path[t * 3 + 2];
@@ -119,11 +122,15 @@ public class CrossModelModesTest {
                 double qx = result.path[(t - 1) * 3], qy = result.path[(t - 1) * 3 + 1], qz = result.path[(t - 1) * 3 + 2];
                 step = Math.sqrt(sq((a[0] - b[0]) - (px - qx)) + sq((a[1] - b[1]) - (py - qy)) + sq((a[2] - b[2]) - (pz - qz)));
             }
+            for (int i = 0; i < 3; i++) {
+                float p = result.path[t * 3 + i];
+                maxUlps = Math.max(maxUlps, Math.abs(a[i] - p) / Math.ulp(p));
+            }
             maxOpen = Math.max(maxOpen, open);
             maxStep = Math.max(maxStep, step);
             rows.add(new double[]{a[0], a[1], a[2], px, py, pz, open, step});
         }
-        return new Outcome(s.mode(), s.horizon(), maxOpen, rows.get(rows.size() - 1)[6], maxStep, rows);
+        return new Outcome(s.mode(), s.horizon(), maxOpen, rows.get(rows.size() - 1)[6], maxStep, maxUlps, rows);
     }
 
     static PlayerSim.World world(Layout layout) {

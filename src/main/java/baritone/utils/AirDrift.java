@@ -29,8 +29,8 @@ public final class AirDrift {
 
     private AirDrift() {}
 
-    public static final double AIR_ACCEL = 0.02;
-    public static final double AIR_DRAG = 0.91;
+    public static final double AIR_ACCEL = 0.02f; // floats, as vanilla holds them
+    public static final double AIR_DRAG = 0.91f;
     /** Share of the ideal reach the planner counts on. */
     public static final double MARGIN = 0.75;
     /** The player is 0.6 wide, so a 1 wide hole takes the centre anywhere within 0.2 of the column's middle. */
@@ -49,7 +49,7 @@ public final class AirDrift {
         int t = 0;
         for (int d = 0; d < N; d++) {
             while (y < d - 1e-9) {
-                v = (v - 0.08) * 0.98;
+                v = (v - 0.08) * 0.98f;
                 y -= v;
                 t++;
             }
@@ -92,7 +92,7 @@ public final class AirDrift {
     public static int ticksUntil(double y, double vy, double floorTop) {
         int t = 0;
         while (y > floorTop && t < N) {
-            vy = (vy - 0.08) * 0.98;
+            vy = (vy - 0.08) * 0.98f;
             y += vy;
             t++;
         }

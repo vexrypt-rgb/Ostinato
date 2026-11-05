@@ -176,7 +176,7 @@ final class CombatMace {
             // had been. Fly to where it will be when the fall reaches its height.
             int fallTicks = 0;
             for (double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5; dy > 0 && fallTicks < 30; fallTicks++) {
-                v = (v - 0.08) * 0.98;
+                v = (v - 0.08) * 0.98f;
                 dy += v;
             }
             Vec3 ahead = target.position().add(targeting.velocity(target).multiply(fallTicks, 0, fallTicks));
@@ -206,7 +206,7 @@ final class CombatMace {
                 int n = 0;
                 double v = me.getDeltaMovement().y, dy = me.getY() - target.getY() - 1.5;
                 while (dy > 0 && n < 60) {
-                    v = (v - 0.08) * 0.98;
+                    v = (v - 0.08) * 0.98f;
                     dy += v;
                     n++;
                 }
