@@ -38,6 +38,8 @@ import baritone.api.utils.PathCalculationResult;
 import baritone.api.utils.interfaces.IGoalRenderPos;
 import baritone.pathing.calc.AStarPathFinder;
 import baritone.pathing.calc.MaestroPathFinder;
+import baritone.pathing.calc.SimEdge;
+import baritone.pathing.calc.SimEdgePathFinder;
 import baritone.pathing.calc.AbstractNodeCostSearch;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
@@ -909,6 +911,24 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         return m.choose(PathDecisionMatrix.categorize(context, start.getX(), start.getY(), start.getZ(), g.getX(), g.getZ(), blocks));
     }
 
+    /** Ostinato 2.0 Phase 05: the player's body now, as the sim-edge search's start state. */
+    public SimEdge.Body playerBody() {
+        var p = ctx.player();
+        var v = p.getDeltaMovement();
+        SimEdge.Body b = new SimEdge.Body();
+        b.known = true;
+        b.x = p.getX();
+        b.y = p.getY();
+        b.z = p.getZ();
+        b.vx = v.x;
+        b.vy = v.y;
+        b.vz = v.z;
+        b.yaw = p.getYRot();
+        b.onGround = p.onGround();
+        b.sprinting = p.isSprinting();
+        return b;
+    }
+
     private AbstractNodeCostSearch createPathfinder(BlockPos start, Goal goal, IPath previous, CalculationContext context) {
         Goal transformed = goal;
         if (Baritone.settings().simplifyUnloadedYCoord.value && goal instanceof IGoalRenderPos) {
@@ -934,6 +954,18 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         }
         if (hierarchical) { // Ostinato: opt-in hierarchical planner
             return new HierarchicalPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, SectionGraph.INSTANCE, weight);
+        }
+        if (Baritone.settings().simEdgeSearch.value) { // Ostinato 2.0 Phase 05: opt-in simulated-edge planner (falls back to A* itself)
+            SimEdgePathFinder sim = new SimEdgePathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);
+            if (feet.equals(start) && ctx.player() != null) {
+                sim.startBody(playerBody());
+            }
+            synchronized (dead) {
+                if (!dead.isEmpty() && Objects.equals(deadGoal, goal)) {
+                    sim.avoidDead(dead.clone());
+                }
+            }
+            return sim;
         }
         if (Baritone.settings().maestro.value) { // Ostinato Maestro: opt-in action-aware planner (falls back to A* itself)
             MaestroPathFinder maestro = new MaestroPathFinder(realStart, start.getX(), start.getY(), start.getZ(), transformed, favoring, context, weight);

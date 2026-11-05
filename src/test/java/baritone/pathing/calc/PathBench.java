@@ -130,6 +130,7 @@ public final class PathBench {
         if (spec == null || spec.isEmpty() || spec.equals("astar")) return ASTAR;
         if (spec.startsWith("wa:")) return weighted(Double.parseDouble(spec.substring(3)));
         if (spec.equals("maestro")) return (s, g, c) -> new MaestroPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, 1); // Ostinato Maestro
+        if (spec.equals("simedge")) return (s, g, c) -> new SimEdgePathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, 1); // Ostinato 2.0 Phase 05
         if (spec.startsWith("hpa")) { // hpa[:factor[:radius]]; a fresh SectionGraph per query = cold cache (worst case)
             String[] p = spec.split(":");
             double factor = p.length > 1 ? Double.parseDouble(p[1]) : 0;

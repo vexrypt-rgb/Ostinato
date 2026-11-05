@@ -13,6 +13,8 @@ import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.utils.input.Input;
 import baritone.pathing.RouteReuse;
 import baritone.pathing.calc.MaestroPathFinder;
+import baritone.pathing.calc.SimEdge;
+import baritone.pathing.calc.SimEdgePathFinder;
 import baritone.pathing.kinematic.KinematicLine;
 import baritone.pathing.movement.movements.MovementLine;
 import baritone.pathing.movement.movements.MovementStraight;
@@ -52,7 +54,10 @@ import java.util.TreeMap;
  * </ul>
  * With -Dostinato.legatotest.arms=kline the four arms are the kinematic MovementLine experiment instead (Legato search
  * off in all of them): A baseline; B kinematicLine; C Legato smoothing; D both. With arms=maestro: A baseline; B Legato
- * smoothing; C Maestro; D Maestro and Legato smoothing (Legato search off throughout).
+ * smoothing; C Maestro; D Maestro and Legato smoothing (Legato search off throughout). With arms=simedge (Ostinato 2.0
+ * Phase 05) the course is {@link SimEdgeCourse} and the arms are A legacy A*, B simEdgeSearch, C legacy again, D
+ * simEdgeSearch again: two independent replications (B vs A, D vs C) and an A/A' noise control (C vs A). Each lap
+ * also records what its first plan predicted, under both cost models, for planning accuracy.
  * <p>
  * Each repetition walks every leg once per mode, the mode order rotated by repetition and leg (a Latin square), so
  * no mode always goes first. Route reuse and the failed-line memory are cleared before every lap. Every row reports
@@ -65,6 +70,9 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private static final boolean KLINE = "kline".equals(System.getProperty("ostinato.legatotest.arms"));
     /** Ostinato Maestro: -Dostinato.legatotest.arms=maestro; A baseline, B Legato smoothing, C Maestro, D Maestro + smoothing. */
     private static final boolean MAESTRO = "maestro".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** Ostinato 2.0 Phase 05: -Dostinato.legatotest.arms=simedge (see the class comment). */
+    private static final boolean SIMEDGE = "simedge".equals(System.getProperty("ostinato.legatotest.arms"));
+    private static final List<LegatoCourse.Leg> LEGS = SIMEDGE ? SimEdgeCourse.LEGS : LegatoCourse.LEGS;
 
     private record Lap(int rep, LegatoCourse.Leg leg, int mode) {}
 
@@ -94,13 +102,21 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     /** Ticks turning on the spot; plans dropped mid-lap; laps that left a key forced down. */
     private int turnInPlace, cancels, stuckKeyLaps;
     private boolean faultHooked;
+    /** Phase 05: the body at the lap's start, the first plan's predictions (legacy model, sim model), and jumps. */
+    private SimEdge.Body lapBody;
+    private double predLegacy, predSim;
+    private int planWait, links, simLinks, jumps;
+    /** Phase 05: the first plan's last cell, and the lap tick the body first came within 0.8 of its centre (the lap's own arrival test, -1 never). Measures partial plans too. */
+    private int segX, segY, segZ, segTicks;
+    private boolean complete, wasGround;
+    private long simSearch0, simFallback0;
 
     private LegatoLiveTest(Baritone b) {
         baritone = b;
         for (int r = 0; r < REPS; r++) {
-            for (int l = 0; l < LegatoCourse.LEGS.size(); l++) {
+            for (int l = 0; l < LEGS.size(); l++) {
                 for (int k = 0; k < MODES.length; k++) {
-                    laps.add(new Lap(r, LegatoCourse.LEGS.get(l), (k + r + l) % MODES.length));
+                    laps.add(new Lap(r, LEGS.get(l), (k + r + l) % MODES.length));
                 }
             }
         }
@@ -180,15 +196,15 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     inner.accept(code, evidence);
                 };
             }
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : "legato") + " laps=" + laps.size()
-                    + " reps=" + REPS + " legs=" + LegatoCourse.LEGS.size() + " order=latin");
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE ? "simedge" : "legato") + " laps=" + laps.size()
+                    + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin");
             server(mc, () -> {
                 // peaceful: the first run lost its last 28 laps to a creeper on the platform
                 mc.getSingleplayerServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
                 build(mc);
                 ServerPlayer p = player(mc);
                 p.getInventory().clearContent();
-                LegatoCourse.Leg first = LegatoCourse.LEGS.getFirst();
+                LegatoCourse.Leg first = LEGS.getFirst();
                 p.teleportTo(first.sx() + 0.5, LegatoCourse.F + 1, first.sz() + 0.5);
             });
             wait = 80;
@@ -206,7 +222,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         for (int x = -2; x <= LegatoCourse.SIZE + 2; x++) {
             for (int z = -2; z <= LegatoCourse.SIZE + 2; z++) {
                 for (int y = F - 1; y <= F + 6; y++) {
-                    level.setBlock(new BlockPos(x, y, z), LegatoCourse.solid(x, y, z) ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+                    boolean solid = SIMEDGE ? SimEdgeCourse.solid(x, y, z) : LegatoCourse.solid(x, y, z);
+                    level.setBlock(new BlockPos(x, y, z), solid ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
                 }
             }
         }
@@ -215,6 +232,13 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private static void mode(int mode) {
         Baritone.settings().presto.value = false;
         Baritone.settings().maestro.value = MAESTRO && mode >= 2;
+        Baritone.settings().simEdgeSearch.value = SIMEDGE && (mode == 1 || mode == 3);
+        if (SIMEDGE) {
+            Baritone.settings().kinematicLine.value = false;
+            Baritone.settings().legato.value = false;
+            Baritone.settings().legatoSearch.value = false;
+            return;
+        }
         if (MAESTRO) {
             Baritone.settings().kinematicLine.value = false;
             Baritone.settings().legato.value = mode == 1 || mode == 3;
@@ -281,6 +305,15 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             // every lap starts facing +x, so the first turn is the same for every mode
             player.setYRot(-90);
             player.setXRot(0);
+            lapBody = baritone.getPathingBehavior().playerBody();
+            predLegacy = predSim = Double.NaN;
+            planWait = -1;
+            segTicks = -1;
+            links = simLinks = jumps = 0;
+            complete = false;
+            wasGround = true;
+            simSearch0 = SimEdgePathFinder.searches.get();
+            simFallback0 = SimEdgePathFinder.fallbacks.get();
             before = counters();
             calcs = driverChanges = rewinds = planned = 0;
             lastPathPos = -1;
@@ -320,7 +353,13 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         int pos = ex == null ? -1 : ex.getPosition();
         if (pos >= 0 && lastPathPos >= 0 && pos < lastPathPos) rewinds++;
         if (pos >= 0) lastPathPos = pos;
-        if (ex != null && planned == 0) planned = ex.getPath().positions().size();
+        if (ex != null && planned == 0) {
+            planned = ex.getPath().positions().size();
+            predict(ex.getPath(), l, ticks - lapStart);
+        }
+        if (planWait >= 0 && segTicks < 0 && Math.abs(x - (segX + 0.5)) < 0.8 && Math.abs(z - (segZ + 0.5)) < 0.8 && Math.abs(y - segY) < 1) segTicks = (int) (ticks - lapStart);
+        if (wasGround && !player.onGround() && player.getDeltaMovement().y > 0.2) jumps++;
+        wasGround = player.onGround();
         if (ex != null && pos >= 0 && pos < ex.getPath().movements().size()) {
             var mv = ex.getPath().movements().get(pos);
             if (mv instanceof MovementLine line) {
@@ -349,11 +388,14 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                             + " planned=%d calcs=%d driverChanges=%d rewinds=%d posPackets=%d drivers=%s"
                             + " evals=%d feasible=%d shortcuts=%d removed=%d theta=%d/%d straights=%d straightFails=%d evalUs=%d smoothUs=%d"
                             + " kinNs=%d allocKB=%d lineTicks=%s straightTicks=%s turnInPlace=%d cancels=%d faults=%s"
-                            + " klineAccepted=%d klineOff=%d klineGround=%d klinePending=%d klineDowngrades=%d lineDeclines=%s",
+                            + " klineAccepted=%d klineOff=%d klineGround=%d klinePending=%d klineDowngrades=%d lineDeclines=%s"
+                            + " planWait=%d predLegacy=%.2f predSim=%.2f complete=%b links=%d simLinks=%d jumps=%d simSearches=%d simFallbacks=%d segTicks=%d",
                     index, l.rep(), l.leg().name(), MODES[l.mode()], result, took, travelled, turned, x, z,
                     planned, calcs, driverChanges, rewinds, d[0], driverTicks, d[1], d[2], d[3], d[4], d[6], d[5], d[7], d[8], d[9] / 1000, d[10] / 1000,
                     PlanStats.kinNs.get() - kinNs0, (allocated() - alloc0) / 1024, lineTicks, straightTicks, turnInPlace, cancels, faults,
-                    d[11], d[12], d[13], d[14], d[15], lineDeclines);
+                    d[11], d[12], d[13], d[14], d[15], lineDeclines,
+                    planWait, predLegacy, predSim, complete, links, simLinks, jumps,
+                    SimEdgePathFinder.searches.get() - simSearch0, SimEdgePathFinder.fallbacks.get() - simFallback0, segTicks);
             rows.add(row);
             log(row);
             if (there) {
@@ -363,6 +405,36 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             index++;
             state = 3;
             wait = 20;
+        }
+    }
+
+    /**
+     * Phase 05 planning accuracy: the first plan of the lap priced from the lap's start body by both cost models, the
+     * legacy closed-form costs and the chained sim (whichever search made the plan), to compare with the lap's ticks.
+     */
+    private void predict(baritone.api.pathing.calc.IPath path, Lap l, long at) {
+        planWait = (int) at;
+        complete = path.getDest().getX() == l.leg().gx() && path.getDest().getZ() == l.leg().gz();
+        segX = path.getDest().getX();
+        segY = path.getDest().getY();
+        segZ = path.getDest().getZ();
+        try {
+            var ctx = new baritone.pathing.movement.CalculationContext(baritone);
+            SimEdge e = new SimEdge(new baritone.pathing.kinematic.BsiWorld(ctx.bsi), ctx);
+            e.sprintAscends = Baritone.settings().sprintAscends.value;
+            List<int[]> cells = new ArrayList<>();
+            for (var p : path.positions()) cells.add(new int[]{p.getX(), p.getY(), p.getZ()});
+            double a = 0, b = 0;
+            for (SimEdge.Priced pr : e.price(cells, lapBody)) {
+                a += pr.legacy();
+                b += pr.sim();
+                links++;
+                if (pr.simulated()) simLinks++;
+            }
+            predLegacy = a;
+            predSim = b;
+        } catch (RuntimeException ex) {
+            log("predict failed lap " + index + ": " + ex);
         }
     }
 
@@ -405,7 +477,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     t.isEmpty() ? "-" : t.get(t.size() / 2), t.stream().mapToLong(Long::longValue).average().orElse(Double.NaN)));
         }
         // paired: each lap against the baseline lap of the same leg and repetition
-        for (LegatoCourse.Leg leg : LegatoCourse.LEGS) {
+        for (LegatoCourse.Leg leg : LEGS) {
             for (int m = 1; m < MODES.length; m++) {
                 List<Double> ratios = new ArrayList<>();
                 List<Long> base = new ArrayList<>(), arm = new ArrayList<>();
@@ -422,6 +494,22 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                         ratios.size(), base.isEmpty() ? "-" : base.get(base.size() / 2), MODES[m], arm.isEmpty() ? "-" : arm.get(arm.size() / 2),
                         ratios.isEmpty() ? "-" : String.format(Locale.ROOT, "%.3f", ratios.get(ratios.size() / 2)), ratios));
             }
+        }
+        if (SIMEDGE) { // the second replication: D against C, same leg and repetition
+            for (LegatoCourse.Leg leg : LEGS) {
+                List<Double> ratios = new ArrayList<>();
+                for (int r = 0; r < REPS; r++) {
+                    Long c = reached.get(leg.name() + "/" + r + "/2"), d = reached.get(leg.name() + "/" + r + "/3");
+                    if (c != null && d != null) ratios.add(d / (double) c);
+                }
+                Collections.sort(ratios);
+                log(String.format(Locale.ROOT, "paired leg=%s mode=D base=C pairs=%d medianRatio=%s ratios=%s", leg.name(), ratios.size(),
+                        ratios.isEmpty() ? "-" : String.format(Locale.ROOT, "%.3f", ratios.get(ratios.size() / 2)), ratios));
+            }
+            log("simedge searches=" + SimEdgePathFinder.searches.get() + " fallbacks=" + SimEdgePathFinder.fallbacks.get()
+                    + " capped=" + SimEdgePathFinder.capped.get() + " exceptions=" + SimEdgePathFinder.exceptions.get()
+                    + " simEdges=" + SimEdgePathFinder.simEdges.get() + " legacyEdges=" + SimEdgePathFinder.legacy.get()
+                    + " sims=" + SimEdgePathFinder.sims.get() + " inconsistent=" + SimEdgePathFinder.inconsistencies.get());
         }
         log(LegatoStats.line());
         if (MAESTRO) { // Ostinato Maestro: proof that arms C/D searched with Maestro, not only that the switch was on

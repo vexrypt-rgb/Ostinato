@@ -2402,6 +2402,26 @@ public final class Settings {
     public final Setting<Integer> maestroMaxStates = new Setting<>(1_500_000);
 
     /**
+     * Ostinato 2.0 Phase 05: plan with simulated movement edges. Walking, turning and one-block jumps are priced by
+     * stepping the player physics model from the state the previous step ends in (keeping momentum), instead of by
+     * fixed costs; other moves keep their usual costs. Falls back to the usual A* when it finds nothing. Off: the
+     * usual planner, unchanged.
+     */
+    public final Setting<Boolean> simEdgeSearch = new Setting<>(false);
+
+    /**
+     * With simEdgeSearch on: the most search states (cell and motion) one search may create before it stops with its
+     * best partial path, as a timed-out search does. 0 means no cap.
+     */
+    public final Setting<Integer> simEdgeMaxStates = new Setting<>(1_500_000);
+
+    /**
+     * With simEdgeSearch on: steps are simulated only within this many blocks of where the search starts; further out
+     * they keep their usual costs. 0 simulates everywhere (slow on long or rough routes).
+     */
+    public final Setting<Integer> simEdgeHorizon = new Setting<>(32);
+
+    /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.
      * Codes: M01 kinematic stuck, M02 off path, M03 movement timeout, M04 movement failed.
      */
