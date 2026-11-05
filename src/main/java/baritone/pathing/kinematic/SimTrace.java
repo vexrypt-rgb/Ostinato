@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.contract.PredictionTolerance;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -32,15 +34,23 @@ public final class SimTrace {
 
     private final String label;
     private final PlayerSim pred, open;
+    /** Ostinato 2.0 Phase 04: per-mode bounds, or null for the fixed {@link #DIVERGED}. */
+    private final PredictionTolerance tolerance;
+    private PredictionTolerance.Mode mode;
     private boolean havePred, haveOpen;
     private float cmdYaw;
     private int tick, mismatches, firstDiverged = -1;
     private double maxStep, sumSq, openErr, maxYaw;
 
     public SimTrace(String label, PlayerSim.World world) {
+        this(label, world, null);
+    }
+
+    public SimTrace(String label, PlayerSim.World world, PredictionTolerance tolerance) {
         this.label = label;
         this.pred = new PlayerSim(world);
         this.open = new PlayerSim(world);
+        this.tolerance = tolerance;
     }
 
     /** One tick's comparison; every field is real minus predicted. */
@@ -85,7 +95,7 @@ public final class SimTrace {
             openErr = r.openError();
             maxYaw = Math.max(maxYaw, Math.abs(r.yaw));
             if (r.groundPredicted != r.groundActual) mismatches++;
-            if (firstDiverged < 0 && e > DIVERGED) firstDiverged = tick;
+            if (firstDiverged < 0 && e > (tolerance == null ? DIVERGED : tolerance.oneStep(mode))) firstDiverged = tick;
             write(r);
         }
         tick++;
@@ -94,6 +104,7 @@ public final class SimTrace {
 
     /** The controls the mover applies this tick, from the state just observed. */
     public void commit(PlayerSim actual, float yaw, int input, boolean sprint, boolean jump) {
+        if (tolerance != null) mode = PredictionTolerance.classify(actual, input != 0, sprint);
         pred.copyFrom(actual);
         pred.tick(yaw, input, sprint, jump);
         havePred = true;
@@ -139,8 +150,9 @@ public final class SimTrace {
     }
 
     public String summary(boolean ok) {
-        return String.format(Locale.ROOT, "SIMTRACE %s ok=%b ticks=%d maxStep=%.4f rmsStep=%.4f firstOver%.2f=%d openLoopEnd=%.3f groundMismatch=%d maxYawLag=%.1f",
-                label, ok, tick, maxStep, rmsStep(), DIVERGED, firstDiverged, openErr, mismatches, maxYaw);
+        return String.format(Locale.ROOT, "SIMTRACE %s ok=%b ticks=%d maxStep=%.4f rmsStep=%.4f firstOver%s=%d openLoopEnd=%.3f groundMismatch=%d maxYawLag=%.1f",
+                label, ok, tick, maxStep, rmsStep(), tolerance == null ? String.format(Locale.ROOT, "%.2f", DIVERGED) : "Mode",
+                firstDiverged, openErr, mismatches, maxYaw);
     }
 
     /** Print the summary and append it to {@code simtrace/summary.csv}. */

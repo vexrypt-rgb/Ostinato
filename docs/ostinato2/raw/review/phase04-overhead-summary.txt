@@ -1,0 +1,5 @@
+phase04 consumer overhead, ns per tick, 3000 batches of 200 after 500 warmup, ABAB interleaved (sink 0)
+simtrace-off p50 1698.0 p95 2250.5 p99 3234.0
+simtrace-on p50 1704.5 p95 2270.0 p99 3593.0
+travel-off p50 105.5 p95 132.5 p99 186.0
+travel-on p50 109.0 p95 135.0 p99 202.5

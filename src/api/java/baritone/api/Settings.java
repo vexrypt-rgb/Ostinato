@@ -963,6 +963,13 @@ public final class Settings {
     public final Setting<Boolean> latticeExperiment = new Setting<>(false);
 
     /**
+     * Ostinato: when on, SimTrace and PhysicsTravel judge a predicted tick against the per-mode bounds in
+     * PredictionTolerance.MEASURED instead of their fixed constants (0.05 Euclidean, 0.1 summed axes).
+     * Off keeps the old checks. Several bounds are Tier-S only, so the default stays off.
+     */
+    public final Setting<Boolean> predictionTolerance = new Setting<>(false);
+
+    /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
      */
     public final Setting<Double> pathTieBreak = new Setting<>(0.0);

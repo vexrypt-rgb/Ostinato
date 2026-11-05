@@ -17,6 +17,7 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.contract.PredictionTolerance;
 import baritone.pathing.kinematic.BsiWorld;
 
 import baritone.utils.PositionSync;
@@ -1354,7 +1355,7 @@ public class MovementJump extends Movement {
         }
         SimTrace.files = true;
         if (trace == null) {
-            trace = new SimTrace("jump " + t.a + "," + t.dy + "," + t.b + " runUp=" + t.runUp, new ClientWorld(ctx));
+            trace = new SimTrace("jump " + t.a + "," + t.dy + "," + t.b + " runUp=" + t.runUp, new ClientWorld(ctx), PredictionTolerance.active());
         }
         trace.observe(real, ctx.player().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);

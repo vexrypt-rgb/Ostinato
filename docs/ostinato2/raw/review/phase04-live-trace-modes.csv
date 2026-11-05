@@ -1,0 +1,8 @@
+mode,n,p50,p95,p99,max,over0.05,groundMismatch
+climb-jump,739,0.0003,0.1737,0.2374,0.5357,96,0
+sprint-ground,4008,0.0013,0.1437,0.2235,0.2448,633,0
+sprint-jump-air,9477,0.0003,0.0105,0.0983,0.6305,168,1
+kind,runs,ok,held,openLoopEnd_p50,openLoopEnd_p95,openLoopEnd_p99,openLoopEnd_max
+chain,16,13,0,2.787,4.605,4.605,4.605
+climb,49,31,20,0.813,3.170,6.522,6.522
+jump,869,653,526,0.125,2.827,6.713,7.623

@@ -14,6 +14,7 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.IPlayerContext;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
+import baritone.contract.PredictionTolerance;
 import baritone.pathing.kinematic.ClientWorld;
 import baritone.pathing.kinematic.PlayerSim;
 import baritone.pathing.movement.Movement;
@@ -49,6 +50,8 @@ public final class PhysicsTravel {
     private int step, target = -1, cooldown;
     /** Jump cooldown left by our own presses; the client keeps it private. */
     private int jumpTicks;
+    /** Ostinato 2.0 Phase 04: the mode of the tick {@link #predicted} ran; null while predictionTolerance is off. */
+    private PredictionTolerance.Mode predictedMode;
 
     public PhysicsTravel(IPlayerContext ctx) {
         this.ctx = ctx;
@@ -56,6 +59,17 @@ public final class PhysicsTravel {
         this.real = new PlayerSim(world);
         this.predicted = new PlayerSim(world);
         this.finder = new PhysicsPathfinder(world, NODE_BUDGET).viz(PathViz.get());
+    }
+
+    /**
+     * Ostinato 2.0 Phase 04: whether the real player left the predicted tick. A null tolerance is the old check, the
+     * summed axis error over {@link #DRIFT}, which a null mode also falls back to; otherwise the Euclidean error over the bound for {@code mode}.
+     */
+    static boolean drifted(PlayerSim predicted, PlayerSim real, PredictionTolerance tolerance, PredictionTolerance.Mode mode) {
+        if (tolerance == null || mode == null) {
+            return Math.abs(predicted.x - real.x) + Math.abs(predicted.y - real.y) + Math.abs(predicted.z - real.z) > DRIFT;
+        }
+        return tolerance.exceeds(mode, real.x - predicted.x, real.y - predicted.y, real.z - predicted.z);
     }
 
     /** @return the path position to continue from if this drove the tick, or -1 to let the next layer run it */
@@ -102,8 +116,7 @@ public final class PhysicsTravel {
         if (end == pathPosition) return drop();
         BetterBlockPos goal = path.positions().get(end);
 
-        boolean drifted = plan != null && step > 0
-                && Math.abs(predicted.x - real.x) + Math.abs(predicted.y - real.y) + Math.abs(predicted.z - real.z) > DRIFT;
+        boolean drifted = plan != null && step > 0 && drifted(predicted, real, PredictionTolerance.active(), predictedMode);
         PathViz viz = PathViz.get();
         if (plan == null || step >= plan.size() || drifted || end != target) {
             String why = plan == null ? null : drifted ? "drift" : end != target ? "new target" : "plan done";
@@ -137,6 +150,7 @@ public final class PhysicsTravel {
             // ticks, off the one-wide walkway). The plan step waits; the drift check replans if the turn cost it.
             baritone.getInputOverrideHandler().clearAllKeys();
             predicted.copyFrom(real);
+            predictedMode = PredictionTolerance.active() == null ? null : PredictionTolerance.classify(real, false, false);
             predicted.tick(a.yaw, false, false, false);
             return pathPosition;
         }
@@ -145,6 +159,7 @@ public final class PhysicsTravel {
         viz.physTick(real.x, real.y, real.z, real.vx, real.vy, real.vz, real.onGround, real.climbable(), a.yaw,
                 (a.forward ? PathViz.IN_W : 0) | (a.sprint ? PathViz.IN_SPRINT : 0) | (a.jump ? PathViz.IN_JUMP : 0));
         predicted.copyFrom(real);
+        predictedMode = PredictionTolerance.active() == null ? null : PredictionTolerance.classify(real, a.forward, a.sprint);
         predicted.tick(a.yaw, a.forward, a.sprint, a.jump);
         jumpTicks = predicted.jumpTicks;
         baritone.getInputOverrideHandler().clearAllKeys();

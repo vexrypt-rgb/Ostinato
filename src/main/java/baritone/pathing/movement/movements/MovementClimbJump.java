@@ -17,6 +17,7 @@
 
 package baritone.pathing.movement.movements;
 
+import baritone.contract.PredictionTolerance;
 import baritone.utils.PositionSync;
 import baritone.Baritone;
 import baritone.api.IBaritone;
@@ -341,7 +342,7 @@ public class MovementClimbJump extends Movement {
         }
         SimTrace.files = true;
         if (trace == null) {
-            trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? t.stand ? "stand-leap" : "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder wall=" + t.destWall : ""), new ClientWorld(ctx));
+            trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? t.stand ? "stand-leap" : "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder wall=" + t.destWall : ""), new ClientWorld(ctx), PredictionTolerance.active());
         }
         trace.observe(real, ctx.player().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);
