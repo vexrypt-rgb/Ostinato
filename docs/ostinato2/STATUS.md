@@ -1,6 +1,8 @@
 # Ostinato 2.0 — status
 
-**Phase 04 gate: PASS WITH BLOCKERS (provisional).** It is complete at Tier U/S. Tier L is partial: three of six modes are validated live, from historical traces. Phase 05 was **not** started.
+**Phase 05 gate: NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. Phase 06 was **not** started.
+
+Phase 04 gate (unchanged): PASS WITH BLOCKERS (provisional).
 
 ## Where
 
@@ -53,6 +55,30 @@
 | New paths behind flags; defaults unchanged | `predictionTolerance=false`. `inputArbitration` and `latticeExperiment` still false. | VERIFIED, U |
 | Identical behavior with flags off | `PredictionToleranceTest.flagOff*`: every SimTrace row field, the verdict and summary; 100,000 random drift pairs | VERIFIED, U |
 
+## Phase 05 (simulation-derived A*)
+
+- **Audit first:** `PHASE05_AUDIT.md` covers hashing, equivalence, dominance, pruning, heuristic validity, reopening,
+  reconstruction, edge start state and the executor policy the sim copies. §11 records three changes made during
+  implementation: the corridor, the half-block correction and the horizon.
+- **Code** (`phase-05` commit, all behind `simEdgeSearch=false`):
+  - `SimEdge` (the simulated edge evaluator) and `SimEdgePathFinder` (the search over cell × motion class);
+  - `PathNode.body`, and `PathingBehavior.playerBody()` plus a branch in `createPathfinder`;
+  - three settings: `simEdgeSearch`, `simEdgeMaxStates`, `simEdgeHorizon`;
+  - the live course `SimEdgeCourse` and harness arms `-Dostinato.legatotest.arms=simedge` in `LegatoLiveTest`;
+  - the analysis script `scripts/simedge-ab.py`.
+- **Tests:** `SimEdgeTest` (15 tests plus an env-gated benchmark) and `SimEdgeCourseTest` (2) pass. `settingsDefaultOff`
+  pins the default. Full suite: 1535 tests, 1 failed (the pre-existing B5 `SecondoTest`), 19 skipped.
+- **Evidence** (BENCHMARKS, Phase 05):
+
+| tier | result |
+|---|---|
+| S, headless, 60 queries × 2 | Horizon 32: 5 failures vs A*'s 4 (all timeouts), 1.5–3× plan time on hard terrain. Route price under the sim model 0.995–1.000 of A*'s. |
+| L, seed 71006, 96 laps | Reliability holds (96/96). Laps 3–9% slower on 3 of 4 legs. Sim-model prediction error 0.032 vs legacy 0.020. |
+| L, seed 71007, 96 laps | Reproduces 71006: reliability holds (96/96), ridges 7–10% and slalom 3% slower, bumps 0.8% faster, sim-model predictions slightly worse. |
+
+- **Classification:** no improvement on any pre-registered measure. Legacy behaviour is retained, and no default
+  changed. No baseline fixes were needed: legacy and executor code are untouched.
+
 ## Blockers (owner decisions or live tests)
 
 - **B1. Tier-L bounds for WALK, FALL, FLUID, and ladder climbing proper, and now all six modes for the 26.3 model.**
@@ -72,9 +98,11 @@
 
 ## Next task
 
-Phase 05, **not started**. Before it, the owner should decide:
-- whether to run B1–B3 on a 26.3 client;
-- whether B4's execution-tier comparison is required before the lattice continues.
+**Owner decision. Phase 06 was not started.** Open questions:
+- B1–B4 above are unchanged by Phase 05.
+- Should Phase 05 be retried with a sim of the executor that actually drives (the kinematic driver), or with planning
+  time hidden (planning ahead while moving)? D13 names both as the reasons it lost. Either would be new work.
+- Should the Phase 05 code stay on the branch default-off (current state), or be dropped?
 
 ## Previous status (Grok, REPORTED; kept as written)
 

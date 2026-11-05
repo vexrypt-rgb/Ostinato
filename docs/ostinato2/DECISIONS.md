@@ -203,3 +203,54 @@ Owner request, after Phase 04: "make sure any physics predictor like player sim 
 - The D11 Tier-L tolerance bounds (SPRINT 0.2235, SPRINT_JUMP 0.0983, CLIMB 0.2374) were measured with the 1.16 `PlayerSim`, and the historical trace keeps only residuals, so it cannot be replayed through the new model. For the current model those bounds are UNKNOWN until a 26.3 client re-run (blocker B1 grows).
 - `predictionTolerance` stays default-off, so no production default changed.
 - TenorClef (1.16.1) is a separate code line. This branch builds only 26.3, but porting this `PlayerSim` to a 1.16.1 bot would now be wrong for that version.
+
+## D13. Phase 05: simulation-derived A* is kept behind `simEdgeSearch` (default off); legacy A* stays the planner
+
+The task: improve A* with simulated walking, turning and jumping edges, keep legacy A* behind a flag, and adopt only
+on no reliability regression plus a reproducible gain in planning accuracy, route quality or execution efficiency.
+The audit (`PHASE05_AUDIT.md`) came first. The gate was pre-registered in BENCHMARKS before any live data.
+
+**What was built** (all new code behind `simEdgeSearch=false`; legacy A* and the executor unchanged):
+
+- `SimEdge` prices TRAVERSE, DIAGONAL and ASCEND links by running `PlayerSim` under a controller that copies the
+  executor: 32°/tick yaw cap, sprint rule, MovementAscend's jump rule. Each edge starts from the previous edge's
+  predicted end body (position, velocity, yaw, sprint, ground, jump cooldown). Edges it cannot simulate keep legacy
+  costs and make the body unknown, and an unknown body is priced as legacy's steady state.
+- `SimEdgePathFinder` searches over the state (cell, motion class), with 66 classes per cell (rest, 16 heading
+  sectors × walk/sprint × ground/air, unknown) and one representative body per state. Approximate dominance pruning is
+  bounded by `MOMENTUM_BOUND`. It falls back to `AStarPathFinder` on an empty result or an exception, and is capped by
+  `simEdgeMaxStates`.
+- `simEdgeHorizon` (32) limits simulation to edges near the search start. Without it, 20/60 headless queries timed
+  out.
+- Duration is the edge cost. Drift (summed `PredictionTolerance` bounds), air ticks and food are measured per edge
+  but not added to the cost.
+- Paths are rebuilt from the same `Movement` classes, so execution is legacy's in every arm.
+
+**Gate result: NO IMPROVEMENT. Legacy behaviour retained.**
+
+| criterion | seed 71006 | seed 71007 |
+|---|---|---|
+| Reliability (reached, faults, stuck keys, exceptions) | holds: 96/96, none, none, 0 | holds: 96/96, none, none, 0 |
+| 1. Lap ticks ≤ 0.97 on ≥ 2 legs, none ≥ 1.03 | **fails**: 1.03–1.09 slower on slalom, ridges, steps; bumps 0.995 | **fails**: ridges 1.07–1.10, slalom 1.03; bumps 0.992 |
+| 2. Sim-model prediction error ≥ 25% lower than legacy | **fails**: 0.032 vs 0.020, CI of difference below 0 | **fails**: paired difference −0.005, CI below 0 |
+| Route quality (Tier S, sim-model price) | 0.98–1.00 of A*'s, measured only by the sim model itself | — |
+
+**Why it did not help:**
+
+1. **Plan time is execution time here.** The first sim-edge plan waits about 13 ticks against 2–3 for A*, and on these
+   78-block legs that alone is a 3–4% loss. With the first plan's wait removed, ridges stay 2.5–7% slower on both
+   seeds. Slalom and bumps are about even, and steps is even on one seed and 2–3% faster on the other. Headless, the search is 1.5–3× slower than A* even with the horizon.
+2. **The sim does not model the live executor.** With `kinematicTravel` on, as in every arm, much of the lap is
+   driven by the kinematic driver, not by `MovementAscend`/`MovementTraverse`. Both models over-predict the jump legs
+   (ridges +21% legacy, +23% sim), and the sim is the further off. A search that optimises an executor it doesn't
+   model can choose routes that are worse live: more turning on most legs, and slower ridges. This is audit risk R2.
+3. **Little to gain on this action set.** Under its own model the sim search finds routes only 0–2% cheaper than A*'s
+   (headless and course). Walking, turning and one-block jumps are already priced well by the legacy closed forms
+   (legacy first-segment error 2% median).
+
+**Baseline fixes:** none were found. No legacy or executor code changed, so there is nothing to split out.
+
+**Kept:** the code, tests, course and analysis script stay on the branch, default off, as the measured negative
+result and as a base if the executor's own controller (the kinematic driver) is ever simulated instead. **Not
+done:** adding drift, risk or food to the cost; simulating descends, falls or parkour; reconstruction that hands the
+sim's end bodies to the executor. Each is a Phase 06+ owner decision, not part of this phase.

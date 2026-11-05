@@ -384,3 +384,168 @@ This is the Phase 04 command (5 reps, SHORT) with `OSTINATO_BENCH=physics263-rev
 
 - No live client.
 - The D11 Tier-L bounds were not re-measured for the new model (STATUS B1).
+
+## Phase 05: simulation-derived A* (2026-11-05, branch `ostinato2/claude-review`, local only)
+
+### Pre-registered gate (written before any live data)
+
+- **Arms** (`-Dostinato.legatotest.arms=simedge`, course `SimEdgeCourse`: slalom, ridges, bumps, steps): A legacy A*;
+  B `simEdgeSearch`; C legacy again; D `simEdgeSearch` again. Latin-square order, 6 reps, seed 71006. A second run on
+  seed 71007 is the reproducibility check. Everything else is the same in all arms (Legato and kinematicLine off).
+- **Reliability (must hold, both runs):** reached(B) ≥ reached(A) and reached(D) ≥ reached(C); no lap with stuck keys;
+  no fault code in B/D that A/C never show; simedge exceptions = 0.
+- **Noise control:** C/A per-leg median ratios. If any leg's A/A' spread exceeds 3%, a ticks claim on that leg needs
+  its effect to exceed that spread.
+- **Improvement (at least one, in both replications B/A and D/C, and in both seeds):**
+  1. Execution efficiency: paired lap-ticks ratio ≤ 0.97 on ≥ 2 legs, no leg ≥ 1.03.
+  2. Planning accuracy: on complete first plans, the median |predicted − actual| / actual of the sim model (predSim,
+     against lap ticks minus planWait) is ≥ 25% lower than the legacy model's (predLegacy), with a paired bootstrap
+     95% CI of the difference excluding 0. This is measured on all laps (the models priced on the same path).
+  3. Route quality: none claimed separately; the headless bench reports it under the sim model (Tier S only).
+- **Otherwise:** classified "no improvement". `simEdgeSearch` stays off (it is off by default either way), and the
+  result is documented.
+- Baseline fixes found during the phase go in their own commits and apply to every arm.
+- **Addendum (2026-11-05 05:10, before the counted run).** An aborted first attempt, 3 laps, showed that the
+  first plan is usually a partial segment (`complete=false`), so measure 2 would have few samples. The harness
+  now also records `segTicks`, the lap tick at which the feet first stand in the first plan's last cell.
+  `simedge-ab.py` adds a "first segment" accuracy table, with actual = segTicks − planWait, over every lap that got
+  there. Measure 2 is now judged on the first-segment table, with the same 25% / CI rule, because it covers more laps.
+  The complete-plan table is still reported and must not point the other way: its CI must not lie entirely below 0.
+  A second attempt was aborted after 6 laps: the first version of `segTicks` (feet in the cell) missed even complete
+  plans, because a lap ends within 0.8 of the goal centre. `segTicks` now uses the lap's own arrival test: within 0.8
+  horizontally of the cell centre and within 1 block of its height. Only `segTicks` values were inspected, not
+  accuracy. Neither aborted attempt (3 + 6 laps) is counted.
+
+### Headless (Tier S): `SimEdgeTest.benchmark`, PathBench queries, 2 reps, 10 s budget per query
+
+Command: `OSTINATO_SIMEDGE_BENCH=1 OSTINATO_BENCH_REPS=2 OSTINATO_SIMEDGE_HORIZON=<h> gradlew test -Postinato_bench --tests baritone.pathing.calc.SimEdgeTest.benchmark`.
+Raw tables: `build/pathbench/simedge-h0.md` and `simedge-h32.md` (not committed). The A* rows are the same run's
+legacy arm.
+
+| run | planner | failures / 60 | nodes/s | MB allocated | median ms | p95 ms |
+|---|---|---|---|---|---|---|
+| 1 | A* (legacy) | 4 (BREAK_PLACE LONG ×4) | 136,068 | 3,431 | 115.0 | 10,011.8 |
+| 1 | sim-edge, no horizon | **20** (HILLS MED 3, HILLS LONG 4, CAVES LONG 1, WATER LONG 4, BREAK_PLACE MED 4, LONG 4) | 36,576 | 410,725 | 1,872.3 | 10,008.6 |
+| 2 | A* (legacy) | 4 (BREAK_PLACE LONG ×4) | — | — | 113.5 | 10,006.5 |
+| 2 | sim-edge, horizon 32 | **5** (BREAK_PLACE MED 1, LONG 4) | 78,298 | 104,100 | 505.3 | 9,999.7 |
+
+- All sim-edge failures are timeouts. There were no exceptions, no fallbacks and no capped searches.
+- Run 1 showed the cost of simulating every edge. Run 2's horizon is an algorithmic change (PHASE05_AUDIT §11).
+- The one extra run-2 failure is a BREAK_PLACE MEDIUM query. A* already needs a median 4.7 s there, and sim-edge's
+  median is 8.3 s, so one query passed the 10 s budget. In the client the planner has Baritone's own short timeouts
+  and returns its best partial path. Headless plan time is a cost, not a live reliability result.
+- Plan time with horizon 32 is about 1.5–3× A*'s on the hard terrains (HILLS LONG median 5.1 s against 2.6 s) and
+  close to A* on FLAT.
+
+Route quality: every path that both planners found in run 2 is re-priced under the sim model from an unknown start,
+same evaluator for both.
+
+| terrain | pairs | A* path, sim price | sim-edge path, sim price | median ratio | turns A* / sim-edge |
+|---|---|---|---|---|---|
+| FLAT | 12 | 998.8 | 999.0 | 1.0000 | 0.5 / 0.6 |
+| HILLS | 12 | 1269.3 | 1263.7 | 0.9950 | 19.1 / 20.3 |
+| CAVES | 12 | 1624.7 | 1622.6 | 0.9993 | 24.1 / 24.4 |
+| WATER | 12 | 1114.4 | 1112.0 | 0.9993 | 5.2 / 5.9 |
+| BREAK_PLACE | 6 | 855.3 | 855.6 | 0.9999 | 0.4 / 0.8 |
+
+Run 1 (no horizon) gave HILLS 0.9845, CAVES 0.9917, WATER 0.9893 on its fewer completed pairs (5, 11, 8).
+
+Live course, headless (`SimEdgeCourseTest`, unknown start, sim price):
+
+| leg | A* | sim-edge | ratio |
+|---|---|---|---|
+| slalom | 344.75 | 338.79 | 0.9827 |
+| ridges | 333.20 | 329.26 | 0.9882 |
+| bumps | 297.62 | 298.34 | 1.0024 |
+| steps | 323.56 | 317.53 | 0.9814 |
+
+These are the sim model's own prices, so they show only that the search optimises what it measures. Whether the
+executor gets the time back is the live A/B's question.
+
+### Live A/B (Tier L), seed 71006, 6 reps, 96 laps
+
+Command (PowerShell): `$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40
+-Dostinato.testHarness=true -Dostinato.legatotest=true -Dostinato.legatotest.exit=true
+-Dostinato.legatotest.arms=simedge -Dostinato.legatotest.reps=6 -Dostinato.seed=71006'; .\gradlew.bat
+:fabric:runClient -PclientXmx=1536M` on the 26.3 dev client, Peaceful. A fresh `fabric/run/client/options.txt`
+needs `onboardAccessibility:false`, or the harness waits behind the onboarding screen. Analysis: `python scripts/simedge-ab.py build/simedge-live-71006.txt`,
+which holds the counted run's `LEGATOTEST` lines only. The client's `legatotest-result.txt` also holds the 9 aborted
+laps, so it was not used. Full output: `build/simedge-live-71006-analysis.md` (not committed).
+
+**Reliability:** A 24/24, B 24/24, C 24/24, D 24/24 reached. No fault codes in any arm, no stuck keys.
+`simedge searches=59 fallbacks=0 capped=0 exceptions=0`. Holds.
+
+**Lap ticks**, paired by leg and rep, median ratio with bootstrap 95% CI:
+
+| leg | B/A | D/C | C/A (noise) | turned A/B | jumps A/B |
+|---|---|---|---|---|---|
+| slalom | 1.039 (1.028–1.208) | 1.035 (1.025–1.044) | 1.001 (0.947–1.013) | 552/686 | 0/0 |
+| ridges | 1.090 (1.059–1.116) | 1.068 (1.060–1.078) | 0.993 (0.982–1.015) | 1246/1600 | 9/8 |
+| bumps | 0.997 (0.995–1.000) | 0.995 (0.990–1.000) | 1.000 (0.998–1.003) | 328/663 | 0/1 |
+| steps | 1.036 (1.025–1.045) | 1.029 (1.022–1.045) | 1.000 (0.998–1.005) | 734/1159 | 3/5 |
+
+- The C/A noise is within 1% at the median on every leg; one slalom pair reached 0.947.
+- The sim-edge arms are **slower** on three legs, in both replications, and even on bumps. Measure 1 fails in the
+  wrong direction (≥ 1.03 on slalom, ridges and steps).
+- Diagnostic (not a gate measure): most of the slowdown is planning. The sim search's first plan waits a median
+  12–14 ticks against 2–3 for A*. With that wait removed, the ratios are slalom 1.004 / 0.999, ridges 1.051 / 1.025,
+  bumps 0.993 / 0.992, steps 0.997 / 0.997. Driving is even except on ridges, which stay slower, and bumps, which
+  gain 0.7%, well under the 3% bar.
+- Sim-edge laps mostly turn more: arm B has 1.2–2.0× A's `turned` degrees on every leg; arm D has more than C on
+  ridges, bumps and steps but fewer on slalom (480 vs 552). They jump about the same.
+
+**Planning accuracy**: relative error of predicted ticks against actual ticks, both models priced on the same first
+plan from the lap's start body.
+
+| table | set | n | legacy model | sim model | median paired difference (legacy − sim) | 95% CI |
+|---|---|---|---|---|---|---|
+| first segment (gate) | all arms | 93 | 0.020 | 0.032 | −0.006 | −0.014..−0.004 |
+| first segment | legacy arms A,C | 47 | 0.068 | 0.104 | −0.032 | −0.032..−0.012 |
+| first segment | sim arms B,D | 46 | 0.011 | 0.011 | −0.005 | −0.005..−0.003 |
+| complete plans | all arms | 85 | 0.020 | 0.032 | −0.007 | −0.015..−0.005 |
+
+- The sim model is slightly **less** accurate than the legacy closed-form costs. The CI excludes 0 on the wrong
+  side, so measure 2 fails.
+- By leg, the first-segment signed bias (legacy / sim) is: slalom +0.001 / +0.008, ridges +0.209 / +0.230,
+  bumps −0.008 / +0.005, steps +0.074 / +0.104.
+- Both models over-predict the jump legs, by about 20% on ridges and 7–10% on steps. The executor (with
+  `kinematicTravel` on, as in every arm) crosses ridges faster than either model's MovementAscend-shaped jump. The
+  sim copies `MovementAscend`'s jump rule, not the kinematic driver, which is risk R2 of the audit.
+
+### Live A/B (Tier L), seed 71007, 6 reps, 96 laps (reproducibility run)
+
+Same command with `-Dostinato.seed=71007`. Analysis: `build/simedge-live-71007.txt` and `-analysis.md` (not committed).
+
+**Reliability:** 24/24 in every arm. No faults, no stuck keys. `simedge searches=58 fallbacks=0 capped=0
+exceptions=0`. Holds.
+
+| leg | B/A | D/C | C/A (noise) | B/A, D/C without first-plan wait (diagnostic) | turned A/B |
+|---|---|---|---|---|---|
+| slalom | 1.029 (0.995–1.047) | 1.032 (1.025–1.041) | 0.996 (0.920–1.006) | 0.996 / 1.000 | 612/652 |
+| ridges | 1.102 (1.050–1.130) | 1.070 (1.056–1.095) | 1.020 (0.977–1.071) | 1.071 / 1.034 | 1320/1524 |
+| bumps | 0.992 (0.985–0.998) | 0.992 (0.983–1.000) | 1.000 (1.000–1.002) | 0.990 / 0.990 | 354/714 |
+| steps | 1.014 (1.003–1.022) | 1.005 (0.998–1.021) | 1.000 (0.990–1.000) | 0.980 / 0.971 | 748/1339 |
+
+Planning accuracy (paired difference legacy − sim error; negative means the sim model is worse):
+
+| table | n | legacy | sim | difference | 95% CI |
+|---|---|---|---|---|---|
+| first segment (gate), all arms | 94 | 0.063 | 0.059 | −0.005 | −0.014..−0.005 |
+| complete plans, all arms | 85 | 0.017 | 0.029 | −0.006 | −0.014..−0.005 |
+
+- The pattern of seed 71006 repeats: slower on ridges and slalom, about even on bumps (−0.8%), and per-lap
+  predictions slightly worse under the sim model.
+- One difference: with the first plan's wait removed, steps driving is 2–3% faster here (CIs below 1), where seed
+  71006 showed 0.997. That gain is smaller than the planning wait it costs, it did not reproduce across seeds, and
+  it is a diagnostic, not a gate measure.
+
+### Phase 05 gate classification
+
+| criterion | 71006 | 71007 | verdict |
+|---|---|---|---|
+| Reliability | holds | holds | **no regression** |
+| 1. Execution efficiency | fails (1.03–1.09 slower on 3 legs) | fails (ridges 1.07–1.10, slalom 1.03) | fail |
+| 2. Planning accuracy | fails (CI of difference below 0) | fails (CI below 0) | fail |
+| 3. Route quality | Tier S only: 0.98–1.00 under the sim model's own price | — | not claimed |
+
+**Result: NO IMPROVEMENT.** `simEdgeSearch` stays off, and legacy A* is the planner (DECISIONS D13).
