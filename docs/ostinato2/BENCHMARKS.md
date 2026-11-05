@@ -177,3 +177,161 @@ beam 12/12, weighted 12/12, physics 12/12, chosen beam, dev unique 0; shared med
 ```
 
 Max divergence 0.000000. Three trials per case. The bench test ran the corpus twice and the discrete columns matched. Latency and allocated bytes are recorded per trial in `docs/ostinato2/raw/phase03-trials.csv` (252 data rows) and are not golden. Physics rows use expansions `-1` and divergence `na`. Physics missed held-out `gap-2-far` and `corner-long` inside node budget 1500. The lattice tick cap of 400 did not bind. Full suite was not run.
+
+---
+
+## Claude review reruns (2026-11-04, branch `ostinato2/claude-review`, local only)
+
+Same machine and toolchain as above. Priority BelowNormal, `--max-workers=2`, `-x nativeHost`, no client. Raw files are in `docs/ostinato2/raw/review/`. Seeds: the lattice and PathBench worlds are deterministic and hand-built or fixed, so there is no world seed. The bootstrap seed is `0x0A571A70` (10,000 resamples). The random flag-off drift test uses seed `0x040D21F7`.
+
+### Phase 00 at the Phase 03 endpoint, 5 reps (VERIFIED, Tier-S)
+
+```
+$env:OSTINATO_BENCH='phase00-review'; $env:OSTINATO_BENCH_REPS='5'; $env:OSTINATO_BENCH_ONLY='SHORT'
+gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2G test -x nativeHost --tests *.PathBenchTest --tests *.PlayerSimTest --tests *.SimTraceTest --tests *.TravelStackTest --tests *.TickSimTest --tests *.LineWalkTest --tests *.MomentumJumpCostTest --tests *.LadderGrabTest --tests *.SteeredFallTest --tests *.JumpSearchTest --tests *.PhysicsPathfinderTest --tests *.SecondoTest
+```
+
+- Result: 65 passed, 1 failed (`SecondoTest`, F-M6, a pre-existing failure), 2 skipped.
+- The node/cost/path fingerprint is **identical** to Grok's `raw/phase00-short-fingerprint.txt`.
+- Raw files: `raw/review/phase00-review-raw.csv`, `phase00-review-fingerprint.txt`, `phase00-review.md`.
+- Spread of the per-rep median ms over the 5 reps:
+
+  | Terrain | Min | Max | Grok (1 rep, REPORTED) |
+  |---|---|---|---|
+  | FLAT | 0.298 | 0.311 | 0.56 |
+  | HILLS | 4.064 | 4.287 | 4.59 |
+  | CAVES | 1.366 | 1.395 | 1.42 |
+  | WATER | 2.730 | 3.141 | 2.84 |
+  | BREAK_PLACE | 68.2 | 74.7 | 81.5 |
+
+- Grok's FLAT and BREAK_PLACE values fall outside this spread, most likely because of warmup. Timing is not golden; only the fingerprint is.
+
+### Phase 03 review bench, 20 trials (VERIFIED, Tier-S)
+
+```
+$env:OSTINATO_BENCH='phase03-review'; $env:OSTINATO_LATTICE_TRIALS='20'; $env:OSTINATO_WRITE_DOCS='1'
+gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2G test -x nativeHost --tests baritone.lattice.LatticeStockAStarTest
+```
+
+- Raw files:
+  - `raw/review/phase03-trials.csv`: 28 cases × 3 methods × 20 trials.
+  - `raw/review/phase03-summary.txt`: the decision, per-case rows and the `stats` lines.
+  - `raw/review/phase03-stock.csv` and `phase03-stock-summary.txt`: stock A*, 28 cases × 2 configs × 20 trials.
+- Decision under D9's rule: **CONTINUE, PROVISIONAL** (see DECISIONS D9 status). Reproducible: the discrete columns are identical across trials. Divergence 0, which is self-consistency only.
+- Latency, nearest-rank percentiles pooled over every trial (ms):
+
+  | Split | Method | Success | Wilson 95% | p50 | p95 | p99 |
+  |---|---|---|---|---|---|---|
+  | dev | beam | 12/12 | [0.758, 1] | 0.276 | 1.375 | 1.853 |
+  | dev | weighted A* | 12/12 | [0.758, 1] | 0.086 | 0.582 | 0.962 |
+  | dev | PhysicsPathfinder | 12/12 | [0.758, 1] | 2.302 | 23.394 | 32.241 |
+  | dev | stock A* | 12/12 | [0.758, 1] | 0.234 | 0.639 | 1.030 |
+  | dev | stock A* + parkour | 12/12 | [0.758, 1] | 0.809 | 1.896 | 2.958 |
+  | held | beam | 16/16 | [0.806, 1] | 0.137 | 0.929 | 1.175 |
+  | held | weighted A* | 16/16 | [0.806, 1] | 0.026 | 0.200 | 0.211 |
+  | held | PhysicsPathfinder | 14/16 | [0.640, 0.965] | 1.944 | 33.380 | 34.801 |
+  | held | stock A* | 16/16 | [0.806, 1] | 0.131 | 0.344 | 0.561 |
+  | held | stock A* + parkour | 16/16 | [0.806, 1] | 0.737 | 1.468 | 1.720 |
+
+- Fisher two-sided, beam vs physics success: held p = 0.4839, dev p = 1.0.
+- Bootstrap 95% CI of the median travel-tick ratio vs physics:
+
+  | Split | Beam | Weighted |
+  |---|---|---|
+  | dev | [0.944, 1.286] | [1.028, 1.500] |
+  | held | [0.920, 1.241] | [1.000, 1.241] |
+
+- Shared dev median expansions: beam 102, weighted 27.5, physics 76.5.
+- Stock A* travel is the A* cost estimate, NOT_EQUIVALENT to simulated ticks. Stock without parkour bridges gaps by placing blocks (gap-2: estTicks 74.3); with parkour it jumps (26.6).
+
+### Phase 04 per-mode prediction error
+
+**Tier-L (historical live 26.3 SIMTRACE traces, 2026-10-14; no client run in this review)**
+
+```
+python docs/ostinato2/tools/live_trace_modes.py <Ostinato-bastion-263>/fabric/run/client/simtrace docs/ostinato2/raw/review/phase04-live-trace-modes.csv
+```
+
+One-step Euclidean error (blocks):
+
+| Mode | n | p50 | p95 | p99 | max | ticks over 0.05 |
+|---|---|---|---|---|---|---|
+| sprint-ground | 4008 | 0.0013 | 0.1437 | 0.2235 | 0.2448 | 633 |
+| sprint-jump-air | 9477 | 0.0003 | 0.0105 | 0.0983 | 0.6305 | 168 |
+| climb-jump | 739 | 0.0003 | 0.1737 | 0.2374 | 0.5357 | 96 |
+
+- Ticks with yaw lag ≤ 1° have p99 ≤ 0.098; yaw lag dominates the tail.
+- Open-loop end error per run, p50: jump 0.125, climb 0.813, chain 2.787.
+- Not covered by any trace: walking, falling without input, fluids, and ladder climbing proper.
+
+**Tier-S cross-model (PlayerSim 1.16 model vs PPE 26.3 model, identical terrain, held input)**
+
+```
+gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2G test -x nativeHost --tests baritone.physics.CrossModelModesTest
+```
+
+| Mode | Ticks | Max open-loop distance | Max per-tick displacement difference |
+|---|---|---|---|
+| walk | 20 | 0.000001 | 0.000000 |
+| sprint | 20 | 0.000000 | 0.000000 |
+| sprint-jump | 20 | 0.000004 | 0.000005 |
+| fall (from 20 blocks) | 30 | 0.000006 | 0.000007 |
+| water walk | 20 | 0.000000 | 0.000000 |
+| ladder jump | 20 | 0.000004 | 0.000007 |
+
+- Raw files: `raw/review/phase04-crossmodel.csv` (every tick) and `phase04-crossmodel-summary.txt`.
+- The water and ladder cases engage their mechanics: water walk covers about 0.1 block/tick vs about 0.22 for a land walk, and the ladder rises about 0.118/tick.
+
+**Consumer overhead (VERIFIED, Tier-S microbench)**
+
+```
+$env:OSTINATO_BENCH='phase04'
+gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2G test -x nativeHost --tests baritone.pathing.physics.PredictionToleranceTest
+```
+
+Method: 3000 batches of 200 ticks after 500 warmup batches, with the paths interleaved ABAB. One sample is a batch's mean ns per tick. Raw data: `raw/review/phase04-overhead.csv`.
+
+| Path | p50 ns | p95 ns | p99 ns |
+|---|---|---|---|
+| SimTrace observe+commit, flag off | 1698.0 | 2250.5 | 3234.0 |
+| SimTrace observe+commit, flag on | 1704.5 | 2270.0 | 3593.0 |
+| PhysicsTravel predict+drift, flag off | 105.5 | 132.5 | 186.0 |
+| PhysicsTravel predict+drift, flag on | 109.0 | 135.0 | 202.5 |
+
+- Flag on adds at most 0.36 µs per tick at p99, against a 50 ms client tick.
+- The flag-off path differs from the pre-Phase-04 code by one null check per call (SimTrace) and two settings reads per tick (PhysicsTravel). The bench does not include the settings reads.
+- Real client tick-time p95/p99 is Tier-L and was **not measured** (blocker B2 in STATUS).
+
+### Planner regression check at the Phase 04 HEAD (VERIFIED, Tier-S)
+
+The same command as the Phase 00 5-rep run, with `OSTINATO_BENCH=phase04-review` and `*.PredictionToleranceTest` and `*.InputArbiterTest` added:
+
+- Result: 85 tests, 1 failed (`SecondoTest`, F-M6), 3 skipped.
+- The fingerprint is **identical** to the Phase 00 baseline.
+- Raw files: `raw/review/phase04-review-raw.csv`, `phase04-review-fingerprint.txt`, `phase04-review.md`.
+
+Per-rep median ms (5 reps):
+
+| Terrain | Phase 03 endpoint | Phase 04 HEAD |
+|---|---|---|
+| FLAT | 0.298–0.311 | 0.303–0.511 (one outlier rep) |
+| HILLS | 4.064–4.287 | 4.005–4.276 |
+| CAVES | 1.366–1.395 | 1.343–1.418 |
+| WATER | 2.730–3.141 | 2.660–2.822 |
+| BREAK_PLACE | 68.2–74.7 | 66.8–68.9 |
+
+- Pooled p95 over all 100 timed queries: 76.96 ms at the Phase 03 endpoint, 69.09 ms at Phase 04.
+- Phase 04 does not touch the planner, so no regression is expected, and none is seen.
+
+### Full suite
+
+Command: `gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2G test -x nativeHost --continue`
+
+| Commit | Tests | Failed | Skipped | Notes |
+|---|---|---|---|---|
+| Phase 03 endpoint `09631d874` | 1465 | 1 | 18 | `SecondoTest`, F-M6 |
+| Phase 04 HEAD, before the catalog fix | 1482 | 3 | 20 | `SecondoTest`, plus `SettingCatalogTest.everySettingHasACategory` and `.descriptionsJsonIsUpToDate`, both for the new setting. Fixed in `54423c807`. |
+| Phase 04 HEAD (`54423c807` tree) | 1482 | 1 | 20 | `SecondoTest` only |
+
+- The two extra skips are the opt-in benches `LatticeStockAStarTest.reviewBench` and `PredictionToleranceTest.overheadBench`.
+- After the suite ran, `git status` showed no change under `docs/ostinato2/raw/` (F-M4 fixed).

@@ -245,4 +245,44 @@ Each fix is a separate `review-fix(phase-0X): ...` commit:
 
 ## 7. TenorClef
 
-TenorClef consumes Ostinato as a committed jar (`libs/baritone-unoptimized-fabric-ostinato-26.3.jar`), with a `-PostinatoJar` override. Compile result against the endpoint jar: *pending at the time of this commit; recorded in the post-fix section.*
+TenorClef consumes Ostinato as a committed jar (`libs/baritone-unoptimized-fabric-ostinato-26.3.jar`), with a `-PostinatoJar` override. Compile result against the endpoint jar: *pending at the time of this commit; recorded in §8.*
+
+## 8. Post-fix status (added after the fixes)
+
+### TenorClef (§7 result)
+
+`gradlew --offline --no-daemon --max-workers=2 :26.3:compileJava -PostinatoJar=<Ostinato-o2review>/fabric/build/libs/baritone-fabric-1.26.0-7-g09631d874.jar`, run on TenorClef `983cf317`: `BUILD SUCCESSFUL in 12m 18s`, exit 0. **VERIFIED, Tier-U (compile only).**
+
+The Phase 04 commits add one `Settings` field and one class. No API is removed or changed, so the compile was not repeated against the Phase 04 jar. That is an inference, not a run.
+
+### Correction to §4
+
+The Phase 02 audit said `ComparisonHarness` and `LatticeSearch` "both consume" `PhysicsTransition`. They consume the concrete `PlayerSimPhysics`; no code is typed against the interface (`grep -rn PhysicsTransition src` finds only the interface and its one implementation). The types are still minimal and used, so the verdict holds. The interface itself was not promoted in Phase 04 (DECISIONS D11).
+
+### Fix outcomes
+
+| Finding | Outcome | Commit | Evidence |
+|---|---|---|---|
+| F-H1: no comparison with current navigation | **Fixed at planner tier.** Stock A* rows on all 28 lattice worlds, default and parkour, 20 trials. Execution tier is impossible headlessly (D2), so it is a blocker (STATUS B4). | `83f8a134d` | `raw/review/phase03-stock*` |
+| F-H2: "observed" is the predictor | **Fixed as far as headless allows.** A per-mode check now exists: Tier-L from the historical 26.3 SIMTRACE traces for sprint, sprint-jump and climb-jump, and Tier-S PlayerSim-vs-PPE cross-model for walk, sprint, sprint-jump, fall, water and ladder. Missing Tier-L is recorded as a blocker (STATUS B1). | `1edef6005` | `raw/review/phase04-*` |
+| F-H3: weak statistics | **Fixed.** Expansion counter, p50/p95/p99, Wilson, Fisher, a seeded paired bootstrap and 20 trials. D9 is marked PROVISIONAL in DECISIONS. | `b1df1fc41` | `raw/review/phase03-summary.txt` |
+| F-M1: lease leak | **Fixed.** `releaseAll` runs on world change, and `releaseInputLeases` runs on executor cancel and segment discard. | `665b8dc7e` | `InputArbiterTest`, 12/12 |
+| F-M2: missing tests | **Fixed.** Timeout-without-ack (1200 ticks), never two owners (200 seeds × 400 steps), and release tests. | `665b8dc7e` | same |
+| F-M3: bypass writes | Recorded, not fixed (later-phase migration). | — | STATUS B6 |
+| F-M4: test overwrote docs | **Fixed.** Writes go to `build/` unless `OSTINATO_WRITE_DOCS=1`. | `b1df1fc41` | full suite leaves `docs/` clean |
+| F-M5: no variance | **Fixed.** 5 reps at the endpoint, with per-terrain spread; the fingerprint is identical. | `1443357d3` | `raw/review/phase00-review*` |
+| F-M6: SecondoTest red | Not fixed. It is out of scope and an owner decision. | — | STATUS B5 |
+| F-L1: git hygiene | Mitigated by the snapshot commit. | `09631d874` | — |
+| F-L2: implicit version | **Fixed.** MC 26.3 is recorded. | DECISIONS D10 | — |
+| F-L3, F-L4 | No action needed. | — | — |
+
+### Verdicts after fixes
+
+| Phase | Before | After | Remaining limit |
+|---|---|---|---|
+| 00 baseline | PASS WITH FIXES | **PASS** | Planner tier only. No execution baseline exists (D2). |
+| 01 input ownership | PASS WITH FIXES | **PASS** (flag off) | Flag-on behavior in a world is UNKNOWN (L), and there are 31 bypass writers. |
+| 02 contracts | PASS WITH FIXES | **PASS WITH FIXES** | The `PhysicsTransition` interface has no consumer besides its one implementation. "Observed" in `ComparisonHarness` is still self-consistency; the per-mode check lives in Phase 04. |
+| 03 lattice | PASS WITH FIXES | **PASS, decision PROVISIONAL** | CONTINUE at planner tier, but the evidence is weak (Fisher p = 0.48, ratio CIs include 1.0), and stock A* solves everything too. Execution tier is a blocker. |
+
+The suite and benchmark reruns after the fixes are recorded in BENCHMARKS ("Claude review reruns").
