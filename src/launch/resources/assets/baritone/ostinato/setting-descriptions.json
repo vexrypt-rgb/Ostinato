@@ -452,5 +452,6 @@
  "maestroTurnCost": "With maestro on: ticks charged for turning around (180 degrees); a turn of angle a costs this * 6 * (a/180)^2, so a right angle costs 1.5 ticks at 1.0 and going straight costs nothing.",
  "maestroMaxStates": "With maestro on: the most search states (cell and heading) one search may create before it stops with its best partial path, as a timed-out search does. 0 means no cap.",
  "inputArbitration": "Ostinato: when on, the fall controller submits one complete key frame per tick to the input arbiter. Off, it writes keys directly, as before.",
- "latticeExperiment": "Ostinato: when on, the kinodynamic lattice experiment is allowed to run. Path execution, A*, and the kinematic controllers do not read this. The lattice benchmark calls the prototype directly, so the default stays off."
+ "latticeExperiment": "Ostinato: when on, the kinodynamic lattice experiment is allowed to run. Path execution, A*, and the kinematic controllers do not read this. The lattice benchmark calls the prototype directly, so the default stays off.",
+ "predictionTolerance": "Ostinato: when on, SimTrace and PhysicsTravel judge a predicted tick against the per-mode bounds in PredictionTolerance.MEASURED instead of their fixed constants (0.05 Euclidean, 0.1 summed axes). Off keeps the old checks. Several bounds are Tier-S only, so the default stays off."
 }
