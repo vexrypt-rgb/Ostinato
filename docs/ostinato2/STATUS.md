@@ -1,8 +1,8 @@
 # Ostinato 2.0 — status
 
-Phase: **01 input ownership**. Phase 02 was not started.
+Phase: **02 shared contracts**, rechecked on `combine/main-maze-ppe` after the maze and predictive-physics merge.
 
-These notes were copied onto `combine/main-maze-ppe` (`Ostinato-combined`) with the Phase 01 sources. That branch also has `origin/main`, `maze-backrooms-expand` (including the maze survival working tree), and `feat/predictive-physics`. It was not pushed. `Ostinato-secondo` was left dirty.
+These notes now live on that branch in `Ostinato-combined`. It has `origin/main`, `maze-backrooms-expand` (including the maze survival working tree), `feat/predictive-physics`, and Phase 01. `Ostinato-secondo` was left dirty.
 
 Gate: **PASS**.
 
@@ -33,6 +33,14 @@ None. Wiring fall did not require a `PathExecutor` change.
 
 Gate was **PARTIAL**. The SHORT planner baseline is in `BENCHMARKS.md`. Headless `PathExecutor` is no. The headless `PlayerSim` tick-driver assignment was superseded before any of it was written. See `DECISIONS.md` D7.
 
+## Recheck on the combined tree (2026-11-04)
+
+Tree: `Ostinato-combined`, branch `combine/main-maze-ppe`. No client. `OSTINATO_BENCH` unset. Command and counts are in `BENCHMARKS.md`.
+
+- Phase 00: `stockAStarMatchesGoldenCosts` was re-run on this tree. Gate stays **PARTIAL**. Execution ticks, CPU, live prediction error, and MEDIUM/LONG timing were not re-measured. Headless `PathExecutor` is still no.
+- Phase 01: `InputArbiterTest` and `SettingCatalogTest` were re-run here. Gate stays **PASS**. Flag-on fall in a world is still **UNKNOWN** (L). `inputArbitration` still defaults to false.
+- Phase 02: gate **PASS** for the supported subset. `physics-search` and `trivial-sprint` share one PlayerSim world, one settled start, and the same budgets, and both reach the flat goal in 18 ticks (end `0.5000 0.0000 5.2136`). PPE ran and is labeled `NOT_EQUIVALENT` (`PPE-26.3-living-tick`, held input, feet y=64). Stock A* is named and not executed. Report: `docs/ostinato2/raw/phase02-flat.txt`.
+
 ## Next
 
-Phase 02 was not started.
+Phase 03 was not started.

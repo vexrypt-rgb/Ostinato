@@ -1,6 +1,6 @@
 # Ostinato 2.0 — decisions
 
-Phase 00 recorded the baseline. Phase 01 added the input arbiter. D7 supersedes the headless tick-driver assignment. Phase 02 was not started.
+Phase 00 recorded the baseline. Phase 01 added the input arbiter. D7 supersedes the headless tick-driver assignment. D8 is the Phase 02 comparison on the combined tree. D5's sentence that PPE is absent applied to `feature/secondo-v1` before the merge.
 
 ## D1. Baseline commit is `origin/main`, not the dirty 1.16.1 checkout
 
@@ -43,7 +43,15 @@ Phase 01 adds `InputArbiter` and connects only `FallController`. `Settings.input
 
 `claim` bumps that owner's epoch. Emergency beats a normal claim, then higher priority, then the smaller owner id. A loser who keeps a resource keeps their epoch. A loser left with nothing goes stale. `requestCancel` does not drop keys. `confirmRelease` and `fail` do, and they record `RELEASED` and `FAILED` separately.
 
-No change to A*, costs, travel-stack order, process priority, or `PathExecutor`. Phase 02 was not started.
+No change to A*, costs, travel-stack order, process priority, or `PathExecutor`.
+
+## D8. Phase 02 compares through contracts and does not rewrite physics
+
+On `combine/main-maze-ppe`, PPE is in the tree. The equivalent pair is still `PlayerSim` (semantics `PlayerSim-1.16-land-tick`): `PhysicsPathfinder.plan` replayed through `PlayerSim.tick`, and a trivial sprint on the same settled sim, same flat world, same goal, same tick budget 200 and node budget 1500.
+
+PPE is called through `Predictor` and labeled `NOT_EQUIVALENT`. Its tick is the 26.3 living model, its floor is y=64 rather than the PlayerSim floor at y=-1, and its input is one chord held for 40 ticks. Stock A* is labeled `NOT_EQUIVALENT` and is not executed: `calculate0` cost is not a PlayerSim tick, and `PathExecutor` is not headless (D2).
+
+No edit to `PlayerSim`, `PhysicsPathfinder`, `PathExecutor`, `PathingBehavior`, `AStarPathFinder`, `InputOverrideHandler`, or `TravelStack`. Robustness margins are null. Phase 03 was not started.
 
 ## Assignment that was superseded
 

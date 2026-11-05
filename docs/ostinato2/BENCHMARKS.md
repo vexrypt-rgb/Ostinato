@@ -123,3 +123,32 @@ From `Ostinato-secondo` at `2f4176049` plus the uncommitted Phase 01 edits:
 | `SecondoTest` | 13 | 0 | 0 | U |
 
 `PhysicalInputTest` and `SettingCatalogTest` were not in the phase 00 command. They passed here. No live (L) fall was run.
+
+## Recheck after the merge (2026-11-04, VERIFIED)
+
+From `Ostinato-combined` on `combine/main-maze-ppe`, dirty with the Phase 02 sources. No `java` or `javaw` before the build. BelowNormal. `OSTINATO_BENCH` unset. `-x nativeHost`. Offline, no daemon, max workers 2.
+
+```
+.\gradlew.bat --offline --no-daemon --max-workers=2 -x nativeHost test --tests baritone.contract.ComparisonHarnessTest --tests baritone.utils.InputArbiterTest --tests baritone.gui.SettingCatalogTest --tests baritone.pathing.calc.PathBenchTest.stockAStarMatchesGoldenCosts --tests baritone.pathing.physics.PhysicsPathfinderTest
+```
+
+`BUILD SUCCESSFUL` in 34s. 16 tests, 0 failures, 0 errors, 0 skipped.
+
+| Class | Tests | Fail | What |
+|---|---|---|---|
+| `PathBenchTest.stockAStarMatchesGoldenCosts` | 1 | 0 | Phase 00. Golden cost and node lines still match. 10.5s. Timing table was not re-measured |
+| `InputArbiterTest` | 8 | 0 | Phase 01. Same cases as the first pass |
+| `SettingCatalogTest` | 3 | 0 | Phase 01. Categories and descriptions, including the merged settings |
+| `PhysicsPathfinderTest` | 3 | 0 | Flat, gap, corner. Unchanged class |
+| `ComparisonHarnessTest` | 1 | 0 | Phase 02. Report matches `src/test/resources/contract/flat-sprint.txt` |
+
+Phase 02 report, also in `docs/ostinato2/raw/phase02-flat.txt`:
+
+```
+physics-search EQUIVALENT PlayerSim-1.16-land-tick executed=true reached=true ticks=18 cost=18.0 end 0.5000 0.0000 5.2136
+trivial-sprint EQUIVALENT PlayerSim-1.16-land-tick executed=true reached=true ticks=18 cost=18.0 end 0.5000 0.0000 5.2136
+ppe-held-sprint NOT_EQUIVALENT PPE-26.3-living-tick executed=true reached=true ticks=40 cost=19.0 status OK end 0.5000 64.0000 11.2389 held-input different world y
+stock-astar NOT_EQUIVALENT planner-cost-not-PlayerSim executed=false reached=false ticks=-1 cost=- not executed; PathExecutor is not headless and stock A* cost is not a PlayerSim tick
+```
+
+The two equivalent rows share the PlayerSim world, the settled start, and the budgets. PPE's 40 ticks are the held horizon, not a stop on the goal. Its cost 19 is the first recorded sample inside the goal column. Stock A* was not executed in this harness. The golden test above is the separate Phase 00 recheck. No live client.
