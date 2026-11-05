@@ -8,7 +8,7 @@
 - Branch: `ostinato2/claude-review`, created from the Phase 03 endpoint `09631d874`. That commit is a snapshot of Grok's uncommitted Phase 03 tree on `combine/main-maze-ppe` @ `a1e9817cd`.
 - Final commit: the commit that last touched this file. The final report gives the hash.
 - **Nothing was pushed, merged, or opened as a PR.** The clone's push URL is `DISABLED-no-push`. Grok's trees (`Ostinato-combined`, `Ostinato-secondo`) were not modified.
-- Benchmark version: Minecraft **26.3** (DECISIONS D10).
+- Benchmark version: Minecraft **26.3** (DECISIONS D10). Since physics-263 (D12), `PlayerSim`, its native mirror and the other predictors model 26.3 too.
 
 ## What was done
 
@@ -32,6 +32,12 @@
    - `PlayerState` and `PlayerSim.World` are declared canonical as they are.
    - `PhysicsTransition` was **not** promoted: the interface has zero consumers.
    - PlayerSim-vs-PPE cross-model test over six modes.
+4. **physics-263** (owner request after Phase 04; DECISIONS D12):
+   - `PlayerSim` and the Rust mirror `native/src/sim.rs` now follow the 26.3 rules. Native parity is bitwise.
+   - PPE's sprint speed was one float ulp low; fixed.
+   - The spectate `InputDecoder` now uses 26.3's client input pipeline.
+   - `ItemThrow` and eight inline fall predictors now use 26.3's float math.
+   - New test class `PlayerSim263Test` pins the version-specific rules against values read from the decompiled 26.3 client.
    - Flag-off identity tests.
    - Overhead microbench.
    - The new setting is registered in `SettingCategorizer` (MOVEMENT) and `setting-descriptions.json`, so `SettingCatalogTest` passes.
@@ -42,14 +48,15 @@
 |---|---|---|
 | ≥2 real consumers per canonical interface | `PredictionTolerance`: `SimTrace` (three movers) + `PhysicsTravel`. `PlayerState`: 5 consumers. `PlayerSim.World`: ≥7. | VERIFIED, U |
 | Validated per-mode tolerances | SPRINT, SPRINT_JUMP, CLIMB (climb-jump): 26.3 live traces. WALK, FALL, FLUID: cross-model only. Ladder climbing proper and vines: not traced. | **L for 3 of 6**, S for 3 |
-| Physics constants follow the benchmark version | No constant changed. PlayerSim stays the 1.16 model, judged against 26.3 traces. Version adapters wait for Phase 09. | U |
+| Physics constants follow the benchmark version | **Changed by owner request (D12):** PlayerSim, native sim, PPE, decoder and the inline predictors follow 26.3. Cost estimators (`TickSim`, `SurfaceSpeed`) already match 26.3's structure to float rounding and were left alone. | VERIFIED, U/S. **No Tier L for the new model.** |
 | p95/p99 overhead, no material regression | Consumer microbench: ≤ +0.36 µs/tick at p99 with the flag on. Flag off runs the old path. Planner bench at HEAD: see BENCHMARKS. | S. **Client tick time not measured.** |
 | New paths behind flags; defaults unchanged | `predictionTolerance=false`. `inputArbitration` and `latticeExperiment` still false. | VERIFIED, U |
 | Identical behavior with flags off | `PredictionToleranceTest.flagOff*`: every SimTrace row field, the verdict and summary; 100,000 random drift pairs | VERIFIED, U |
 
 ## Blockers (owner decisions or live tests)
 
-- **B1. Tier-L bounds for WALK, FALL, FLUID, and ladder climbing proper.**
+- **B1. Tier-L bounds for WALK, FALL, FLUID, and ladder climbing proper, and now all six modes for the 26.3 model.**
+  - The SPRINT, SPRINT_JUMP and CLIMB bounds were measured with the 1.16 `PlayerSim`. The historical trace keeps only residuals, so it cannot be replayed through the D12 model. For the current model, those bounds are unknown until a 26.3 client re-run.
   - Needs a 26.3 client run with `kinematicTrace` on, plus movers that trace those modes. Today only the jump, chain, and climb-jump movers trace.
   - Until then, those bounds are borrowed or legacy values (Tier S).
 - **B2. Client tick time p95/p99**, with `predictionTolerance` on and off. This is a Tier-L measurement; the microbench is only a proxy.

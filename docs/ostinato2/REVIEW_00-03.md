@@ -286,3 +286,12 @@ The Phase 02 audit said `ComparisonHarness` and `LatticeSearch` "both consume" `
 | 03 lattice | PASS WITH FIXES | **PASS, decision PROVISIONAL** | CONTINUE at planner tier, but the evidence is weak (Fisher p = 0.48, ratio CIs include 1.0), and stock A* solves everything too. Execution tier is a blocker. |
 
 The suite and benchmark reruns after the fixes are recorded in BENCHMARKS ("Claude review reruns").
+
+### physics-263 (owner request after Phase 04)
+
+- The owner asked that every physics predictor follow 26.3, not 1.16.1. This reverses the review's earlier stance that constants wait for Phase 09 (D5, D10).
+- What changed, what was left alone and why, and the evidence: DECISIONS D12.
+- Two findings came out of the audit beyond PlayerSim itself:
+  - PPE's sprint speed was one float ulp low.
+  - The spectate decoder's client diagonal matched neither version.
+- Consequence for the review: the Phase 04 Tier-L bounds now describe the old model. STATUS B1 records that.

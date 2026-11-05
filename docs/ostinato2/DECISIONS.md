@@ -29,6 +29,8 @@ A new test-only driver should sit next to `PathBench`. It consumes the `IPath` a
 
 ## D5. Version split stays visible
 
+**Superseded by D12** (physics-263): `PlayerSim` now models 26.3. The text below is kept as it was decided.
+
 `PlayerSim` is documented as 1.16 movement. The game is 26.3. PPE on `feat/predictive-physics` claims 26.3 server rules and is not in this tree. Phase 00 left `PlayerSim` as the only existing tick body. Phase 01 did not use it as the integration point (D7). Any later sim numbers still have to be labeled as that 1.16 model.
 
 ## D6. What Phase 00 did not decide
@@ -101,6 +103,8 @@ The entries below were added by the Claude review on branch `ostinato2/claude-re
 
 ## D10. Benchmark version is Minecraft 26.3
 
+**Partly superseded by D12:** 26.3 stays the benchmark version, but `PlayerSim` is no longer a 1.16 model and the predictors' constants were changed to 26.3's. The bullets below are kept as decided.
+
 - The build, the fabric jar, PPE and the live SIMTRACE traces used for the Phase 04 bounds are all 26.3.
 - `PlayerSim` is a 1.16 movement model (D5). It is run on 26.3, and the 26.3 live traces measure how well it predicts that client.
 - Headless PlayerSim numbers in Phases 02–04 are therefore "1.16 model, judged against a 26.3 client where Tier-L exists".
@@ -132,10 +136,70 @@ Evidence rule: a canonical interface needs at least two existing consumers. Noth
   | FALL | 0.0983 | **S** | no live fall trace; SPRINT_JUMP bound borrowed |
   | FLUID | 0.05 | **S** | no live fluid trace; old DIVERGED kept |
 
-- **Tier-L source:** `Ostinato-bastion-263/fabric/run/client/simtrace/`, 2026-10-14, 26.3 client. These are historical traces: no client was run in this review. `PlayerSim` was diffed against that commit and is unchanged apart from a documented bit-identical refactor (REVIEW F-H2).
+- **Tier-L source:** `Ostinato-bastion-263/fabric/run/client/simtrace/`, 2026-10-14, 26.3 client. These are historical traces: no client was run in this review. `PlayerSim` was diffed against that commit and is unchanged apart from a documented bit-identical refactor (REVIEW F-H2). **After D12 these bounds describe the old 1.16 model, not the current one.**
 - **Tier-S evidence:** `CrossModelModesTest`. PlayerSim and PPE agree within 7e-6 blocks over 20–30 ticks in every mode (`raw/review/phase04-crossmodel-summary.txt`). That bounds disagreement between the models. It is not error against the game, and the near-zero agreement suggests the two share a derivation, so it is weak independent evidence.
 - **Flag off:** with the setting off, both consumers run their old check. Tests compare the off path against the old rule: `PredictionToleranceTest.flagOffSimTraceIsTheOldFixedThreshold` (every row field, `firstDiverged` and the summary string) and `flagOffDriftIsTheOldSummedAxisCheck` (100,000 random pairs). With the flag off, mode classification is skipped entirely.
 - **Flag on is a behavior change:**
   - `PhysicsTravel` replans on SPRINT ground ticks only past 0.2235 Euclidean, where it used to replan past 0.1 summed over the axes.
   - Whether that helps or hurts is a Tier-L question (laps on a course), and it was not run. The flag must stay off until it is.
 - **Not done:** per-mode bounds for PPE as a predictor (PPE has live validation only for TNT), and version-specific constants (Phase 09).
+
+## D12. Physics predictors follow 26.3 (physics-263)
+
+Owner request, after Phase 04: "make sure any physics predictor like player sim uses 26.3 physics and not 1.16.1 physics". This replaces D5 and the "constants stay as they are" bullet of D10. 26.3 is still the benchmark version. Every rule below was read from the decompiled 26.3 client jar (`LocalPlayer`, `LivingEntity`, `Entity`, `Player`, `ItemEntity`, `Mth`, block classes), not from PPE or Grok's notes.
+
+**`PlayerSim` (Java) and `native/src/sim.rs` (Rust mirror), rewritten to 26.3:**
+
+- Input: KeyboardInput's normalised key vector, then `modifyInput` (0.98, item-use 0.2, sneak 0.3, square-movement correction), in floats. A plain diagonal is now full length (1.16 held 0.98 on each axis).
+- Speed: the speed cutoff is horizontal as a whole (`vx²+vz² < 9e-6`), vertical on its own (0.003). The sprint speed is `(float)(0.1f · (1 + (double)0.3f))` = 0.13000001f, as the attribute system works it out. Air control is 0.025999999f / 0.02f.
+- Sprint: kept through a wall met within 8° of the input (`minorHorizontalCollision`). 1.16 stopped on any wall.
+- Friction comes from the supporting block (`mainSupportingBlockPos`, found with vanilla's nearest-centre rule and its retry shifted back by the move), not from the block under the centre. All drags are 26.3's floats (`0.91f`, `0.98f`, `computeModifiedFriction`).
+- Trig uses `Mth`'s 65536-entry sine table, built with StrictMath. `PlayerSim263Test.sineTableIsMths` compares all 65536 entries of sin and cos with vanilla `Mth`: no entry differs.
+- Jump: `max(jumpPower, vy)` with float power, and a sprint kick through the table.
+- `Entity.move` gives the position applied only past `1e-7`, `Mth.equal` collision flags, the step-up candidate heights (float, deduplicated, sorted; the first that goes further wins), and `restituteMovementAfterCollisions`.
+- Bounce: slime 1.0 and beds 0.75 through a new `World.bounce`, with the gravity share taken off the landing tick. A landing at or under 0.08 does not bounce, so standing on slime is still.
+- After the move: the slime `stepOn` and the honey slide, swept per axis leg. Water order is 26.3's (sprint and swim rules, sneak sink 0.04f, fluid-falling adjustment, hop-out with `vy = 0.3f`).
+- Native marshalling: the state grows to 21 doubles (minor collision, supported, onGroundNoBlocks, supporting cell). Snapshots carry 4 factors per cell, with bounce added.
+
+**Other predictors:**
+
+| Predictor | Change |
+|---|---|
+| PPE `LivingSim` | The sprint toggle used `speed *= 1.3f` in floats, which gives 0.13f. Vanilla gives 0.13000001f. It now uses the attribute arithmetic both ways. This was the source of the 1.85-ulp PlayerSim/PPE gap. |
+| `InputDecoder` (spectate) | Client key impulses go through `PlayerSim.keyInput(f, s, using, sneaking)`. The old `sqrt(0.5) · 0.98` diagonal matched neither 1.16 nor 26.3. The restart velocity uses the float drags, and a grounded player keeps vanilla's standing `vy = -0.0784`, not 0. Bot (server-side) keys are unchanged. |
+| `ItemThrow` | The throw velocity uses vanilla's float math and the Mth table; the drags are `0.98f` and `0.98f · 0.6f`. The random spread is still left out, as before. |
+| Inline fall predictors: `AirDrift`, `MovementFall`, `MovementDescend`, `MovementParkour`, `ExtensionController`, `CombatMace`, `CombatShield`, `OpponentModel` | `(vy - 0.08) · 0.98` became `· 0.98f`, and `0.91` became `0.91f` where present. |
+| `LadderClutch` | Already used `0.98f`. Only its comment changed ("1.21.4" → 26.3). |
+| `contract.PlayerSimPhysics.SEMANTICS` | `PlayerSim-26.3-land-tick`. The contract golden `flat-sprint.txt` was updated to match; its numbers did not change. |
+
+**Left as they are, on purpose:**
+
+- `TickSim`, `SurfaceSpeed`, and the `MovementJump` coast and stop estimates are closed-form cost estimators.
+- Their structure already matches 26.3: 0.546 ground drag, 0.91 air, `(vy-0.08)·0.98`, 0.02/0.026 air control, `0.21600002/f³`. They differ only by float rounding in the 7th digit.
+- Changing them would only shift planner costs by about 1e-7 and perturb A* tie-breaks. That is not a physics change.
+
+**Accepted approximations** (documented in the code):
+
+- Fine voxel-grid heights are not separate step candidates; it was argued that they don't change outcomes.
+- The fence/wall `onPos` special case is ignored.
+- Fluid height, jumping from the ground in water, the swim pose's box, sneaking edges and `SUPPRESSES_BOUNCE` are not modelled, except in the client-backed worlds, which read `SUPPRESSES_BOUNCE`.
+- Worlds that can't list a single cell (`cellBoxes`) have no supporting block, so friction falls back to under the centre. `SnapshotWorld` (spectate) has no bed bounce.
+
+**Test expectation changes (intended physics changes, not regressions):**
+
+- `PlayerSimTest`: three expectations moved to the float drags (`0.2·0.91f`, `0.2·0.4f·0.91f`, `(v-0.08)·0.98f`) at 1e-12 tolerance.
+- `NativeParityTest`: its random world gained bed bounce cells, without changing the random sequence.
+- `CrossModelModesTest` now asserts agreement with PPE within 0.5 float ulp of PPE's float output, instead of only writing the table.
+
+**Evidence:**
+
+- `NativeParityTest` with `-Postinato_native_require`: 24/24, full state compared bitwise, beds included (Tier U).
+- `PlayerSim263Test`, 8 tests: key pipeline, the sine table against vanilla `Mth`, sprint kept along a shallow wall and lost sideways, supporting-block friction on an ice edge, slime standing, bed = 0.75 of slime, step-up headroom (Tier U).
+- `CrossModelModesTest`: see BENCHMARKS (Tier S).
+
+**What this does not show:**
+
+- No live client was run, so there is no Tier-L evidence for the new model.
+- The D11 Tier-L tolerance bounds (SPRINT 0.2235, SPRINT_JUMP 0.0983, CLIMB 0.2374) were measured with the 1.16 `PlayerSim`, and the historical trace keeps only residuals, so it cannot be replayed through the new model. For the current model those bounds are UNKNOWN until a 26.3 client re-run (blocker B1 grows).
+- `predictionTolerance` stays default-off, so no production default changed.
+- TenorClef (1.16.1) is a separate code line. This branch builds only 26.3, but porting this `PlayerSim` to a 1.16.1 bot would now be wrong for that version.

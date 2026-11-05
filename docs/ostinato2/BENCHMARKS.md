@@ -335,3 +335,52 @@ Command: `gradlew --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xm
 
 - The two extra skips are the opt-in benches `LatticeStockAStarTest.reviewBench` and `PredictionToleranceTest.overheadBench`.
 - After the suite ran, `git status` showed no change under `docs/ostinato2/raw/` (F-M4 fixed).
+
+## physics-263 (2026-11-04/05, branch `ostinato2/claude-review`, local only; DECISIONS D12)
+
+### Native parity (VERIFIED, Tier-U)
+
+`gradlew ... test -Postinato_native_require --tests "baritone.pathing.kinematic.*" --tests "baritone.contract.*"`
+
+- 180 tests, 0 failed, 3 skipped.
+- `NativeParityTest` ran 24/24 with nothing skipped. It compares the Java and Rust full 21-double state bitwise over random worlds, which now include bed-bounce cells.
+
+### PlayerSim vs PPE (VERIFIED, Tier-S)
+
+`CrossModelModesTest` now asserts that every PlayerSim coordinate is within 0.5 float ulp of PPE's float output.
+
+| mode | maxOpenError | maxFloatUlps (26.3 PlayerSim, fixed PPE) | maxOpenError, 1.16 PlayerSim vs unfixed PPE |
+|---|---|---|---|
+| walk | 1.906e-07 | 0.475 | 5.970e-07 (1.73 ulps: fails the bound) |
+| sprint | 2.090e-07 | 0.489 | 4.900e-07 |
+| sprint-jump | 3.425e-06 | 0.470 | 3.522e-06 |
+| fall | 3.783e-06 | 0.496 | 5.545e-06 |
+| water-walk | 5.781e-08 | 0.488 | 8.849e-08 |
+| ladder-jump | 3.752e-06 | 0.492 | 3.748e-06 |
+
+- The 1e-6-scale open errors are PPE's float output quantization at y≈64, not model disagreement.
+- Before PPE's sprint-speed fix, the 26.3 PlayerSim was 1.85 ulps off on sprint. That gap is how the PPE bug was found.
+- Raw files: `raw/review/physics263-crossmodel.csv`, `physics263-crossmodel-summary.txt`, and `physics263-crossmodel-old116-summary.txt` (the 1.16 model, run in a throwaway worktree at `9b5bbfa7f`).
+- Both models were written from the same decompiled sources, so this agreement is not independent evidence against the game.
+
+### Planner regression (VERIFIED, Tier-S)
+
+This is the Phase 04 command (5 reps, SHORT) with `OSTINATO_BENCH=physics263-review`, plus the spectate tests, `PlayerSim263Test` and `CrossModelModesTest`.
+
+- Result: 151 tests, 1 failed (`SecondoTest`, F-M6), 3 skipped.
+- The fingerprint is **identical** to `raw/review/phase04-review-fingerprint.txt`, so the float-drag changes did not move any planner node, cost or path.
+- All 20 queries median 1.9 ms, p95 87.4 ms. Timing is not golden.
+- Raw files: `raw/review/physics263-review-raw.csv`, `physics263-review-fingerprint.txt`, `physics263-review.md`.
+
+### Full suite (VERIFIED)
+
+`gradlew ... test -Postinato_native_require --continue`: 1517 tests, 1 failed (`SecondoTest`, F-M6), 18 skipped.
+
+- That is 35 more tests than the Phase 04 HEAD row's 1482. Eight of them are `PlayerSim263Test`.
+- That run used `-Postinato_native_require`, and the earlier rows used `-x nativeHost`, so 2 fewer were skipped. The rest of the difference was not broken down per class.
+- `InputDecoderTest` was changed afterwards (its keyboard truth is now a 26.3 client) and passed 5/5 in the regression run above.
+
+### Not run
+
+- No live client.
+- The D11 Tier-L bounds were not re-measured for the new model (STATUS B1).
