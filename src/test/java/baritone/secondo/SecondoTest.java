@@ -165,9 +165,10 @@ public class SecondoTest {
     }
 
     @Test
-    public void plannedApisAreAbsentOnThisBranchAndInvokeIsANoop() {
+    public void absentApisProbeAbsentAndInvokeIsANoop() {
+        // The predictive-physics, Cadenza, Bombard, Scherzo and Presto types now ship on main, so whether a type is on the
+        // classpath is no longer fixed. What stays fixed: a lookup that reports no type gives ABSENT, and v1 never invokes.
         for (Id id : Id.values()) {
-            assertFalse(id.typeName, SecondoFeatures.classPresent(id.typeName));
             assertEquals(id.name(), State.ABSENT, SecondoFeatures.probe(id, lookup(false, false, null)));
             assertFalse(SecondoFeatures.invoke(id, State.ABSENT));
             assertFalse(SecondoFeatures.invoke(id, State.OFF));
