@@ -99,7 +99,16 @@ public final class RouteReuse {
         if (path == null || context == null) {
             return;
         }
-        remember(path.getGoal(), path.positions(), blocks(context), stamp(), path);
+        remember(path.getGoal(), path.positions(), blocks(context), stamp(context), path);
+    }
+
+    /** Ostinato Legato: {@link #stamp()} keyed by the Legato mode too, so a path planned in one mode is not replayed in another. */
+    static long stamp(CalculationContext context) {
+        long stamp = stamp();
+        if (stamp == Long.MIN_VALUE) {
+            return stamp;
+        }
+        return stamp ^ ((context.legatoSmooth ? 1L : 0L) << 62) ^ ((context.legatoSearch ? 1L : 0L) << 61);
     }
 
     public static void remember(Goal goal, List<BetterBlockPos> positions, Blocks blocks, long stamp, IPath path) {
@@ -148,7 +157,7 @@ public final class RouteReuse {
         if (goal == null || context == null) {
             return null;
         }
-        long stamp = stamp();
+        long stamp = stamp(context);
         if (stamp == Long.MIN_VALUE) {
             return null;
         }

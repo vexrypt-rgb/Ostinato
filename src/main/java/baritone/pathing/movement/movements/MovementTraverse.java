@@ -262,7 +262,8 @@ public class MovementTraverse extends Movement {
             if (opener != null) {
                 Optional<Rotation> rotation = RotationUtils.reachable(ctx, opener);
                 if (rotation.isPresent()) {
-                    return state.setTarget(new MovementState.MovementTarget(rotation.get(), true)).setInput(Input.CLICK_RIGHT, true);
+                    // reachable() means "after turning" (Ostinato): click once the crosshair is on it, not mid-turn
+                    return state.setTarget(new MovementState.MovementTarget(rotation.get(), true)).setInput(Input.CLICK_RIGHT, ctx.isLookingAt(opener));
                 }
             }
         }
@@ -284,7 +285,7 @@ public class MovementTraverse extends Movement {
             if (blocked != null) {
                 Optional<Rotation> rotation = RotationUtils.reachable(ctx, blocked);
                 if (rotation.isPresent()) {
-                    return state.setTarget(new MovementState.MovementTarget(rotation.get(), true)).setInput(Input.CLICK_RIGHT, true);
+                    return state.setTarget(new MovementState.MovementTarget(rotation.get(), true)).setInput(Input.CLICK_RIGHT, ctx.isLookingAt(blocked));
                 }
             }
         }

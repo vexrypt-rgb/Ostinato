@@ -1,0 +1,71 @@
+=== prestotest-result-v41-run1.txt (jolt safe): 24 laps
+ normal laps
+  baseline: 10/10 reached (100%, 95% 72%-100%); reached ticks mean 247.4 sd 19.0 median 253; end-to-end 2474 ticks spent / 10 reached = 247.4 per completion
+     counters pathEvents=32 driverChanges=140 rewinds=1
+     main thread: kinematic 499.4 us/tick
+  presto  : 9/10 reached (90%, 95% 60%-98%); reached ticks mean 254.4 sd 20.3 median 256; end-to-end 2504 ticks spent / 9 reached = 278.2 per completion
+     FELL lap 13 at x=42.25 z=0.08 y=198.0 ticks=214 [prestotest-result-v41-run1.txt]
+     counters pathEvents=34 driverChanges=143 rewinds=5 checks=40 agree=39 unavailable=1 landings=57
+     main thread: kinematic 470.0 us/tick; ppe 36.8 ms over 40 checks = 0.92 ms/check; hook 6.5 us/hooked tick (1773 ticks)
+  pairs n=10: both reached 9, baseline only 1, Presto only 0, neither 0; McNemar exact p 1.000
+  paired ticks (both reached) n=9: Presto - baseline mean +5.3 sd 22.7 95% CI -12.2..+22.8; median +1; Presto slower 5 faster 3 tied 1, sign test p 0.727
+ jolt laps
+  baseline: 1/2 reached (50%, 95% 9%-91%); reached ticks mean 279.0 sd nan median 279; end-to-end 372 ticks spent / 1 reached = 372.0 per completion
+     FELL lap 20 at x=9.68 z=0.52 y=198.0 ticks=93 jolt=applied@82->7.88/unsettled [prestotest-result-v41-run1.txt]
+     jolts: lap 20 applied@82->7.88/unsettled, lap 23 applied@101->7.78
+     counters posPackets=2 pathEvents=12 driverChanges=25 rewinds=1
+     main thread: kinematic 170.9 us/tick
+  presto  : 0/2 reached (0%, 95% 0%-66%); reached ticks mean nan sd nan median -; end-to-end 95 ticks spent / 0 reached = inf per completion
+     FELL lap 21 at x=9.3 z=0.54 y=198.0 ticks=45 jolt=applied@33->7.77 [prestotest-result-v41-run1.txt]
+     FELL lap 22 at x=9.3 z=0.5 y=198.0 ticks=50 jolt=applied@38->7.82 [prestotest-result-v41-run1.txt]
+     jolts: lap 21 applied@33->7.77, lap 22 applied@38->7.82
+     counters corrections=2 posPackets=2 pathEvents=18 driverChanges=9 distrusts=1
+     main thread: kinematic 94.6 us/tick; ppe 0.0 ms over 0 checks = nan ms/check; hook 8.1 us/hooked tick (34 ticks)
+  pairs n=2: both reached 0, baseline only 1, Presto only 0, neither 1; McNemar exact p 1.000
+=== prestotest-result-v41-run2.txt (jolt safe): 24 laps
+ normal laps
+  baseline: 10/10 reached (100%, 95% 72%-100%); reached ticks mean 253.8 sd 17.8 median 255; end-to-end 2538 ticks spent / 10 reached = 253.8 per completion
+     counters pathEvents=30 driverChanges=136 rewinds=1
+     main thread: kinematic 488.4 us/tick
+  presto  : 7/10 reached (70%, 95% 40%-89%); reached ticks mean 248.6 sd 11.3 median 253; end-to-end 2387 ticks spent / 7 reached = 341.0 per completion
+     FELL lap 1 at x=42.25 z=0.9 y=198.0 ticks=219 [prestotest-result-v41-run2.txt]
+     FELL lap 13 at x=42.25 z=0.09 y=198.0 ticks=214 [prestotest-result-v41-run2.txt]
+     FELL lap 18 at x=42.25 z=0.1 y=198.0 ticks=214 [prestotest-result-v41-run2.txt]
+     counters pathEvents=46 driverChanges=139 checks=38 agree=38 landings=53
+     main thread: kinematic 472.8 us/tick; ppe 26.3 ms over 38 checks = 0.69 ms/check; hook 6.6 us/hooked tick (1667 ticks)
+  pairs n=10: both reached 7, baseline only 3, Presto only 0, neither 0; McNemar exact p 0.250
+  paired ticks (both reached) n=7: Presto - baseline mean +0.7 sd 14.3 95% CI -12.6..+14.0; median +0; Presto slower 3 faster 2 tied 2, sign test p 1.000
+ jolt laps
+  baseline: 2/2 reached (100%, 95% 34%-100%); reached ticks mean 273.5 sd 17.7 median 286; end-to-end 547 ticks spent / 2 reached = 273.5 per completion
+     jolts: lap 20 applied@182->32.95, lap 23 applied@158->33.23
+     counters posPackets=2 pathEvents=4 driverChanges=27 rewinds=1
+     main thread: kinematic 368.2 us/tick
+  presto  : 2/2 reached (100%, 95% 34%-100%); reached ticks mean 273.0 sd 17.0 median 285; end-to-end 546 ticks spent / 2 reached = 273.0 per completion
+     jolts: lap 21 applied@158->33.23, lap 22 applied@182->33.23
+     counters corrections=2 posPackets=2 pathEvents=4 driverChanges=27 distrusts=2 retrusts=2 checks=7 agree=7 landings=9
+     main thread: kinematic 384.0 us/tick; ppe 3.3 ms over 7 checks = 0.47 ms/check; hook 4.3 us/hooked tick (355 ticks)
+  pairs n=2: both reached 2, baseline only 0, Presto only 0, neither 0; McNemar exact p 1.000
+  paired ticks (both reached) n=2: Presto - baseline mean -0.5 sd 34.6 95% CI -311.9..+310.9; median +24; Presto slower 1 faster 1 tied 0, sign test p 1.000
+=== prestotest-result-v41-run3.txt (jolt safe): 24 laps
+ normal laps
+  baseline: 10/10 reached (100%, 95% 72%-100%); reached ticks mean 263.4 sd 31.0 median 260; end-to-end 2634 ticks spent / 10 reached = 263.4 per completion
+     counters pathEvents=33 driverChanges=178 rewinds=1
+     main thread: kinematic 475.1 us/tick
+  presto  : 10/10 reached (100%, 95% 72%-100%); reached ticks mean 264.8 sd 25.5 median 256; end-to-end 2648 ticks spent / 10 reached = 264.8 per completion
+     counters pathEvents=28 driverChanges=171 checks=33 agree=32 unavailable=1 landings=47
+     main thread: kinematic 457.8 us/tick; ppe 31.3 ms over 33 checks = 0.95 ms/check; hook 6.7 us/hooked tick (1678 ticks)
+  pairs n=10: both reached 10, baseline only 0, Presto only 0, neither 0; McNemar exact p 1.000
+  paired ticks (both reached) n=10: Presto - baseline mean +1.4 sd 42.5 95% CI -28.9..+31.7; median +20; Presto slower 6 faster 3 tied 1, sign test p 0.508
+ jolt laps
+  baseline: 1/2 reached (50%, 95% 9%-91%); reached ticks mean 314.0 sd nan median 314; end-to-end 483 ticks spent / 1 reached = 483.0 per completion
+     FELL lap 20 at x=21.56 z=-0.3 y=198.0 ticks=169 jolt=never [prestotest-result-v41-run3.txt]
+     jolts: lap 20 never, lap 23 applied@213->34.41
+     counters posPackets=1 pathEvents=10 driverChanges=39
+     main thread: kinematic 337.0 us/tick
+  presto  : 0/2 reached (0%, 95% 0%-66%); reached ticks mean nan sd nan median -; end-to-end 481 ticks spent / 0 reached = inf per completion
+     FELL lap 21 at x=33.98 z=1.5 y=198.0 ticks=237 jolt=applied@215->34.13 [prestotest-result-v41-run3.txt]
+     FELL lap 22 at x=34.01 z=-0.48 y=198.0 ticks=244 jolt=applied@222->34.13 [prestotest-result-v41-run3.txt]
+     jolts: lap 21 applied@215->34.13, lap 22 applied@222->34.13
+     counters corrections=2 posPackets=2 pathEvents=10 driverChanges=37 declinedTicks=41 distrusts=1 checks=1 agree=1 landings=1
+     main thread: kinematic 150.9 us/tick; ppe 0.8 ms over 1 checks = 0.75 ms/check; hook 3.6 us/hooked tick (161 ticks)
+  pairs n=2: both reached 0, baseline only 1, Presto only 0, neither 1; McNemar exact p 1.000

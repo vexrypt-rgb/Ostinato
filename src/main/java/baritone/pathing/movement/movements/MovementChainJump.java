@@ -33,6 +33,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.MovementState;
+import baritone.pathing.physics.PhysicsTravel;
 import baritone.pathing.viz.PathViz;
 import baritone.utils.pathing.MutableMoveResult;
 import net.minecraft.world.phys.Vec3;
@@ -280,6 +281,14 @@ public class MovementChainJump extends Movement {
         }
     }
 
+    /**
+     * Ostinato Presto v4: whether a chain's first plan must wait for the look, standing, before its keys go down: the
+     * look (at {@code lookYaw}) is more than {@link PhysicsTravel#offPlan}'s gate off the plan's take-off yaw.
+     */
+    static boolean turnFirst(float lookYaw, float planYaw) {
+        return PhysicsTravel.offPlan(lookYaw, planYaw);
+    }
+
     @Override
     public MovementState updateState(MovementState state) {
         MovementState s = update0(state);
@@ -350,6 +359,15 @@ public class MovementChainJump extends Movement {
             }
             if (still && !js.search(real, true) && !js.search(real, false)) {
                 return fail(state, "no chain from here");
+            }
+            float planYaw = js.yaw(js.plan, false, 0);
+            if (turnFirst(ctx.playerRotations().getYaw(), planYaw)) {
+                // Ostinato Presto v4: the walk to the run-up start faced back; the plan's first keys assume its yaw
+                // now, but the look turns 32° a tick. Pressed mid-turn the jump went the walk's way, back into the gap
+                // behind (presto-v4-fix6 lap 4, ChainJump 8>18: jump at yaw 88.8 for a plan east, fell at x 5.4).
+                // Turn on the spot; the plan is searched again from here once the look is round.
+                state.setTarget(new MovementState.MovementTarget(new Rotation(planYaw, ctx.playerRotations().getPitch()), true));
+                return state;
             }
             running = true;
             PositionSync.sync(ctx.player());

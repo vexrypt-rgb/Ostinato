@@ -171,6 +171,17 @@ public interface IBaritone {
     /** Ostinato: pathfinder-consistent world questions (water/lava, place-against, avoid-break, tool speed, path block changes). */
     baritone.api.utils.IWorldQueries getWorldQueries();
 
+    /** Ostinato: the predictive physics engine (trajectories, falls, projectiles, explosions over a world snapshot). */
+    baritone.api.physics.IPredictivePhysics getPredictivePhysics();
+
+    /** Read-only contextual threat intelligence (26.3). */
+    baritone.api.threat.IThreatAssessment getThreatAssessment();
+
+    /**
+     * Ostinato: Grace Note, the emergency survival layer (fall clutch). Observe-only unless switched to LIVE.
+     */
+    baritone.api.gracenote.IGraceNote getGraceNote();
+
     // Ostinato: health estimator
     /**
      * @return The estimated health of nearby living entities (see {@link baritone.api.utils.IHealthEstimator}). The

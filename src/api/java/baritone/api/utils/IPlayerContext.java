@@ -85,6 +85,22 @@ public interface IPlayerContext {
                 if (top >= 0.25 && top <= 1.0 && player().position().y >= feet.y + top - 0.01) {
                     return feet.above();
                 }
+                // Ostinato: run105. Pressed against a fence, wall or closed gate post (mid-block), the player's centre is up to
+                // 0.3 inside the post's block, so the node was the post itself. A path then started "inside" a closed gate,
+                // the traverse out never opened it (its gate check only looks ahead), and room 4's dig pushed it for 10 min
+                // (the provisioning log hunt was pinned on the fence beside it first). When the gap beside the post is
+                // narrower than the player, the body stands in the neighbour: that is the node.
+                double lx = player().position().x - feet.x, lz = player().position().z - feet.z, w = player().getBbWidth();
+                double minX = shape.min(net.minecraft.core.Direction.Axis.X), maxX = shape.max(net.minecraft.core.Direction.Axis.X);
+                double minZ = shape.min(net.minecraft.core.Direction.Axis.Z), maxZ = shape.max(net.minecraft.core.Direction.Axis.Z);
+                int sx = lx >= maxX ? 1 : lx <= minX ? -1 : 0, sz = lz >= maxZ ? 1 : lz <= minZ ? -1 : 0;
+                double gapX = sx > 0 ? 1 - maxX : sx < 0 ? minX : 1, gapZ = sz > 0 ? 1 - maxZ : sz < 0 ? minZ : 1;
+                if (Math.min(gapX, gapZ) < w) {
+                    BetterBlockPos side = gapX <= gapZ ? new BetterBlockPos(feet.x + sx, feet.y, feet.z) : new BetterBlockPos(feet.x, feet.y, feet.z + sz);
+                    if (world().getBlockState(side).getCollisionShape(world(), side).isEmpty()) {
+                        return side;
+                    }
+                }
             } else if (player().onGround() && player().mainSupportingBlockPos.isPresent()
                     && world().getBlockState(feet.below()).getCollisionShape(world(), feet.below()).isEmpty()) {
                 // on the edge of a low top with the centre over air (a candle is 1/8 wide): the node is still above it

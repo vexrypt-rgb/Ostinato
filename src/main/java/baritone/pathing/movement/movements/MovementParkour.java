@@ -65,6 +65,11 @@ public class MovementParkour extends Movement {
     private final int dist;
     /** Backed up a block for the 4 block gap's run-up. */
     private boolean ranUp;
+    /**
+     * Ostinato (Presto v4): the 4 block gap was entered at a run whose ticks fall wrong against the edge (no jump along
+     * it lands), so it brakes and backs up for one fresh run-up; {@link #rerunning} while that back-up lasts.
+     */
+    private boolean reran, rerunning;
     private final boolean ascend;
     /** Blocks laid in front of the edge before the jump: one turns a 5 block gap into a 4 block one, two a 6 block gap. */
     private final int ext;
@@ -483,6 +488,7 @@ public class MovementParkour extends Movement {
     public void reset() {
         super.reset();
         ranUp = false;
+        reran = rerunning = false;
     }
 
     @Override
@@ -559,8 +565,22 @@ public class MovementParkour extends Movement {
             BetterBlockPos runFrom = two ? back2 : back;
             double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
             double along = (ctx.player().position().x - (runFrom.x + 0.5)) * direction.getStepX() + (ctx.player().position().z - (runFrom.z + 0.5)) * direction.getStepZ();
-            if (along <= -0.3 || v > 0.1 || ctx.player().position().y > src.y + 0.1 || !ctx.playerFeet().equals(src) && !ctx.playerFeet().equals(back) && !ctx.playerFeet().equals(runFrom)) {
+            boolean onRunUp = ctx.playerFeet().equals(src) || ctx.playerFeet().equals(back) || ctx.playerFeet().equals(runFrom);
+            float travelYaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
+            boolean runningIn = v > 0.1 && !rerunning;
+            if (runningIn && !reran && along > -0.3 && onRunUp && ctx.player().onGround() && ctx.player().position().y <= src.y + 0.1
+                    && !runUpLands(travelYaw)) {
+                // Ostinato (Presto v4): already running when the jump came up (a Traverse led into it), so there was no
+                // back-up, and no tick of this run jumps far enough: the sprint's steps fall against the edge so the
+                // last one on the block is too early. Live the take-off came at x 49.32 every time and the box hit the
+                // landing's face 3 cm short of its edge (presto-v4-trace1, 5 of 5; ParkourFourGapTest). Brake and back
+                // up once, for a run from a new spot.
+                reran = rerunning = true;
+                runningIn = false;
+            }
+            if (along <= -0.3 || runningIn || ctx.player().position().y > src.y + 0.1 || !onRunUp) {
                 ranUp = true;
+                rerunning = false;
             } else {
                 // keep facing the landing and walk backwards, so there is no turn to lag behind
                 state.setInput(Input.SPRINT, false);
@@ -644,7 +664,18 @@ public class MovementParkour extends Movement {
                     double distFromStart = Math.max(Math.abs(xDiff), Math.abs(zDiff));
                     // a 4 block gap jumps on the last tick still on the block: wait while the next step stays on it
                     double speed = jd == 5 ? Math.max(Math.abs(ctx.player().getDeltaMovement().x), Math.abs(ctx.player().getDeltaMovement().z)) / 0.546 : 0;
-                    if (jd == 5 ? distFromStart + speed < 1.0 : distFromStart < 0.7) {
+                    boolean wait = jd == 5 ? distFromStart + speed < 1.0 : distFromStart < 0.7;
+                    if (jd == 5 && ctx.player().onGround()) {
+                        // Ostinato (Presto v4): the sim knows which tick lands: wait while a jump a tick later still
+                        // does, jump now if this one does, and keep the step rule only when neither lands
+                        float yaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
+                        if (jumpLands(yaw, 1, true)) {
+                            wait = true;
+                        } else if (jumpLands(yaw, 0, true)) {
+                            wait = false;
+                        }
+                    }
+                    if (wait) {
                         return state;
                     }
                 }
@@ -687,15 +718,23 @@ public class MovementParkour extends Movement {
         sim.collidedH = false;
         sim.jumpTicks = 0;
         ClientWorld.readEffects(ctx, sim);
+        return simJump(sim, yaw, delay, dest.y, this::landsOn);
+    }
+
+    /**
+     * W and sprint held along {@code yaw}, jump pressed on tick {@code delay}: whether the first landing is at feet
+     * height {@code destY} on a block {@code landsOn} accepts. Runs {@code sim} on from its state.
+     */
+    static boolean simJump(PlayerSim sim, float yaw, int delay, int destY, java.util.function.BiPredicate<Double, Double> landsOn) {
         boolean left = false;
         for (int t = 0; t < 60; t++) {
             sim.tick(yaw, true, true, t == delay);
             if (!sim.onGround) {
                 left = true;
             } else if (left || t > delay + 2) {
-                return left && PlayerSim.feetCell(sim.y) == dest.y && landsOn(sim.x, sim.z);
+                return left && PlayerSim.feetCell(sim.y) == destY && landsOn.test(sim.x, sim.z);
             }
-            if (sim.y < dest.y - 1.5) {
+            if (sim.y < destY - 1.5) {
                 return false;
             }
         }

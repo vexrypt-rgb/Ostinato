@@ -923,12 +923,32 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
-        state.setTarget(new MovementTarget(
-                RotationUtils.calcRotationFromVec3d(ctx.playerHead(),
-                        footing(ctx, pos),
-                        ctx.playerRotations()).withPitch(ctx.playerRotations().getPitch()),
-                false
-        )).setInput(Input.MOVE_FORWARD, true);
+        Rotation to = RotationUtils.calcRotationFromVec3d(ctx.playerHead(),
+                footing(ctx, pos),
+                ctx.playerRotations()).withPitch(ctx.playerRotations().getPitch());
+        state.setTarget(new MovementTarget(to, false));
+        if (!turningAway(ctx, to)) {
+            state.setInput(Input.MOVE_FORWARD, true);
+        }
+    }
+
+    /** Past this the walk this tick goes too far sideways of where it is meant to go: {@link #turningAway}. */
+    static final float WALK_GATE = 60f;
+
+    /**
+     * Ostinato Presto v4: whether the yaw this tick's move will use (the aim processor's step, at most 32° from the last
+     * sent yaw) is still more than {@link #WALK_GATE} off {@code to}. Walking on through a turn-around goes sideways:
+     * a Traverse on the one-wide walkway turned from 45 to -115 with forward held and went from z 0.45 to 1.09
+     * (presto-v4-fix7 lap 22). A 90° corner peeks to 58° and walks on; only a reversal waits, two or three ticks.
+     */
+    static boolean turningAway(IPlayerContext ctx, Rotation to) {
+        IBaritone b = ctx.player() == null ? null : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+        float moving = b == null ? ctx.playerRotations().getYaw() : b.getLookBehavior().getAimProcessor().peekRotation(to).getYaw();
+        return walkGate(moving, to.getYaw());
+    }
+
+    static boolean walkGate(float movingYaw, float toYaw) {
+        return Math.abs(Mth.wrapDegrees(movingYaw - toYaw)) > WALK_GATE;
     }
 
     /**
@@ -1112,7 +1132,7 @@ public interface MovementHelper extends ActionCosts, Helper {
                 double faceY = (placeAt.getY() + against1.getY() + 0.5D) * 0.5D;
                 double faceZ = (placeAt.getZ() + against1.getZ() + 1.0D) * 0.5D;
                 Rotation place = RotationUtils.calcRotationFromVec3d(wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.playerHead(), new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
-                Rotation actual = baritone.getLookBehavior().getAimProcessor().peekRotation(place);
+                Rotation actual = baritone.getLookBehavior().getAimProcessor().peekAim(place); // Ostinato: run100, uncapped (IAimProcessor.peekAim)
                 HitResult res = RayTraceUtils.rayTraceTowards(ctx.player(), actual, ctx.playerController().getBlockReachDistance(), wouldSneak);
                 if (res != null && res.getType() == HitResult.Type.BLOCK && ((BlockHitResult) res).getBlockPos().equals(against1) && ((BlockHitResult) res).getBlockPos().relative(((BlockHitResult) res).getDirection()).equals(placeAt)) {
                     state.setTarget(new MovementTarget(place, true));

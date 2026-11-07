@@ -1,0 +1,30 @@
+GRACENOTETEST start mode=OBSERVE policy=GraceNotePolicy[allowWaterBucket=true, minDamage=4.0, recoverWater=true, respectInteractionPause=true, cooldownTicks=10, maxActionsPerWindow=4, source=ostinato-default]
+GRACENOTETEST observe-15 drop 15 blocks mode=OBSERVE bucket=true
+GRACENOTETEST observe-15 outcome GraceNoteOutcome[sequence=1, episode=1, mode=OBSERVE, emergency=FALL, response=NONE, result=OBSERVED, reason=OBSERVE_ONLY_FEASIBLE, predictedDamage=12.0, predictedLethal=false, measuredDamage=12.0, alive=true, startTick=330, requested=-1, started=-1, executed=-1, acknowledged=-1, avoided=-1, landed=344, released=-1, endTick=354, recovered=false]
+GRACENOTETEST observe-15 trail [THREAT_DETECTED, EVALUATING, VERIFYING, COMPLETED] health=8.833333 alive=true
+GRACENOTETEST observe-15 PASS observed, no takeover
+GRACENOTETEST live-no-bucket-15 drop 15 blocks mode=LIVE bucket=false
+GRACENOTETEST live-no-bucket-15 outcome GraceNoteOutcome[sequence=2, episode=2, mode=LIVE, emergency=FALL, response=NONE, result=OBSERVED, reason=NO_BUCKET, predictedDamage=12.0, predictedLethal=false, measuredDamage=12.0, alive=true, startTick=442, requested=-1, started=-1, executed=-1, acknowledged=-1, avoided=-1, landed=456, released=-1, endTick=466, recovered=false]
+GRACENOTETEST live-no-bucket-15 trail [THREAT_DETECTED, EVALUATING, VERIFYING, COMPLETED] health=8.0 alive=true
+GRACENOTETEST live-no-bucket-15 PASS no takeover without a bucket
+GRACENOTETEST live-standing-15 drop 15 blocks mode=LIVE bucket=true
+GRACENOTETEST live-standing-15 outcome GraceNoteOutcome[sequence=3, episode=3, mode=LIVE, emergency=FALL, response=WATER_BUCKET, result=AVOIDED, reason=ACQUIRE>RECOVERED, predictedDamage=12.0, predictedLethal=false, measuredDamage=0.0, alive=true, startTick=553, requested=553, started=553, executed=566, acknowledged=567, avoided=566, landed=566, released=578, endTick=578, recovered=true]
+GRACENOTETEST live-standing-15 trail [THREAT_DETECTED, EVALUATING, ACQUIRING_CONTROL, EXECUTING, VERIFYING, RECOVERING, RELEASING_CONTROL, COMPLETED] health=20.0 alive=true
+GRACENOTETEST live-standing-15 PASS AVOIDED measuredDamage=0.0 recovered=true
+GRACENOTETEST live-pathing-15 path running=true x=4.23
+GRACENOTETEST live-pathing-15 drop 15 blocks mode=LIVE bucket=true
+GRACENOTETEST live-pathing-15 outcome GraceNoteOutcome[sequence=4, episode=4, mode=LIVE, emergency=FALL, response=WATER_BUCKET, result=AVOIDED, reason=ACQUIRE>RECOVERED, predictedDamage=12.0, predictedLethal=false, measuredDamage=0.0, alive=true, startTick=693, requested=693, started=693, executed=706, acknowledged=707, avoided=706, landed=706, released=718, endTick=718, recovered=true]
+GRACENOTETEST live-pathing-15 trail [THREAT_DETECTED, EVALUATING, ACQUIRING_CONTROL, EXECUTING, VERIFYING, RECOVERING, RELEASING_CONTROL, COMPLETED] health=20.0 alive=true
+GRACENOTETEST live-pathing-15 after release: goalActive=true reached=true pos=29.0,201.0,0.5
+GRACENOTETEST live-pathing-15 PASS AVOIDED measuredDamage=0.0 recovered=true resumed to goal
+GRACENOTETEST live-lethal-31 drop 31 blocks mode=LIVE bucket=true
+GRACENOTETEST live-lethal-31 outcome GraceNoteOutcome[sequence=5, episode=5, mode=LIVE, emergency=FALL, response=WATER_BUCKET, result=AVOIDED, reason=ACQUIRE>RECOVERED, predictedDamage=28.0, predictedLethal=true, measuredDamage=0.0, alive=true, startTick=912, requested=912, started=912, executed=935, acknowledged=936, avoided=935, landed=935, released=947, endTick=947, recovered=true]
+GRACENOTETEST live-lethal-31 trail [THREAT_DETECTED, EVALUATING, ACQUIRING_CONTROL, EXECUTING, VERIFYING, RECOVERING, RELEASING_CONTROL, COMPLETED] health=20.0 alive=true
+GRACENOTETEST live-lethal-31 PASS AVOIDED measuredDamage=0.0 recovered=true
+GRACENOTETEST summary observe-15: PASS observed, no takeover
+GRACENOTETEST summary live-no-bucket-15: PASS no takeover without a bucket
+GRACENOTETEST summary live-standing-15: PASS AVOIDED measuredDamage=0.0 recovered=true
+GRACENOTETEST summary live-pathing-15: PASS AVOIDED measuredDamage=0.0 recovered=true resumed to goal
+GRACENOTETEST summary live-lethal-31: PASS AVOIDED measuredDamage=0.0 recovered=true
+GRACENOTETEST grace note ns/tick samples=504 p50=28700 p95=692000 p99=3120600 max=108206800
+GRACENOTETEST telemetry Telemetry[ticks=987, screened=54, predictions=54, emergencies=5, acquisitions=3, clicks=3, avoided=3, survived=0, died=0, failed=0, aborted=0, observed=2, deferred=0, thrashBlocked=0, totalNanos=218786000, maxNanos=111424900, predictNanos=132374900, predictMaxNanos=99758000]

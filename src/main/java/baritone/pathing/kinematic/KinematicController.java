@@ -2,7 +2,12 @@ package baritone.pathing.kinematic;
 
 import baritone.utils.ExperimentalMovement;
 import baritone.Baritone;
+import baritone.api.gracenote.IGraceNote;
 import baritone.api.pathing.calc.IPath;
+import baritone.api.physics.IPredictivePhysics;
+import baritone.api.physics.PredictionRequest;
+import baritone.api.physics.PredictionResult;
+import baritone.gracenote.GraceNote;
 import baritone.api.pathing.movement.IMovement;
 import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.IPlayerContext;
@@ -17,12 +22,16 @@ import baritone.pathing.movement.movements.MovementDescend;
 import baritone.pathing.movement.movements.MovementDiagonal;
 import baritone.pathing.movement.movements.MovementFall;
 import baritone.pathing.movement.movements.MovementParkour;
+import baritone.pathing.movement.movements.MovementLine;
+import baritone.pathing.movement.movements.MovementStraight;
+import baritone.pathing.legato.LegatoFeasibility;
 import baritone.pathing.movement.movements.MovementTraverse;
 import baritone.api.utils.Helper;
 import baritone.pathing.viz.PathViz;
 import baritone.utils.BlockStateInterface;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
@@ -96,6 +105,7 @@ public final class KinematicController {
     private final Random rng = baritone.utils.OstinatoRandom.create("kinematic.wander"); // Ostinato: seedable for the parity check
     private int lastDrivenTick = -10;
     private boolean longJump; // the driven stretch holds a 3 or 4 block gap
+    private boolean straightAhead; // Legato: the driven stretch holds a straight any-angle line
     private boolean endsAtPlace; // the stretch stops at a movement that breaks or places, which needs the player slow at the edge
     /** Ticks the controller has driven the player, so callers can verify the backend is in use. */
     public static volatile long drivenTicks;
@@ -105,11 +115,84 @@ public final class KinematicController {
     /** The slot the running rollout records into, null when not recording. */
     private PathViz.Rollout vizR;
 
+    /**
+     * Ostinato Presto: one per player, kept across paths (a controller lives one path; trust is about the model and
+     * the server, not the path). See {@link Presto}.
+     */
+    private static final java.util.Map<IPlayerContext, Presto> PRESTO = new java.util.WeakHashMap<>();
+    private final Presto presto;
+    /** The engine's flight of a gap takeoff runs at most this long, and gets this long (cooperative) to answer. */
+    private static final int PRESTO_HORIZON = 40;
+    private static final long PRESTO_DEADLINE = 5_000_000L;
+    /** After a vetoed takeoff hands the jump to Baritone, the controller sits out this long so it is not taken back mid-run. */
+    private static final int PRESTO_REST = 20;
+    private int prestoDefers;
+    private static Boolean prestoVersionSupported;
+    private final float[] prestoYawVelocity = new float[1];
+    private PredictionResult.Landing checkedLanding;
+    /** The touchdown of the running rollout's first jump (tick counted from now, -1 none), and of the chosen plan's. */
+    private int rollT, rollLandT, bestLandT;
+    private double rollLandX, rollLandY, rollLandZ, bestLandX, bestLandY, bestLandZ;
+
     public KinematicController(IPlayerContext ctx) {
         this.ctx = ctx;
         this.world = new ClientWorld(ctx);
         this.real = new PlayerSim(world);
         this.sim = new PlayerSim(world);
+        synchronized (PRESTO) {
+            this.presto = PRESTO.computeIfAbsent(ctx, c -> new Presto());
+        }
+    }
+
+    /** Ostinato Presto: this player's monitor and counters (for the harness and logs). */
+    /**
+     * Ostinato Presto: the landing audit, run every client tick (from PathingBehavior) whoever is driving: a jump that
+     * goes wrong usually ends with the path abandoned and this controller no longer called.
+     */
+    public static void audit(Baritone baritone) {
+        IPlayerContext ctx = baritone.getPlayerContext();
+        Presto p;
+        synchronized (PRESTO) {
+            p = PRESTO.get(ctx); // disabled/unused mode must not allocate a monitor
+        }
+        if (p == null) return;
+        boolean eligible = Baritone.settings().presto.value && ctx.player() != null && ctx.player().isAlive()
+                && versionSupported() && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.getPvpProcess().isActive();
+        if (p.auditContext(ctx.world(), ctx.player(), eligible) && p.armed()) {
+            p.landing(ctx.player().tickCount, ctx.player().getY(), ctx.player().onGround());
+        }
+    }
+
+    public static void invalidatePresto(IPlayerContext ctx, boolean correction) {
+        synchronized (PRESTO) {
+            Presto p = PRESTO.get(ctx);
+            if (p != null) {
+                if (correction && Baritone.settings().presto.value) p.corrected();
+                else p.invalidate();
+            }
+        }
+    }
+
+    private static boolean versionSupported() {
+        if (prestoVersionSupported == null) {
+            prestoVersionSupported = Presto.supportsVersion(net.minecraft.SharedConstants.getCurrentVersion().name());
+        }
+        return prestoVersionSupported;
+    }
+
+    private static boolean supportedBody(IPlayerContext ctx) {
+        var p = ctx.player();
+        return ClientWorld.plainGravity(ctx) && !p.isNoGravity() && !p.getAbilities().flying && !p.isFallFlying()
+                && !p.isPassenger() && !p.isInWater() && !p.isInLava() && !p.isShiftKeyDown()
+                && Presto.supportsBody(p.getBbWidth(), p.getBbHeight(), p.maxUpStep(),
+                p.getAttributeValue(Attributes.AIR_DRAG_MODIFIER), p.getAttributeValue(Attributes.FRICTION_MODIFIER),
+                p.getAttributeValue(Attributes.BOUNCINESS));
+    }
+
+    public static Presto presto(IPlayerContext ctx) {
+        synchronized (PRESTO) {
+            return PRESTO.computeIfAbsent(ctx, c -> new Presto());
+        }
     }
 
     /**
@@ -117,31 +200,61 @@ public final class KinematicController {
      */
     public int tick(Baritone baritone, IPath path, int pathPosition) {
         narrowEnd = false;
+        traceDelay = Integer.MIN_VALUE;
+        traceJump = false;
+        traceGain = Double.NaN;
+        branch = "rollout";
         int r = drive(baritone, path, pathPosition);
+        traceTick = ctx.player().tickCount;
+        traceR = r;
+        traceWhy = r < 0 ? declined : branch;
         if (r >= 0) {
             drivenTicks++;
+            if (prestoOn && Baritone.settings().prestoDebug.value && drivenTicks % 600 == 0) {
+                System.out.println(presto.summary());
+            }
         }
         boolean jumpNext = pathPosition < path.movements().size() && (path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementParkour
                 || path.movements().get(pathPosition) instanceof baritone.pathing.movement.movements.MovementJump);
         if (r < 0 && !narrowEnd && declined != null && Baritone.settings().kinematicTrace.value && pathPosition < path.movements().size()) {
             BetterBlockPos d = path.movements().get(pathPosition).getDest();
             if (narrowAt(new double[]{d.x + 0.5, d.y, d.z + 0.5})) {
-                System.out.printf("KTRACE decline p=%d why=%s%n", pathPosition, declined);
+                System.out.println(String.format("KTRACE decline p=%d why=%s", pathPosition, declined));
             }
         }
         if ((narrowEnd || jumpNext) && Baritone.settings().kinematicTrace.value) {
             // Ostinato: per-tick trace onto a narrow landing or through a jump: who drives, where the player is, how it moves
             net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
-            System.out.printf("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b yaw=%.1f%n", r,
-                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround(), Mth.wrapDegrees(ctx.player().getYRot()));
+            // println, not printf: the client's stdout capture logs println only, and printf lines were lost
+            System.out.println(String.format("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b yaw=%.1f why=%s", r,
+                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround(), Mth.wrapDegrees(ctx.player().getYRot()), traceWhy));
         }
         return r;
     }
 
     /** Ostinato: why the controller left the last tick to Baritone before it looked at the stretch (trace only). */
     private String declined;
+    /** Ostinato Presto v4.1: which part of drive() drove the last tick (trace only; constant strings). */
+    private String branch;
+
+    /*
+     * Ostinato Presto v4.1, trace only (read by the live harness; no allocation): the last tick's client tick, return,
+     * why it declined or which branch drove, the chosen plan's jump delay (MIN_VALUE: no rollouts ran, -1 walk), whether
+     * it pressed jump, the plan's progress along the line over standing still, and whether the stretch was a long jump.
+     */
+    public int traceTick = -1, traceR = -1, traceDelay = Integer.MIN_VALUE;
+    public boolean traceJump, traceLong;
+    public double traceGain = Double.NaN;
+    public String traceWhy;
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
+        checkedLanding = null;
+        prestoOn = Baritone.settings().presto.value && versionSupported() && ctx.player().isAlive()
+                && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.getPvpProcess().isActive();
+        if (!prestoOn) {
+            presto.invalidate();
+            prestoDefers = 0;
+        }
         declined = "state";
         if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
                 || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
@@ -159,12 +272,36 @@ public final class KinematicController {
             return -1;
         }
         ClientWorld.readPlayer(ctx, real);
+        int tick = ctx.player().tickCount;
+        if (prestoOn) {
+            long h0 = System.nanoTime();
+            baritone.getPredictivePhysics().warmUp(); // Presto v4: the first takeoff check is not the cold one
+            presto.begin(ctx.world(), ctx.player(), path, tick);
+            boolean was = presto.trusted();
+            Presto.Reason miss = presto.observe(tick, real.x, real.y, real.z, real.vx, real.vz, real.onGround);
+            presto.hookNanos += System.nanoTime() - h0;
+            presto.hookTicks++;
+            if (was != presto.trusted() && Baritone.settings().prestoDebug.value) {
+                Helper.HELPER.logDebug("Presto: " + (was ? "prediction distrusted (" + miss + ")" : "prediction trusted again"));
+            }
+        } else {
+            presto.drop();
+            presto.disarm(); // Grace Note's episode: whatever lands now is not the jump that was predicted
+        }
 
         double[] here = project(line, real.x, real.y, real.z, Double.MAX_VALUE);
         double end = line.get(line.size() - 1)[3];
         double handback = endsAtPlace ? PLACE_HANDBACK : HANDBACK;
         if (here[1] > WIDE + 0.2) {
             declined = "off line " + here[1];
+            return -1;
+        }
+        if (prestoOn && !presto.trusted() && longJump && real.onGround && baritoneJumps(path, pathPosition)) {
+            // Ostinato Presto: the sim has been missing the real player; Baritone's own parkour takes the gaps it can
+            // until the sim tracks again. Gaps only this controller flies (four wide, off a slab) stay with it.
+            presto.declined++;
+            presto.drop();
+            declined = "presto untrusted";
             return -1;
         }
         declined = null;
@@ -200,6 +337,7 @@ public final class KinematicController {
             } else {
                 // Ostinato: still flying onto a narrow block the position sync has already counted reached (the feet
                 // cell is its cell mid-air): keep steering for its middle, or the coast carried past an iron bar (cubed)
+                branch = "steerAir";
                 return steerAir(baritone, newPos, airAim[0], airAim[1]);
             }
         }
@@ -209,6 +347,7 @@ public final class KinematicController {
             boolean along = recenters > 1 && here[1] < 0.1;
             double[] c = pointAt(here[0] + (along ? 0.6 : 0));
             float yaw = (float) Math.toDegrees(Math.atan2(-(c[0] - real.x), c[2] - real.z));
+            branch = "recenter";
             baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
             baritone.getInputOverrideHandler().clearAllKeys();
             baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, along || here[1] > 0.05);
@@ -217,6 +356,7 @@ public final class KinematicController {
         if (narrowFlight) {
             // Ostinato: after a narrowTakeoff fly the arrival steering (airArrive) all the way down, not the rollouts
             if (!real.onGround) {
+                branch = "narrowFlight";
                 return arrive(baritone, newPos, line.get(line.size() - 1));
             }
             if (ctx.player().tickCount - narrowJumpTick > 2) {
@@ -225,25 +365,36 @@ public final class KinematicController {
         }
         if (narrowStart && real.onGround) {
             // no run-up on a block an eighth wide: jump from where we stand (or hand the takeoff to TakeoffController)
+            branch = "narrowStart";
             return narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
         }
         boolean backing = ctx.player().tickCount - narrowBackTick <= 15; // backing up for a run-up takes it out of range
         if (narrowEnd && real.onGround && end - here[0] < NARROW_RANGE + (backing ? 1.5 : 0)) {
             // Ostinato: a short hop onto a narrow block: the rollouts score how far along the line a jump gets before
             // the horizon, and a jump that falls past an open trapdoor's edge is still above it then (cubed level 1)
+            branch = "narrowEnd";
             int nt = narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
             if (nt >= 0) {
                 return nt;
             }
         }
         if (arriving) {
+            branch = "arrive";
             return arrive(baritone, newPos, line.get(line.size() - 1));
         }
         head = Baritone.settings().headSteering.value;
         camYaw = ctx.player().getYRot();
         camVel0 = baritone.getLookBehavior().yawVelocity();
+        if (real.onGround && turningAround(ctx.playerRotations().getYaw(), aim(real.x, real.z, here[0], false))) {
+            declined = "turning";
+            return -1;
+        }
         // a slow drift of the aim point off the line, as a hand wanders; none where precision matters
         double maxWander = longJump || endsAtPlace ? 0 : Baritone.settings().pathWander.value;
+        if (straightAhead) {
+            // Legato: a line was checked with the box plus MARGIN either side; wander only inside half of that
+            maxWander = Math.min(maxWander, LegatoFeasibility.MARGIN / 2);
+        }
         wander = Math.max(-maxWander, Math.min(maxWander, wander * 0.97 + rng.nextGaussian() * 0.15 * maxWander));
 
         float best = Float.NaN;
@@ -255,12 +406,24 @@ public final class KinematicController {
         double walkScore = -1e9;
         vizRec = viz.beginRollouts();
         int bestR = -1, walkR = -1;
+        // Ostinato Presto: the best plan that jumps later, for a takeoff the engine vetoes
+        double laterScore = -1e9;
+        float laterOff = 0;
+        int laterDelay = NEVER;
+        bestLandT = -1;
         for (int delay : longJump ? DELAYS : JUMP_OR_NOT) {
             for (float off : delay <= 0 ? YAW_OFFSETS : NO_OFFSET) {
                 double score = rollout(off, delay, false, here[0]);
                 PathViz.Rollout r = vizR;
                 int ri = viz.rolloutCount - 1;
-                if (score > bestScore + 1e-6 && !holdsWithMargin(off, delay, here[0])) {
+                int lt = rollLandT;
+                double lx = rollLandX, ly = rollLandY, lz = rollLandZ;
+                if (delay > 0 && score > laterScore + 1e-6) {
+                    laterScore = score;
+                    laterOff = off;
+                    laterDelay = delay;
+                }
+                if (score > bestScore + 1e-6 && !holdsWithMargin(off, delay, false, here[0])) {
                     score = -1e9; // the real jump leaves a little later or shorter than the sim's: a barely-landing plan is out
                     if (r != null) {
                         r.reason = "barely lands";
@@ -273,6 +436,7 @@ public final class KinematicController {
                     bestDelay = delay;
                     bestShort = false;
                     bestR = r != null ? ri : -1;
+                    bestLand(lt, lx, ly, lz);
                 }
                 if (delay == NEVER && score > walkScore + 1e-6) {
                     walkScore = score;
@@ -284,7 +448,20 @@ public final class KinematicController {
             if (delay <= 0) {
                 // steering at the line right beside the player first: gets the box off a corner it snagged on
                 double score = rollout(0, delay, true, here[0]);
+                PathViz.Rollout r = vizR;
                 int ri = vizR != null ? viz.rolloutCount - 1 : -1;
+                int lt = rollLandT;
+                double lx = rollLandX, ly = rollLandY, lz = rollLandZ;
+                if (score > bestScore + 1e-6 && !holdsWithMargin(0, delay, true, here[0])) {
+                    // Ostinato Presto v4: the margin holds for this aim too. Beside the line by 0.2, the point right
+                    // beside the player is 25° off the axis; a jump there, taken on the tick a hop landed at the
+                    // run-up's edge, fell 0.05 short of the four gap (presto-v4-fix5 lap 9 with Presto, fix6 lap 0 without)
+                    score = -1e9;
+                    if (r != null) {
+                        r.reason = "barely lands";
+                        r.score = score;
+                    }
+                }
                 if (delay == NEVER && score > walkScore + 1e-6) {
                     walkScore = score;
                     walkOff = 0;
@@ -297,10 +474,15 @@ public final class KinematicController {
                     bestDelay = delay;
                     bestShort = true;
                     bestR = ri;
+                    bestLand(lt, lx, ly, lz);
                 }
             }
         }
-        if (!longJump && bestDelay == 0 && !jumpWorthIt(bestScore, walkScore, here[0])) {
+        boolean holdHop = !longJump && bestDelay == 0 && prestoOn && !presto.trusted() && walkScore > here[0] + 0.05;
+        if (holdHop && jumpWorthIt(bestScore, walkScore, here[0]) && real.onGround) {
+            presto.hopsHeld++; // Ostinato Presto: the sim is off the real player, so no hop that running can do without
+        }
+        if (!longJump && bestDelay == 0 && (!jumpWorthIt(bestScore, walkScore, here[0]) || holdHop)) {
             // a hop that is barely ahead of running: stay on the ground
             bestScore = walkScore;
             best = walkOff;
@@ -316,6 +498,9 @@ public final class KinematicController {
             }
         }
         boolean bestJump = bestDelay == 0 && real.onGround;
+        traceLong = longJump;
+        traceDelay = bestDelay;
+        traceGain = bestScore - here[0];
         int strafe = 0;
         if (!real.onGround && bestScore > here[0] + 0.05) {
             // micro adjustment in the air, as a player taps A or D: the camera is slow, a strafe acts next tick
@@ -323,12 +508,52 @@ public final class KinematicController {
             for (int st = -1; st <= 1; st += 2) {
                 rolloutStrafe = st;
                 double sc = rollout(best, bestDelay, bestShort, here[0]);
-                if (sc > base + 0.08 && holdsWithMargin(best, bestDelay, here[0])) {
+                if (sc > base + 0.08 && holdsWithMargin(best, bestDelay, bestShort, here[0])) {
                     base = sc;
                     strafe = st;
                 }
             }
             rolloutStrafe = 0;
+        }
+        boolean sprintKey = !(endsAtPlace && end - here[0] < PLACE_BRAKE);
+        if (!real.onGround || !longJump) {
+            prestoDefers = 0;
+        }
+        if (prestoOn && bestJump && longJump && Baritone.settings().prestoPhysicsCheck.value && bestLandT >= 0 && !crossesGap()) {
+            // Ostinato Presto: a step up or down inside the stretch, floor under the whole line: nothing to fall into.
+            // The engine holds one yaw where the controller steers, and from a standstill that once flew a step-up off
+            // the one-wide walkway and vetoed it (live run 3); the landing audit still covers the jump
+            presto.noGap++;
+        } else if (prestoOn && bestJump && longJump && Baritone.settings().prestoPhysicsCheck.value) {
+            // Ostinato Presto: fly this takeoff in the engine (vanilla 26.3) before pressing it
+            Presto.Verdict v = takeoffCheck(baritone, sprintKey, tick);
+            if (v.veto()) {
+                if (Baritone.settings().prestoDebug.value) {
+                    Helper.HELPER.logDebug("Presto: takeoff vetoed (" + v + ") at " + ctx.playerFeet());
+                }
+                if (laterScore > here[0] + 0.05 && prestoDefers < Presto.MAX_DEFER && holdsWithMargin(laterOff, laterDelay, false, here[0])) {
+                    // a later takeoff the sim lands too: run on this tick and ask again on the next
+                    prestoDefers++;
+                    presto.deferred++;
+                    bestScore = laterScore;
+                    best = laterOff;
+                    bestDelay = laterDelay;
+                    bestShort = false;
+                    bestJump = false;
+                } else if (baritoneJumps(path, pathPosition)) {
+                    // no later takeoff: Baritone's parkour takes the jump from here
+                    presto.fallbacks++;
+                    presto.drop();
+                    cooldown = PRESTO_REST;
+                    declined = "presto " + v;
+                    return -1;
+                } else {
+                    // only this controller flies this gap: nothing safer than its own jump, so it stands (as with Presto off)
+                    presto.overridden++;
+                }
+            } else {
+                prestoDefers = 0;
+            }
         }
         boolean committed = !real.onGround && ctx.player().tickCount - lastDrivenTick <= 1;
         if (bestScore <= here[0] + 0.05) {
@@ -340,6 +565,7 @@ public final class KinematicController {
                         return nt;
                     }
                 }
+                declined = "no progress";
                 return -1; // nothing makes progress safely; Baritone knows how to recover
             }
             best = 0; // mid-air with no plan left: keep steering at the line rather than hand over in flight
@@ -355,11 +581,136 @@ public final class KinematicController {
         }
         baritone.getInputOverrideHandler().clearAllKeys();
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
-        baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, !(endsAtPlace && end - here[0] < PLACE_BRAKE));
+        baritone.getInputOverrideHandler().setInputForceState(Input.SPRINT, sprintKey);
         baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, bestJump);
+        traceJump = bestJump;
+        traceDelay = bestDelay; // a Presto deferral may have replaced the plan
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_LEFT, strafe > 0);
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_RIGHT, strafe < 0);
+        if (prestoOn) {
+            // Ostinato Presto: what these keys should do by next tick, with the camera where it will really be
+            long h0 = System.nanoTime();
+            float applied = head ? LookBehavior.modelYawStep(camYaw, camVel0, yaw, prestoYawVelocity) : yaw;
+            sim.copyFrom(real);
+            sim.tick(applied, 1, strafe, sprintKey, bestJump);
+            presto.expect(tick, sim.x, sim.y, sim.z, sim.vx, sim.vz, sim.onGround);
+            if (bestJump && bestLandT >= 0) {
+                // Arm only after this exact jump's inputs are committed, never while merely considering a plan.
+                if (checkedLanding != null) presto.arm(tick, checkedLanding.tick, checkedLanding.y, bestLandT, bestLandY);
+                else if (!presto.armed()) presto.armSim(tick, bestLandT, bestLandY);
+            }
+            presto.hookNanos += System.nanoTime() - h0;
+        }
         return newPos;
+    }
+
+    /** Ostinato Presto: whether Presto acts this tick (setting on, Grace Note not in an episode). */
+    private boolean prestoOn;
+
+    /** Grace Note owns emergencies: while it has an episode open Presto keeps out, and what it expected no longer holds. */
+    private static boolean graceNoteBusy(Baritone baritone) {
+        GraceNote gn = baritone.getGraceNote();
+        if (gn.holdsControl()) {
+            return true;
+        }
+        IGraceNote.Phase p = gn.status().phase();
+        return p != IGraceNote.Phase.MONITORING && p != IGraceNote.Phase.COMPLETED
+                && p != IGraceNote.Phase.FAILED;
+    }
+
+    /**
+     * Ostinato Presto: whether Baritone's own parkour can take every long jump of the stretch (three wide at most, off a
+     * full block); the four-wide ones and those off a slab or soul sand are flown by this controller only.
+     */
+    private boolean baritoneJumps(IPath path, int pathPosition) {
+        for (int k = pathPosition; k <= lastMove && k < path.movements().size(); k++) {
+            IMovement mv = path.movements().get(k);
+            if (mv instanceof MovementParkour) {
+                BetterBlockPos s = mv.getSrc(), d = mv.getDest();
+                BlockState on = ctx.world().getBlockState(s.below());
+                if (Math.abs(d.x - s.x) + Math.abs(d.z - s.z) > 4 || MovementHelper.collisionTop(on) < 1 || on.getBlock() == Blocks.SOUL_SAND) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Ostinato Presto: whether the straight line from the feet to PlayerSim's landing passes over a column with no
+     * collision anywhere from a block under the lower of the two feet heights up to the higher: a gap to fall into.
+     * Sampled every quarter block along the line's middle.
+     */
+    private boolean crossesGap() {
+        double dx = bestLandX - real.x, dz = bestLandZ - real.z;
+        int n = Math.max(1, (int) Math.ceil(Math.sqrt(dx * dx + dz * dz) / 0.25));
+        int lo = Mth.floor(Math.min(real.y, bestLandY)) - 1, hi = Mth.floor(Math.max(real.y, bestLandY));
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        for (int k = 0; k <= n; k++) {
+            int bx = Mth.floor(real.x + dx * k / n), bz = Mth.floor(real.z + dz * k / n);
+            boolean floor = false;
+            for (int by = lo; by <= hi && !floor; by++) {
+                floor = MovementHelper.collisionTop(ctx.world().getBlockState(p.set(bx, by, bz))) > 0;
+            }
+            if (!floor) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void bestLand(int t, double x, double y, double z) {
+        bestLandT = t;
+        bestLandX = x;
+        bestLandY = y;
+        bestLandZ = z;
+    }
+
+    /**
+     * Ostinato Presto: the chosen takeoff, flown by the predictive physics engine with W, sprint and jump held toward
+     * where PlayerSim lands it. Its first landing is compared with PlayerSim's (see {@link Presto#judge}). Inline: one
+     * call on a gap jump's takeoff tick, SCREENING, horizon {@link #PRESTO_HORIZON} at most.
+     */
+    private Presto.Verdict takeoffCheck(Baritone baritone, boolean sprint, int tick) {
+        if (bestLandT <= 0 || bestLandT > PRESTO_HORIZON) {
+            presto.checked(Presto.Verdict.UNAVAILABLE, 0);
+            return Presto.Verdict.UNAVAILABLE; // the plan lands past the rollout: nothing to compare with
+        }
+        long t0 = System.nanoTime();
+        Presto.Verdict v;
+        PredictionResult r = null;
+        try {
+            IPredictivePhysics ppe = baritone.getPredictivePhysics();
+            float toLand = (float) Math.toDegrees(Math.atan2(-(bestLandX - real.x), bestLandZ - real.z));
+            r = ppe.predict(PredictionRequest.trajectory(ppe.capture(ctx.player()), Math.min(PRESTO_HORIZON, bestLandT + 12))
+                    .input(new PredictionRequest.Input(1, 0, true, sprint, false, toLand, Float.NaN))
+                    .priority(PredictionRequest.Priority.MOVEMENT)
+                    .fidelity(PredictionRequest.Fidelity.SCREENING)
+                    .consumer("presto")
+                    .deadlineIn(PRESTO_DEADLINE)
+                    .build());
+            boolean usable = Presto.usable(r, bestLandT);
+            PredictionResult.Landing l = r.landing;
+            double side = l == null ? 0 : Presto.offLine(real.x, real.z, bestLandX, bestLandZ, l.x, l.z);
+            v = Presto.judge(usable, l != null, l == null ? 0 : l.damage, l != null && l.lethal, l == null ? 0 : l.y, bestLandY, side);
+            if (usable && v == Presto.Verdict.UNAVAILABLE) {
+                presto.offLine++;
+            }
+        } catch (RuntimeException e) {
+            v = Presto.Verdict.UNAVAILABLE; // an unsupported body or no world: no opinion, the controller decides alone
+        }
+        presto.checked(v, System.nanoTime() - t0);
+        if (Baritone.settings().prestoDebug.value) {
+            PredictionResult.Landing l = r == null ? null : r.landing;
+            System.out.println(String.format(java.util.Locale.ROOT, "PRESTO check t=%d pos=%.3f,%.3f,%.3f v=%.4f,%.4f cam=%.1f sprint=%b sim=%d@%.3f,%.3f,%.3f ppe=%s %s %s",
+                    tick, real.x, real.y, real.z, real.vx, real.vz, ctx.player().getYRot(), sprint, bestLandT, bestLandX, bestLandY, bestLandZ,
+                    l == null ? "none" : String.format(java.util.Locale.ROOT, "%d@%.3f,%.3f,%.3f", l.tick, l.x, l.y, l.z),
+                    r == null ? "-" : r.status + "/" + r.confidence, v));
+        }
+        if (v == Presto.Verdict.AGREE) {
+            checkedLanding = r.landing;
+        }
+        return v;
     }
 
     // Ostinato: the stretch ends on a block narrower than a full one (real collision shape), see arrive
@@ -645,6 +996,8 @@ public final class KinematicController {
         float cam = camYaw, camVel = camVel0;
         float[] vel = new float[1];
         simJumped = false;
+        rollT = 0;
+        rollLandT = -1;
         for (int t = 0; t < lookahead; t++) {
             float off = t < 4 ? yawOffset : 0;
             // off long gaps a jump plan jumps once, now; toward one it keeps hopping to carry the speed over
@@ -658,6 +1011,10 @@ public final class KinematicController {
             boolean air = !sim.onGround;
             simJumped |= jump;
             sim.tick(want, 1, !sim.onGround && t < 4 ? rolloutStrafe : 0, true, jump);
+            rollT = t + 1;
+            if (air && sim.onGround && simJumped) {
+                touchdown();
+            }
             if (air && sim.onGround && simJumped && !landsSquare()) {
                 return reject("lands on edge");
             }
@@ -696,6 +1053,16 @@ public final class KinematicController {
         return settles(cam, camVel, s) ? score : reject("lands in gap");
     }
 
+    /** Ostinato Presto: the rollout's first touchdown after its jump, for the takeoff check to compare with. */
+    private void touchdown() {
+        if (rollLandT < 0) {
+            rollLandT = rollT;
+            rollLandX = sim.x;
+            rollLandY = sim.y;
+            rollLandZ = sim.z;
+        }
+    }
+
     /** Call after every rollout tick: whether the rollout just touched down from further up than is safe. */
     private boolean hardLanding() {
         if (!sim.onGround) {
@@ -718,6 +1085,10 @@ public final class KinematicController {
                 want = cam;
             }
             sim.tick(want, true, true, false);
+            rollT++;
+            if (sim.onGround && simJumped) {
+                touchdown();
+            }
             if (sim.onGround && simJumped && !landsSquare()) {
                 return false;
             }
@@ -798,13 +1169,12 @@ public final class KinematicController {
      * plans. Ostinato: the side shifts catch a jump cutting toward a path that turns after the landing, which touched
      * down on the landing block's very edge in the sim and fell past it for real (cubed level 9).
      */
-    private boolean holdsWithMargin(float off, int delay, double s0) {
+    private boolean holdsWithMargin(float off, int delay, boolean shortAim, double s0) {
         double hs = Math.hypot(real.vx, real.vz);
         if (!longJump || !real.onGround || hs < 0.01) {
             return true;
         }
-        double ux = real.vx / hs, uz = real.vz / hs;
-        double[][] shifts = {{-ux * 0.25, -uz * 0.25}, {-uz * LATERAL_MARGIN, ux * LATERAL_MARGIN}, {uz * LATERAL_MARGIN, -ux * LATERAL_MARGIN}};
+        double[][] shifts = marginShifts(real.vx, real.vz);
         double x = real.x, z = real.z;
         boolean rec = vizRec;
         vizRec = false;
@@ -812,7 +1182,7 @@ public final class KinematicController {
         for (double[] d : shifts) {
             real.x = x + d[0];
             real.z = z + d[1];
-            if (rollout(off, delay, false, s0) <= -1e8) {
+            if (rollout(off, delay, shortAim, s0) <= -1e8) {
                 holds = false;
                 break;
             }
@@ -821,6 +1191,15 @@ public final class KinematicController {
         real.x = x;
         real.z = z;
         return holds;
+    }
+
+    /**
+     * The take-off spots {@link #holdsWithMargin} flies from, as offsets from the real one: a quarter block back along
+     * the ground velocity (vx, vz, not zero), and {@link #LATERAL_MARGIN} to either side of it.
+     */
+    static double[][] marginShifts(double vx, double vz) {
+        double hs = Math.hypot(vx, vz), ux = vx / hs, uz = vz / hs;
+        return new double[][]{{-ux * 0.25, -uz * 0.25}, {-uz * LATERAL_MARGIN, ux * LATERAL_MARGIN}, {uz * LATERAL_MARGIN, -ux * LATERAL_MARGIN}};
     }
 
     /**
@@ -887,6 +1266,23 @@ public final class KinematicController {
         return false;
     }
 
+    /** Above this many degrees between the look and the path, the rollouts' yaw model is no guide (see turningAround). */
+    static final float TURN_LIMIT = 90f;
+
+    /**
+     * Ostinato Presto v4: whether the player, on the ground, still has to turn more than {@link #TURN_LIMIT} to face
+     * along the path. The rollouts model the look's turn per tick, but near a reversal which way it goes depends on
+     * the aim's jitter and the target's drift, and the model and the real look turned opposite ways: after the
+     * one-block gap's walk-back (facing west, path east) the controller took the Traverse and jumped mid-turn,
+     * flying off the walkway's side (presto-v4-fix2 laps 3, 15). Baritone's movement turns the player first.
+     */
+    static boolean turningAround(float moveYaw, float pathYaw) {
+        float d = (pathYaw - moveYaw) % 360f;
+        if (d >= 180f) d -= 360f;
+        if (d < -180f) d += 360f;
+        return Math.abs(d) > TURN_LIMIT;
+    }
+
     private float aim(double x, double z, double s, boolean shortAim) {
         double[] tgt = pointAt(s + (shortAim ? 0.4 : 1.6));
         if (wander != 0 && !shortAim) {
@@ -951,9 +1347,11 @@ public final class KinematicController {
         }
         lastMove = i - 1;
         longJump = false;
+        straightAhead = false;
         for (int k = pathPosition; k < i; k++) {
             IMovement mv = moves.get(k);
             longJump |= mv instanceof MovementParkour && mv.getSrc().distSqr(mv.getDest()) >= 16;
+            straightAhead |= mv instanceof MovementStraight;
         }
         return line.size() >= 2;
     }
@@ -967,9 +1365,15 @@ public final class KinematicController {
         return true;
     }
 
-    private static boolean drivable(IMovement mv) {
+    static boolean drivable(IMovement mv) {
         if (mv instanceof MovementTraverse || mv instanceof MovementDiagonal || mv instanceof MovementAscend) {
             return mv.getDest().y - mv.getSrc().y <= 1;
+        }
+        if (mv instanceof MovementStraight) {
+            return true; // Legato: flat by construction
+        }
+        if (mv instanceof MovementLine) {
+            return KinematicLine.drivable((MovementLine) mv); // a knight move: behind kinematicLine, plain ground only
         }
         if (mv instanceof MovementParkour) {
             if (((MovementParkour) mv).extensions() > 0) {
@@ -1079,11 +1483,16 @@ public final class KinematicController {
     /** Advance past moves whose destination the player already stands in (on the ground at its floor, or near it mid-jump;
      * standing a floor below an ascend's destination must not skip the ascend). */
     private int syncPosition(IPath path, int pathPosition) {
-        int fx = PlayerSim.floor(real.x), fz = PlayerSim.floor(real.z);
-        int fy = PlayerSim.floor(real.y + 1e-3);
+        return syncedPosition(path.movements(), pathPosition, lastMove, real.x, real.y, real.z, real.onGround);
+    }
+
+    /** The furthest move in [pathPosition, lastMove] whose dest cell holds the feet, plus one; else pathPosition. */
+    static int syncedPosition(List<? extends IMovement> moves, int pathPosition, int lastMove, double x, double y, double z, boolean onGround) {
+        int fx = PlayerSim.floor(x), fz = PlayerSim.floor(z);
+        int fy = PlayerSim.floor(y + 1e-3);
         for (int i = lastMove; i >= pathPosition; i--) {
-            BetterBlockPos d = path.movements().get(i).getDest();
-            if (d.x == fx && d.z == fz && (real.onGround ? fy == d.y : fy >= d.y - 1 && fy <= d.y + 1)) {
+            BetterBlockPos d = moves.get(i).getDest();
+            if (d.x == fx && d.z == fz && (onGround ? fy == d.y : fy >= d.y - 1 && fy <= d.y + 1)) {
                 return i + 1;
             }
         }

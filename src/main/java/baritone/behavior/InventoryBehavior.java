@@ -64,6 +64,9 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (event.getType() == TickEvent.Type.OUT) {
             return;
         }
+        if (baritone.getGraceNote().holdsControl()) {
+            return; // Ostinato: no hotbar swaps under an emergency maneuver (the bucket it holds could be swapped out)
+        }
         if (ctx.player().containerMenu != ctx.player().inventoryMenu) {
             // we have a crafting table or a chest or something open
             return;

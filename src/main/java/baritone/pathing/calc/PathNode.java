@@ -77,6 +77,17 @@ public final class PathNode {
     /** Ostinato: the cost this node was last expanded at. */
     public double expandedCost = ActionCosts.COST_INF;
 
+    /** Ostinato Legato: reached from {@link #previous} by a straight any-angle line (Theta*), not by a grid move. */
+    public boolean legato;
+
+    /**
+     * Ostinato Cadenza: the cost at which this goal cell's terminal cost was charged (NaN: never), and that charge.
+     * The search stops at a goal cell only once it pops it again with the charge paid at its current cost.
+     */
+    public double terminalPaidAt = Double.NaN;
+
+    public double terminalCharge;
+
     public PathNode(int x, int y, int z, Goal goal) {
         this.previous = null;
         this.cost = ActionCosts.COST_INF;
@@ -97,6 +108,17 @@ public final class PathNode {
         this.x = x;
         this.y = y;
         this.z = z;
+    }
+
+    /** Ostinato Maestro: another search state for the same cell (same heuristic), not yet reached. */
+    PathNode(PathNode sameCell) {
+        this.previous = null;
+        this.cost = ActionCosts.COST_INF;
+        this.estimatedCostToGoal = sameCell.estimatedCostToGoal;
+        this.heapPosition = -1;
+        this.x = sameCell.x;
+        this.y = sameCell.y;
+        this.z = sameCell.z;
     }
 
     public boolean isOpen() {

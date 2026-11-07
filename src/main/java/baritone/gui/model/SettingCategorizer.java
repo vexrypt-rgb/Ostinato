@@ -49,16 +49,16 @@ public final class SettingCategorizer {
                 "incorrectSize", "distanceTrim", "mapArtMode", "startAtLayer", "layerOrder", "layerHeight", "skipFailedLayers",
                 "breakFromAbove", "goalBreakFromAbove", "placeIncorrectBlockPenaltyMultiplier",
                 "breakCorrectBlockPenaltyMultiplier", "backfill",
-                "mazeMode", "mazeSeed", "mazeMinActionDelay", "mazeMaxActionDelay", "mazeActionJitter", "mazeMapFile");
+                "mazeMode", "mazeSeed", "mazeMinActionDelay", "mazeMaxActionDelay", "mazeActionJitter", "mazeMapFile", "mazeDepthY");
         put(m, WATER_AIR, "allowDoorAirPockets", "allowBoats", "allowBoatFall", "maxFallHeightBoat", "walkOnWaterOnePenalty",
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater", "allowMountClutch", "allowSteeredFalls");
         put(m, RENDER, "yLevelBoxSize", "fadePath", "cachedChunksOpacity");
-        put(m, MOVEMENT, "freeLook", "humanInputCaps", "maxYawPerTick", "maxPitchPerTick", "physicalInput", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "parkourTurnCap", "analogMovement", "randomLooking", "randomLooking113",
+        put(m, MOVEMENT, "freeLook", "humanInputCaps", "maxYawPerTick", "maxPitchPerTick", "physicalInput", "inputArbitration", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "parkourTurnCap", "analogMovement", "randomLooking", "randomLooking113",
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
                 "travelStack", "simTravel",
                 "nativeAcceleration", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
-                "allowNeos", "kinematicTrace", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
+                "allowNeos", "kinematicTrace", "presto", "prestoPhysicsCheck", "prestoDebug", "legato", "legatoSmoothing", "legatoSearch", "legatoDebug", "kinematicLine", "cadenza", "cadenzaMaxTargets", "cadenzaShortHorizon", "cadenzaBuilder", "cadenzaTurnAware", "cadenzaBatch", "cadenzaDebug", "maestro", "maestroTurnCost", "maestroMaxStates", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost", "fastMode", "fastModeMinHealth");
         put(m, PATHING, "seedPlanning", "seedPlanningSeed", "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
                 "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival", "blocksToAvoidStandingOn");

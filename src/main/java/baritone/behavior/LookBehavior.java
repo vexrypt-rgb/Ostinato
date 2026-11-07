@@ -72,10 +72,21 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
         this.target = new Target(rotation, this.human ? Target.Mode.CLIENT : Target.Mode.resolve(ctx, blockInteract));
         this.traceTarget = rotation; // Ostinato
+        if (traceCallers) {
+            traceTargetBy = StackWalker.getInstance().walk(f -> f.skip(1).findFirst()
+                    .map(c -> c.getClassName().substring(c.getClassName().lastIndexOf('.') + 1) + "." + c.getMethodName() + ":" + c.getLineNumber())
+                    .orElse("?"));
+        }
     }
 
     /** Ostinato: the last rotation asked for, before the hand or the aim jitter, for the parity trace. */
     public Rotation traceTarget;
+    /**
+     * Ostinato Presto v4.1: test harness only (off unless a trace turns it on; it walks the stack on every request).
+     * Who asked for {@link #traceTarget}.
+     */
+    public static volatile boolean traceCallers;
+    public String traceTargetBy = "-";
 
     @Override
     public IAimProcessor getAimProcessor() {
@@ -248,6 +259,11 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
      * 26 deg/tick at 40 deg, 33 at 90, 50 at 200; the default model reaches 54 at 90), and a jump of the aim point
      * by more than 25 deg is answered after 3 ticks (150 ms, that hand's fastest decile of reaction times).
      */
+    /** Ostinato: hand yaw speed cap, degrees per tick (was 60, then 72; user asked for 90). Bounds both humanStep and modelYawStep. */
+    static final float HAND_MAX_YAW = 90f;
+    /** Ostinato: hand pitch speed cap, degrees per tick (was 45; user asked for 90). */
+    static final float HAND_MAX_PITCH = 90f;
+
     static final boolean FLICK_USER = "user".equals(System.getProperty("ostinato.flick"));
 
     /** Ostinato: the user-profile cap on one tick's turn for a move of {@code d} degrees still to go. */
@@ -261,7 +277,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     /** One tick of the hand's yaw (the same model as {@link #humanStep}), for rollouts: returns the new camera yaw, speed in outVel[0]. */
     public static float modelYawStep(float cam, float vel, float target, float[] outVel) {
         float dy = net.minecraft.util.Mth.wrapDegrees(target - cam);
-        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
+        float want = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -HAND_MAX_YAW, HAND_MAX_YAW) : dy;
         float acc = 12f + Math.abs(dy) * 0.5f;
         float out = vel + net.minecraft.util.Mth.clamp(want - vel, -acc, acc);
         if (Math.abs(dy) <= 1.5f) out = dy;
@@ -285,8 +301,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
         float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
-        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -60f, 60f) : dy;
-        float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -45f, 45f) : dp;
+        float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -HAND_MAX_YAW, HAND_MAX_YAW) : dy;
+        float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -HAND_MAX_PITCH, HAND_MAX_PITCH) : dp;
         // acceleration limit scales with the size of the move: a flick may start hard, a nudge starts soft
         float accY = 12f + Math.abs(dy) * 0.5f, accP = 9f + Math.abs(dp) * 0.5f;
         float outY = velYaw + net.minecraft.util.Mth.clamp(wantY - velYaw, -accY, accY);
@@ -313,6 +329,18 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         return new Rotation(cy + outY, net.minecraft.util.Mth.clamp(cp + outP, -90f, 90f));
     }
 
+    /**
+     * Ostinato: where this tick's turn is measured from. A silent (SERVER) look leaves the camera where it was and
+     * sends its own rotation, so the turn the server sees, and the one the gate limits, starts at the rotation last
+     * sent. Measured from the camera instead, a camera left more than the gate's limit from the target pinned the sent
+     * yaw at camera +- limit for good, and the walk drifted sideways off a one-wide path (presto-v4-fix1 laps 0, 1, 3:
+     * camera at 80 after the parkour walk-back, target -90, sent yaw stuck 120 short). A visible look and the human
+     * step send what the camera shows, so the camera is the last sent rotation there.
+     */
+    static Rotation gateFrom(Target.Mode mode, boolean human, Rotation camera, Rotation sent) {
+        return mode == Target.Mode.SERVER && !human && sent != null ? sent : camera;
+    }
+
     @Override
     public void onPlayerUpdate(PlayerUpdateEvent event) {
 
@@ -333,9 +361,10 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 this.processor.capOverride = 0;
                 // Ostinato: the human-input gate; no single-tick turn past a fast flick, pitch kept in range.
                 // physicalInput (off by default) then keeps that inside a hand's speed and acceleration.
-                float toY = HumanInputCaps.capYaw(this.prevRotation.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw());
-                float toP = HumanInputCaps.capPitch(this.prevRotation.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch());
-                float[] aimed = physicalLook(this.prevRotation.getYaw(), this.prevRotation.getPitch(), toY, toP);
+                Rotation from = gateFrom(this.target.mode, this.human, this.prevRotation, this.serverRotation);
+                float toY = HumanInputCaps.capYaw(from.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw());
+                float toP = HumanInputCaps.capPitch(from.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch());
+                float[] aimed = physicalLook(from.getYaw(), from.getPitch(), toY, toP);
                 ctx.player().setYRot(aimed[0]);
                 ctx.player().setXRot(aimed[1]);
                 break;
@@ -470,6 +499,20 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
         @Override
         public final Rotation peekRotation(final Rotation rotation) {
+            return peek(rotation, true);
+        }
+
+        @Override
+        public final Rotation peekAim(final Rotation rotation) {
+            return peek(rotation, false); // Ostinato: run100, see IAimProcessor.peekAim
+        }
+
+        @Override
+        public final Rotation peekSettledRotation(final Rotation rotation) {
+            return peek(rotation, false); // Ostinato: same uncapped settle as peekAim
+        }
+
+        private Rotation peek(final Rotation rotation, final boolean capped) {
             final Rotation prev = this.getPrevRotation();
 
             float desiredYaw = rotation.getYaw();
@@ -485,8 +528,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             desiredPitch += this.randomPitchOffset;
 
             return new Rotation(
-                    this.calculateMouseMove(prev.getYaw(), desiredYaw),
-                    this.calculateMouseMove(prev.getPitch(), desiredPitch)
+                    this.calculateMouseMove(prev.getYaw(), desiredYaw, capped),
+                    this.calculateMouseMove(prev.getPitch(), desiredPitch, capped)
             ).clamp();
         }
 
@@ -550,9 +593,12 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             return pitch;
         }
 
-        private float calculateMouseMove(float current, float target) {
+        private float calculateMouseMove(float current, float target, boolean capped) {
             // Shortest-path turn, capped so PvP aim tracks instead of snapping.
             float delta = net.minecraft.util.Mth.wrapDegrees(target - current);
+            if (!capped) {
+                return current + mouseToAngle(angleToMouse(delta)); // Ostinato: uncapped settle (peekAim / peekSettledRotation)
+            }
             float cap = 32f;
             try {
                 cap = Float.parseFloat(System.getProperty("ostinato.aim.deg", "32"));
@@ -576,7 +622,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
     }
 
-    private static class Target {
+    static class Target {
 
         public final Rotation rotation;
         public final Mode mode;

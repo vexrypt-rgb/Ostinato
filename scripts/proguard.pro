@@ -21,6 +21,9 @@
 -dontwarn baritone.launch.BaritoneForgeModXD
 # progard doesn't like signature polymorphism
 -dontwarn java.lang.invoke.MethodHandle
+# LegatoLiveTest samples thread allocation via the management API, which is not in the library jars
+-dontwarn java.lang.management.**
+-dontwarn com.sun.management.**
 
 # please do not change the comment below
 -keep class baritone.api.** { *; } # this is the keep api

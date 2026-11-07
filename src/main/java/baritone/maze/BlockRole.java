@@ -29,7 +29,12 @@ public enum BlockRole {
     LIGHT,
     FEATURE,
     /** Solid plug at the far end of the corridor stub. */
-    STUB_CAP;
+    STUB_CAP,
+    /**
+     * Ostinato: 2026-11-02, poolrooms. A floor cell that holds still water. Solid for the seal and the dig (a survival
+     * furnisher without water placing leaves pool tiles there instead); the creative schematic places water.
+     */
+    WATER;
 
     public boolean solid() {
         return this != OUTSIDE && this != AIR && this != LIGHT; // Ostinato: the light is a torch, not a full block

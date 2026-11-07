@@ -25,6 +25,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
@@ -38,11 +41,15 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
     private final Object placeMutex = new Object();
     private final Object propertiesMutex = new Object();
     private final Object globalHeuristicMutex = new Object();
-    private final HashSet<BlockPos> _blocksToAvoidBreaking = new HashSet<>();
-    private final List<Predicate<BlockPos>> _breakAvoiders = new ArrayList<>();
-    private final List<Predicate<BlockPos>> _placeAvoiders = new ArrayList<>();
-    private final List<Predicate<BlockPos>> _forceCanWalkOn = new ArrayList<>();
-    private final List<Predicate<BlockPos>> _forceAvoidWalkThrough = new ArrayList<>();
+    // Ostinato: read on every block the pathfinder looks at, written a handful of times per task. The lists are
+    // copy-on-write so a read needs no monitor (the monitor alone measured ~18ns per call, the whole check ~1ns) and
+    // survives TenorClef's clear()+addAll() on the tick thread, which was a live ConcurrentModificationException risk
+    // against the pathing thread. Writers keep taking the mutexes so the existing callers still serialize.
+    private final Set<BlockPos> _blocksToAvoidBreaking = ConcurrentHashMap.newKeySet();
+    private final List<Predicate<BlockPos>> _breakAvoiders = new CopyOnWriteArrayList<>();
+    private final List<Predicate<BlockPos>> _placeAvoiders = new CopyOnWriteArrayList<>();
+    private final List<Predicate<BlockPos>> _forceCanWalkOn = new CopyOnWriteArrayList<>();
+    private final List<Predicate<BlockPos>> _forceAvoidWalkThrough = new CopyOnWriteArrayList<>();
     private final List<BiPredicate<BlockState, ItemStack>> _forceSaveTool = new ArrayList<>();
     private final List<BiPredicate<BlockState, ItemStack>> _forceUseTool = new ArrayList<>();
     private final List<BiFunction<Double, BlockPos, Double>> _globalHeuristics = new ArrayList<>();
@@ -74,6 +81,23 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
         }
     }
 
+    // Ostinato: run107. TenorClef's BotBehaviour clears and refills _breakAvoiders on every state change, so a predicate
+    // Ostinato put there would vanish on the next task push. #maze.backrooms.connected keeps the finished complex whole
+    // while the builder digs the next segment through this slot instead; TenorClef never touches it.
+    public interface CellGuard {
+        boolean test(int x, int y, int z);
+    }
+
+    private volatile CellGuard ostinatoGuard;
+
+    public void setOstinatoGuard(CellGuard guard) {
+        ostinatoGuard = guard;
+    }
+
+    public CellGuard ostinatoGuard() {
+        return ostinatoGuard;
+    }
+
     public void configurePlaceBucketButDontFall(boolean allow) {
         synchronized (propertiesMutex) {
             _dontPlaceBucketButStillFall = allow;
@@ -102,55 +126,47 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
     }
 
     // The x,y,z forms are asked per block by the pathfinder: with nothing registered they answer without a BlockPos.
+    // The reads below are lock-free by design (see the field comment); the mutexes stay on the write paths.
 
     public boolean shouldAvoidBreaking(int x, int y, int z) {
-        synchronized (breakMutex) {
-            if (_blocksToAvoidBreaking.isEmpty() && _breakAvoiders.isEmpty()) return false;
-            return shouldAvoidBreaking(new BlockPos(x, y, z));
-        }
+        CellGuard guard = ostinatoGuard;
+        if (guard != null && guard.test(x, y, z)) return true;
+        if (_blocksToAvoidBreaking.isEmpty() && _breakAvoiders.isEmpty()) return false;
+        return shouldAvoidBreaking(new BlockPos(x, y, z));
     }
 
     public boolean shouldAvoidBreaking(BlockPos pos) {
-        synchronized (breakMutex) {
-            if (_blocksToAvoidBreaking.contains(pos))
-                return true;
-            return anyMatch(_breakAvoiders, pos);
-        }
+        CellGuard guard = ostinatoGuard;
+        if (guard != null && guard.test(pos.getX(), pos.getY(), pos.getZ())) return true;
+        if (_blocksToAvoidBreaking.contains(pos))
+            return true;
+        return anyMatch(_breakAvoiders, pos);
     }
 
     public boolean shouldAvoidPlacingAt(BlockPos pos) {
-        synchronized (placeMutex) {
-            return anyMatch(_placeAvoiders, pos);
-        }
+        return anyMatch(_placeAvoiders, pos);
     }
 
     public boolean shouldAvoidPlacingAt(int x, int y, int z) {
-        synchronized (placeMutex) {
-            return !_placeAvoiders.isEmpty() && anyMatch(_placeAvoiders, new BlockPos(x, y, z));
-        }
+        return !_placeAvoiders.isEmpty() && anyMatch(_placeAvoiders, new BlockPos(x, y, z));
     }
 
     public boolean canWalkOnForce(int x, int y, int z) {
-        synchronized (propertiesMutex) {
-            return !_forceCanWalkOn.isEmpty() && anyMatch(_forceCanWalkOn, new BlockPos(x, y, z));
-        }
+        return !_forceCanWalkOn.isEmpty() && anyMatch(_forceCanWalkOn, new BlockPos(x, y, z));
     }
 
     public boolean shouldAvoidWalkThroughForce(BlockPos pos) {
-        synchronized (propertiesMutex) {
-            return anyMatch(_forceAvoidWalkThrough, pos);
-        }
+        return anyMatch(_forceAvoidWalkThrough, pos);
     }
 
     public boolean shouldAvoidWalkThroughForce(int x, int y, int z) {
-        synchronized (propertiesMutex) {
-            return !_forceAvoidWalkThrough.isEmpty() && anyMatch(_forceAvoidWalkThrough, new BlockPos(x, y, z));
-        }
+        return !_forceAvoidWalkThrough.isEmpty() && anyMatch(_forceAvoidWalkThrough, new BlockPos(x, y, z));
     }
 
+    /** Ostinato: indexed so a copy-on-write list is walked without allocating an iterator per block. */
     private static boolean anyMatch(List<Predicate<BlockPos>> preds, BlockPos pos) {
-        for (Predicate<BlockPos> pred : preds) {
-            if (pred.test(pos)) return true;
+        for (int i = 0, n = preds.size(); i < n; i++) {
+            if (preds.get(i).test(pos)) return true;
         }
         return false;
     }
@@ -241,7 +257,7 @@ public class AltoClefSettings implements baritone.api.policy.IAgentPolicy {
          */
     }
 
-    public HashSet<BlockPos> getBlocksToAvoidBreaking() {
+    public Set<BlockPos> getBlocksToAvoidBreaking() {
         return _blocksToAvoidBreaking;
     }
 

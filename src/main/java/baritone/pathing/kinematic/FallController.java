@@ -11,10 +11,13 @@ import baritone.api.utils.input.Input;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.movements.MovementFall;
+import baritone.utils.InputArbiter;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Map;
 
 /**
  * Slow kinematic, long falls: walks off the edge towards the landing column, steers in the air with W, and when the
@@ -30,6 +33,11 @@ public final class FallController {
     private static volatile boolean placedWater; // static: a replan during the fall builds a new executor and controller
     /** Ticks driven, so callers can verify the mode is in use. */
     public static volatile long drivenTicks;
+    /** Ostinato: lease while inputArbitration is on. The flag-off path never touches it. */
+    private InputArbiter.Lease lease;
+    private long heldEpoch;
+    /** True after a flag-on frame reached the keys, so handing the tick back clears those keys. */
+    private boolean wrote;
 
     public FallController(IPlayerContext ctx) {
         this.ctx = ctx;
@@ -37,13 +45,30 @@ public final class FallController {
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
     public int tick(Baritone baritone, IPath path, int pathPosition) {
-        int r = drive(baritone, path, pathPosition);
-        if (r >= 0) {
-            drivenTicks++;
-        } else {
-            ticks = 0;
+        // Ostinato: off, the body below is the previous direct key write. It does not take a lease.
+        if (!Baritone.settings().inputArbitration.value) {
+            int r = drive(baritone, path, pathPosition);
+            if (r >= 0) {
+                drivenTicks++;
+            } else {
+                ticks = 0;
+            }
+            return r;
         }
-        return r;
+        try {
+            int r = drive(baritone, path, pathPosition);
+            if (r >= 0) {
+                drivenTicks++;
+            } else {
+                ticks = 0;
+                endLease(baritone, false);
+            }
+            return r;
+        } catch (RuntimeException e) {
+            ticks = 0;
+            endLease(baritone, true);
+            throw e;
+        }
     }
 
     private int drive(Baritone baritone, IPath path, int pathPosition) {
@@ -66,12 +91,12 @@ public final class FallController {
                 ticks = 0;
                 return -1;
             }
-            var in = baritone.getInputOverrideHandler();
             inv.setSelectedSlot(empty);
             baritone.getLookBehavior().human();
             baritone.getLookBehavior().updateTarget(new Rotation(player.getYRot(), 90f), true);
-            in.clearAllKeys();
-            in.setInputForceState(Input.CLICK_RIGHT, player.getXRot() > 80 && ticks % 3 == 0);
+            if (!press(baritone, false, false, false, false, false, false, player.getXRot() > 80 && ticks % 3 == 0)) {
+                return -1;
+            }
             return pathPosition;
         }
         if (!(path.movements().get(pathPosition) instanceof MovementFall fall)) {
@@ -94,7 +119,6 @@ public final class FallController {
             return -1; // a boat fall, or no way down alive
         }
         BetterBlockPos feet = ctx.playerFeet();
-        var in = baritone.getInputOverrideHandler();
         Vec3 centre = VecUtils.getBlockPosCenter(dest);
         Inventory inv = player.getInventory();
         int water = inv.findSlotMatchingItem(new net.minecraft.world.item.ItemStack(Items.WATER_BUCKET));
@@ -108,12 +132,15 @@ public final class FallController {
                 inv.setSelectedSlot(empty);
                 baritone.getLookBehavior().human();
                 baritone.getLookBehavior().updateTarget(new Rotation(player.getYRot(), 90f), true);
-                in.clearAllKeys();
-                in.setInputForceState(Input.CLICK_RIGHT, player.getXRot() > 80 && ticks % 3 == 0);
+                if (!press(baritone, false, false, false, false, false, false, player.getXRot() > 80 && ticks % 3 == 0)) {
+                    return -1;
+                }
                 return pathPosition;
             }
             if (feet.equals(dest)) {
-                in.clearAllKeys();
+                if (!press(baritone, false, false, false, false, false, false, false)) {
+                    return -1;
+                }
                 return pathPosition + 1;
             }
         }
@@ -139,16 +166,24 @@ public final class FallController {
         baritone.getLookBehavior().human();
         // drifting: keep facing the way the keys were worked out for
         baritone.getLookBehavior().updateTarget(new Rotation(drift != null ? player.getYRot() : toDest.getYaw(), pitch), true);
-        in.clearAllKeys();
+        boolean forward;
+        boolean back;
+        boolean left;
+        boolean right;
+        boolean sneak;
         if (drift != null) {
-            in.setInputForceState(Input.MOVE_FORWARD, drift[0]);
-            in.setInputForceState(Input.MOVE_BACK, drift[1]);
-            in.setInputForceState(Input.MOVE_LEFT, drift[2]);
-            in.setInputForceState(Input.MOVE_RIGHT, drift[3]);
+            forward = drift[0];
+            back = drift[1];
+            left = drift[2];
+            right = drift[3];
+            sneak = false;
         } else {
-            in.setInputForceState(Input.MOVE_FORWARD, off);
+            forward = off;
+            back = false;
+            left = false;
+            right = false;
             // hold sneak while dropping fast so the air steering does not overshoot the column
-            in.setInputForceState(Input.SNEAK, off && air && Math.abs(player.getDeltaMovement().y) > 0.4);
+            sneak = off && air && Math.abs(player.getDeltaMovement().y) > 0.4;
         }
         boolean click = false;
         if (place && player.getXRot() > 80 && ctx.objectMouseOver() instanceof net.minecraft.world.phys.BlockHitResult hit
@@ -157,7 +192,9 @@ public final class FallController {
                 && ctx.playerHead().distanceTo(hit.getLocation()) < ctx.playerController().getBlockReachDistance()) {
             click = true;
         }
-        in.setInputForceState(Input.CLICK_RIGHT, click);
+        if (!press(baritone, forward, back, left, right, sneak, false, click)) {
+            return -1;
+        }
         if (click) {
             placedWater = true;
         }
@@ -165,5 +202,71 @@ public final class FallController {
             System.out.printf("FALL y %.2f vy %.2f pit %.0f water%d %s%n", player.getY(), player.getDeltaMovement().y, player.getXRot(), Inventory.isHotbarSlot(water) ? 1 : 0, click ? "C" : "");
         }
         return pathPosition;
+    }
+
+    /**
+     * One chord. Off, this is clear-all then the seven keys the fall used to set.
+     * On, a rejected claim writes nothing, so a preempting owner keeps its keys.
+     *
+     * @return false only when the flag is on and this controller did not get the chord
+     */
+    private boolean press(Baritone baritone, boolean forward, boolean back, boolean left, boolean right,
+                          boolean sneak, boolean jump, boolean clickRight) {
+        if (!Baritone.settings().inputArbitration.value) {
+            var in = baritone.getInputOverrideHandler();
+            in.clearAllKeys();
+            in.setInputForceState(Input.MOVE_FORWARD, forward);
+            in.setInputForceState(Input.MOVE_BACK, back);
+            in.setInputForceState(Input.MOVE_LEFT, left);
+            in.setInputForceState(Input.MOVE_RIGHT, right);
+            in.setInputForceState(Input.SNEAK, sneak);
+            in.setInputForceState(Input.JUMP, jump);
+            in.setInputForceState(Input.CLICK_RIGHT, clickRight);
+            return true;
+        }
+        InputArbiter arb = baritone.getInputArbiter();
+        if (lease == null || heldEpoch != lease.epoch() || !holdsChord(lease)) {
+            lease = arb.claim(FallInput.OWNER, FallInput.PRIORITY, false, FallInput.LEASE);
+            heldEpoch = lease.epoch();
+        }
+        if (!holdsChord(lease)) {
+            return false;
+        }
+        Map<Input, Boolean> frame = FallInput.submit(arb, lease,
+                FallInput.chord(forward, back, left, right, sneak, jump, clickRight));
+        if (frame == null) {
+            return false;
+        }
+        writeApplied(baritone, frame);
+        wrote = true;
+        return true;
+    }
+
+    private static boolean holdsChord(InputArbiter.Lease lease) {
+        return lease.holds(InputArbiter.Resource.MOVE)
+                && lease.holds(InputArbiter.Resource.JUMP)
+                && lease.holds(InputArbiter.Resource.SNEAK)
+                && lease.holds(InputArbiter.Resource.CLICK);
+    }
+
+    /** Release a lease taken while the flag was on. A tick that never wrote leaves the keyboard alone. */
+    private void endLease(Baritone baritone, boolean failed) {
+        Map<Input, Boolean> frame = FallInput.end(baritone.getInputArbiter(), lease, failed);
+        lease = null;
+        heldEpoch = 0;
+        if (wrote && frame != null) {
+            writeApplied(baritone, frame);
+        }
+        wrote = false;
+    }
+
+    private static void writeApplied(Baritone baritone, Map<Input, Boolean> frame) {
+        var in = baritone.getInputOverrideHandler();
+        in.clearAllKeys();
+        for (Map.Entry<Input, Boolean> entry : frame.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                in.setInputForceState(entry.getKey(), true);
+            }
+        }
     }
 }

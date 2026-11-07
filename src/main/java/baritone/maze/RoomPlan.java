@@ -34,9 +34,17 @@ public final class RoomPlan {
     public final int sizeY;
     public final int sizeZ;
     public final BlockRole[][][] roles;
+    /** Ostinato: 2026-11-02. The connected-mode variant, or null for a backrooms-grid room ({@link MazePlanner}). */
+    public final RoomVariant variant;
 
     public RoomPlan(int cellX, int cellZ, long mazeSeed, long roomSeed, MazeTheme theme,
                     int originX, int originY, int originZ, BlockRole[][][] roles) {
+        this(cellX, cellZ, mazeSeed, roomSeed, theme, originX, originY, originZ, roles, null);
+    }
+
+    public RoomPlan(int cellX, int cellZ, long mazeSeed, long roomSeed, MazeTheme theme,
+                    int originX, int originY, int originZ, BlockRole[][][] roles, RoomVariant variant) {
+        this.variant = variant;
         this.cellX = cellX;
         this.cellZ = cellZ;
         this.mazeSeed = mazeSeed;
@@ -67,7 +75,26 @@ public final class RoomPlan {
             }
         }
         copy[x][y][z] = role;
-        return new RoomPlan(cellX, cellZ, mazeSeed, roomSeed, theme, originX, originY, originZ, copy);
+        return new RoomPlan(cellX, cellZ, mazeSeed, roomSeed, theme, originX, originY, originZ, copy, variant);
+    }
+
+    /** Ostinato: 2026-11-02. Room-relative container spots: the variant's, or the fixed four of the backrooms box. */
+    public java.util.List<int[]> lootSpots() {
+        return variant != null ? variant.lootSpots() : java.util.List.of(MazePlanner.LOOT_SPOTS);
+    }
+
+    /**
+     * Ostinato: 2026-11-02. The harness line for a planned or built room:
+     * {@code MAZE ROOM variant=<id> theme=<id> size=WxHxD cell=x,z phase=<phase>}. H is the box height, shell to ceiling.
+     */
+    public String roomLine(String phase) {
+        return "MAZE ROOM variant=" + variantId() + " theme=" + theme.id + " size=" + sizeX + "x" + sizeY + "x" + sizeZ
+                + " cell=" + cellX + "," + cellZ + " phase=" + phase;
+    }
+
+    /** Ostinato: 2026-11-02. Id for logs: the variant, or "backrooms" for a grid room. */
+    public String variantId() {
+        return variant != null ? variant.id : "backrooms";
     }
 
     /** Stable text of the theme and every role. Same seed and origin always produce the same text. */

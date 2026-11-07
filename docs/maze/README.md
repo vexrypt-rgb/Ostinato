@@ -119,3 +119,53 @@ Tests are in `src/test/java/baritone/maze/`.
 - **Farm without surface damage.** Harvest surface resources with no visible scars, and replant any tree that is cut.
 - **Farming room type.** A room theme with underground crop plots and lighting.
 - **Natural-looking loot.** Loot in containers should read like naturally generated chests, not a bot stash.
+
+## Room variants (connected / forever mode)
+
+Ostinato: 2026-11-02. Before this, every `#maze.backrooms.connected` room was the same 7x7x7 box (4 clear) on a
+16-block pitch, in one of four themes; the backrooms grid (`MazePlanner`) is a 10x7x7 room plus stub. That is still
+true for the backrooms grid and for rooms already in a saved connected map.
+
+### Gap list vs the Backrooms feel (inventory before this change)
+
+| Backrooms trait | Before | Now |
+| --- | --- | --- |
+| Rooms of very different size | one 7x7 footprint | 5x5 to 13x13, halls 13x5 / 5x13 |
+| Tall empty spaces | 4 clear everywhere | lobby and warehouse 6 clear, poolroom 5 |
+| Mono-yellow endless halls | yellow office only | `mono_yellow` long halls and large offices |
+| Poolrooms (wet, white tile) | none | `poolrooms` with a 3x3 pool (water in creative; tile basin in survival, see below) |
+| Cramped maintenance with pipes | `pipes` theme on the same box | `maintenance` 6x11, ceiling pipe runs, 4 clear under them |
+| Open warehouse, pillars | none | 13x13, 4 pillars, plank-beam ceiling |
+| Irregular rooms | boxes only | L-shaped office (cut corner left as untouched world, still seal-checked) |
+| Soft theme edges | hard cut | near a door, 60/30/15% of clad cells take the neighbour's palette |
+| Natural loot per theme | 4 tables | 5 more tables (pool junk, tools/parts, warehouse stock, lost-and-found) |
+| Farming room (cane/wheat) | none | **not done**: the TenorClef furnisher cannot place water or till, so a farm would fail strict verify |
+| Water in pools in survival | n/a | **gated**: `-Dostinato.maze.water=true` asks for `water` steps; off by default until TenorClef can empty a bucket |
+| Liminal props (desks, fluorescent rows, vents) | feature block only | still only the feature block |
+| Multi-floor rooms / stairs inside rooms | none | none |
+
+### Variants
+
+| id | box (x×h×z, h = shell to ceiling) | clear | themes (weight) | weight |
+| --- | --- | --- | --- | --- |
+| small_office | 5×7×5 (offset 1,1) | 4 | yellow_office 70, pipes 30 | 12 |
+| medium_office | 7×7×7 | 4 | yellow_office 60, hub 25, deep 15 | 13 |
+| large_office | 11×7×11 | 4 | yellow_office 50, mono_yellow 50 | 10 |
+| long_hall_x / long_hall_z | 13×7×5 / 5×7×13 | 4 | mono_yellow | 7 + 7 |
+| l_office | 11×7×11, far (+x,+z) quarter cut | 4 | yellow_office 60, hub 40 | 10 |
+| lobby | 11×9×11 | 6 | lobby | 8 |
+| poolroom | 11×8×11, 3×3 pool | 5 | poolrooms | 8 |
+| maintenance | 6×8×11, pipes under the ceiling | 4 (5 mid) | maintenance 80, pipes 20 | 13 |
+| warehouse | 13×9×13, 4 pillars | 6 | warehouse | 7 |
+| hub_square | 9×7×9 | 4 | hub | 5 |
+| classic | 7×7×7 | 4 | old per-cell theme | 0 (only from old maps) |
+
+Rules that keep the complex correct:
+
+- A variant is `RoomVariant.forCell(seed ^ salt, gx, gz)`: pure in seed and cell, so swarm bots agree.
+- Every interior covers the door lane (cell-relative columns 2..4), so doors are always on a real wall and line up.
+  The tunnel runs from one room's door wall to the other's (`runBetween`), and may climb `run - 2` (capped at 8).
+- The map line is `room gx gz y doors <variant>`. The 6th field is new; a line without it loads as `classic`, and
+  older readers ignore it. The header stays `ostinato-maze-connected 1`.
+- The seal check counts an L's cut corner as world (it must be solid), not as part of the room.
+- Each planned and dug room logs `MAZE ROOM variant=<id> theme=<id> size=WxHxD cell=x,z phase=planned|dig`.
