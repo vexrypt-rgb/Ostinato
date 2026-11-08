@@ -549,3 +549,116 @@ Planning accuracy (paired difference legacy − sim error; negative means the si
 | 3. Route quality | Tier S only: 0.98–1.00 under the sim model's own price | — | not claimed |
 
 **Result: NO IMPROVEMENT.** `simEdgeSearch` stays off, and legacy A* is the planner (DECISIONS D13).
+
+## Phase 04 live validation (2026-11-08, branch `ostinato2/claude-review`, local only)
+
+Scope: close the Phase 04 gate (STATUS B1–B3) with live 26.3 client evidence for the current (D12, 26.3) `PlayerSim`.
+Phase 05 is not touched. `predictionTolerance` stays default **false**.
+
+### Pre-registered criteria (written 2026-11-08, before any data was collected)
+
+**Instruments** (harness-only; every one is off unless its `-D` property is set):
+
+- `-Dostinato.tolerancetrace=true`: `ToleranceTraceTest`. It runs in a fresh Peaceful world and builds a course high
+  over spawn: a flat field, a field of 1-high bumps, a 1-deep and a 3-deep still-water pool, and a ladder wall and a vine wall.
+  - Each tick it drives the player with seeded scripted controls (forward, sprint, jump and a yaw). They are applied
+    exactly as `PhysicsTravel` applies them: `setYRot`, the look target at pitch 0, and forced keys through
+    `PlayerMovementInput`.
+  - It predicts the next tick from the state it read (`ClientWorld.readPlayer`, `copyFrom`), with `jumpTicks` tracked
+    from its own predictions as `PhysicsTravel` does.
+  - At the next tick it writes the one-step error to `tolerance-trace.csv`.
+  - The mode is `PredictionTolerance.classify(pre-tick state, forward, sprint)`, which is the consumers' own call.
+- `-Dostinato.tickClock=true`: client tick time, from `Minecraft.tick` HEAD to RETURN, through a one-line hook in the
+  existing tick-start mixin.
+- `-Dostinato.legatotest.arms=tolerance`: `LegatoLiveTest` arms on `SimEdgeCourse`, in a Latin square:
+
+  | Arm | `predictionTolerance` |
+  |---|---|
+  | A | off |
+  | B | on |
+  | C | off |
+  | D | on |
+
+  `-Dostinato.legatotest.stack=<travelStack>` sets the travel stack for all arms. Rows add tick-time p50/p95/p99/max,
+  `PhysicsTravel` plans and drift replans, and `PhysicsTravel` driver time.
+
+**Predictor per mode.** Each mode uses the simulator's own model for that mode:
+
+- `tick()` for WALK, SPRINT, SPRINT_JUMP, FALL and CLIMB. `tick()` handles ladders and vines.
+- `tickWater()` for FLUID.
+
+Two diagnostics are written but are not part of the gate:
+
+- the land `tick()` error on water ticks, which is what `SimTrace` computes there;
+- the error with the yaw the client actually used, which is the model error with controller yaw lag removed.
+
+**Excluded rows** (counted and reported, never silently dropped):
+
+- the tick a server position or motion packet for the player arrived;
+- the 3 ticks after a teleport;
+- rest ticks: on the ground, no keys, horizontal speed under 0.003;
+- ticks where the keys the client used differ from the scripted keys (an instrument fault).
+
+Every other tick counts, including yaw lag, landings, collisions, wall and bump contact, and climb exits.
+
+**Sessions.** Dev seed 81001, held-out seed 81002. Same course, different scripted control sequences. Target: ≥ 2000
+usable ticks per mode per session; a session stops at 30,000 ticks.
+
+**Bounds (B1):**
+
+- The bound for a mode is the dev session's p99 one-step Euclidean error.
+- On the held-out session, a mode **validates** when:
+  - n ≥ 300 in both sessions, and
+  - the held-out share of ticks over the dev bound is ≤ 2.0%.
+- A mode with n < 300 in either session is **insufficient data**.
+- A mode with n ≥ 300 and a held-out share over 2.0% is **not validated**. The bound is not re-derived from held-out
+  data.
+- **Unacceptable prediction error (FAIL):** any mode's held-out p99 > 0.30 blocks with n ≥ 300. That is above every
+  historical live p99 of the old model (max 0.2374), and above one tick of steady ground sprint (about 0.28).
+- Validated modes replace their `PredictionTolerance.MEASURED` value with the dev p99, labelled Tier L, 26.3 model.
+  That changes flag-on behaviour only; the default stays off.
+- Modes that do not validate keep their current value. Their basis is relabelled as **not validated** for the 26.3
+  model. The old 1.16-model numbers are never relabelled as validated.
+- The A/B runs with the table as it stands after this step.
+
+**Overhead (B2).** Measured in the A/B laps:
+
+- Per lap: p95 and p99 of client tick time.
+- Pairs: B against A and D against C, same leg and repetition, pooled over both A/B runs.
+- Statistic: the median paired difference (on − off), with a bootstrap 95% CI (10,000 resamples, fixed seed).
+- **Acceptable:** the CI upper bound is ≤ 0.5 ms for both p95 and p99. That is 1% of the 50 ms tick.
+- **FAIL:** a CI lower bound is > 0.5 ms.
+- **Otherwise:** inconclusive.
+
+**A/B (B3).** `-Dostinato.legatotest.arms=tolerance -Dostinato.legatotest.stack=physics`, 6 reps (96 laps).
+
+- Seeds: 81011, then 81012 for reproducibility.
+- Why `physics`: under the production `auto` stack, `PHYSICS` drove at most 3 ticks in any of the 96 Phase 05 laps
+  (`build/simedge-live-71006.txt`). The flag's only behaviour change is `PhysicsTravel`'s drift check, so an `auto` A/B
+  would measure almost nothing.
+
+Criteria:
+
+- **Reliability (must hold in both seeds):**
+  - reached(B) ≥ reached(A) − 1 and reached(D) ≥ reached(C) − 1;
+  - no lap with stuck keys;
+  - no fault code in B/D that A/C never show;
+  - no death.
+- **Noise:** C/A per-leg median lap-ticks ratio. A ticks claim on a leg needs its effect to exceed that leg's A/A′
+  spread.
+- **Improvement (any one, in both replications B/A and D/C, in both seeds):**
+  1. Completion time: paired lap-ticks ratio ≤ 0.97 on ≥ 2 legs, with no leg ≥ 1.03.
+  2. Recovery: per-lap cancels + rewinds lower with the flag on (paired mean difference < 0, bootstrap 95% CI
+     excluding 0).
+  3. Reliability: strictly more laps reached in B than in A and in D than in C.
+- **Regression (FAIL):**
+  - reliability fails, or
+  - lap-ticks ratio ≥ 1.03 on ≥ 2 legs in both replications and both seeds, beyond the A/A′ spread.
+- **Otherwise:** "no improvement". The implementation stands, but no navigation benefit is claimed.
+
+**Phase 04 gate:**
+
+- **PASS:** all six modes validated, no unacceptable error, overhead acceptable, and no A/B regression.
+- **FAIL:** unacceptable error, overhead FAIL, or A/B regression.
+- **PROVISIONAL:** anything else, such as a mode with insufficient data, a mode not validated, or an inconclusive
+  overhead result.
