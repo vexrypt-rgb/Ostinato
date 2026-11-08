@@ -840,3 +840,207 @@ classes all pass:
 - `SimEdgeTest` (16, 1 env-gated skip);
 - `SimTraceTest`, `PhysicsPathfinderTest`, `TravelStackTest`, `SettingCatalogTest`, `PlayerSim263Test` and
   `CrossModelModesTest`.
+
+## Phase 05B: SimEdge diagnosis (2026-11-08, branch `ostinato2/claude-review`, local only)
+
+Instrumentation is commit e071cc7d9 (flag-gated, no behaviour change). The raw evidence is in
+`docs/ostinato2/raw/phase05b/`.
+
+### Planning cost, headless (VERIFIED, Tier S)
+
+`OSTINATO_SIMEDGE_PROFILE=1 .\gradlew.bat test --tests baritone.pathing.calc.SimEdgeProfileTest`. Each run plans
+every `SimEdgeCourse` leg from the lap start body (at rest, facing +x) with the live budget of 500 ms primary and
+2000 ms failure. It does 3 warm-up rounds, then 6 counted rounds. Raw: `headless-profile-h32.txt`.
+
+| leg | A* ms | SimEdge ms | SimEdge result | nodes / cells | sims | sim ms | legacy move evals (distinct) | alloc MB |
+|---|---|---|---|---|---|---|---|---|
+| slalom | 7 | 501 | **timed out**, partial (44 of 60 cells) | 11648 / 908 | 84222 | 292 | 1147014 (89892) | 393 |
+| ridges | 8 | 503 | **timed out**, partial (54 of 76) | 11968 / 976 | 85754 | 294 | 1181367 (96624) | 391 |
+| bumps | 2 | 17 | complete | 518 / 220 | 2337 | 8 | 51183 (21681) | 13 |
+| steps | 5 | 502 | **timed out**, partial (50 of 69) | 9728 / 599 | 73347 | 298 | 957627 (59301) | 383 |
+
+A* allocates about 1 MB per plan and never times out.
+
+### Planning cost, live (VERIFIED, Tier L)
+
+The diagnostic run was seed 71006, 2 reps, 32 laps, with `-Dostinato.legatotest.arms=simedge
+-Dostinato.legatotest.trace=true -Dostinato.simedge.profile=true`. Otherwise it used the Phase 05 command. Digest
+(`python scripts/simedge-prof.py`): `diag-71006-profile-digest.txt`.
+
+- **First plan:**
+
+  | leg | A* first plan | SimEdge first plan |
+  |---|---|---|
+  | bumps | 3 ms | 27 ms |
+  | ridges | 20 ms | 807 ms |
+  | slalom | 12 ms | 853 ms |
+  | steps | 8 ms | 722 ms |
+
+  The SimEdge first plan timed out in 4/16 laps. The median `planWait` was 2 ticks for A* in every leg. For SimEdge
+  it was 2 on bumps, 17.5 on ridges, 18.5 on slalom and 16 on steps.
+- **Where SimEdge time goes, all 20 searches:**
+  - Simulation takes 50–58% and legacy move evaluation 19–22%. Open set, states and GC take the remaining 23–28%.
+  - There are 12.5–15.9 expanded states per cell, against 1 in A*, and 7.2–7.6 sims per expansion.
+  - Legacy moves are evaluated 12–16× per distinct (cell, move): once for each motion state of the cell.
+  - Only 1.8–2.3% of sims are exact repeats, so an input-keyed sim cache would save almost nothing.
+  - Allocation is a median 175 MB per search, against 4 MB for A*.
+- **Harness confound (not fixed: it applies to every arm, and Phase 05 ran with it):**
+  - PathingBehavior's same-start timeout escalation (`plannedStarts`) persists between laps, because the 4 laps of a
+    leg run back to back with an equal goal.
+  - The first lap of each leg block plans with a 500 ms primary budget; the next three get 2000, 4000 and 8000 ms.
+  - A* is unaffected, since it finishes in milliseconds.
+  - SimEdge waits a median 12 ticks at position 0, where it returns a partial plan, and 16.5–18 ticks at positions
+    1–3, where it runs to a complete plan.
+
+### Where SimEdge laps lose time (VERIFIED, Tier L, diagnostic run)
+
+Medians are per leg over 4 laps per arm. "Driving" is lap ticks minus the ticks before the first path.
+
+| leg | ticks A* / SimEdge | wait before the first path | driving difference |
+|---|---|---|---|
+| slalom | 339 / 355 | 1 / 17.5 | −0.5 |
+| ridges | 270 / 292 | 1 / 16.5 | +6.5 |
+| bumps | 298 / 296 | 1 / 1 | −2 |
+| steps | 293 / 306.5 | 1 / 15 | −0.5 |
+
+- No lap had a mid-lap gap with no path.
+- Progress against time (ticks to pass x = 10, 20, …, 80):
+  - On steps SimEdge is ahead by 2, 7 and 4 ticks at x = 10, 20 and 30, then even.
+  - On ridges it is 1 tick ahead to x = 30, then 3–7 behind. But from x = 33 on, both arms' first plans are the same
+    cells and moves, so that loss is not a route choice. The C/A ridges noise this run was 1.015 and 1.064.
+  - On bumps SimEdge is 2–2.5 ticks ahead from x = 60.
+- The route differences are all near the start. From rest facing +x, SimEdge goes straight first (steps: along
+  z = 70–71 to x = 14, then diagonals) where A* takes the diagonal line at once.
+- Both of Phase 05's Tier-L runs fit this picture. Over the course, the first-plan wait was about 7.9 ticks per lap
+  against about 2.75 ticks per lap of driving difference.
+
+### Multi-tick prediction divergence (VERIFIED, offline replay of the live trace)
+
+`OSTINATO_SIMEDGE_TRACE=<dir> .\gradlew.bat test --tests baritone.pathing.calc.SimEdgeDivergenceTest`. Raw:
+`diag-71006-divergence-summary.txt`. The course is rebuilt headless. Windows containing a position packet or a
+sneak are left out (there were none).
+
+**Recorded inputs**, open loop. Horizontal position error (m), median / p90, over all drivers:
+
+| k ticks | 1 | 2 | 5 | 10 | 20 | 40 |
+|---|---|---|---|---|---|---|
+| error | 0.001 / 0.006 | 0.002 / 0.016 | 0.005 / 0.057 | 0.011 / 0.151 | 0.028 / 0.503 | 0.105 / 1.478 |
+| samples | 9815 | 9783 | 9687 | 9527 | 9207 | 8567 |
+
+Vertical error has median and p90 of 0 at every k.
+
+**Planner-assumed inputs**: SimEdge's own edge controller, chained along the path the executor was running from
+each recorded state.
+
+| k ticks | 1 | 2 | 5 | 10 | 20 | 40 |
+|---|---|---|---|---|---|---|
+| error | 0.007 / 0.046 | 0.015 / 0.093 | 0.044 / 0.297 | 0.067 / 0.637 | 0.098 / 1.245 | 0.167 / 1.689 |
+| covered / samples (KINEMATIC) | 6600 / 6951 | 5767 / 6919 | 5157 / 6823 | 4370 / 6663 | 2999 / 6343 | 975 / 5849 |
+
+- A chain stops at the first edge the sim does not model (Line, Descend). BARITONE-driven ticks are all on such
+  edges, so they have no coverage.
+- At 10–20 ticks the planner's assumed trajectory diverges 2–4× more at p90 than the recorded inputs do. The medians
+  stay under 0.1 m.
+
+**Steering**: |SimEdge yaw − executor yaw|, in degrees.
+
+| driver and edge | median | p90 |
+|---|---|---|
+| KINEMATIC traverse | 4.8 | 31.4 |
+| KINEMATIC diagonal | 1.3 | 30.3 |
+| KINEMATIC ascend | 1.9 | 24.0 |
+
+- The KinematicController aims along the polyline, so it cuts corners at turns. SimEdge aims at the destination
+  cell centre.
+- Sprint matches on 95% of traverse ticks and on every ascend tick.
+- Ascend jumps: only 8 ground ticks were seen, so this is not judged.
+
+**Per-edge duration**, executor ticks minus predicted ticks, median / mean |error|, over 1853 completed edges:
+
+| move (driver) | n | from the recorded entry state, one edge | chained from the plan's start body | legacy cost |
+|---|---|---|---|---|
+| Traverse (KINEMATIC) | 1236 | 0.00 / 0.10 | 0.00 / 0.54 | +0.44 / 0.55 |
+| Diagonal (KINEMATIC) | 231 | 0.00 / 0.06 | 0.00 / 0.16 | −0.04 / 0.23 |
+| Ascend (KINEMATIC) | 12 | 0.00 / 0.67 | −4.00 / 3.18 | −3.63 / 2.96 |
+| Descend (KINEMATIC) | 42 | not modelled | not modelled | −4.32 / 4.32 |
+| Line (BARITONE) | 332 | not modelled | not modelled | +0.03 / 0.21 |
+
+### Useful alternatives (VERIFIED, Tier L, diagnostic run)
+
+Each lap's first plan was priced from the rest start body under the sim model and the legacy model. That price was
+compared with the executor's ticks over the same completed prefix (`diag-71006-divergence-firstpaths.csv`).
+
+| leg | A* path | SimEdge path |
+|---|---|---|
+| slalom | sim 341.8, legacy 331.7, realized 332–336 | sim 335.8, legacy 331.7, realized 332–333 |
+| bumps | sim 293.6, realized 295 | sim 294.3, realized 292–293 |
+
+- The executor follows SimEdge's routes at the speed the sim predicts. Those routes are worth 0–3 ticks per lap
+  (≤ 1%). That gain is smaller than one first-plan wait.
+
+### Single largest bottleneck
+
+**First-plan latency.** SimEdge's search keeps 12–16 motion states per cell inside its 32-block horizon. Each
+expanded state runs about 7 edge sims and about 100 legacy move evaluations.
+
+- On 3 of 4 legs the first plan exceeds the 500 ms primary budget, live and headless.
+- The lap starts about 15 ticks late, which is 70–100% of the SimEdge loss on slalom, ridges and steps.
+- The controller mismatch is not the bottleneck. Per-edge timing from the real entry state is accurate (traverse
+  mean error 0.10 ticks). Where the routes are equal (ridges past x = 33), the arms differ by no more than the A/A'
+  noise.
+
+### Pre-registered experiment (written 2026-11-08, before any experiment data)
+
+- **Hypothesis.** The route value SimEdge adds is near the start, and its cost is the multi-state search over the
+  whole 32-block horizon. Simulating only within 8 blocks of the search start should:
+  - cut the first plan to a fraction of the budget;
+  - keep the near-start choice (straight-ahead acceleration from rest);
+  - be legacy beyond that.
+- **Change.**
+  - `simEdgeHorizon` is 8 in the experiment arm. It is an existing setting, read only when `simEdgeSearch` is on.
+  - No planner code changes. Production defaults stay as they are: `simEdgeSearch` false, `simEdgeHorizon` 32.
+- **Choice of 8.**
+  - In the diagnostic run, sim cells grew roughly with the horizon in the 20-wide strips, at about 1000 cells for
+    32. A quarter of that should bring the ridges, slalom and steps first plans from 0.5–0.9 s to roughly 0.1–0.2 s.
+  - 8 blocks cover acceleration from rest (about 3 blocks) and a turn.
+  - The value was not tuned on any data.
+- **Arms** (`-Dostinato.legatotest.arms=simedge5b`; course, Latin square, budgets and harness as in Phase 05;
+  trace and profile off):
+
+  | arm | planner |
+  |---|---|
+  | A | legacy A* |
+  | B | `simEdgeSearch`, horizon 32: the existing SimEdge |
+  | C | legacy A* (A/A' control) |
+  | D | `simEdgeSearch`, horizon 8: the experiment |
+
+  Runs: 6 reps on each of seeds 71006 and 71007, the Phase 05 seeds. That is 2 × 96 laps.
+- **Reliability (must hold in both seeds):**
+  - reached(D) ≥ reached(A) and reached(D) ≥ reached(C);
+  - no stuck keys;
+  - no fault code in D that A and C never show;
+  - simedge exceptions = 0.
+- **Noise control:** C/A per-leg median ratio. A claim on a leg whose |C/A − 1| exceeds 3% needs an effect larger
+  than that spread.
+- **M1, against the original baseline** (Phase 05 measure 1, unchanged): paired lap-ticks median ratios D/A and
+  D/C ≤ 0.97 on ≥ 2 legs, and no leg ≥ 1.03, in both seeds.
+- **M2, against the existing SimEdge** (same rule): D/B ≤ 0.97 on ≥ 2 legs, and no leg ≥ 1.03, in both seeds.
+- **Mechanism (reported; required for a class B claim):** median `planWait`(D) − median `planWait`(A) ≤ 3 ticks on
+  every leg, in both seeds.
+- **Classification:**
+
+  | class | condition |
+  |---|---|
+  | A — improvement | reliability holds and M1 is met in both seeds, for D/A and D/C |
+  | B — partial | reliability holds, M1 is not met, M2 is met in both seeds and the mechanism holds |
+  | D — regression | reliability fails in either seed, or D/B ≥ 1.03 on ≥ 2 legs in both seeds |
+  | C — no improvement | anything else |
+
+- **Archive rule for SimEdge (recommendation only).** Recommend archiving SimEdge as a planner if no leg's D/A
+  median ratio is ≤ 0.99 in both seeds, that is, if not even a 1% gain shows anywhere once latency is cut.
+  Otherwise keep it as disabled research code.
+- **Reported, not gating:**
+  - the headless profile at horizon 8 (`OSTINATO_SIMEDGE_HORIZON=8`);
+  - per-leg `planWait` and `planUs`;
+  - the driving difference (ticks minus first-path wait).
+- **On failure,** no further optimization attempt is made in Phase 05B.
