@@ -1,0 +1,152 @@
+
+# seed 71006: 96 laps, legs ['slalom', 'ridges', 'bumps', 'steps'], reps 6
+
+## Arms as run (simEdgeSearch, simEdgeHorizon per mode)
+  A: [(False, 32)]
+  B: [(True, 32)]
+  C: [(False, 32)]
+  D: [(True, 8)]
+  arms as pre-registered: True
+
+## Reliability
+  A: 24/24 reached; non-reached []; fault codes []
+  B: 24/24 reached; non-reached []; fault codes []
+  C: 24/24 reached; non-reached []; fault codes []
+  D: 24/24 reached; non-reached []; fault codes []
+  stuck-key laps 0, held-key lines 0; LEGATOTEST simedge searches=54 fallbacks=0 capped=0 exceptions=0 simEdges=2213671 legacyEdges=2595483 sims=2216084 inconsistent=52218
+  reliability holds: True
+
+## Paired lap ticks (reached pairs, by leg and rep): median ratio, bootstrap 95% CI
+| leg | D/A | D/C | D/B | B/A | C/A |
+|---|---|---|---|---|---|
+| slalom | 1.009 (0.963–1.012), n=6 | 0.997 (0.994–1.006), n=6 | 0.962 (0.921–0.978), n=6 | 1.044 (1.031–1.054), n=6 | 1.006 (0.967–1.013), n=6 |
+| ridges | 1.005 (0.995–1.057), n=6 | 1.005 (0.988–1.039), n=6 | 0.972 (0.902–0.997), n=6 | 1.057 (1.020–1.124), n=6 | 1.002 (0.989–1.034), n=6 |
+| bumps | 0.997 (0.997–1.003), n=6 | 0.998 (0.997–1.002), n=6 | 1.003 (1.002–1.007), n=6 | 0.995 (0.993–0.997), n=6 | 1.000 (0.998–1.002), n=6 |
+| steps | 0.988 (0.986–0.998), n=6 | 0.990 (0.986–1.010), n=6 | 0.961 (0.944–0.975), n=6 | 1.032 (1.019–1.047), n=6 | 0.998 (0.978–1.010), n=6 |
+
+## Lap ticks, median per arm
+  slalom: A 337.5, B 353.0, C 340.0, D 340.0
+  ridges: A 272.5, B 286.0, C 273.0, D 276.0
+  bumps: A 299.0, B 297.0, C 299.0, D 298.0
+  steps: A 295.0, B 303.5, C 295.0, D 292.0
+
+## Mechanism: first-plan wait (ticks before the first path), median per arm; D − A must be ≤ 3 on every leg
+  slalom: planWait A 2.5 B 12.5 C 2.0 D 4.0 (D−A +1.5, ok); planner ms per lap A 8 B 685 C 9 D 103
+  ridges: planWait A 2.0 B 12.0 C 2.0 D 5.0 (D−A +3.0, ok); planner ms per lap A 9 B 555 C 8 D 165
+  bumps: planWait A 2.0 B 2.0 C 2.0 D 2.0 (D−A +0.0, ok); planner ms per lap A 3 B 15 C 3 D 3
+  steps: planWait A 2.0 B 12.5 C 2.0 D 5.0 (D−A +3.0, ok); planner ms per lap A 7 B 528 C 7 D 116
+  mechanism holds: True
+
+## planWait by position in the leg block (same-start timeout escalation)
+  A: pos 0 2.5, pos 1 2.0, pos 2 2.0, pos 3 2.0
+  B: pos 0 11.5, pos 1 12.5, pos 2 12.0, pos 3 12.0
+  C: pos 0 2.0, pos 1 2.0, pos 2 2.0, pos 3 2.0
+  D: pos 0 4.0, pos 1 4.5, pos 2 5.0, pos 3 4.0
+
+## Diagnostic: driving (lap ticks − first-plan wait), paired median ratio
+  slalom: D/A 1.004 (0.984–1.006); D/B 0.984 (0.980–1.003); B/A 1.003 (0.999–1.027); C/A 1.006 (0.994–1.013)
+  ridges: D/A 0.997 (0.985–1.048); D/B 0.996 (0.922–1.026); B/A 1.022 (0.984–1.087); C/A 1.004 (0.991–1.032)
+  bumps: D/A 0.997 (0.997–1.005); D/B 1.005 (1.003–1.008); B/A 0.993 (0.992–0.997); C/A 1.000 (0.998–1.002)
+  steps: D/A 0.980 (0.978–0.990); D/B 0.986 (0.970–0.998); B/A 0.997 (0.986–1.010); C/A 0.998 (0.980–1.010)
+  D/A: legs ≤ 0.97 0, met False []
+  D/C: legs ≤ 0.97 0, met False []
+  D/B: legs ≤ 0.97 2, met True []
+
+## Harness lines
+  LEGATOTEST start kinematicTravel=true presto=false arms=simedge5b laps=96 reps=6 legs=4 order=latin travelStack=auto tickClock=false seed=71006
+  LEGATOTEST paired leg=slalom mode=B pairs=6 medianA=338 medianB=355 medianRatio=1.053 ratios=[1.029673590504451, 1.032640949554896, 1.0353982300884956, 1.0532544378698225, 1.053412462908012, 1.0547945205479452]
+  LEGATOTEST paired leg=slalom mode=C pairs=6 medianA=338 medianC=340 medianRatio=1.006 ratios=[0.9315068493150684, 1.0029498525073746, 1.0059347181008902, 1.0059347181008902, 1.0118694362017804, 1.014792899408284]
+  LEGATOTEST paired leg=slalom mode=D pairs=6 medianA=338 medianD=341 medianRatio=1.012 ratios=[0.9287671232876712, 0.9970501474926253, 1.0059347181008902, 1.0118343195266273, 1.0118694362017804, 1.0118694362017804]
+  LEGATOTEST paired leg=ridges mode=B pairs=6 medianA=273 medianB=286 medianRatio=1.062 ratios=[1.0035087719298246, 1.036764705882353, 1.0522388059701493, 1.0622710622710623, 1.0833333333333333, 1.164835164835165]
+  LEGATOTEST paired leg=ridges mode=C pairs=6 medianA=273 medianC=273 medianRatio=1.004 ratios=[0.9816849816849816, 0.9964912280701754, 1.0, 1.0036764705882353, 1.0151515151515151, 1.0522388059701493]
+  LEGATOTEST paired leg=ridges mode=D pairs=6 medianA=273 medianD=276 medianRatio=1.011 ratios=[0.9926739926739927, 0.9964912280701754, 1.0, 1.010989010989011, 1.0298507462686568, 1.0833333333333333]
+  LEGATOTEST paired leg=bumps mode=B pairs=6 medianA=299 medianB=297 medianRatio=0.997 ratios=[0.9933110367892977, 0.9933110367892977, 0.9933110367892977, 0.9966442953020134, 0.9966442953020134, 0.9966555183946488]
+  LEGATOTEST paired leg=bumps mode=C pairs=6 medianA=299 medianC=299 medianRatio=1.000 ratios=[0.9966555183946488, 1.0, 1.0, 1.0, 1.0, 1.0033557046979866]
+  LEGATOTEST paired leg=bumps mode=D pairs=6 medianA=299 medianD=298 medianRatio=0.997 ratios=[0.9966555183946488, 0.9966555183946488, 0.9966555183946488, 0.9966555183946488, 1.0033557046979866, 1.0033557046979866]
+  LEGATOTEST paired leg=steps mode=B pairs=6 medianA=295 medianB=306 medianRatio=1.034 ratios=[1.0169491525423728, 1.0203389830508474, 1.0310344827586206, 1.0337837837837838, 1.0372881355932204, 1.0574324324324325]
+  LEGATOTEST paired leg=steps mode=C pairs=6 medianA=295 medianC=295 medianRatio=1.000 ratios=[0.9763513513513513, 0.9796610169491525, 0.9966216216216216, 1.0, 1.0, 1.0206896551724138]
+  LEGATOTEST paired leg=steps mode=D pairs=6 medianA=295 medianD=292 medianRatio=0.990 ratios=[0.9864406779661017, 0.9864864864864865, 0.9864864864864865, 0.9898305084745763, 0.9898305084745763, 1.006896551724138]
+  LEGATOTEST paired leg=slalom mode=D base=C pairs=6 medianRatio=0.997 ratios=[0.9941176470588236, 0.9941348973607038, 0.9970588235294118, 0.9970845481049563, 1.0058997050147493, 1.0058997050147493]
+  LEGATOTEST paired leg=ridges mode=D base=C pairs=6 medianRatio=1.011 ratios=[0.9787234042553191, 0.9963369963369964, 1.0, 1.010989010989011, 1.0111940298507462, 1.0671641791044777]
+  LEGATOTEST paired leg=bumps mode=D base=C pairs=6 medianRatio=1.000 ratios=[0.9966555183946488, 0.9966555183946488, 0.9966555183946488, 1.0, 1.0, 1.0033557046979866]
+  LEGATOTEST paired leg=steps mode=D base=C pairs=6 medianRatio=0.990 ratios=[0.9864406779661017, 0.9864864864864865, 0.9898305084745763, 0.9898305084745763, 1.0103806228373702, 1.0103806228373702]
+  LEGATOTEST simedge searches=54 fallbacks=0 capped=0 exceptions=0 simEdges=2213671 legacyEdges=2595483 sims=2216084 inconsistent=52218
+  LEGATOTEST keys stuck after 0 laps
+
+# seed 71007: 96 laps, legs ['slalom', 'ridges', 'bumps', 'steps'], reps 6
+
+## Arms as run (simEdgeSearch, simEdgeHorizon per mode)
+  A: [(False, 32)]
+  B: [(True, 32)]
+  C: [(False, 32)]
+  D: [(True, 8)]
+  arms as pre-registered: True
+
+## Reliability
+  A: 24/24 reached; non-reached []; fault codes []
+  B: 24/24 reached; non-reached []; fault codes []
+  C: 24/24 reached; non-reached []; fault codes []
+  D: 24/24 reached; non-reached []; fault codes []
+  stuck-key laps 0, held-key lines 0; LEGATOTEST simedge searches=53 fallbacks=0 capped=0 exceptions=0 simEdges=2150792 legacyEdges=2541171 sims=2153184 inconsistent=50517
+  reliability holds: True
+
+## Paired lap ticks (reached pairs, by leg and rep): median ratio, bootstrap 95% CI
+| leg | D/A | D/C | D/B | B/A | C/A |
+|---|---|---|---|---|---|
+| slalom | 1.013 (0.957–1.019), n=6 | 1.015 (1.004–1.018), n=6 | 0.977 (0.935–0.980), n=6 | 1.037 (1.017–1.046), n=6 | 1.000 (0.946–1.007), n=6 |
+| ridges | 1.015 (0.988–1.054), n=6 | 1.020 (1.002–1.061), n=6 | 0.931 (0.889–0.950), n=6 | 1.112 (1.061–1.140), n=6 | 1.006 (0.956–1.013), n=6 |
+| bumps | 1.000 (1.000–1.000), n=6 | 1.000 (1.000–1.000), n=6 | 1.012 (1.002–1.015), n=6 | 0.988 (0.985–0.998), n=6 | 1.000 (1.000–1.000), n=6 |
+| steps | 0.978 (0.969–1.005), n=6 | 0.978 (0.969–1.005), n=6 | 0.981 (0.946–0.988), n=6 | 1.012 (0.995–1.033), n=6 | 1.000 (0.985–1.016), n=6 |
+
+## Lap ticks, median per arm
+  slalom: A 338.5, B 351.0, C 337.0, D 343.0
+  ridges: A 269.0, B 301.5, C 270.0, D 275.0
+  bumps: A 298.0, B 294.5, C 298.0, D 298.0
+  steps: A 295.0, B 295.5, C 295.0, D 289.0
+
+## Mechanism: first-plan wait (ticks before the first path), median per arm; D − A must be ≤ 3 on every leg
+  slalom: planWait A 2.0 B 13.0 C 2.0 D 5.0 (D−A +3.0, ok); planner ms per lap A 7 B 645 C 7 D 111
+  ridges: planWait A 2.0 B 13.0 C 3.0 D 5.0 (D−A +3.0, ok); planner ms per lap A 8 B 571 C 8 D 164
+  bumps: planWait A 2.0 B 2.0 C 2.0 D 2.0 (D−A +0.0, ok); planner ms per lap A 3 B 16 C 3 D 3
+  steps: planWait A 2.0 B 12.5 C 2.0 D 5.0 (D−A +3.0, ok); planner ms per lap A 7 B 539 C 7 D 125
+  mechanism holds: True
+
+## planWait by position in the leg block (same-start timeout escalation)
+  A: pos 0 2.0, pos 1 2.0, pos 2 2.0, pos 3 2.0
+  B: pos 0 12.0, pos 1 13.0, pos 2 12.5, pos 3 13.0
+  C: pos 0 2.0, pos 1 2.0, pos 2 2.0, pos 3 2.0
+  D: pos 0 5.0, pos 1 4.5, pos 2 5.0, pos 3 5.0
+
+## Diagnostic: driving (lap ticks − first-plan wait), paired median ratio
+  slalom: D/A 1.006 (0.978–1.010); D/B 1.000 (0.991–1.004); B/A 1.006 (0.977–1.016); C/A 1.000 (0.977–1.006)
+  ridges: D/A 1.006 (0.977–1.043); D/B 0.951 (0.913–0.975); B/A 1.073 (1.026–1.099); C/A 1.002 (0.958–1.009)
+  bumps: D/A 1.000 (1.000–1.000); D/B 1.014 (1.003–1.015); B/A 0.986 (0.985–0.997); C/A 1.000 (1.000–1.000)
+  steps: D/A 0.969 (0.961–0.995); D/B 1.007 (0.971–1.014); B/A 0.974 (0.962–0.996); C/A 1.000 (0.985–1.016)
+  D/A: legs ≤ 0.97 0, met False []
+  D/C: legs ≤ 0.97 0, met False []
+  D/B: legs ≤ 0.97 1, met False []
+
+## Harness lines
+  LEGATOTEST start kinematicTravel=true presto=false arms=simedge5b laps=96 reps=6 legs=4 order=latin travelStack=auto tickClock=false seed=71007
+  LEGATOTEST paired leg=slalom mode=B pairs=6 medianA=339 medianB=351 medianRatio=1.042 ratios=[1.0053475935828877, 1.029325513196481, 1.0324483775811208, 1.0415430267062316, 1.0416666666666667, 1.0502958579881656]
+  LEGATOTEST paired leg=slalom mode=C pairs=6 medianA=339 medianC=337 medianRatio=1.003 ratios=[0.8983957219251337, 0.9941002949852508, 0.9970414201183432, 1.0029761904761905, 1.0058651026392962, 1.0089020771513353]
+  LEGATOTEST paired leg=slalom mode=D pairs=6 medianA=339 medianD=343 medianRatio=1.015 ratios=[0.9090909090909091, 1.0058651026392962, 1.0117994100294985, 1.014792899408284, 1.0178041543026706, 1.0208333333333333]
+  LEGATOTEST paired leg=ridges mode=B pairs=6 medianA=269 medianB=304 medianRatio=1.130 ratios=[1.0346020761245676, 1.088235294117647, 1.0929368029739777, 1.1301115241635689, 1.1301115241635689, 1.1492537313432836]
+  LEGATOTEST paired leg=ridges mode=C pairs=6 medianA=269 medianC=270 medianRatio=1.007 ratios=[0.9273356401384083, 0.9852941176470589, 1.003717472118959, 1.0074349442379182, 1.007462686567164, 1.0185873605947955]
+  LEGATOTEST paired leg=ridges mode=D pairs=6 medianA=269 medianD=277 medianRatio=1.015 ratios=[0.9653979238754326, 1.0111524163568772, 1.0148698884758365, 1.0149253731343284, 1.0183823529411764, 1.0892193308550187]
+  LEGATOTEST paired leg=bumps mode=B pairs=6 medianA=298 medianB=295 medianRatio=0.990 ratios=[0.9832214765100671, 0.9865771812080537, 0.9865771812080537, 0.9899328859060402, 0.9966442953020134, 1.0]
+  LEGATOTEST paired leg=bumps mode=C pairs=6 medianA=298 medianC=298 medianRatio=1.000 ratios=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  LEGATOTEST paired leg=bumps mode=D pairs=6 medianA=298 medianD=298 medianRatio=1.000 ratios=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  LEGATOTEST paired leg=steps mode=B pairs=6 medianA=295 medianB=297 medianRatio=1.017 ratios=[0.9932432432432432, 0.9966101694915255, 1.006779661016949, 1.0169491525423728, 1.027972027972028, 1.0372881355932204]
+  LEGATOTEST paired leg=steps mode=C pairs=6 medianA=295 medianC=295 medianRatio=1.000 ratios=[0.9694915254237289, 1.0, 1.0, 1.0, 1.0, 1.0314685314685315]
+  LEGATOTEST paired leg=steps mode=D pairs=6 medianA=295 medianD=289 medianRatio=0.980 ratios=[0.9627118644067797, 0.976271186440678, 0.9763513513513513, 0.9796610169491525, 0.9898305084745763, 1.020979020979021]
+  LEGATOTEST paired leg=slalom mode=D base=C pairs=6 medianRatio=1.018 ratios=[1.0, 1.0088235294117647, 1.0119047619047619, 1.0178041543026706, 1.0178041543026706, 1.0178041543026706]
+  LEGATOTEST paired leg=ridges mode=D base=C pairs=6 medianRatio=1.034 ratios=[0.9963503649635036, 1.0074074074074073, 1.0074074074074073, 1.0335820895522387, 1.041044776119403, 1.081180811808118]
+  LEGATOTEST paired leg=bumps mode=D base=C pairs=6 medianRatio=1.000 ratios=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  LEGATOTEST paired leg=steps mode=D base=C pairs=6 medianRatio=0.980 ratios=[0.9627118644067797, 0.976271186440678, 0.9763513513513513, 0.9796610169491525, 0.9898305084745763, 1.020979020979021]
+  LEGATOTEST simedge searches=53 fallbacks=0 capped=0 exceptions=0 simEdges=2150792 legacyEdges=2541171 sims=2153184 inconsistent=50517
+  LEGATOTEST keys stuck after 0 laps
+
+# Pre-registered classification (both seeds)
+  reliability True; M1 (D/A and D/C) False; M2 (D/B) False; mechanism True; regression False -> class C
+  archive rule: legs with D/A ≤ 0.99 in both seeds ['steps'] -> keep SimEdge as disabled research code

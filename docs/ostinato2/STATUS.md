@@ -8,6 +8,14 @@
 
 **Phase 05 gate (unchanged): NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. The Phase 04 validation did not touch it. Phase 06 was **not** started.
 
+**Phase 05B diagnosis: class C, NO IMPROVEMENT** (DECISIONS D15, 2026-11-08).
+- SimEdge's loss is first-plan latency: 12–16 motion states per cell inside the 32-block horizon. It is not the
+  physics, and not the controller.
+- The one pre-registered experiment ran SimEdge with `simEdgeHorizon` 8 (2 seeds × 96 laps). It cut the wait from
+  12–13 ticks to 4–5 and lost no laps.
+- It still did not beat legacy A* (D/A 0.978–1.015), and beat the existing SimEdge on ≥ 2 legs in one seed only.
+- SimEdge stays disabled, kept as research code. No production default changed. Phase 06 was **not** started.
+
 ## Where
 
 - Repo: `vexrypt-rgb/Ostinato`, local clone `Ostinato-o2review`.
@@ -157,16 +165,51 @@ What the Phase 04 evidence does **not** establish for Phase 05:
 One-step bounds cover neither. They do narrow D13's diagnosis: one tick ahead, the physics model is exact, so a
 Phase 05 retry should target plan time and the controller model, not `PlayerSim`.
 
+## Phase 05B (SimEdge diagnosis, 2026-11-08)
+
+Scope: diagnosis and one bounded experiment. No A* redesign, physics rewrite, lattice, controller refactor or
+default change; nothing pushed or merged.
+
+- **Commits** (local, `ostinato2/claude-review`):
+
+  | commit | content |
+  |---|---|
+  | `e071cc7d9` | flag-gated diagnostics |
+  | `5b26423b5` | diagnosis and pre-registration, written before any experiment data |
+  | `b78f7d56b` | the experiment's harness arms `simedge5b` |
+  | the commit that last touched this file | results |
+
+- **Diagnosis** (BENCHMARKS "Phase 05B"):
+  - The first plan exceeds the 500 ms budget on 3 of 4 legs. About 7 sims and about 100 legacy move evaluations run
+    per expansion, with 12–16 states per cell, and 175 MB is allocated per search.
+  - That latency is 70–100% of the lap loss.
+  - Per-edge timing from the real entry state is accurate. Multi-tick drift under SimEdge's assumed steering is 2–4×
+    the recorded-input drift at p90.
+  - The routes are followable, but worth 0–3 ticks a lap.
+- **Experiment** (`simEdgeHorizon` 8, seeds 71006 and 71007, 6 reps each):
+
+  | check | result |
+  |---|---|
+  | Reliability | 24/24 per arm, no faults or stuck keys |
+  | D − A first-plan wait | ≤ 3 ticks on every leg |
+  | M1 against legacy A* | not met |
+  | M2 against the existing SimEdge | met in 71006 only |
+
+  **Class C.**
+- **Archive rule:** steps D/A ≤ 0.99 in both seeds, so keep SimEdge as disabled research code.
+- **Full suite** at the results commit: see BENCHMARKS "Phase 05B". The known SecondoTest failure is expected.
+
 ## Next task
 
-**Owner decisions. Phase 05 was not re-run and Phase 06 was not started.**
+**Owner decisions. Phase 05B is complete. Phase 06 was not started.**
 
 1. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
    pre-registered drift-check design (bound × margin, or persistence) and its own A/B.
-2. Phase 05 retry direction (D13):
-   - a sim of the executor that actually drives (the kinematic driver), or
-   - planning time hidden (planning ahead while moving).
-   Or drop the Phase 05 code. It is default-off on the branch today.
+2. SimEdge (D15):
+   - Keep it disabled.
+   - Do not fund another latency fix on this course: even zero wait gains about 2–3% on steps only.
+   - It can only pay off on momentum-decided routes (gaps, sprint jumps, long ascent chains). That needs a new
+     pre-registered scenario family as its own phase. Otherwise archive it.
 3. Separately:
    - `SimTrace`'s land prediction on water ticks (D14 finding 2);
    - B5 Secondo bookkeeping;

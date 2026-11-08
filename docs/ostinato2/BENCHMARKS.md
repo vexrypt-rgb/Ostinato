@@ -1044,3 +1044,149 @@ expanded state runs about 7 edge sims and about 100 legacy move evaluations.
   - per-leg `planWait` and `planUs`;
   - the driving difference (ticks minus first-path wait).
 - **On failure,** no further optimization attempt is made in Phase 05B.
+
+### Experiment: SimEdge with `simEdgeHorizon` 8 (pre-registered above)
+
+Experiment commit `b78f7d56b`: the harness arms and the profile test's horizon variable. No planner code changed.
+Analysis: `python scripts/simedge5b-ab.py docs/ostinato2/raw/phase05b/ab-71006-lines.txt
+docs/ostinato2/raw/phase05b/ab-71007-lines.txt`. It uses the same median and bootstrap (4000 resamples, seed 1) as
+`scripts/simedge-ab.py`. Raw: `ab-71006-lines.txt`, `ab-71007-lines.txt` (every `LEGATOTEST` line of each counted run)
+and `headless-profile-h8.txt`.
+
+Command (PowerShell, 26.3 dev client, Peaceful, second monitor):
+`$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true
+-Dostinato.legatotest=true -Dostinato.legatotest.exit=true -Dostinato.legatotest.arms=simedge5b
+-Dostinato.legatotest.reps=6 -Dostinato.seed=<71006|71007>'; .\gradlew.bat :fabric:runClient -PclientXmx=1536M`.
+Trace and profile were off. Every lap row records `simEdge` and `horizon`. The script checked that every lap of
+every arm ran as pre-registered:
+
+| arm | simEdgeSearch | horizon |
+|---|---|---|
+| A | false | 32 |
+| B | true | 32 |
+| C | false | 32 |
+| D | true | 8 |
+
+#### Headless (Tier S, reported, not gating)
+
+`OSTINATO_SIMEDGE_PROFILE=1 OSTINATO_SIMEDGE_HORIZON=8`, otherwise as the profile above. Each cell is a median of 6
+rounds.
+
+| leg | A* ms | SimEdge h32 ms | SimEdge h8 ms | h8 result | h8 cells / nodes / sims | h8 alloc MB (h32) |
+|---|---|---|---|---|---|---|
+| slalom | 7 | 501 (timed out, 6/6) | 133 | complete, 6/6 | 1467 / 4083 / 18176 | 92 (393) |
+| ridges | 9 | 503 (timed out, 6/6) | 201 | complete, 6/6 | 1538 / 5348 / 28267 | 140 (391) |
+| bumps | 2 | 17 | 4 | complete, 6/6 | 224 / 240 / 72 | 2 (13) |
+| steps | 5 | 502 (timed out, 6/6) | 136 | complete, 6/6 | 907 / 3824 / 20485 | 100 (383) |
+
+At horizon 8 there are 2.8–4.2 nodes per cell on slalom, ridges and steps (1.1 on bumps), against 12.5–15.9 at
+horizon 32. On those three legs the first plan still takes 19–27× A*'s time.
+
+#### Live A/B (Tier L), seeds 71006 and 71007, 6 reps each, 2 × 96 laps
+
+**Reliability (both seeds):**
+- 24/24 reached in every arm, with no fault codes in any arm and no stuck or held keys.
+- `simedge searches=54` (71006) and 53 (71007), with `fallbacks=0 capped=0 exceptions=0` in both.
+- **Holds.**
+
+**Lap ticks**, paired by leg and rep, median ratio (bootstrap 95% CI), n = 6 per cell:
+
+| seed | leg | D/A | D/C | D/B | B/A | C/A (noise) |
+|---|---|---|---|---|---|---|
+| 71006 | slalom | 1.009 (0.963–1.012) | 0.997 (0.994–1.006) | **0.962** (0.921–0.978) | 1.044 (1.031–1.054) | 1.006 (0.967–1.013) |
+| 71006 | ridges | 1.005 (0.995–1.057) | 1.005 (0.988–1.039) | 0.972 (0.902–0.997) | 1.057 (1.020–1.124) | 1.002 (0.989–1.034) |
+| 71006 | bumps | 0.997 (0.997–1.003) | 0.998 (0.997–1.002) | 1.003 (1.002–1.007) | 0.995 (0.993–0.997) | 1.000 (0.998–1.002) |
+| 71006 | steps | 0.988 (0.986–0.998) | 0.990 (0.986–1.010) | **0.961** (0.944–0.975) | 1.032 (1.019–1.047) | 0.998 (0.978–1.010) |
+| 71007 | slalom | 1.013 (0.957–1.019) | 1.015 (1.004–1.018) | 0.977 (0.935–0.980) | 1.037 (1.017–1.046) | 1.000 (0.946–1.007) |
+| 71007 | ridges | 1.015 (0.988–1.054) | 1.020 (1.002–1.061) | **0.931** (0.889–0.950) | 1.112 (1.061–1.140) | 1.006 (0.956–1.013) |
+| 71007 | bumps | 1.000 (1.000–1.000) | 1.000 (1.000–1.000) | 1.012 (1.002–1.015) | 0.988 (0.985–0.998) | 1.000 (1.000–1.000) |
+| 71007 | steps | 0.978 (0.969–1.005) | 0.978 (0.969–1.005) | 0.981 (0.946–0.988) | 1.012 (0.995–1.033) | 1.000 (0.985–1.016) |
+
+- The C/A noise is within 0.6% at the median on every leg in both seeds, so the 3% noise rule does not bind.
+- **Baseline unchanged.** B/A reproduces Phase 05's B/A on every leg within its CI:
+  - Phase 05, 71006: 1.039, 1.090, 0.997, 1.036. Phase 05, 71007: 1.029, 1.102, 0.992, 1.014.
+  - Arm A medians differ from Phase 05's by at most 3 ticks per leg:
+
+    | leg | Phase 05 (71006 / 71007) | Phase 05B (71006 / 71007) |
+    |---|---|---|
+    | slalom | 339 / 341 | 337.5 / 338.5 |
+    | ridges | 269.5 / 269.5 | 272.5 / 269 |
+    | bumps | 299 / 298 | 299 / 298 |
+    | steps | 294.5 / 295 | 295 / 295 |
+
+**Mechanism: median first-plan wait (ticks), and median planner time per lap (ms):**
+
+| seed | leg | wait A | wait B | wait C | wait D | D − A | planner A / B / D |
+|---|---|---|---|---|---|---|---|
+| 71006 | slalom | 2.5 | 12.5 | 2 | 4 | +1.5 | 8 / 685 / 103 |
+| 71006 | ridges | 2 | 12 | 2 | 5 | +3 | 9 / 555 / 165 |
+| 71006 | bumps | 2 | 2 | 2 | 2 | 0 | 3 / 15 / 3 |
+| 71006 | steps | 2 | 12.5 | 2 | 5 | +3 | 7 / 528 / 116 |
+| 71007 | slalom | 2 | 13 | 2 | 5 | +3 | 7 / 645 / 111 |
+| 71007 | ridges | 2 | 13 | 3 | 5 | +3 | 8 / 571 / 164 |
+| 71007 | bumps | 2 | 2 | 2 | 2 | 0 | 3 / 16 / 3 |
+| 71007 | steps | 2 | 12.5 | 2 | 5 | +3 | 7 / 539 / 125 |
+
+- D − A ≤ 3 on every leg in both seeds: **holds**, though at the limit on 5 of 8 leg-seeds.
+- The latency cut is real: D's first plan is 4–5 ticks against B's 12–13.
+- **Escalation confound, without profiling:**
+  - B's wait is 11.5–12 at block position 0 and 12–13 at positions 1–3.
+  - D's is 4–5 at every position, and A's and C's 2–2.5.
+  - So the confound moves B by at most about 1.5 ticks and D not at all; it cannot change the classification. It was
+    larger in the profiled diagnostic run because profiling slows the search.
+
+**Diagnostic, not gating.** Driving is lap ticks minus first-plan wait, as a paired median ratio:
+
+| seed | leg | D/A | D/B | B/A | C/A |
+|---|---|---|---|---|---|
+| 71006 | slalom | 1.004 | 0.984 | 1.003 | 1.006 |
+| 71006 | ridges | 0.997 | 0.996 | 1.022 | 1.004 |
+| 71006 | bumps | 0.997 | 1.005 | 0.993 | 1.000 |
+| 71006 | steps | **0.980** (0.978–0.990) | 0.986 | 0.997 | 0.998 |
+| 71007 | slalom | 1.006 | 1.000 | 1.006 | 1.000 |
+| 71007 | ridges | 1.006 | 0.951 | 1.073 | 1.002 |
+| 71007 | bumps | 1.000 | 1.014 | 0.986 | 1.000 |
+| 71007 | steps | **0.969** (0.961–0.995) | 1.007 | 0.974 | 1.000 |
+
+- This is the ceiling for any further SimEdge latency fix on this course. Even with no wait at all, horizon 8
+  drives 2–3% faster than A* on steps only; slalom, ridges and bumps are even.
+- Steps gains about 6–9 ticks while driving and loses 3 waiting. The gain is near the start, as the diagnosis found.
+- On bumps, horizon 32 drives 0.7–1.4% faster than A* and horizon 8 does not. That small gain comes from simulating
+  far from the start, which is cheap only on bumps (17 ms).
+- Ridges B/A 1.022/1.073 in driving: the horizon-32 search's partial first plans also cost route quality. Horizon 8
+  removes that (D/A 0.997/1.006).
+
+#### Phase 05B classification
+
+| criterion | 71006 | 71007 | verdict |
+|---|---|---|---|
+| Arms as pre-registered | yes | yes | — |
+| Reliability | holds | holds | holds |
+| M1 D/A (≤ 0.97 on ≥ 2 legs, no leg ≥ 1.03) | 0 legs ≤ 0.97; none ≥ 1.03 | 0 legs; none ≥ 1.03 | **not met** |
+| M1 D/C | 0 legs; none ≥ 1.03 | 0 legs; none ≥ 1.03 | **not met** |
+| M2 D/B | 2 legs (slalom 0.962, steps 0.961); none ≥ 1.03 | 1 leg (ridges 0.931); none ≥ 1.03 | **not met** (71007) |
+| Mechanism (wait D − A ≤ 3) | holds | holds | holds |
+| Regression (D/B ≥ 1.03 on ≥ 2 legs, both seeds) | 0 legs | 0 legs | no |
+
+**Class C: NO IMPROVEMENT.**
+- Horizon 8 removes most of SimEdge's planning loss. D/B is below 1 on 6 of 8 leg-seeds, and D is never ≥ 1.03
+  against any arm.
+- But it is not faster than legacy A* (M1). Its gain over the existing SimEdge (M2) reaches 0.97 on two legs only in
+  seed 71006.
+- The mechanism holds, but class B needs M2 in both seeds, so it is not class B.
+
+**Archive rule:** steps D/A is 0.988 (71006) and 0.978 (71007), ≤ 0.99 in both seeds. The pre-registered rule
+therefore recommends **keeping SimEdge as disabled research code**, not archiving it.
+
+**Algorithmic or harness?** The D-versus-B difference is algorithmic: the same search simulates less, and no other
+code changed. Nothing in the baseline changed:
+- arm A reproduces Phase 05;
+- the Phase 05B instrumentation sits behind `static final` flags read from system properties (`SimEdge.PROFILE`,
+  the harness trace), which the JIT folds when they are off; both were off in the A/B;
+- the escalation confound was left as in Phase 05.
+
+#### Full suite at the Phase 05B results commit (VERIFIED, Tier U)
+
+Same command as Phase 04: 1537 tests, 1 failed, 21 skipped, 4 min 26 s. The failure is the pre-existing B5
+`SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop`. The 2 extra tests and 2 extra skips against Phase 04
+are the env-gated `SimEdgeProfileTest` and `SimEdgeDivergenceTest`, which skip without their variables.

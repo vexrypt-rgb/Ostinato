@@ -318,3 +318,89 @@ them only as a labelled fixture for the per-mode judging test. `predictionTolera
 
 **Gate: PROVISIONAL.** B1 is met (6/6), there is no unacceptable error, and B3 shows no regression, but acceptable
 overhead (B2) is not shown. See BENCHMARKS "Phase 04 gate classification".
+
+## D15. Phase 05B: SimEdge's loss is first-plan latency; a horizon of 8 removes most of it but beats nothing; class C, SimEdge stays disabled
+
+The task: diagnose why Phase 05's SimEdge (D13) did not improve performance, then pre-register and run one bounded
+experiment, with no redesign of A* and no Phase 06. The diagnosis and the experiment's criteria were written to
+BENCHMARKS ("Phase 05B", commit `5b26423b5`) before any experiment data. Evidence is in BENCHMARKS "Phase 05B" and
+`docs/ostinato2/raw/phase05b/`.
+
+**Added (diagnostics, all off unless their flag is set):**
+
+- Commit `e071cc7d9`:
+  - `-Dostinato.simedge.profile`: per-search `SIMEDGEPROF` and per-plan `PLANPROF` lines, with sim and legacy-move time
+    by edge kind, expansions, duplicate sims and allocation.
+  - `-Dostinato.legatotest.trace`: per-tick `simedge-trace.csv` and per-path `simedge-paths.csv`, plus a `planUs`
+    field on every lap row.
+  - Env-gated tests: `SimEdgeProfileTest` (`OSTINATO_SIMEDGE_PROFILE`) and `SimEdgeDivergenceTest`
+    (`OSTINATO_SIMEDGE_TRACE`), an offline multi-tick replay of a live trace.
+  - Scripts: `scripts/simedge-prof.py`.
+- Commit `b78f7d56b`: harness arms `-Dostinato.legatotest.arms=simedge5b` (A legacy, B SimEdge horizon 32, C legacy,
+  D SimEdge horizon 8). Lap rows log `simEdge` and `horizon`; `SimEdgeProfileTest` reads `OSTINATO_SIMEDGE_HORIZON`.
+- `scripts/simedge5b-ab.py`: the pre-registered analysis and classification.
+
+**Not changed:**
+- planner code;
+- the physics;
+- the controller;
+- production defaults (`simEdgeSearch` false, `simEdgeHorizon` 32);
+- the benchmark criteria (Phase 05 measure 1 is the M1 rule as written);
+- the harness's same-start timeout escalation. It is documented as a confound and measured: at most about 1.5 ticks
+  on B, none on D.
+
+**Diagnosis findings:**
+
+1. **The bottleneck is first-plan latency.**
+   - SimEdge expands 12–16 motion states per cell inside its 32-block horizon, with about 7 edge sims and about 100
+     legacy move evaluations per expansion. Half the time is simulation, a fifth is legacy move evaluation.
+   - Only 2% of sims are exact repeats, so caching would not help.
+   - On 3 of 4 legs the first plan exceeds the 500 ms primary budget. The lap starts about 12–18 ticks late, which is
+     70–100% of the Phase 05 loss.
+2. **The controller mismatch is not the bottleneck.**
+   - Timing per edge from the executor's real entry state is accurate (traverse mean error 0.10 ticks over 1236
+     edges).
+   - Open-loop drift with recorded inputs is about 0.01 m at 10 ticks and about 0.1 m at 40 (median).
+   - With SimEdge's own assumed steering, it is 0.07 m and 0.17 m. p90 is 2–4× worse at 10–20 ticks, because the
+     kinematic driver cuts corners where SimEdge aims at cell centres.
+   - Chained over many edges, ascends are where the model is weakest (−4 ticks median).
+   - Line and Descend, which the BARITONE driver runs, are not simulated at all.
+3. **SimEdge's alternatives are physically followable but worth little.**
+   - The executor drives SimEdge's routes at the predicted speed.
+   - The route difference is near the start (accelerate straight from rest, then the diagonal) and is worth 0–3
+     ticks per lap.
+
+**Experiment result (2 seeds × 96 laps):**
+
+- Horizon 8 cuts SimEdge's first-plan wait from 12–13 ticks to 4–5, against A*'s 2.
+- No arm lost a lap.
+- Paired lap-ticks medians:
+
+  | pair | range |
+  |---|---|
+  | D/A | 0.978–1.015 |
+  | D/C | 0.978–1.020 |
+  | D/B | 0.931–1.012 |
+
+- M1 (≤ 0.97 against the legacy baseline on ≥ 2 legs) is not met in either seed.
+- M2 (against the existing SimEdge) is met in seed 71006 only (slalom 0.962, steps 0.961). In 71007 only ridges
+  (0.931) passes.
+- The mechanism holds in both seeds (wait D − A ≤ 3), so the latency explanation is confirmed. But removing the
+  latency leaves almost nothing: driving D/A without the wait is 0.97–0.98 on steps and 0.997–1.006 elsewhere.
+
+**Decision:**
+
+- **Class C (no improvement).** `simEdgeSearch` stays default false, and `simEdgeHorizon` keeps its default of 32.
+- No further SimEdge optimization in Phase 05B, as pre-registered.
+- **Keep SimEdge as disabled research code** (pre-registered archive rule: steps D/A ≤ 0.99 in both seeds, 0.988 and
+  0.978). Do not delete it; do not enable it.
+- Finding for anyone who enables it anyway: horizon 8 dominates horizon 32 on this course. D/B ≤ 0.981 on slalom,
+  ridges and steps in both seeds, and only bumps is slightly worse (1.003 and 1.012).
+
+**Recommended next action (owner decision):**
+
+- Do not fund another latency fix for SimEdge on this course. Even zero wait would gain about 2–3% on steps only,
+  short of the ≥ 2-leg gate.
+- SimEdge can only pay off where momentum decides the route: gaps, sprint jumps, long ascent chains. That would need
+  a new pre-registered scenario family and its own phase, not a retuning of this one.
+- If no such scenario is wanted, archive SimEdge.
