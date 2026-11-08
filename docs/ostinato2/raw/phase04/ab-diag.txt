@@ -1,0 +1,13 @@
+pairs 96; drift replans on 1650, off 60
+PhysicsTravel time per lap, paired on - off: median +26.36 ms, mean +50.28 ms
+degrees turned per lap, paired on - off: median +146, mean +343
+
+per-tick client tick time by driver, all lap ticks but the first, ms
+| driver | flag | n | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| - | off | 168 | 6.42 | 10.43 | 103.91 | 134.98 |
+| - | on | 120 | 6.99 | 10.72 | 12.99 | 14.77 |
+| BARITONE | off | 11745 | 5.21 | 7.73 | 122.91 | 193.44 |
+| BARITONE | on | 11538 | 5.25 | 7.85 | 118.68 | 197.58 |
+| PHYSICS | off | 16994 | 5.40 | 20.84 | 65.60 | 175.92 |
+| PHYSICS | on | 17014 | 5.57 | 23.23 | 62.93 | 168.14 |

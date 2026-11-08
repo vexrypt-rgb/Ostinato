@@ -1,0 +1,9 @@
+TOLTRACE start seed=81001 target=2000 maxTicks=30000 settle=3 predictionTolerance=false tickPackets=true
+TOLTRACE mode=WALK n=2069 p50=0.0008 p95=0.0020 p99=0.0035 max=0.0060
+TOLTRACE mode=SPRINT n=2000 p50=0.0012 p95=0.0022 p99=0.0047 max=0.0059
+TOLTRACE mode=SPRINT_JUMP n=2110 p50=0.0002 p95=0.0004 p99=0.0005 max=0.0178
+TOLTRACE mode=FALL n=2000 p50=0.0000 p95=0.0000 p99=0.0000 max=0.0000
+TOLTRACE mode=FLUID n=2072 p50=0.0001 p95=0.0003 p99=0.0003 max=0.0404
+TOLTRACE mode=CLIMB n=2000 p50=0.0000 p95=0.0003 p99=0.0011 max=0.0017
+TOLTRACE excluded={FALL/packet=73, FALL/settle=385, FLUID/rest=21, FLUID/settle=45, WALK/packet=44, WALK/rest=1410, WALK/settle=56} runTicks=14614 segments=233 falls=127 fellOff=0 deaths=0
+TOLTRACE done seed=81001

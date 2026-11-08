@@ -662,3 +662,181 @@ Criteria:
 - **FAIL:** unacceptable error, overhead FAIL, or A/B regression.
 - **PROVISIONAL:** anything else, such as a mode with insufficient data, a mode not validated, or an inconclusive
   overhead result.
+
+**Addendum (written 2026-11-08 during the dev session, before the held-out session ran):**
+
+- The trace CSV writes errors with 6 decimals. Every usable FALL row seen so far is below 5e-7: no-key airborne ticks are
+  gravity and drag only, which the 26.3 model reproduces to float precision.
+- A dev p99 that rounds to 0 at that resolution is recorded as "< 1e-6". Its bound is set to the instrument resolution,
+  1e-6. That is not a tuned value: a bound of exactly 0 would call every non-zero rounding error a miss.
+- The held-out share over the bound is counted at the same resolution.
+- The smoke run that checked the harness (seed 81009, target 60 per mode) is a harness check only. Its rows are kept in
+  `build/phase04/smoke-81009/` and are not used for any bound.
+- The smoke run used a 4-deep pool by mistake. The dev and held-out sessions use the pre-registered 3-deep pool.
+
+### Live traces (B1), 26.3 client, D12 model (VERIFIED, Tier L)
+
+Commands (PowerShell, repo root, nothing else running; one client session per seed):
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.tickClock=true -Dostinato.tolerancetrace=true -Dostinato.tolerancetrace.exit=true -Dostinato.seed=81001'
+.\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient -PclientXmx=1536M *> trace-81001.log
+# held-out: the same with -Dostinato.seed=81002
+# each session writes fabric/run/client/tolerance-trace.csv and tolerancetrace-result.txt, moved out before the next
+python scripts/tolerance-trace.py docs/ostinato2/raw/phase04/trace-81001.csv.gz docs/ostinato2/raw/phase04/trace-81002.csv.gz
+```
+
+Raw rows, per-session summaries and the analysis output: `docs/ostinato2/raw/phase04/`.
+
+| session | client ticks | segments | falls | fall-offs | deaths | key-mismatch exclusions |
+|---|---|---|---|---|---|---|
+| dev 81001 | 14,614 | 233 | 127 | 0 | 0 | 0 |
+| held-out 81002 | 14,850 | 240 | 136 | 0 | 0 | 0 |
+
+**Bounds** (dev p99 is the bound; held-out share over it):
+
+| mode | dev n | dev p50 | dev p95 | dev p99 (bound) | dev max | held-out n | held-out p99 | held-out over bound | status |
+|---|---|---|---|---|---|---|---|---|---|
+| WALK | 2069 | 0.000846 | 0.001954 | 0.003547 | 0.005995 | 2076 | 0.003233 | 17/2076 = 0.82% | validated |
+| SPRINT | 2000 | 0.001234 | 0.002235 | 0.004708 | 0.005901 | 2017 | 0.005054 | 31/2017 = 1.54% | validated |
+| SPRINT_JUMP | 2110 | 0.000237 | 0.000415 | 0.000452 | 0.017837 | 2078 | 0.000454 | 21/2078 = 1.01% | validated |
+| FALL | 2000 | < 1e-6 | < 1e-6 | < 1e-6 → 0.000001 (addendum) | < 1e-6 | 2000 | < 1e-6 | 0/2000 = 0.00% | validated |
+| FLUID (`tickWater`) | 2072 | 0.000143 | 0.000319 | 0.000346 | 0.040430 | 2020 | 0.000346 | 17/2020 = 0.84% | validated |
+| CLIMB (ladders, vines) | 2000 | 0.000000 | 0.000308 | 0.001103 | 0.001663 | 2062 | 0.001135 | 22/2062 = 1.07% | validated |
+
+**B1: 6/6 validated.** No mode is near the 0.30 FAIL line; the largest held-out p99 is 0.005054 (SPRINT).
+`PredictionTolerance.MEASURED` now holds the six dev p99s, Tier L, basis "live 26.3 trace, D12 model".
+
+**Excluded rows** (counted, not dropped silently):
+
+| mode | dev packet | dev settle | dev keys | dev rest | held-out packet | held-out settle | held-out keys | held-out rest |
+|---|---|---|---|---|---|---|---|---|
+| WALK | 44 | 56 | 0 | 1410 | 64 | 60 | 0 | 1551 |
+| FALL | 73 | 385 | 0 | 0 | 62 | 408 | 0 | 0 |
+| FLUID | 0 | 45 | 0 | 21 | 0 | 45 | 0 | 60 |
+| CLIMB | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
+
+SPRINT and SPRINT_JUMP had no excluded rows. Settle rows are the 3 ticks after each teleport (fall and pool
+segments). Rest rows are standing still between segments.
+
+**Diagnostics (not gated), p99 of usable rows:**
+
+| mode | dev, yaw the client used | held-out, yaw the client used | dev, land `tick()` | held-out, land `tick()` |
+|---|---|---|---|---|
+| WALK, SPRINT, SPRINT_JUMP, FALL, CLIMB | 0.000000 | 0.000000 | = primary | = primary |
+| FLUID | 0.000000 | 0.000000 | **0.385000** | **0.385000** |
+
+- **With the yaw the client applied, the D12 model's p99 is 0 in every mode.** Nearly all the residual error is the
+  applied yaw differing from the commanded yaw: p50 0.56°, p99 1.02°, max 5.5° (both sessions). That gap exists for
+  every consumer that sets yaw the same way (`PhysicsTravel` does), so it belongs in the bound.
+- **FLUID, land `tick()`: p99 0.385.** `SimTrace` predicts every tick with `tick()` (`SimTrace.java:109`), including
+  water ticks. Its flag-on FLUID verdicts therefore judge a land prediction against a water bound. That is a consumer
+  mismatch, not a model error (`tickWater` p99 0.000346). It is diagnostic only (`SimTrace` drives nothing), and is
+  recorded in D14, not fixed here.
+- Script coverage: commanded turns are at most 30°/tick (p99 30.0), under the 32°/tick aim cap. Turns over the cap are
+  not sampled. `PhysicsTravel` turns in place, keys up, when its step is over the cap (`PhysicsTravel.java:151`).
+
+**Tails (max rows, not gated):**
+
+| session, mode | max | rows | cause |
+|---|---|---|---|
+| dev SPRINT_JUMP | 0.0178 | 3 | leaving the pool with the swimming flag still set; error with the yaw used is the same, so model, not yaw |
+| dev FLUID | 0.0404 | 2 | jump at the water surface, dy −0.04; the water-jump is unmodelled (D12) |
+| held-out SPRINT | 0.0890 | 1 | error with the yaw used is 0: a 0.4° yaw difference at a bump edge |
+| held-out WALK | 0.0294 | 1 | walking into the ladder wall; error with the yaw used is the same, so a model residual at ladder contact |
+
+### Live A/B and tick time (B2, B3), seeds 81011 and 81012 (VERIFIED, Tier L)
+
+The table above is in `MEASURED` for every flag-on arm. Commands (PowerShell, repo root, nothing else running):
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.tickClock=true -Dostinato.legatotest=true -Dostinato.legatotest.exit=true -Dostinato.legatotest.arms=tolerance -Dostinato.legatotest.stack=physics -Dostinato.legatotest.reps=6 -Dostinato.seed=81011'
+.\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient -PclientXmx=1536M *> ab-81011.log
+# reproducibility: the same with -Dostinato.seed=81012
+# each run appends fabric/run/client/tolerance-ticks.csv, moved out before the next
+python scripts/tolerance-ab.py docs/ostinato2/raw/phase04/ab-81011-lines.txt docs/ostinato2/raw/phase04/ab-81012-lines.txt
+python scripts/tolerance-ab-diag.py docs/ostinato2/raw/phase04/ab-81011-ticks.csv.gz docs/ostinato2/raw/phase04/ab-81011-lines.txt docs/ostinato2/raw/phase04/ab-81012-ticks.csv.gz docs/ostinato2/raw/phase04/ab-81012-lines.txt
+```
+
+`ab-*-lines.txt` holds every `LEGATOTEST` line of the run log. The script output is in `ab-analysis.txt` and
+`ab-diag.txt`. Each run took 29 minutes, 96 laps each.
+
+**Reliability (both seeds: holds):**
+
+| seed | A reached | B reached | C reached | D reached | faults | stuck keys | deaths | cancels + rewinds |
+|---|---|---|---|---|---|---|---|---|
+| 81011 | 24/24 | 24/24 | 24/24 | 24/24 | none | 0 | 0 | 0 in every lap |
+| 81012 | 24/24 | 24/24 | 24/24 | 24/24 | none | 0 | 0 | 0 in every lap |
+
+**Lap ticks, per-leg median paired ratio** (reached pairs, n = 6 each):
+
+| leg | 81011 B/A | 81011 D/C | 81011 C/A (noise) | 81012 B/A | 81012 D/C | 81012 C/A (noise) |
+|---|---|---|---|---|---|---|
+| slalom | 0.997 | 0.999 | 0.999 | 0.994 | 0.996 | 0.999 |
+| ridges | 1.005 | 0.998 | 0.996 | 0.991 | 1.015 | 0.991 |
+| bumps | 1.003 | 1.000 | 0.998 | 1.000 | 1.000 | 1.000 |
+| steps | 0.988 | 0.988 | 1.010 | 0.962 | 0.975 | 0.977 |
+
+- Completion time: one leg in one replication is ≤ 0.97 beyond its noise (81012 steps B/A 0.962; D/C 0.975). The
+  criterion needs ≥ 2 legs in both replications and both seeds: **not met**. No leg is ≥ 1.03.
+- Recovery: there was nothing to recover from. No lap in any arm cancelled or rewound, so the paired difference is 0
+  with a CI of 0: **no improvement**.
+- Reliability: every arm reached 24/24, so it is not strictly more: **no improvement**.
+- Regression: none. Reliability holds, and no leg is ≥ 1.03.
+
+**B3 verdict: no improvement.** The implementation stands, but no navigation benefit is claimed.
+
+**Tick time (B2), per-lap quantiles, pairs B–A and D–C, both seeds pooled, n = 96:**
+
+| statistic | median off | median on | median paired diff (on − off) | bootstrap 95% CI | verdict |
+|---|---|---|---|---|---|
+| p95 (gated) | 17.50 ms | 18.80 ms | +0.591 ms | −0.014 .. +1.224 ms | inconclusive (upper > 0.5) |
+| p99 (gated) | 87.18 ms | 92.37 ms | −2.979 ms | −4.511 .. −1.300 ms | acceptable |
+| p50 (diagnostic) | 5.20 ms | 5.31 ms | +0.085 ms | +0.064 .. +0.150 ms | — |
+| max (diagnostic) | 124.72 ms | 118.81 ms | −1.882 ms | −5.822 .. −0.418 ms | — |
+
+**B2 verdict: inconclusive.** The p95 CI crosses the 0.5 ms line: it is not shown to be under it (acceptable), nor
+over it (FAIL). This is with the flag on. With the flag off (the default) the old check runs unchanged, so production
+pays nothing (`PredictionToleranceTest.flagOff*`). Seed 81011 alone gave p95 +1.215 ms (CI +0.109 .. +1.793).
+
+**Where the flag-on time goes** (diagnostic, not pre-registered, never gated; `scripts/tolerance-ab-diag.py`):
+
+| measure (96 pairs) | flag off | flag on |
+|---|---|---|
+| `PhysicsTravel` drift replans, total | 60 | 1650 |
+| `PhysicsTravel` plans, total | 3111 | 4433 |
+| `PhysicsTravel` time per lap, paired on − off | — | median +26.4 ms, mean +50.3 ms |
+| degrees turned per lap, paired on − off | — | median +146°, mean +343° |
+| PHYSICS-driven ticks: p50 / p95 / p99 | 5.40 / 20.84 / 65.60 ms (n=16,994) | 5.57 / 23.23 / 62.93 ms (n=17,014) |
+| BARITONE-driven ticks: p50 / p95 / p99 | 5.21 / 7.73 / 122.91 ms | 5.25 / 7.85 / 118.68 ms |
+
+With the 26.3 bounds, the flag-on drift check fires about 17 times a lap where the old summed-axis 0.1 check fires
+about 0.6 times. Each firing is a fresh `PhysicsPathfinder` search, on the tick. That is the p95 shift. Laps take
+the same number of ticks, and turn more. The per-lap p99 and max are set by the 3 or so slowest ticks of a
+~300-tick lap. Those ticks are mostly BARITONE-driven (p99 of 119–123 ms in both arms), not PHYSICS-driven, so the
+replans do not move them. Their cause was not investigated. Laps allocate 0.9–2.1 GB each.
+
+### Phase 04 gate classification (pre-registered rule)
+
+| requirement | result |
+|---|---|
+| All six modes validated (B1) | **met**: 6/6, held-out share over the bound 0–1.54% (criterion ≤ 2.0%) |
+| No unacceptable prediction error | **met**: largest held-out p99 0.005054 (criterion ≤ 0.30) |
+| Overhead acceptable (B2) | **not shown**: p95 inconclusive (CI −0.014 .. +1.224 ms), p99 acceptable |
+| No A/B regression (B3) | **met**: reliability holds in both seeds, no slow legs. Result: no improvement |
+
+**Gate: PROVISIONAL.** It is not PASS, because acceptable overhead is not shown. It is not FAIL: there is no
+unacceptable error and no regression, and the overhead is not shown to be over 0.5 ms. The pre-registration names
+an inconclusive overhead result as PROVISIONAL. More seeds were not run to narrow the CI, because the
+pre-registration fixed two runs.
+
+### Full suite at the validation HEAD (VERIFIED, Tier U)
+
+`.\gradlew.bat --offline --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx1536M" cleanTest test -x nativeHost`:
+1535 tests, 1 failed, 19 skipped, 4 min 22 s. The failure is the pre-existing B5
+`SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop`, the same counts as at the Phase 05 HEAD. The targeted
+classes all pass:
+- `PredictionToleranceTest` (7, 1 env-gated skip);
+- `SimEdgeTest` (16, 1 env-gated skip);
+- `SimTraceTest`, `PhysicsPathfinderTest`, `TravelStackTest`, `SettingCatalogTest`, `PlayerSim263Test` and
+  `CrossModelModesTest`.

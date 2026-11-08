@@ -1,8 +1,12 @@
 # Ostinato 2.0 — status
 
-**Phase 05 gate: NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. Phase 06 was **not** started.
+**Phase 04 gate: PROVISIONAL after live validation** (DECISIONS D14, 2026-11-08).
+- All six modes have validated Tier-L bounds for the 26.3 (D12) model.
+- The flag-on A/B shows no improvement and no regression.
+- Client tick-time overhead with the flag on is inconclusive: p95 +0.59 ms, CI −0.01 .. +1.22 ms, against a 0.5 ms criterion.
+- `predictionTolerance` stays default **false**.
 
-Phase 04 gate (unchanged): PASS WITH BLOCKERS (provisional).
+**Phase 05 gate (unchanged): NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. The Phase 04 validation did not touch it. Phase 06 was **not** started.
 
 ## Where
 
@@ -43,15 +47,23 @@ Phase 04 gate (unchanged): PASS WITH BLOCKERS (provisional).
    - Flag-off identity tests.
    - Overhead microbench.
    - The new setting is registered in `SettingCategorizer` (MOVEMENT) and `setting-descriptions.json`, so `SettingCatalogTest` passes.
+5. **Phase 04 live validation** (2026-11-08; DECISIONS D14; criteria pre-registered in BENCHMARKS before any data):
+   - Live 26.3 traces of all six modes: dev seed 81001, held-out seed 81002, ≥ 2000 usable ticks per mode per session.
+     They come from a new scripted harness, `ToleranceTraceTest`.
+   - `PredictionTolerance.MEASURED` is replaced by the validated dev p99s (Tier L). This changes flag-on only.
+   - Client tick time, from a new `TickClock` (harness-only).
+   - A paired flag on/off A/B on `SimEdgeCourse`, physics stack, 192 laps (seeds 81011, 81012).
+   - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase04/`.
 
 ## Phase 04 gate
 
 | Requirement | Result | Tier |
 |---|---|---|
 | ≥2 real consumers per canonical interface | `PredictionTolerance`: `SimTrace` (three movers) + `PhysicsTravel`. `PlayerState`: 5 consumers. `PlayerSim.World`: ≥7. | VERIFIED, U |
-| Validated per-mode tolerances | SPRINT, SPRINT_JUMP, CLIMB (climb-jump): 26.3 live traces. WALK, FALL, FLUID: cross-model only. Ladder climbing proper and vines: not traced. | **L for 3 of 6**, S for 3 |
-| Physics constants follow the benchmark version | **Changed by owner request (D12):** PlayerSim, native sim, PPE, decoder and the inline predictors follow 26.3. Cost estimators (`TickSim`, `SurfaceSpeed`) already match 26.3's structure to float rounding and were left alone. | VERIFIED, U/S. **No Tier L for the new model.** |
-| p95/p99 overhead, no material regression | Consumer microbench: ≤ +0.36 µs/tick at p99 with the flag on. Flag off runs the old path. Planner bench at HEAD: see BENCHMARKS. | S. **Client tick time not measured.** |
+| Validated per-mode tolerances | **All six modes**, live 26.3 traces of the D12 model (D14). Dev 81001 / held-out 81002, ≥ 2000 usable ticks per mode per session. Held-out share over the dev p99 is 0–1.54% (criterion ≤ 2.0%). Ladders and vines both traced; FLUID with `tickWater`. | **L for 6 of 6** |
+| Physics constants follow the benchmark version | **Changed by owner request (D12):** PlayerSim, native sim, PPE, decoder and the inline predictors follow 26.3. Cost estimators (`TickSim`, `SurfaceSpeed`) already match 26.3's structure to float rounding and were left alone. **Live (D14):** with the yaw the client applied, the model's one-step p99 is 0 in every mode. | VERIFIED, U/S/**L** |
+| p95/p99 overhead, no material regression | Client tick time, 96 lap pairs (flag on − off). p95: +0.59 ms, CI −0.01 .. +1.22 ms, **inconclusive** against 0.5 ms. p99: −2.98 ms, CI −4.51 .. −1.30 ms, acceptable. The cost is extra drift replans (1650 on vs 60 off). Flag off runs the old path. | L. **Inconclusive** |
+| Flag-on navigation effect | Live A/B, 192 laps (seeds 81011, 81012). Reliability holds (192/192 reached; no faults, stuck keys, deaths or cancels). Lap-tick ratios 0.962–1.015. **No improvement, no regression.** | L |
 | New paths behind flags; defaults unchanged | `predictionTolerance=false`. `inputArbitration` and `latticeExperiment` still false. | VERIFIED, U |
 | Identical behavior with flags off | `PredictionToleranceTest.flagOff*`: every SimTrace row field, the verdict and summary; 100,000 random drift pairs | VERIFIED, U |
 
@@ -79,30 +91,87 @@ Phase 04 gate (unchanged): PASS WITH BLOCKERS (provisional).
 - **Classification:** no improvement on any pre-registered measure. Legacy behaviour is retained, and no default
   changed. No baseline fixes were needed: legacy and executor code are untouched.
 
-## Blockers (owner decisions or live tests)
+## Blockers
 
-- **B1. Tier-L bounds for WALK, FALL, FLUID, and ladder climbing proper, and now all six modes for the 26.3 model.**
-  - The SPRINT, SPRINT_JUMP and CLIMB bounds were measured with the 1.16 `PlayerSim`. The historical trace keeps only residuals, so it cannot be replayed through the D12 model. For the current model, those bounds are unknown until a 26.3 client re-run.
-  - Needs a 26.3 client run with `kinematicTrace` on, plus movers that trace those modes. Today only the jump, chain, and climb-jump movers trace.
-  - Until then, those bounds are borrowed or legacy values (Tier S).
-- **B2. Client tick time p95/p99**, with `predictionTolerance` on and off. This is a Tier-L measurement; the microbench is only a proxy.
-- **B3. Does flag-on `PhysicsTravel` help?**
-  - With the flag on, it replans on sprint ground ticks past 0.2235 Euclidean, instead of past 0.1 summed over the axes.
-  - That needs an A/B lap course in a real client before anyone turns it on.
-- **B4. Phase 03 execution tier.**
-  - The lattice was compared with stock A* at planner tier only.
-  - An execution-tier comparison needs either a headless `PathExecutor` (D2 says no) or live runs.
-  - D9 stays PROVISIONAL until then.
-- **B5. A pre-2.0 test is red:** `SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop` (F-M6). The PPE merge invalidated it. Fixing it means changing Secondo bookkeeping, which is the owner's call.
-- **B6. 31 direct key writers bypass the arbiter** (F-M3). `inputArbitration` must not be turned on in production until they migrate. That migration is later-phase work.
+**Phase 04 gate items (D14; evidence in BENCHMARKS "Phase 04 live validation"):**
+
+- **B1. RESOLVED.** All six modes validated, Tier L, for the D12 model.
+  - The dev p99s are in `MEASURED`. The 1.16-model D11 numbers are no longer in the table.
+  - Coverage limits:
+    - turns ≤ 30°/tick;
+    - one course;
+    - no slime, honey, ice, soul sand, flowing water, lava or sneaking;
+    - one-step only.
+- **B2. MEASURED, INCONCLUSIVE.** This is the only reason the gate is PROVISIONAL rather than PASS.
+  - With the flag on, the p95 CI crosses 0.5 ms.
+  - The cost is real and its source is known: about 17 extra `PhysicsPathfinder` replans a lap, +26 ms of
+    `PhysicsTravel` time per lap.
+  - With the flag off (the default) there is no cost.
+  - Closing it needs a new pre-registered measurement, or a cheaper drift check (new design, own A/B). It was not
+    re-run here, because the pre-registration fixed two runs.
+- **B3. MEASURED: NO IMPROVEMENT.** The tight bounds replan more without any gain in lap time, recovery or
+  reliability. The flag stays off. No navigation benefit is claimed.
+
+**Not Phase 04 gate items. Assessed only for their effect on the gate and on Phase 05 (2026-11-08):**
+
+- **B4. Phase 03 execution tier: OPEN, unchanged.**
+  - The lattice was compared with stock A* at planner tier only. D9 stays PROVISIONAL.
+  - Effect on the Phase 04 gate: none.
+  - **Phase 05 dependency: none.** No class outside `baritone.lattice` references it (grep of `src/main/java`), and
+    `SimEdge`/`SimEdgePathFinder` do not use it.
+- **B5. `SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop` red: OPEN, unchanged** (F-M6).
+  - It is a stale assertion that `baritone.api.physics.IPredictivePhysics` is absent; the PPE merge added it.
+  - Effect on the Phase 04 gate: none, because it tests Secondo bookkeeping, not physics or tolerance.
+  - **Phase 05 dependency: none functionally.** But the full suite can never run green until the owner updates
+    Secondo bookkeeping, so "full suite green" cannot serve as a gate signal. Gates use named test classes instead.
+- **B6. Direct key writers bypass the arbiter: OPEN, unchanged** (F-M3).
+  - 267 `setInputForceState`/`clearAllKeys` sites in 31 production files, recounted on this tree. The Phase 04
+    harness `ToleranceTraceTest` adds 5 sites in 1 harness-only file, off by default.
+  - Only `FallController`/`FallInput` use the arbiter.
+  - It blocks turning `inputArbitration` on in production.
+  - Effect on the Phase 04 gate: none.
+  - **Phase 05 dependency: none.** `SimEdge` writes no keys, and Phase 05 paths execute through the legacy `Movement`
+    classes and drivers. A future Phase 05 retry that adds a new driver would add a writer to this list.
+
+## Phase 05 readiness (decision, 2026-11-08)
+
+Phase 05 already ran before this validation (`72e5878a7`, D13: NO IMPROVEMENT, `simEdgeSearch` default off). It was
+not changed or re-run here.
+
+**Decision: Phase 04 does not block Phase 05 work, and gives no evidence-based reason to start it.** What Phase 05
+actually depends on, and where each item stands:
+
+| Phase 05 dependency | Status after D14 |
+|---|---|
+| `PlayerSim` one-step accuracy for walk, sprint and jump (`SimEdge` prices edges by running it) | **Tier L.** Exact given the applied yaw; p99 0.0035–0.0047 (ground) and 0.00045 (air) with the commanded yaw |
+| `PredictionTolerance.classify` and `MEASURED` (`SimEdge`'s `drift` field) | Tier-L table. `drift` is not read by the search or the cost, so no Phase 05 behaviour changed; only its values shrank. `SimEdgeTest` passes |
+| `predictionTolerance` flag; B2; B3 | Not used by Phase 05 |
+| B4 lattice; B5 Secondo; B6 arbiter | Not used by Phase 05 (above) |
+
+What the Phase 04 evidence does **not** establish for Phase 05:
+
+- multi-tick open-loop accuracy;
+- the executor's controller model. D13 reason 2: the kinematic driver drives most of a lap, and `SimEdge` does not
+  simulate it.
+
+One-step bounds cover neither. They do narrow D13's diagnosis: one tick ahead, the physics model is exact, so a
+Phase 05 retry should target plan time and the controller model, not `PlayerSim`.
 
 ## Next task
 
-**Owner decision. Phase 06 was not started.** Open questions:
-- B1–B4 above are unchanged by Phase 05.
-- Should Phase 05 be retried with a sim of the executor that actually drives (the kinematic driver), or with planning
-  time hidden (planning ahead while moving)? D13 names both as the reasons it lost. Either would be new work.
-- Should the Phase 05 code stay on the branch default-off (current state), or be dropped?
+**Owner decisions. Phase 05 was not re-run and Phase 06 was not started.**
+
+1. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
+   pre-registered drift-check design (bound × margin, or persistence) and its own A/B.
+2. Phase 05 retry direction (D13):
+   - a sim of the executor that actually drives (the kinematic driver), or
+   - planning time hidden (planning ahead while moving).
+   Or drop the Phase 05 code. It is default-off on the branch today.
+3. Separately:
+   - `SimTrace`'s land prediction on water ticks (D14 finding 2);
+   - B5 Secondo bookkeeping;
+   - B6 key-writer migration;
+   - B4 execution tier.
 
 ## Previous status (Grok, REPORTED; kept as written)
 

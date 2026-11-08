@@ -254,3 +254,67 @@ The audit (`PHASE05_AUDIT.md`) came first. The gate was pre-registered in BENCHM
 result and as a base if the executor's own controller (the kinematic driver) is ever simulated instead. **Not
 done:** adding drift, risk or food to the cost; simulating descends, falls or parkour; reconstruction that hands the
 sim's end bodies to the executor. Each is a Phase 06+ owner decision, not part of this phase.
+
+## D14. Phase 04 live validation: Tier-L 26.3 bounds adopted; `predictionTolerance` stays off; gate PROVISIONAL
+
+The task: close the Phase 04 gaps (STATUS B1–B3) with live 26.3 evidence for the D12 model, and assess B4–B6 only for
+their effect on the gate and on Phase 05. The criteria were pre-registered in BENCHMARKS ("Phase 04 live validation",
+commit `03dca814b`) before any data. Phase 05 code was not touched.
+
+**Added (instrumentation, all off unless its `-D` property is set):**
+
+- `contract.ToleranceTraceTest` (`-Dostinato.tolerancetrace`): a scripted live trace of all six modes, predicted the
+  way `PhysicsTravel` predicts.
+- `utils.TickClock` (`-Dostinato.tickClock`) and a RETURN inject on `Minecraft.tick` in `MixinMinecraft`: client tick
+  time.
+- `LegatoLiveTest` arms `tolerance` and `-Dostinato.legatotest.stack`, with per-lap tick quantiles and
+  `tolerance-ticks.csv`.
+- `PhysicsTravel.plans` and `driftReplans`: counters only, no behaviour change.
+- Scripts: `tolerance-trace.py` and `tolerance-ab.py` (pre-registered), and `tolerance-ab-diag.py` (diagnostic only).
+
+**Changed (flag-on only):** `PredictionTolerance.MEASURED` now holds the six dev-session p99s, all Tier L, basis
+"live 26.3 trace, D12 model". The D11 values (1.16 model) are gone from the table. `PredictionToleranceTest` keeps
+them only as a labelled fixture for the per-mode judging test. `predictionTolerance` is still default **false**.
+
+| mode | D11 bound (1.16 model) | D14 bound (D12 model, live 26.3) | held-out share over |
+|---|---|---|---|
+| WALK | 0.2235 (S, borrowed) | 0.003547 | 0.82% |
+| SPRINT | 0.2235 (L, old model) | 0.004708 | 1.54% |
+| SPRINT_JUMP | 0.0983 (L, old model) | 0.000452 | 1.01% |
+| FALL | 0.0983 (S, borrowed) | 0.000001 (resolution floor) | 0% |
+| FLUID | 0.05 (S, old DIVERGED) | 0.000346 (`tickWater`) | 0.84% |
+| CLIMB | 0.2374 (L, climb-jump only) | 0.001103 (ladders and vines) | 1.07% |
+
+**Findings:**
+
+1. **The D12 model is exact one tick ahead, given the yaw the client applied.** With that yaw, p99 is 0 in every
+   mode in both sessions. The residual is the applied yaw differing from the commanded yaw (p50 0.56°, p99 1.02°).
+   This is Tier-L evidence for D12 that the cross-model test (Tier S) could not give.
+2. **`SimTrace` judges water ticks with a land prediction.** It calls `tick()` on every tick (`SimTrace.java:109`).
+   On FLUID ticks that gives a p99 of 0.385, against 0.000346 for `tickWater`. With the flag on, its FLUID verdicts
+   are therefore wrong. `SimTrace` is diagnostic only (it drives nothing), so this was recorded, not fixed: a fix
+   would change trace semantics, which is out of scope.
+3. **Tight bounds make the flag-on drift check a pure cost.** The ground and air bounds are 20–200× tighter than
+   the old 0.1 summed-axis check. With them, `PhysicsTravel` replans about 17 times a lap instead of about 0.6. Over 192 laps
+   (seeds 81011, 81012) this gave:
+   - the same reliability (all reached; no faults, stuck keys, deaths or cancels);
+   - the same lap ticks (paired ratios 0.962–1.015);
+   - a median +26 ms of `PhysicsTravel` time per lap and +146° of turning per lap;
+   - tick-time p95 +0.59 ms (CI −0.01 .. +1.22 ms, inconclusive against 0.5 ms).
+4. **Coverage limits:**
+   - Scripted turns are ≤ 30°/tick, so turns over the 32° aim cap are not sampled. `PhysicsTravel` turns in place for
+     those.
+   - The traces cover one course (flat, 1-high bumps, a 1- and 3-deep still pool, a ladder wall and a vine wall). They
+     do not cover slime, honey, ice, soul sand, flowing water, lava or sneaking.
+   - A one-step bound says nothing about multi-tick open-loop drift, which is what `SimEdge` accumulates.
+
+**Decision:**
+
+- Keep `predictionTolerance` default off.
+- Keep the Tier-L table: it is the validated description of the current model.
+- Do not enable the flag on this evidence. It buys nothing measurable on this course and costs replans.
+- A drift check that uses these bounds with a margin (k × bound, or a few ticks of persistence) would be a new design
+  needing its own pre-registered A/B. It was not tried: tuning it here would be fitting to this data.
+
+**Gate: PROVISIONAL.** B1 is met (6/6), there is no unacceptable error, and B3 shows no regression, but acceptable
+overhead (B2) is not shown. See BENCHMARKS "Phase 04 gate classification".
