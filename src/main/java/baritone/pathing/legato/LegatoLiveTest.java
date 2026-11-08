@@ -73,8 +73,15 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private static final boolean KLINE = "kline".equals(System.getProperty("ostinato.legatotest.arms"));
     /** Ostinato Maestro: -Dostinato.legatotest.arms=maestro; A baseline, B Legato smoothing, C Maestro, D Maestro + smoothing. */
     private static final boolean MAESTRO = "maestro".equals(System.getProperty("ostinato.legatotest.arms"));
-    /** Ostinato 2.0 Phase 05: -Dostinato.legatotest.arms=simedge (see the class comment). */
-    private static final boolean SIMEDGE = "simedge".equals(System.getProperty("ostinato.legatotest.arms"));
+    /**
+     * Ostinato 2.0 Phase 05B: -Dostinato.legatotest.arms=simedge5b. The simedge course and arms, except that D searches
+     * with simEdgeHorizon 8 (the pre-registered horizon experiment) and B with the default 32 (the existing SimEdge).
+     */
+    private static final boolean SIMEDGE5B = "simedge5b".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** Ostinato 2.0 Phase 05: -Dostinato.legatotest.arms=simedge (see the class comment); also on for simedge5b. */
+    private static final boolean SIMEDGE = SIMEDGE5B || "simedge".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** The horizon arm D of simedge5b searches with. */
+    private static final int HORIZON_5B = 8;
     /**
      * Ostinato 2.0 Phase 04 validation: -Dostinato.legatotest.arms=tolerance. The course is {@link SimEdgeCourse}; A and
      * C run with predictionTolerance off, B and D with it on. Nothing else differs between the arms.
@@ -319,7 +326,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                 };
             }
             if (STACK != null) Baritone.settings().travelStack.value = STACK;
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : "legato") + " laps=" + laps.size()
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : "legato") + " laps=" + laps.size()
                     + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin travelStack=" + Baritone.settings().travelStack.value
                     + " tickClock=" + TickClock.ON + " seed=" + System.getProperty("ostinato.seed", "71006"));
             server(mc, () -> {
@@ -357,6 +364,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         Baritone.settings().presto.value = false;
         Baritone.settings().maestro.value = MAESTRO && mode >= 2;
         Baritone.settings().simEdgeSearch.value = SIMEDGE && (mode == 1 || mode == 3);
+        var horizon = Baritone.settings().simEdgeHorizon;
+        horizon.value = SIMEDGE5B && mode == 3 ? HORIZON_5B : horizon.defaultValue; // mode(0) puts the default back
         if (TOLERANCE) Baritone.settings().predictionTolerance.value = mode == 1 || mode == 3; // mode(0) puts the default back
         if (STACK != null) Baritone.settings().travelStack.value = STACK;
         if (SIMEDGE || TOLERANCE) {
@@ -537,13 +546,14 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                             + " evals=%d feasible=%d shortcuts=%d removed=%d theta=%d/%d straights=%d straightFails=%d evalUs=%d smoothUs=%d"
                             + " kinNs=%d allocKB=%d lineTicks=%s straightTicks=%s turnInPlace=%d cancels=%d faults=%s"
                             + " klineAccepted=%d klineOff=%d klineGround=%d klinePending=%d klineDowngrades=%d lineDeclines=%s"
-                            + " planWait=%d predLegacy=%.2f predSim=%.2f complete=%b links=%d simLinks=%d jumps=%d simSearches=%d simFallbacks=%d segTicks=%d",
+                            + " planWait=%d predLegacy=%.2f predSim=%.2f complete=%b links=%d simLinks=%d jumps=%d simSearches=%d simFallbacks=%d segTicks=%d simEdge=%b horizon=%d",
                     index, l.rep(), l.leg().name(), MODES[l.mode()], result, took, travelled, turned, x, z,
                     planned, calcs, driverChanges, rewinds, d[0], driverTicks, d[1], d[2], d[3], d[4], d[6], d[5], d[7], d[8], d[9] / 1000, d[10] / 1000,
                     PlanStats.kinNs.get() - kinNs0, (allocated() - alloc0) / 1024, lineTicks, straightTicks, turnInPlace, cancels, faults,
                     d[11], d[12], d[13], d[14], d[15], lineDeclines,
                     planWait, predLegacy, predSim, complete, links, simLinks, jumps,
-                    SimEdgePathFinder.searches.get() - simSearch0, SimEdgePathFinder.fallbacks.get() - simFallback0, segTicks);
+                    SimEdgePathFinder.searches.get() - simSearch0, SimEdgePathFinder.fallbacks.get() - simFallback0, segTicks,
+                    Baritone.settings().simEdgeSearch.value, Baritone.settings().simEdgeHorizon.value);
             long[] sorted = java.util.Arrays.copyOf(tickNs, tickN);
             java.util.Arrays.sort(sorted);
             row += String.format(Locale.ROOT, " tickP50Us=%d tickP95Us=%d tickP99Us=%d tickMaxUs=%d tickN=%d physUs=%d physPlans=%d driftReplans=%d tolerance=%b stack=%s planUs=%d",

@@ -4,10 +4,11 @@
  * Off unless OSTINATO_SIMEDGE_PROFILE is set (it is a measurement, not a check). Every leg plans from the lap start body
  * (at rest, facing +x) with the live primary/failure timeouts, legacy A* and simulated edges alternating, a few warm-up
  * rounds first. Each sim-edge plan prints its SIMEDGEPROF line; the summary prints per-planner wall time, allocation and
- * expansions.
+ * expansions. OSTINATO_SIMEDGE_HORIZON sets simEdgeHorizon for the sim-edge plans (default 32).
  */
 package baritone.pathing.calc;
 
+import baritone.Baritone;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.utils.BetterBlockPos;
 import baritone.pathing.calc.bench.SyntheticWorld;
@@ -48,6 +49,17 @@ public class SimEdgeProfileTest {
         com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().getId();
         StringBuilder report = new StringBuilder();
+        int horizon = Integer.parseInt(System.getenv().getOrDefault("OSTINATO_SIMEDGE_HORIZON", "32"));
+        Baritone.settings().simEdgeHorizon.value = horizon;
+        try {
+            run(w, mx, tid, report, horizon);
+        } finally {
+            Baritone.settings().simEdgeHorizon.value = Baritone.settings().simEdgeHorizon.defaultValue;
+        }
+        PathBench.write(horizon == 32 ? "simedge-profile.txt" : "simedge-profile-h" + horizon + ".txt", report.toString());
+    }
+
+    private static void run(SyntheticWorld w, com.sun.management.ThreadMXBean mx, long tid, StringBuilder report, int horizon) {
         for (int round = 0; round < WARM + ROUNDS; round++) {
             for (LegatoCourse.Leg leg : SimEdgeCourse.LEGS) {
                 BetterBlockPos s = new BetterBlockPos(leg.sx(), Y, leg.sz());
@@ -78,14 +90,13 @@ public class SimEdgeProfileTest {
                         if (line.startsWith("SIMEDGEPROF")) prof = line.substring("SIMEDGEPROF".length());
                     }
                     boolean toGoal = p.isPresent() && g.isInGoal(p.get().getDest());
-                    String row = String.format(Locale.ROOT, "PROFROW round=%d leg=%s planner=%s us=%d allocKB=%d map=%d timedOut=%b toGoal=%b len=%d fellBack=%b%s",
-                            round - WARM, leg.name(), arm == 0 ? "astar" : "simedge", us, kb, f.mapSize(), f.timedOut(), toGoal,
+                    String row = String.format(Locale.ROOT, "PROFROW horizon=%d round=%d leg=%s planner=%s us=%d allocKB=%d map=%d timedOut=%b toGoal=%b len=%d fellBack=%b%s",
+                            horizon, round - WARM, leg.name(), arm == 0 ? "astar" : "simedge", us, kb, f.mapSize(), f.timedOut(), toGoal,
                             p.map(x -> x.positions().size()).orElse(0), f instanceof SimEdgePathFinder sf2 && sf2.fellBack(), prof);
                     System.out.println(row);
                     report.append(row).append('\n');
                 }
             }
         }
-        PathBench.write("simedge-profile.txt", report.toString());
     }
 }
