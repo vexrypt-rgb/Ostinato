@@ -6,6 +6,7 @@ package baritone.pathing.legato;
 import baritone.Baritone;
 import baritone.api.event.events.PacketEvent;
 import baritone.api.event.events.PathEvent;
+import baritone.api.event.events.PlayerUpdateEvent;
 import baritone.api.event.events.TickEvent;
 import baritone.api.event.events.type.EventState;
 import baritone.api.event.listener.AbstractGameEventListener;
@@ -126,6 +127,21 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private String prevDriver = "start";
     private long physNs0, physPlans0, drift0;
     private BufferedWriter ticksOut;
+    /**
+     * Ostinato 2.0 Phase 05B: -Dostinato.legatotest.trace=true writes every lap tick (the state before the tick, the yaw
+     * its move used, the keys the input reported, who drove, the path and its position) to simedge-trace.csv and every
+     * path a lap ran to simedge-paths.csv, for the offline multi-tick replay. Off: nothing is written.
+     */
+    private static final boolean TRACE = Boolean.getBoolean("ostinato.legatotest.trace");
+    private BufferedWriter traceOut, pathsOut;
+    private final Map<Object, Integer> pathIds = new java.util.IdentityHashMap<>();
+    private boolean traceRow;
+    private long traceT, planNs0;
+    private double tx, ty, tz, tvx, tvy, tvz;
+    private boolean tGround, tSprinting, tCollided;
+    private float tYawUsed;
+    private String tDriver;
+    private int tPath, tPos, tPackets;
 
     private LegatoLiveTest(Baritone b) {
         baritone = b;
@@ -162,6 +178,96 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         // the harness never teleports mid-lap, so every server position packet in a lap is a correction
         if (event.getState() == EventState.PRE && event.getPacket() instanceof net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket) {
             positionPackets++;
+        }
+    }
+
+    @Override
+    public void onPlayerUpdate(PlayerUpdateEvent event) {
+        // after LookBehavior's PRE: the rotation this tick's move uses
+        if (TRACE && traceRow && event.getState() == EventState.PRE && Minecraft.getInstance().player != null) {
+            tYawUsed = Minecraft.getInstance().player.getYRot();
+        }
+    }
+
+    @Override
+    public void onPostTick(TickEvent event) {
+        // the keys the input reported for the tick that just ran: the row for that tick is complete
+        var p = Minecraft.getInstance().player;
+        if (!TRACE || !traceRow || p == null) return;
+        traceRow = false;
+        var k = p.input.keyPresses;
+        Lap l = laps.get(index);
+        try {
+            if (traceOut == null) {
+                traceOut = open("simedge-trace.csv", "seed,lap,rep,leg,mode,t,x,y,z,vx,vy,vz,onGround,sprinting,collidedH,yawUsed,fwd,back,left,right,jump,sprintKey,sneak,driver,path,pos,packets");
+            }
+            traceOut.write(String.format(Locale.ROOT, "%s,%d,%d,%s,%s,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%b,%b,%b,%.4f,%b,%b,%b,%b,%b,%b,%b,%s,%d,%d,%d",
+                    System.getProperty("ostinato.seed", "71006"), index, l.rep(), l.leg().name(), MODES[l.mode()], traceT, tx, ty, tz, tvx, tvy, tvz,
+                    tGround, tSprinting, tCollided, tYawUsed, k.forward(), k.backward(), k.left(), k.right(), k.jump(), k.sprint(), k.shift(),
+                    tDriver, tPath, tPos, tPackets));
+            traceOut.newLine();
+        } catch (IOException e) {
+            log("trace file failed: " + e);
+        }
+    }
+
+    private static BufferedWriter open(String name, String header) throws IOException {
+        var file = Minecraft.getInstance().gameDirectory.toPath().resolve(name);
+        boolean fresh = !Files.exists(file);
+        BufferedWriter w = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        if (fresh) {
+            w.write(header);
+            w.newLine();
+        }
+        return w;
+    }
+
+    /** Phase 05B trace: the state before this tick and who drives it; the row is written once the tick's keys are known. */
+    private void traceTick(net.minecraft.client.player.LocalPlayer player, Lap l, baritone.pathing.path.PathExecutor ex, String drv) {
+        int id = -1;
+        if (ex != null) {
+            Integer known = pathIds.get(ex.getPath());
+            if (known == null) {
+                id = pathIds.size();
+                pathIds.put(ex.getPath(), id);
+                writePath(l, id, ex.getPath());
+            } else {
+                id = known;
+            }
+        }
+        var v = player.getDeltaMovement();
+        traceT = ticks - lapStart;
+        tx = player.getX();
+        ty = player.getY();
+        tz = player.getZ();
+        tvx = v.x;
+        tvy = v.y;
+        tvz = v.z;
+        tGround = player.onGround();
+        tSprinting = player.isSprinting();
+        tCollided = player.horizontalCollision;
+        tYawUsed = Float.NaN;
+        tDriver = drv;
+        tPath = id;
+        tPos = ex == null ? -1 : ex.getPosition();
+        tPackets = positionPackets;
+        traceRow = true;
+    }
+
+    private void writePath(Lap l, int id, baritone.api.pathing.calc.IPath path) {
+        StringBuilder cells = new StringBuilder(), moves = new StringBuilder();
+        for (var p : path.positions()) cells.append(cells.length() == 0 ? "" : "|").append(p.getX()).append(':').append(p.getY()).append(':').append(p.getZ());
+        for (var m : path.movements()) moves.append(moves.length() == 0 ? "" : "|").append(m.getClass().getSimpleName().replace("Movement", ""));
+        try {
+            if (pathsOut == null) {
+                pathsOut = open("simedge-paths.csv", "seed,lap,rep,leg,mode,t,path,simEdge,cells,moves");
+            }
+            pathsOut.write(System.getProperty("ostinato.seed", "71006") + "," + index + "," + l.rep() + "," + l.leg().name() + "," + MODES[l.mode()] + ","
+                    + (ticks - lapStart) + "," + id + "," + Baritone.settings().simEdgeSearch.value + "," + cells + "," + moves);
+            pathsOut.newLine();
+            pathsOut.flush();
+        } catch (IOException e) {
+            log("paths file failed: " + e);
         }
     }
 
@@ -353,6 +459,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             tickN = 0;
             prevDriver = "start";
             physNs0 = PlanStats.physNs.get();
+            planNs0 = PlanStats.astarNs.get();
+            pathIds.clear();
             physPlans0 = PhysicsTravel.plans.get();
             drift0 = PhysicsTravel.driftReplans.get();
             lapStart = ticks;
@@ -381,6 +489,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             lastDriver = drv;
         }
         int pos = ex == null ? -1 : ex.getPosition();
+        if (TRACE) traceTick(player, l, ex, drv);
         if (pos >= 0 && lastPathPos >= 0 && pos < lastPathPos) rewinds++;
         if (pos >= 0) lastPathPos = pos;
         if (ex != null && planned == 0) {
@@ -413,6 +522,14 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             if (!held.isEmpty()) log("keys held right after cancel, lap " + index + ": " + held);
             long[] d = counters();
             for (int i = 0; i < d.length; i++) d[i] -= before[i];
+            traceRow = false; // the lap ends before this tick moves
+            if (traceOut != null) {
+                try {
+                    traceOut.flush();
+                } catch (IOException ex2) {
+                    log("trace flush failed: " + ex2);
+                }
+            }
             String result = there ? "REACHED" : died ? "DIED" : fell ? "FELL" : "TIMEOUT";
             dirty = !there;
             String row = String.format(Locale.ROOT, "lap %d rep=%d leg=%s mode=%s result=%s ticks=%d travelled=%.2f turned=%.0f x=%.2f z=%.2f"
@@ -429,11 +546,11 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     SimEdgePathFinder.searches.get() - simSearch0, SimEdgePathFinder.fallbacks.get() - simFallback0, segTicks);
             long[] sorted = java.util.Arrays.copyOf(tickNs, tickN);
             java.util.Arrays.sort(sorted);
-            row += String.format(Locale.ROOT, " tickP50Us=%d tickP95Us=%d tickP99Us=%d tickMaxUs=%d tickN=%d physUs=%d physPlans=%d driftReplans=%d tolerance=%b stack=%s",
+            row += String.format(Locale.ROOT, " tickP50Us=%d tickP95Us=%d tickP99Us=%d tickMaxUs=%d tickN=%d physUs=%d physPlans=%d driftReplans=%d tolerance=%b stack=%s planUs=%d",
                     rank(sorted, 0.50) / 1000, rank(sorted, 0.95) / 1000, rank(sorted, 0.99) / 1000, rank(sorted, 1.0) / 1000, tickN,
                     (PlanStats.physNs.get() - physNs0) / 1000, PhysicsTravel.plans.get() - physPlans0,
                     PhysicsTravel.driftReplans.get() - drift0, Baritone.settings().predictionTolerance.value,
-                    Baritone.settings().travelStack.value);
+                    Baritone.settings().travelStack.value, (PlanStats.astarNs.get() - planNs0) / 1000);
             if (TOLERANCE) writeTicks(l);
             rows.add(row);
             log(row);

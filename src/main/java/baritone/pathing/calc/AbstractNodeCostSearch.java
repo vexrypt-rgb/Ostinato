@@ -209,13 +209,20 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
         context.claimSearchCaches();
         try {
             long t0 = System.nanoTime(); // Ostinato: planning-time stats
+            long alloc0 = SimEdge.PROFILE ? threadAllocated() : 0;
             IPath path = allowReuse ? RouteReuse.cut(startX, startY, startZ, goal, context) : null;
+            boolean reused = path != null;
             if (path != null) {
                 logDebug("Reused a route of " + path.length() + " from " + startX + " " + startY + " " + startZ);
             } else {
                 path = calculate0(primaryTimeout, failureTimeout).map(IPath::postProcess).orElse(null);
             }
             baritone.utils.PlanStats.astarNs.addAndGet(System.nanoTime() - t0);
+            if (SimEdge.PROFILE) { // Ostinato 2.0 Phase 05B: every planner's wall time and allocation, one line per search
+                System.out.println(String.format(java.util.Locale.ROOT, "PLANPROF planner=%s start=%d,%d,%d us=%d allocKB=%d map=%d timedOut=%b reused=%b found=%b toGoal=%b len=%d primaryMs=%d",
+                        getClass().getSimpleName(), startX, startY, startZ, (System.nanoTime() - t0) / 1000, (threadAllocated() - alloc0) / 1024, mapSize(),
+                        timedOut, reused, path != null, path != null && goal.isInGoal(path.getDest()), path == null ? 0 : path.length(), primaryTimeout));
+            }
             if (cancelRequested) {
                 return new PathCalculationResult(PathCalculationResult.Type.CANCELLATION);
             }
@@ -269,6 +276,12 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
     }
 
     protected abstract Optional<IPath> calculate0(long primaryTimeout, long failureTimeout);
+
+    /** Bytes this thread has allocated so far (HotSpot), for the Phase 05B profile; 0 where unsupported. */
+    private static long threadAllocated() {
+        java.lang.management.ThreadMXBean b = java.lang.management.ManagementFactory.getThreadMXBean();
+        return b instanceof com.sun.management.ThreadMXBean sb ? sb.getCurrentThreadAllocatedBytes() : 0;
+    }
 
     /** Ostinato: the index of the first position the path drops {@link #IRREVERSIBLE_DROP} or more blocks from, or -1. */
     static int firstIrreversibleDrop(IPath path) {

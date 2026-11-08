@@ -60,6 +60,9 @@ public final class SimEdgePathFinder extends AbstractNodeCostSearch {
     static boolean prune = true;
     private volatile AStarPathFinder fallback;
     SimEdge edge;
+    /** Phase 05B profile ({@link SimEdge#PROFILE} only): expansions, re-expansions at a lower cost, cells expanded, legacy move evaluations. */
+    private long profNodes, profReopened, profApply, profApplyNs;
+    private it.unimi.dsi.fastutil.longs.LongOpenHashSet profCells, profApplyKeys;
 
     public static final AtomicLong searches = new AtomicLong(), fallbacks = new AtomicLong(), exceptions = new AtomicLong(),
             capped = new AtomicLong(), statesCreated = new AtomicLong(), statesPruned = new AtomicLong(),
@@ -141,6 +144,16 @@ public final class SimEdgePathFinder extends AbstractNodeCostSearch {
                 sims.addAndGet(edge.sims);
                 simTicks.addAndGet(edge.simTicks);
             }
+        }
+        if (SimEdge.PROFILE && edge != null) {
+            System.out.println(String.format(java.util.Locale.ROOT,
+                    "SIMEDGEPROF start=%d,%d,%d known=%b ms=%d nodes=%d reopened=%d cells=%d states=%d pruned=%d simulated=%d legacy=%d simMisses=%d"
+                            + " sims=%d/%d/%d reached=%d/%d/%d simTicks=%d/%d/%d simUs=%d/%d/%d dupSims=%d apply=%d applyDistinct=%d applyUs=%d timedOut=%b found=%b",
+                    startX, startY, startZ, startBody != null && startBody.known, System.currentTimeMillis() - start, profNodes, profReopened,
+                    profCells == null ? 0 : profCells.size(), stateCount, pruned, simulated, legacyEdges, simFailed,
+                    edge.kindSims[0], edge.kindSims[1], edge.kindSims[2], edge.kindReached[0], edge.kindReached[1], edge.kindReached[2],
+                    edge.kindTicks[0], edge.kindTicks[1], edge.kindTicks[2], edge.kindNs[0] / 1000, edge.kindNs[1] / 1000, edge.kindNs[2] / 1000,
+                    edge.dupExact, profApply, profApplyKeys == null ? 0 : profApplyKeys.size(), profApplyNs / 1000, timedOut, result.isPresent()));
         }
         if (result.isPresent() || cancelRequested) {
             return result;
@@ -233,6 +246,15 @@ public final class SimEdgePathFinder extends AbstractNodeCostSearch {
             mostRecentConsidered = currentNode;
             numNodes++;
             boolean wasExpanded = currentNode.expandedCost == currentNode.cost;
+            if (SimEdge.PROFILE) {
+                profNodes++;
+                if (!wasExpanded && currentNode.expandedCost < ActionCosts.COST_INF) profReopened++;
+                if (profCells == null) {
+                    profCells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+                    profApplyKeys = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+                }
+                profCells.add(BetterBlockPos.longHash(currentNode.x, currentNode.y, currentNode.z));
+            }
             currentNode.expandedCost = currentNode.cost;
             double charge = 0;
             if (goal.isInGoal(currentNode.x, currentNode.y, currentNode.z)) {
@@ -275,18 +297,21 @@ public final class SimEdgePathFinder extends AbstractNodeCostSearch {
                     continue;
                 }
                 res.reset();
+                long a0 = SimEdge.PROFILE ? System.nanoTime() : 0;
                 moves.apply(calcContext, currentNode.x, currentNode.y, currentNode.z, res);
                 double actionCost = res.cost;
+                boolean deferred = res.check != null;
+                if (deferred && actionCost < ActionCosts.COST_INF) {
+                    double v = res.check.verify();
+                    actionCost = v;
+                }
+                if (SimEdge.PROFILE) {
+                    profApplyNs += System.nanoTime() - a0;
+                    profApply++;
+                    profApplyKeys.add(BetterBlockPos.longHash(currentNode.x, currentNode.y, currentNode.z) * 131 + moves.ordinal());
+                }
                 if (actionCost >= ActionCosts.COST_INF) {
                     continue;
-                }
-                boolean deferred = res.check != null;
-                if (deferred) {
-                    double v = res.check.verify();
-                    if (v >= ActionCosts.COST_INF) {
-                        continue;
-                    }
-                    actionCost = v;
                 }
                 if (moves.dynamicXZ && !worldBorder.entirelyContains(res.x, res.z)) {
                     continue;

@@ -184,6 +184,17 @@ public final class SimEdge {
     public boolean canSprint, sprintAscends;
     /** Diagnostics for this instance. */
     public long sims, reached, simTicks;
+    /**
+     * Phase 05B diagnostics (-Dostinato.simedge.profile, off by default): sims, reached, ticks and nanoseconds by kind,
+     * and how many sims repeated an earlier one's exact input (what a memo of {@link #run} would have saved). Counting
+     * only; no result changes.
+     */
+    public static final boolean PROFILE = Boolean.getBoolean("ostinato.simedge.profile");
+    public final long[] kindSims = new long[3], kindReached = new long[3], kindTicks = new long[3], kindNs = new long[3];
+    public long dupExact;
+    private it.unimi.dsi.fastutil.longs.LongOpenHashSet seen;
+    /** Diagnostics: when set, {@link #run} appends every simulated tick's x, y, z here. Null in the search. */
+    public it.unimi.dsi.fastutil.doubles.DoubleArrayList trail;
 
     public SimEdge(PlayerSim.World world, CalculationContext ctx) {
         this.sim = new PlayerSim(world);
@@ -276,6 +287,44 @@ public final class SimEdge {
      * entered the destination at its height within {@link #MAX_TICKS}, with the prediction in {@code out}.
      */
     public boolean run(Body from, int kind, int x, int y, int z, int dx, int dy, int dz, Result out) {
+        if (!PROFILE) {
+            return run0(from, kind, x, y, z, dx, dy, dz, out);
+        }
+        if (seen == null) seen = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        if (!seen.add(inputKey(from, kind, x, y, z, dx, dy, dz))) dupExact++;
+        long t0 = System.nanoTime();
+        boolean ok = run0(from, kind, x, y, z, dx, dy, dz, out);
+        kindNs[kind] += System.nanoTime() - t0;
+        kindSims[kind]++;
+        if (ok) {
+            kindReached[kind]++;
+            kindTicks[kind] += out.ticks;
+        }
+        return ok;
+    }
+
+    /** A 64-bit hash of everything {@link #run0} reads (profile only). */
+    private long inputKey(Body b, int kind, int x, int y, int z, int dx, int dy, int dz) {
+        long h = kind * 31L + (canSprint ? 7 : 0) + (sprintAscends ? 13 : 0);
+        h = h * 0x9E3779B97F4A7C15L + baritone.api.utils.BetterBlockPos.longHash(x, y, z);
+        h = h * 0x9E3779B97F4A7C15L + baritone.api.utils.BetterBlockPos.longHash(dx, dy, dz);
+        if (b.known) {
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.x);
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.y);
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.z);
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.vx);
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.vy);
+            h = h * 0x9E3779B97F4A7C15L + Double.doubleToLongBits(b.vz);
+            h = h * 0x9E3779B97F4A7C15L + Float.floatToIntBits(b.yaw);
+            h = h * 0x9E3779B97F4A7C15L + (b.onGround ? 1 : 0) + (b.sprinting ? 2 : 0) + b.jumpTicks * 4L;
+            h = h * 0x9E3779B97F4A7C15L + b.lastKind * 1009L + b.lastDx * 31L + b.lastDz;
+        } else {
+            h = h * 0x9E3779B97F4A7C15L + 0x5bd1e995L;
+        }
+        return h ^ h >>> 29;
+    }
+
+    private boolean run0(Body from, int kind, int x, int y, int z, int dx, int dy, int dz, Result out) {
         sims++;
         int ddx = dx - x, ddz = dz - z;
         if (from.known) {
@@ -316,6 +365,11 @@ public final class SimEdge {
             boolean wasGround = sim.onGround;
             double px = sim.x, pz = sim.z;
             sim.tick(yaw, 1, 0, sprint, jump);
+            if (trail != null) {
+                trail.add(sim.x);
+                trail.add(sim.y);
+                trail.add(sim.z);
+            }
             out.ticks = t;
             out.drift += PredictionTolerance.MEASURED.oneStep(mode);
             if (!sim.onGround) out.air++;
