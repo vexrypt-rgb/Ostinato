@@ -56,6 +56,18 @@ public class PredictionToleranceTest {
         };
     }
 
+    /**
+     * The consumer tests' own table: the D11 numbers, kept here so these tests check how SimTrace and PhysicsTravel
+     * apply a per-mode bound, whatever {@link PredictionTolerance#MEASURED} holds after a live re-measurement.
+     */
+    static final PredictionTolerance TABLE = new PredictionTolerance(
+            new PredictionTolerance.Bound(Mode.SPRINT, 0.2235, PredictionTolerance.Tier.U, "test fixture"),
+            new PredictionTolerance.Bound(Mode.SPRINT_JUMP, 0.0983, PredictionTolerance.Tier.U, "test fixture"),
+            new PredictionTolerance.Bound(Mode.CLIMB, 0.2374, PredictionTolerance.Tier.U, "test fixture"),
+            new PredictionTolerance.Bound(Mode.WALK, 0.2235, PredictionTolerance.Tier.U, "test fixture"),
+            new PredictionTolerance.Bound(Mode.FALL, 0.0983, PredictionTolerance.Tier.U, "test fixture"),
+            new PredictionTolerance.Bound(Mode.FLUID, 0.05, PredictionTolerance.Tier.U, "test fixture"));
+
     static PlayerSim at(PlayerSim.World w, double x, double y, boolean ground) {
         PlayerSim s = new PlayerSim(w);
         s.x = x + 0.5;
@@ -139,9 +151,9 @@ public class PredictionToleranceTest {
     @Test
     public void flagOnJudgesEachTickByItsMode() {
         PlayerSim.World w = world(0.6f);
-        // ground sprint, 0.08 off: over the old 0.05, inside the live SPRINT bound
+        // ground sprint, 0.08 off: over the old 0.05, inside the SPRINT bound
         SimTrace off = new SimTrace("ground", w);
-        SimTrace on = new SimTrace("ground", w, PredictionTolerance.MEASURED);
+        SimTrace on = new SimTrace("ground", w, TABLE);
         PlayerSim real = at(w, 0, 0, true);
         for (SimTrace t : List.of(off, on)) {
             t.observe(real, 0);
@@ -156,8 +168,8 @@ public class PredictionToleranceTest {
         assertTrue(on.held());
         assertTrue(on.summary(true).contains("firstOverMode="));
 
-        // airborne sprint-jump, 0.12 off: over the live SPRINT_JUMP bound as well
-        SimTrace air = new SimTrace("air", w, PredictionTolerance.MEASURED);
+        // airborne sprint-jump, 0.12 off: over the SPRINT_JUMP bound as well
+        SimTrace air = new SimTrace("air", w, TABLE);
         PlayerSim flying = at(w, 0, 0.8, false);
         flying.vy = 0.2;
         air.observe(flying, 0);
@@ -175,8 +187,8 @@ public class PredictionToleranceTest {
         r.y += 0.06;
         r.z += 0.06;
         assertTrue(PhysicsTravel.drifted(p, r, null, Mode.SPRINT));
-        assertFalse(PhysicsTravel.drifted(p, r, PredictionTolerance.MEASURED, Mode.SPRINT));
-        assertTrue(PhysicsTravel.drifted(p, r, PredictionTolerance.MEASURED, Mode.SPRINT_JUMP));
+        assertFalse(PhysicsTravel.drifted(p, r, TABLE, Mode.SPRINT));
+        assertTrue(PhysicsTravel.drifted(p, r, TABLE, Mode.SPRINT_JUMP));
     }
 
     @Test
@@ -199,12 +211,12 @@ public class PredictionToleranceTest {
             assertTrue(b.oneStep() > 0);
             assertFalse(b.basis().isEmpty());
         }
-        assertEquals(PredictionTolerance.Tier.L, PredictionTolerance.MEASURED.bound(Mode.SPRINT).tier());
-        assertEquals(PredictionTolerance.Tier.L, PredictionTolerance.MEASURED.bound(Mode.SPRINT_JUMP).tier());
-        assertEquals(PredictionTolerance.Tier.L, PredictionTolerance.MEASURED.bound(Mode.CLIMB).tier());
-        assertEquals(PredictionTolerance.Tier.S, PredictionTolerance.MEASURED.bound(Mode.WALK).tier());
-        assertEquals(PredictionTolerance.Tier.S, PredictionTolerance.MEASURED.bound(Mode.FALL).tier());
-        assertEquals(PredictionTolerance.Tier.S, PredictionTolerance.MEASURED.bound(Mode.FLUID).tier());
+        // Phase 04 validation: all six re-measured on the live 26.3 client for the D12 model; none is a 1.16-model number
+        for (Mode m : Mode.values()) {
+            PredictionTolerance.Bound b = PredictionTolerance.MEASURED.bound(m);
+            assertEquals(m.toString(), PredictionTolerance.Tier.L, b.tier());
+            assertTrue(m + ": " + b.basis(), b.basis().contains("D12 model"));
+        }
     }
 
     /**

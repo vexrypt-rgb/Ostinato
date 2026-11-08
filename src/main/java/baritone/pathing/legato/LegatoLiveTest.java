@@ -18,7 +18,9 @@ import baritone.pathing.calc.SimEdgePathFinder;
 import baritone.pathing.kinematic.KinematicLine;
 import baritone.pathing.movement.movements.MovementLine;
 import baritone.pathing.movement.movements.MovementStraight;
+import baritone.pathing.physics.PhysicsTravel;
 import baritone.utils.PlanStats;
+import baritone.utils.TickClock;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -72,7 +74,14 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private static final boolean MAESTRO = "maestro".equals(System.getProperty("ostinato.legatotest.arms"));
     /** Ostinato 2.0 Phase 05: -Dostinato.legatotest.arms=simedge (see the class comment). */
     private static final boolean SIMEDGE = "simedge".equals(System.getProperty("ostinato.legatotest.arms"));
-    private static final List<LegatoCourse.Leg> LEGS = SIMEDGE ? SimEdgeCourse.LEGS : LegatoCourse.LEGS;
+    /**
+     * Ostinato 2.0 Phase 04 validation: -Dostinato.legatotest.arms=tolerance. The course is {@link SimEdgeCourse}; A and
+     * C run with predictionTolerance off, B and D with it on. Nothing else differs between the arms.
+     */
+    private static final boolean TOLERANCE = "tolerance".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** -Dostinato.legatotest.stack=&lt;travelStack&gt; pins the travel stack for every arm; unset leaves the setting alone. */
+    private static final String STACK = System.getProperty("ostinato.legatotest.stack");
+    private static final List<LegatoCourse.Leg> LEGS = SIMEDGE || TOLERANCE ? SimEdgeCourse.LEGS : LegatoCourse.LEGS;
 
     private record Lap(int rep, LegatoCourse.Leg leg, int mode) {}
 
@@ -110,6 +119,13 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private int segX, segY, segZ, segTicks;
     private boolean complete, wasGround;
     private long simSearch0, simFallback0;
+    /** Phase 04 validation: client tick time of every lap tick (TickClock, ns) and who drove it; physics counters at the lap's start. */
+    private final long[] tickNs = new long[TIMEOUT + 64];
+    private final String[] tickDriver = new String[TIMEOUT + 64];
+    private int tickN;
+    private String prevDriver = "start";
+    private long physNs0, physPlans0, drift0;
+    private BufferedWriter ticksOut;
 
     private LegatoLiveTest(Baritone b) {
         baritone = b;
@@ -196,8 +212,10 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     inner.accept(code, evidence);
                 };
             }
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE ? "simedge" : "legato") + " laps=" + laps.size()
-                    + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin");
+            if (STACK != null) Baritone.settings().travelStack.value = STACK;
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : "legato") + " laps=" + laps.size()
+                    + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin travelStack=" + Baritone.settings().travelStack.value
+                    + " tickClock=" + TickClock.ON + " seed=" + System.getProperty("ostinato.seed", "71006"));
             server(mc, () -> {
                 // peaceful: the first run lost its last 28 laps to a creeper on the platform
                 mc.getSingleplayerServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
@@ -222,7 +240,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         for (int x = -2; x <= LegatoCourse.SIZE + 2; x++) {
             for (int z = -2; z <= LegatoCourse.SIZE + 2; z++) {
                 for (int y = F - 1; y <= F + 6; y++) {
-                    boolean solid = SIMEDGE ? SimEdgeCourse.solid(x, y, z) : LegatoCourse.solid(x, y, z);
+                    boolean solid = SIMEDGE || TOLERANCE ? SimEdgeCourse.solid(x, y, z) : LegatoCourse.solid(x, y, z);
                     level.setBlock(new BlockPos(x, y, z), solid ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
                 }
             }
@@ -233,7 +251,9 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         Baritone.settings().presto.value = false;
         Baritone.settings().maestro.value = MAESTRO && mode >= 2;
         Baritone.settings().simEdgeSearch.value = SIMEDGE && (mode == 1 || mode == 3);
-        if (SIMEDGE) {
+        if (TOLERANCE) Baritone.settings().predictionTolerance.value = mode == 1 || mode == 3; // mode(0) puts the default back
+        if (STACK != null) Baritone.settings().travelStack.value = STACK;
+        if (SIMEDGE || TOLERANCE) {
             Baritone.settings().kinematicLine.value = false;
             Baritone.settings().legato.value = false;
             Baritone.settings().legatoSearch.value = false;
@@ -330,6 +350,11 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             lastYaw = player.getYRot();
             alloc0 = allocated();
             kinNs0 = PlanStats.kinNs.get();
+            tickN = 0;
+            prevDriver = "start";
+            physNs0 = PlanStats.physNs.get();
+            physPlans0 = PhysicsTravel.plans.get();
+            drift0 = PhysicsTravel.driftReplans.get();
             lapStart = ticks;
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(l.leg().gx(), LegatoCourse.F + 1, l.leg().gz()));
             step = 1;
@@ -346,6 +371,11 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         var ex = baritone.getPathingBehavior().getCurrent();
         String drv = ex == null ? "-" : ex.getLastDriver().toString();
         driverTicks.merge(drv, 1, Integer::sum);
+        if (tickN < tickNs.length) { // the tick before this one, and who drove it (the executor ran in that tick's PRE)
+            tickNs[tickN] = TickClock.last;
+            tickDriver[tickN++] = prevDriver;
+        }
+        prevDriver = drv;
         if (!drv.equals(lastDriver)) {
             if (!lastDriver.isEmpty()) driverChanges++;
             lastDriver = drv;
@@ -355,7 +385,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         if (pos >= 0) lastPathPos = pos;
         if (ex != null && planned == 0) {
             planned = ex.getPath().positions().size();
-            predict(ex.getPath(), l, ticks - lapStart);
+            // Phase 04 validation: the tolerance arms time ticks, and this pricing is Phase 05's and costs tick time
+            if (!TOLERANCE) predict(ex.getPath(), l, ticks - lapStart);
         }
         if (planWait >= 0 && segTicks < 0 && Math.abs(x - (segX + 0.5)) < 0.8 && Math.abs(z - (segZ + 0.5)) < 0.8 && Math.abs(y - segY) < 1) segTicks = (int) (ticks - lapStart);
         if (wasGround && !player.onGround() && player.getDeltaMovement().y > 0.2) jumps++;
@@ -396,6 +427,14 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     d[11], d[12], d[13], d[14], d[15], lineDeclines,
                     planWait, predLegacy, predSim, complete, links, simLinks, jumps,
                     SimEdgePathFinder.searches.get() - simSearch0, SimEdgePathFinder.fallbacks.get() - simFallback0, segTicks);
+            long[] sorted = java.util.Arrays.copyOf(tickNs, tickN);
+            java.util.Arrays.sort(sorted);
+            row += String.format(Locale.ROOT, " tickP50Us=%d tickP95Us=%d tickP99Us=%d tickMaxUs=%d tickN=%d physUs=%d physPlans=%d driftReplans=%d tolerance=%b stack=%s",
+                    rank(sorted, 0.50) / 1000, rank(sorted, 0.95) / 1000, rank(sorted, 0.99) / 1000, rank(sorted, 1.0) / 1000, tickN,
+                    (PlanStats.physNs.get() - physNs0) / 1000, PhysicsTravel.plans.get() - physPlans0,
+                    PhysicsTravel.driftReplans.get() - drift0, Baritone.settings().predictionTolerance.value,
+                    Baritone.settings().travelStack.value);
+            if (TOLERANCE) writeTicks(l);
             rows.add(row);
             log(row);
             if (there) {
@@ -435,6 +474,36 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             predSim = b;
         } catch (RuntimeException ex) {
             log("predict failed lap " + index + ": " + ex);
+        }
+    }
+
+    /** Nearest-rank quantile of a sorted array; 0 when it is empty. */
+    private static long rank(long[] sorted, double q) {
+        if (sorted.length == 0) return 0;
+        return sorted[Math.max(0, Math.min(sorted.length - 1, (int) Math.ceil(q * sorted.length) - 1))];
+    }
+
+    /** Phase 04 validation: every lap tick's time and driver, written after the lap (outside the timed ticks). */
+    private void writeTicks(Lap l) {
+        try {
+            if (ticksOut == null) {
+                var file = Minecraft.getInstance().gameDirectory.toPath().resolve("tolerance-ticks.csv");
+                boolean fresh = !Files.exists(file);
+                ticksOut = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                if (fresh) {
+                    ticksOut.write("seed,lap,rep,leg,mode,tolerance,i,ns,driver");
+                    ticksOut.newLine();
+                }
+            }
+            String head = System.getProperty("ostinato.seed", "71006") + "," + index + "," + l.rep() + "," + l.leg().name() + "," + MODES[l.mode()]
+                    + "," + Baritone.settings().predictionTolerance.value + ",";
+            for (int i = 0; i < tickN; i++) {
+                ticksOut.write(head + i + "," + tickNs[i] + "," + tickDriver[i]);
+                ticksOut.newLine();
+            }
+            ticksOut.flush();
+        } catch (IOException e) {
+            log("tick file failed: " + e);
         }
     }
 
@@ -495,7 +564,11 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                         ratios.isEmpty() ? "-" : String.format(Locale.ROOT, "%.3f", ratios.get(ratios.size() / 2)), ratios));
             }
         }
-        if (SIMEDGE) { // the second replication: D against C, same leg and repetition
+        if (TOLERANCE) {
+            log("tolerance physPlans=" + PhysicsTravel.plans.get()
+                    + " driftReplans=" + PhysicsTravel.driftReplans.get() + " travelStack=" + Baritone.settings().travelStack.value);
+        }
+        if (SIMEDGE || TOLERANCE) { // the second replication: D against C, same leg and repetition
             for (LegatoCourse.Leg leg : LEGS) {
                 List<Double> ratios = new ArrayList<>();
                 for (int r = 0; r < REPS; r++) {

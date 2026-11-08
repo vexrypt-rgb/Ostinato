@@ -26,19 +26,23 @@ public final class PredictionTolerance {
     }
 
     /**
-     * p99 one-step error per mode. The Tier-L rows come from the 26.3 client SIMTRACE runs of 2026-10-14
-     * (MovementJump, MovementChainJump, MovementClimbJump; PlayerSim unchanged since); yaw lag is included,
-     * because the consumers see it too. The Tier-S rows have no live data: PlayerSim and PPE agree to 1e-5
-     * on them (CrossModelModesTest), which bounds model disagreement, not error against the game.
-     * They borrow the nearest live bound, or keep the old SimTrace constant where none is near.
+     * p99 one-step error per mode, all six Tier L for the current (D12, 26.3) {@code PlayerSim}: the live 26.3 client
+     * traces of 2026-11-08 ({@code ToleranceTraceTest}, BENCHMARKS "Phase 04 live validation"). Each bound is the p99 of
+     * the dev session (seed 81001, about 2000 usable ticks per mode); each held on the held-out session (seed 81002),
+     * where at most 1.54% of a mode's ticks went over it (the pre-registered limit was 2%). The predictor is the
+     * simulator's model for the mode: {@code tickWater} for FLUID, {@code tick} otherwise. Controls were applied as
+     * {@code PhysicsTravel} applies them, so the look path's yaw quantisation is included; with the yaw the client
+     * moved with, every mode's p99 is 0. Turns were at most 30° a tick, under the aim cap, so yaw lag from a larger
+     * commanded turn is not in these numbers. FALL's p99 is under the trace's 1e-6 resolution and is set to it.
+     * The D11 values (SPRINT 0.2235, SPRINT_JUMP 0.0983, CLIMB 0.2374) were measured with the 1.16 model and are gone.
      */
     public static final PredictionTolerance MEASURED = new PredictionTolerance(
-            new Bound(Mode.SPRINT, 0.2235, Tier.L, "live 26.3 jump/chain ground ticks, n=4008, p99"),
-            new Bound(Mode.SPRINT_JUMP, 0.0983, Tier.L, "live 26.3 jump/chain airborne ticks, n=9477, p99"),
-            new Bound(Mode.CLIMB, 0.2374, Tier.L, "live 26.3 climb-jump runs, all ticks, n=739, p99; ladder climbing proper not traced"),
-            new Bound(Mode.WALK, 0.2235, Tier.S, "no live walk trace; SPRINT live bound borrowed; cross-model max 1e-6"),
-            new Bound(Mode.FALL, 0.0983, Tier.S, "no live fall trace; SPRINT_JUMP live bound borrowed; cross-model max 7e-6"),
-            new Bound(Mode.FLUID, 0.05, Tier.S, "no live fluid trace; old SimTrace.DIVERGED kept; cross-model max 0"));
+            new Bound(Mode.WALK, 0.003547, Tier.L, "live 26.3 trace, D12 model, dev n=2069 p99; held-out n=2076, 0.82% over"),
+            new Bound(Mode.SPRINT, 0.004708, Tier.L, "live 26.3 trace, D12 model, dev n=2000 p99; held-out n=2017, 1.54% over"),
+            new Bound(Mode.SPRINT_JUMP, 0.000452, Tier.L, "live 26.3 trace, D12 model, dev n=2110 p99; held-out n=2078, 1.01% over"),
+            new Bound(Mode.FALL, 0.000001, Tier.L, "live 26.3 trace, D12 model, dev n=2000 p99 < 1e-6 (resolution); held-out n=2000, 0% over"),
+            new Bound(Mode.FLUID, 0.000346, Tier.L, "live 26.3 trace, D12 model, tickWater, dev n=2072 p99; held-out n=2020, 0.84% over"),
+            new Bound(Mode.CLIMB, 0.001103, Tier.L, "live 26.3 trace, D12 model, ladders and vines, dev n=2000 p99; held-out n=2062, 1.07% over"));
 
     private final Map<Mode, Bound> bounds = new EnumMap<>(Mode.class);
 

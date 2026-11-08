@@ -52,6 +52,9 @@ public final class PhysicsTravel {
     private int jumpTicks;
     /** Ostinato 2.0 Phase 04: the mode of the tick {@link #predicted} ran; null while predictionTolerance is off. */
     private PredictionTolerance.Mode predictedMode;
+    /** Ostinato 2.0 Phase 04 validation: searches started, and how many of them the drift check started. Counters only. */
+    public static final java.util.concurrent.atomic.AtomicLong plans = new java.util.concurrent.atomic.AtomicLong(),
+            driftReplans = new java.util.concurrent.atomic.AtomicLong();
 
     public PhysicsTravel(IPlayerContext ctx) {
         this.ctx = ctx;
@@ -122,6 +125,8 @@ public final class PhysicsTravel {
             String why = plan == null ? null : drifted ? "drift" : end != target ? "new target" : "plan done";
             target = end;
             step = 0;
+            plans.incrementAndGet();
+            if (drifted) driftReplans.incrementAndGet();
             plan = finder.nativeSearch(Baritone.settings().nativeAcceleration.value).plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
             if (plan == null || plan.isEmpty()) {
                 cooldown = 20;

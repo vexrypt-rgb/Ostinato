@@ -70,6 +70,7 @@ public class MixinMinecraft {
     /** Ostinato: as each client tick begins, the look puts the view where the per-tick model has it, whatever the frame rate. */
     @Inject(method = "tick", at = @At("HEAD"))
     private void ostinato$tickStart(CallbackInfo ci) {
+        if (baritone.utils.TickClock.ON) baritone.utils.TickClock.begin(); // Ostinato 2.0: harness tick timer, off by default
         // Packets are handled once per rendered frame (runTick), so at under 20 frames a second two ticks ran on one
         // frame's news and a slow client fought a step behind a fast one. Handle what has arrived before every tick,
         // as a fast client effectively does. -Dostinato.tickPackets=false leaves vanilla's once-per-frame alone.
@@ -133,6 +134,15 @@ public class MixinMinecraft {
         }
 
         this.tickProvider = null;
+    }
+
+    /** Ostinato 2.0: closes the harness tick timer after Baritone's post-tick listeners (-Dostinato.tickClock only). */
+    @Inject(
+            method = "tick",
+            at = @At("RETURN")
+    )
+    private void ostinato$tickEnd(CallbackInfo ci) {
+        if (baritone.utils.TickClock.ON) baritone.utils.TickClock.end();
     }
 
     @Inject(
