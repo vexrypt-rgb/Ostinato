@@ -20,6 +20,7 @@ import baritone.pathing.kinematic.KinematicLine;
 import baritone.pathing.movement.movements.MovementLine;
 import baritone.pathing.movement.movements.MovementStraight;
 import baritone.pathing.physics.PhysicsTravel;
+import baritone.pathing.unified.UnifiedExecutor;
 import baritone.utils.PlanStats;
 import baritone.utils.TickClock;
 import net.minecraft.client.Minecraft;
@@ -60,7 +61,8 @@ import java.util.TreeMap;
  * smoothing; C Maestro; D Maestro and Legato smoothing (Legato search off throughout). With arms=simedge (Ostinato 2.0
  * Phase 05) the course is {@link SimEdgeCourse} and the arms are A legacy A*, B simEdgeSearch, C legacy again, D
  * simEdgeSearch again: two independent replications (B vs A, D vs C) and an A/A' noise control (C vs A). Each lap
- * also records what its first plan predicted, under both cost models, for planning accuracy.
+ * also records what its first plan predicted, under both cost models, for planning accuracy. With arms=unified (Ostinato
+ * 2.0 Phase 06) the course is the simedge one and B and D drive with unifiedExecutor on, A and C with it off.
  * <p>
  * Each repetition walks every leg once per mode, the mode order rotated by repetition and leg (a Latin square), so
  * no mode always goes first. Route reuse and the failed-line memory are cleared before every lap. Every row reports
@@ -87,9 +89,16 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
      * C run with predictionTolerance off, B and D with it on. Nothing else differs between the arms.
      */
     private static final boolean TOLERANCE = "tolerance".equals(System.getProperty("ostinato.legatotest.arms"));
+    /**
+     * Ostinato 2.0 Phase 06: -Dostinato.legatotest.arms=unified. The course is {@link SimEdgeCourse}; A and C drive with
+     * unifiedExecutor off, B and D with it on. predictionTolerance stays at its default in every arm; nothing else differs.
+     */
+    private static final boolean UNIFIED = "unified".equals(System.getProperty("ostinato.legatotest.arms"));
+    /** The arms that time every lap tick: no Phase 05 pricing in the lap, and a tick file after it. */
+    private static final boolean TIMED = TOLERANCE || UNIFIED;
     /** -Dostinato.legatotest.stack=&lt;travelStack&gt; pins the travel stack for every arm; unset leaves the setting alone. */
     private static final String STACK = System.getProperty("ostinato.legatotest.stack");
-    private static final List<LegatoCourse.Leg> LEGS = SIMEDGE || TOLERANCE ? SimEdgeCourse.LEGS : LegatoCourse.LEGS;
+    private static final List<LegatoCourse.Leg> LEGS = SIMEDGE || TIMED ? SimEdgeCourse.LEGS : LegatoCourse.LEGS;
 
     private record Lap(int rep, LegatoCourse.Leg leg, int mode) {}
 
@@ -133,6 +142,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     private int tickN;
     private String prevDriver = "start";
     private long physNs0, physPlans0, drift0;
+    /** Phase 06: the unified executor's counters at the lap's start. */
+    private long[] ux0;
     private BufferedWriter ticksOut;
     /**
      * Ostinato 2.0 Phase 05B: -Dostinato.legatotest.trace=true writes every lap tick (the state before the tick, the yaw
@@ -326,7 +337,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                 };
             }
             if (STACK != null) Baritone.settings().travelStack.value = STACK;
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : "legato") + " laps=" + laps.size()
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : UNIFIED ? "unified" : "legato") + " laps=" + laps.size()
                     + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin travelStack=" + Baritone.settings().travelStack.value
                     + " tickClock=" + TickClock.ON + " seed=" + System.getProperty("ostinato.seed", "71006"));
             server(mc, () -> {
@@ -353,7 +364,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         for (int x = -2; x <= LegatoCourse.SIZE + 2; x++) {
             for (int z = -2; z <= LegatoCourse.SIZE + 2; z++) {
                 for (int y = F - 1; y <= F + 6; y++) {
-                    boolean solid = SIMEDGE || TOLERANCE ? SimEdgeCourse.solid(x, y, z) : LegatoCourse.solid(x, y, z);
+                    boolean solid = SIMEDGE || TIMED ? SimEdgeCourse.solid(x, y, z) : LegatoCourse.solid(x, y, z);
                     level.setBlock(new BlockPos(x, y, z), solid ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
                 }
             }
@@ -367,8 +378,9 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         var horizon = Baritone.settings().simEdgeHorizon;
         horizon.value = SIMEDGE5B && mode == 3 ? HORIZON_5B : horizon.defaultValue; // mode(0) puts the default back
         if (TOLERANCE) Baritone.settings().predictionTolerance.value = mode == 1 || mode == 3; // mode(0) puts the default back
+        if (UNIFIED) Baritone.settings().unifiedExecutor.value = mode == 1 || mode == 3; // mode(0) puts the default back
         if (STACK != null) Baritone.settings().travelStack.value = STACK;
-        if (SIMEDGE || TOLERANCE) {
+        if (SIMEDGE || TIMED) {
             Baritone.settings().kinematicLine.value = false;
             Baritone.settings().legato.value = false;
             Baritone.settings().legatoSearch.value = false;
@@ -472,6 +484,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             pathIds.clear();
             physPlans0 = PhysicsTravel.plans.get();
             drift0 = PhysicsTravel.driftReplans.get();
+            ux0 = baritone.getUnifiedExecutor().snapshot();
             lapStart = ticks;
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(l.leg().gx(), LegatoCourse.F + 1, l.leg().gz()));
             step = 1;
@@ -504,7 +517,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         if (ex != null && planned == 0) {
             planned = ex.getPath().positions().size();
             // Phase 04 validation: the tolerance arms time ticks, and this pricing is Phase 05's and costs tick time
-            if (!TOLERANCE) predict(ex.getPath(), l, ticks - lapStart);
+            if (!TIMED) predict(ex.getPath(), l, ticks - lapStart);
         }
         if (planWait >= 0 && segTicks < 0 && Math.abs(x - (segX + 0.5)) < 0.8 && Math.abs(z - (segZ + 0.5)) < 0.8 && Math.abs(y - segY) < 1) segTicks = (int) (ticks - lapStart);
         if (wasGround && !player.onGround() && player.getDeltaMovement().y > 0.2) jumps++;
@@ -561,7 +574,8 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     (PlanStats.physNs.get() - physNs0) / 1000, PhysicsTravel.plans.get() - physPlans0,
                     PhysicsTravel.driftReplans.get() - drift0, Baritone.settings().predictionTolerance.value,
                     Baritone.settings().travelStack.value, (PlanStats.astarNs.get() - planNs0) / 1000);
-            if (TOLERANCE) writeTicks(l);
+            if (UNIFIED) row += " unified=" + Baritone.settings().unifiedExecutor.value + " ux=" + uxDelta();
+            if (TIMED) writeTicks(l);
             rows.add(row);
             log(row);
             if (there) {
@@ -610,20 +624,31 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         return sorted[Math.max(0, Math.min(sorted.length - 1, (int) Math.ceil(q * sorted.length) - 1))];
     }
 
-    /** Phase 04 validation: every lap tick's time and driver, written after the lap (outside the timed ticks). */
+    /** Phase 06: the unified executor's counters that moved this lap, as name=delta; CANCEL_LATENCY_MAX as it stands. */
+    private String uxDelta() {
+        long[] now = baritone.getUnifiedExecutor().snapshot();
+        StringBuilder b = new StringBuilder("{");
+        for (var c : UnifiedExecutor.Counter.values()) {
+            long d = c == UnifiedExecutor.Counter.CANCEL_LATENCY_MAX ? now[c.ordinal()] : now[c.ordinal()] - ux0[c.ordinal()];
+            if (d != 0) b.append(b.length() == 1 ? "" : ",").append(c).append('=').append(d);
+        }
+        return b.append('}').toString();
+    }
+
+    /** Phase 04/06 validation: every lap tick's time and driver, written after the lap (outside the timed ticks). */
     private void writeTicks(Lap l) {
         try {
             if (ticksOut == null) {
-                var file = Minecraft.getInstance().gameDirectory.toPath().resolve("tolerance-ticks.csv");
+                var file = Minecraft.getInstance().gameDirectory.toPath().resolve(UNIFIED ? "unified-ticks.csv" : "tolerance-ticks.csv");
                 boolean fresh = !Files.exists(file);
                 ticksOut = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                 if (fresh) {
-                    ticksOut.write("seed,lap,rep,leg,mode,tolerance,i,ns,driver");
+                    ticksOut.write(UNIFIED ? "seed,lap,rep,leg,mode,unified,i,ns,driver" : "seed,lap,rep,leg,mode,tolerance,i,ns,driver");
                     ticksOut.newLine();
                 }
             }
             String head = System.getProperty("ostinato.seed", "71006") + "," + index + "," + l.rep() + "," + l.leg().name() + "," + MODES[l.mode()]
-                    + "," + Baritone.settings().predictionTolerance.value + ",";
+                    + "," + (UNIFIED ? Baritone.settings().unifiedExecutor.value : Baritone.settings().predictionTolerance.value) + ",";
             for (int i = 0; i < tickN; i++) {
                 ticksOut.write(head + i + "," + tickNs[i] + "," + tickDriver[i]);
                 ticksOut.newLine();
@@ -691,11 +716,17 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                         ratios.isEmpty() ? "-" : String.format(Locale.ROOT, "%.3f", ratios.get(ratios.size() / 2)), ratios));
             }
         }
-        if (TOLERANCE) {
-            log("tolerance physPlans=" + PhysicsTravel.plans.get()
+        if (TIMED) {
+            log((UNIFIED ? "unified" : "tolerance") + " physPlans=" + PhysicsTravel.plans.get()
                     + " driftReplans=" + PhysicsTravel.driftReplans.get() + " travelStack=" + Baritone.settings().travelStack.value);
         }
-        if (SIMEDGE || TOLERANCE) { // the second replication: D against C, same leg and repetition
+        if (UNIFIED) {
+            long[] s = baritone.getUnifiedExecutor().snapshot();
+            StringBuilder b = new StringBuilder("unified totals");
+            for (var c : UnifiedExecutor.Counter.values()) b.append(' ').append(c).append('=').append(s[c.ordinal()]);
+            log(b.toString());
+        }
+        if (SIMEDGE || TIMED) { // the second replication: D against C, same leg and repetition
             for (LegatoCourse.Leg leg : LEGS) {
                 List<Double> ratios = new ArrayList<>();
                 for (int r = 0; r < REPS; r++) {
