@@ -1411,3 +1411,306 @@ If the live run cannot be done, that is recorded as a blocker, and no Tier-L cla
   - the live evidence is missing or incomplete;
   - an overhead result is inconclusive.
 - Whatever the class, `unifiedExecutor` stays default false in Phase 06. Enabling it is a later decision.
+
+### Phase 06 results
+
+Judged against the criteria above, which were committed (`f7ad9d0af`) before the batch or the live A/B ran. No
+criterion was changed after a result was seen.
+
+#### Tier S: headless batch (VERIFIED, Tier S)
+
+Command: `gradlew test -Postinato_bench --tests "*UnifiedBatchBench"` with `OSTINATO_WRITE_DOCS=1`, at `f7ad9d0af`.
+Analysis: `python scripts/unified-batch.py docs/ostinato2/raw/phase06/headless-batch.csv`.
+Raw (`docs/ostinato2/raw/phase06/`):
+- `headless-batch.csv`: one row per run, 3600 rows, every counter;
+- `headless-batch-run.txt`: seeds, n, wall time, JVM, OS;
+- `headless-analysis.txt`: the script's full output.
+
+The run: seed 6061, warm-up seed 7071, n = 300 per family, so 1800 trials and 3600 runs. Wall time 96.6 s, Java
+25.0.4.1, Windows 11, 8 CPUs. Unified ran first in 900 trials and second in 900.
+
+**H1 clean: holds.** Over 300 clean trials, legacy and unified are equal on every compared field (0 mismatches).
+Unified DIVERGENCES and legacy drift replans are both 0. Both arms end 252 ARRIVED and 48 EMPTY_PLAN.
+
+**H2 reliability: FAILS (slip).** Allowed loss is ceil(1% of 300) = 3.
+
+| family | legacy arrived | unified arrived | other ends (legacy / unified) | holds |
+|---|---|---|---|---|
+| clean | 252 | 252 | 48 / 48 EMPTY_PLAN | yes |
+| kick | 300 | 300 | — | yes |
+| slip | 247 | **239** | 53 / **61** EMPTY_PLAN | **NO** (loss 8 > 3) |
+| conflict | 300 | 300 | — | yes |
+| cancel | 300 | 45 + 255 CANCEL_STOP | — | yes (0 unintended ends) |
+| edge | 238 | 238 | 62 / 62 EMPTY_PLAN | yes |
+
+There were no REFUSED or TIMEOUT ends in either arm. In the slip family:
+- 9 trials arrived with legacy only: 19, 39, 43, 60, 108, 138, 174, 200 and 265.
+- 1 trial arrived with unified only: 113.
+- Every lost trial ended EMPTY_PLAN: the A* planner used up its node budget (1500 in the harness) and returned no
+  plan.
+
+**H3 safety: holds.**
+- Over every unified trial: RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0, and no conflicting press landed.
+- Every non-timeout end has no key down, no lease held, and the final state that matches its outcome.
+- Every CANCEL_STOP ended on the ground. There were no TIMEOUT ends.
+- Diagnostic: the gate refused 2422 presses (CONFLICTS), and ERASED is 1570. In the legacy arm, 2506 conflicting
+  presses landed.
+
+**H4 correction bounded and counted: holds** (0 violations). Legacy executor counters are all 0.
+
+| family | divergences | corrections | accepted | escalations (= unified drift replans) | legacy drift replans |
+|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | 0 |
+| kick | 281 | 281 | 30 | 251 | 281 |
+| slip | 1905 | 1207 | 725 | 1180 | 1931 |
+| conflict | 0 | 0 | 0 | 0 | 2501 |
+| cancel | 0 | 0 | 0 | 0 | 0 |
+| edge | 300 | 300 | 21 | 279 | 300 |
+
+In conflict, unified has no divergences at all, because the gate refused the other behaviour's presses before the game
+tick. Legacy let them land and replanned 2501 times.
+
+**H5 plans and ticks: no regression.** Paired unified − legacy, bootstrap 95% CI:
+
+| family | plans mean diff (CI) | fewer replans | arrived pairs | ticks mean ratio (CI) | faster / equal / slower | regression |
+|---|---|---|---|---|---|---|
+| kick | −0.100 (−0.133..−0.067) | yes | 300 | 1.0002 (1.0000..1.0005) | 0 / 298 / 2 | no |
+| slip | −2.517 (−3.107..−1.967) | yes | 238 | 0.9999 (0.9988..1.0011) | 14 / 212 / 12 | no |
+| conflict | −8.337 (−8.933..−7.773) | yes | 300 | **0.8530** (0.8416..0.8637) | 297 / 3 / 0 | no |
+| edge | −0.070 (−0.100..−0.043) | yes | 238 | 1.0011 (1.0005..1.0018) | 0 / 227 / 11 | no |
+
+Fewer replans in all four disturbed families (Tier S). Faster in conflict only (Tier S).
+
+**H6 cancel latency: holds.**
+- 258 cancel trials had the request before arrival. Unified ended 255 CANCEL_STOP and 3 ARRIVED.
+- Unified latency: median 1 tick, max 12. Legacy, which waits for the run to end: median 35.
+- No unified trial lacked a stop or an arrival after the request. Unified was never slower than legacy.
+- Among the 229 pairs where legacy latency is ≥ 5, unified was strictly lower in 229 (100%).
+
+**H7 overhead: acceptable.** Per-run driver tick time, paired unified − legacy, all families pooled:
+
+| statistic | median diff (95% CI) | legacy median | unified median |
+|---|---|---|---|
+| p95 | +0.60 µs (+0.50..+0.70) | 182.30 µs | 27.10 µs |
+| p99 | −64.90 µs (−107.40..−9.20) | 15425.40 µs | 14050.35 µs |
+| p50 (diagnostic) | +0.00 µs (+0.00..+0.00) | 0.30 µs | 0.30 µs |
+
+Caveats:
+- **p99 equals the maximum in every one of the 3600 runs.** Every run has fewer than 100 ticks (median 34), so the
+  nearest-rank p99 is the run's slowest tick, which is a planning tick. The p99 row measures replanning, not the
+  executor.
+- Clean only, where both arms do the same work: p50 diff +0.100 µs (CI +0.100..+0.100).
+- Thread CPU time is only resolved to 15.625 ms on this machine, so its per-family medians are coarse.
+
+Diagnostic medians per run, legacy → unified:
+
+| family | plan ms | alloc KB |
+|---|---|---|
+| clean | 17.692 → 17.811 | 45356.5 → 45357.7 |
+| kick | 10.625 → 10.438 | 32293.7 → 31211.2 |
+| slip | 33.843 → 32.289 | 96090.2 → 90568.6 |
+| conflict | 19.684 → 2.707 | 58605.7 → 7789.6 |
+| cancel | 25.053 → 25.012 | 61584.6 → 61553.6 |
+| edge | 29.408 → 29.248 | 81579.6 → 79160.0 |
+
+**Tier S: FAIL** (H2, slip). Everything else held: H1, H3, H4 and H6 hold, H5 has no regression, and H7 is
+acceptable. Fewer replans in kick, slip, conflict and edge, and faster in conflict (Tier S only).
+
+#### Tier L: live A/B on the 26.3 client (VERIFIED, Tier L)
+
+Command, per seed (PowerShell, from the repository root; one client at a time, no other JVM running):
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.tickClock=true -Dostinato.legatotest=true -Dostinato.legatotest.exit=true -Dostinato.legatotest.arms=unified -Dostinato.legatotest.stack=physics -Dostinato.legatotest.reps=6 -Dostinato.seed=<seed>'
+.\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient -PclientXmx=1536M *> ab-<seed>.log
+```
+
+Analysis: `python scripts/unified-ab.py docs/ostinato2/raw/phase06/ab-81011-lines.txt docs/ostinato2/raw/phase06/ab-81012-lines.txt`.
+Raw (`docs/ostinato2/raw/phase06/`):
+- `ab-<seed>-lines.txt`: every `LEGATOTEST` line of the client log, one row per lap with the per-lap executor counters;
+- `ab-<seed>-result.txt`: the harness's own result file;
+- `ab-<seed>-ticks.csv.gz`: the per-tick `unified-ticks.csv`;
+- `ab-analysis.txt`: the script's full output for both seeds.
+
+Both seeds ran to the end: 96 of 96 laps per seed, on the `physics` stack, the flag on in every B/D lap and off in
+every A/C lap, `predictionTolerance` off in every lap.
+
+**L1 reliability: holds in both seeds.**
+
+| seed | A reached | B reached | C reached | D reached | stuck-key lines | deaths | new B/D faults |
+|---|---|---|---|---|---|---|---|
+| 81011 | 24/24 | 24/24 | 24/24 | 24/24 | 0 | 0 | none |
+| 81012 | 24/24 | 24/24 | 24/24 | 24/24 | 0 | 0 | none |
+
+Physics plans / drift replans over the 24 laps of each mode (diagnostic):
+
+| seed | A | B | C | D |
+|---|---|---|---|---|
+| 81011 | 800 / 20 | 777 / 9 | 788 / 19 | 772 / 6 |
+| 81012 | 786 / 19 | 775 / 8 | 784 / 20 | 781 / 9 |
+
+**L2 ownership safety: holds in both seeds** (judged per B/D lap, as pre-registered).
+- In every B/D lap, RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0.
+- No executor counter moved in any A/C lap.
+- OWNED_TICKS over the B/D laps: 8811 (81011) and 8746 (81012), of which INTACT_TICKS 8650 and 8590.
+- In every B/D lap, CORRECTIONS ≤ physics plans and ESCALATIONS = drift replans.
+
+Executor counters summed over the laps of each mode:
+
+| seed | mode | ACQUIRES | COMPLETIONS | FAILURES | CANCEL_STOPS | DIVERGENCES | CORRECTIONS | ACCEPTED | ESCALATIONS |
+|---|---|---|---|---|---|---|---|---|---|
+| 81011 | B | 137 | 54 | 59 | 1 | 16 | 16 | 7 | 9 |
+| 81011 | D | 141 | 58 | 59 | 4 | 15 | 15 | 9 | 6 |
+| 81012 | B | 140 | 57 | 59 | 3 | 12 | 11 | 4 | 8 |
+| 81012 | D | 137 | 57 | 56 | 4 | 14 | 14 | 5 | 9 |
+
+In 81012, DIVERGENCES (26) is one more than CORRECTIONS (25): one miss came after the plan's correction was used, so
+it escalated at once without a second correction (ACCEPTED 9 + ESCALATIONS 17 = 26). That is the pre-registered
+policy. See the finding below on the run totals, which are not all inside the laps.
+
+**L3 completion time: no time improvement, not slower.** Median paired lap-ticks ratio per leg, 6 pairs each:
+
+| seed | leg | B/A | D/C | C/A (noise) |
+|---|---|---|---|---|
+| 81011 | slalom | 0.996 | 1.000 | 0.996 |
+| 81011 | ridges | 0.993 | **1.033** | 0.993 |
+| 81011 | bumps | 1.000 | 0.995 | 1.003 |
+| 81011 | steps | 0.975 | 1.002 | 0.992 |
+| 81012 | slalom | 0.997 | 0.997 | 0.999 |
+| 81012 | ridges | 0.996 | 1.006 | 0.978 |
+| 81012 | bumps | 0.998 | 1.000 | 1.000 |
+| 81012 | steps | 0.980 | 0.988 | 1.003 |
+
+No leg is fast in any pair. One leg is slow beyond noise: D/C ridges in 81011 (1.033 against noise 0.007). It is one
+leg in one replication of one seed, and it does not repeat in 81012 (1.006), so "slower" (≥ 2 slow legs) is not met.
+
+**L4 replans and recovery: drift replans lower in both replications and both seeds.** Paired on − off per lap,
+n = 24, bootstrap 95% CI:
+
+| seed | pair | physics plans | drift replans | cancels + rewinds |
+|---|---|---|---|---|
+| 81011 | B/A | −0.958 (−2.125..+0.208), no difference | **−0.458 (−0.792..−0.167), lower** | 0 (0..0) |
+| 81011 | D/C | −0.667 (−1.833..+0.583), no difference | **−0.542 (−0.792..−0.292), lower** | 0 (0..0) |
+| 81012 | B/A | −0.458 (−1.833..+0.958), no difference | **−0.458 (−0.792..−0.167), lower** | 0 (0..0) |
+| 81012 | D/C | −0.125 (−1.167..+0.917), no difference | **−0.458 (−0.750..−0.167), lower** | 0 (0..0) |
+
+Physics plans are not higher anywhere. Strictly more reached: no (24/24 in every mode).
+
+**L5 overhead: inconclusive.** Client tick time per lap, paired on − off, both seeds pooled, n = 96:
+
+| statistic | median diff (95% CI) | median off | median on | result |
+|---|---|---|---|---|
+| p95 | +0.491 ms (+0.061..+1.170) | 18.96 ms | 18.81 ms | CI upper > 0.5, lower < 0.5 |
+| p99 | +0.272 ms (−1.677..+1.926) | 88.80 ms | 91.95 ms | CI upper > 0.5, lower < 0.5 |
+| p50 (diagnostic) | −0.003 ms (−0.035..+0.027) | 5.57 ms | 5.61 ms | |
+| max (diagnostic) | +2.718 ms (−3.116..+6.054) | 134.49 ms | 129.96 ms | |
+| alloc KB (diagnostic) | +1277.5 (−12972.5..+13728.0) | 1489241.5 | 1479118.5 | |
+
+Neither FAIL (no CI lower bound > 0.5 ms) nor acceptable (both CI upper bounds > 0.5 ms). The client tick includes
+rendering and the integrated server, so its spread (p99 CI about 3.6 ms wide) is far larger than the executor's own
+cost (Tier S H7: p95 +0.6 µs). 96 pairs cannot resolve a 0.5 ms bound on this client.
+
+**L6 cancel latency: not measured live**, as pre-registered (the course cancels only at lap end).
+
+**Tier L verdict: IMPROVEMENT** (drift replans lower in both replications and both seeds). L1 and L2 hold in both
+seeds. L3 is not slower and physics plans are not higher in both replications and both seeds. L5 is inconclusive,
+which is not a Tier L FAIL but keeps the gate from PASS.
+
+**Finding outside the laps: the lap-end cancel releases the executor's keys without acknowledging it (diagnostic,
+not a pre-registered measure).**
+
+L2 is judged per B/D lap, as pre-registered, and holds. The run totals are not all in the laps:
+
+| counter | seed 81011 total | in the laps | seed 81012 total | in the laps |
+|---|---|---|---|---|
+| RELEASED_EARLY | 43 | 0 | 41 | 0 |
+| HANDOVERS | 43 | 0 | 41 | 0 |
+| COMPLETIONS | 155 | 112 | 155 | 114 |
+
+Every other counter's total equals the sum of its laps. In 81011, 43 B/D laps had one CANCEL_REFUSAL and no
+CANCEL_STOP, and 5 had two or three refusals and a stop; in 81012, 41 had one refusal and no stop, and 7 had two refusals and a stop. The extra counts are exactly those laps.
+
+What happens at the end of a B/D lap that ends while the player still moves (all in one client tick, then the next):
+1. The harness calls `PathingBehavior.cancelEverything()` (`LegatoLiveTest.java:542`). The executor refuses the
+   segment cancel because the player is not yet stopped on the ground (CANCEL_REFUSALS, counted in the lap).
+2. `PathingBehavior.cancelEverything()` then calls `PathingControlManager.cancelEverything()` regardless
+   (`PathingBehavior.java:536`), which calls `onLostControl()` on every process. `BastionProcess` (line 4256),
+   `GetToBlockProcess` (194), `PveProcess` (466) and `PvpProcess` (972) call `clearAllKeys()` there
+   unconditionally. They are not the lease owner, but the gate lets releases through by design, so the keys the
+   driver wrote earlier in that tick go up.
+3. The harness logs the lap row and turns the flag off (`mode(0)`, line 584). At the end of the tick the executor
+   sees its owned keys up while it still holds the lease and counts RELEASED_EARLY. The next tick it hands the lease
+   back (HANDOVERS) and settles COMPLETED_VERIFIED (COMPLETIONS). These land after the lap row, so in no lap.
+
+Effect: the keys end up, no key stays down (0 stuck-key lines, "keys held right after cancel" never logged), no
+conflicting press lands, and no lease is left held. Legacy behaves the same way: there the same calls release the
+keys at once. But the executor's cancel protocol (acknowledge once stopped on the ground) is bypassed: a B6 writer
+releases the executor's keys without telling it. So, on the live cancel path, the executor does not have exclusive
+ownership of its keys. Under the task's rule ("if exclusive input ownership cannot be established for that path, do
+not enable the new executor") this alone keeps `unifiedExecutor` off, whatever the gate.
+
+Had RELEASED_EARLY been judged on run totals rather than per lap, L2 would fail in both seeds. The
+gate class is FAIL either way (H2). The criterion was not changed.
+
+Follow-up (not done in Phase 06): make `PathingBehavior.cancelEverything()` tell the executor that the processes are
+cancelled before `onLostControl()` runs, and route the `onLostControl()` `clearAllKeys()` calls through the arbiter
+(part of B6).
+
+#### Slip diagnostic (exploratory, after the gate; not gate evidence)
+
+Run after the gate class was fixed, to find out why unified loses slip arrivals. It changes no criterion, and its
+result does not change the class. Production uses the same node budget as the harness (`PhysicsTravel.NODE_BUDGET`
+= 1500).
+
+Command (PowerShell): `$env:OSTINATO_SLIP_DIAG='1'; $env:OSTINATO_WRITE_DOCS='1'; .\gradlew.bat test -Postinato_bench
+--tests "*UnifiedSlipDiagnostic" -x nativeHost`. Raw: `docs/ostinato2/raw/phase06/slip-diagnostic.txt`.
+
+It re-runs the gated slip family (seed 6061, n = 300) on the same `UnifiedHarness`, then, for each trial that only
+one arm reached, re-plans from the failing arm's state at its empty plan, and from the other arm's state at the same
+tick, with node budgets 1500, 3000, 6000 and 12000. It then runs the whole family again at each budget.
+
+**At budget 1500 it reproduces the gated batch exactly:** 247 against 239 arrived, the same 9 legacy-only trials and
+the same unified-only trial (113).
+
+Per trial:
+- In 8 of the 9 legacy-only trials, unified ends at tick 3 after 2 divergences, 1 accepted correction and 1
+  escalation; the replan after the escalation is empty. In trial 39 it ends at tick 7 (6 divergences, 3 corrections).
+  Legacy, in the same trials, arrives in 48–69 ticks.
+- From unified's failing state, budget 1500 finds no plan in all 9; 3000 and above find one (34–48 steps).
+- Planned from legacy's state at the same tick, budget 1500 also finds no plan in 7 of the 9 (it does in 39 and 138).
+  The two states differ mainly in the speed across the course: |vx| ≈ 0.022–0.024 for unified against ≈ 0.010 for
+  legacy at tick 3. So keeping the plan through the first slip ticks leaves unified with more sideways speed when it
+  finally replans, and that state is harder for the planner. Legacy did not ask for a plan from a state the planner
+  cannot solve; the diagnostic does not show which later states it planned from.
+- Trial 113 (legacy only fails, at tick 11): both arms are in the same state at that tick; 1500 finds no plan, 3000
+  finds 38 steps.
+
+Whole slip family at each budget (legacy, unified):
+
+| node budget | arrived | EMPTY_PLAN | legacy only | unified only | total plan ms |
+|---|---|---|---|---|---|
+| 1500 (gated) | 247, 239 | 53, 61 | 9 | 1 | 15611, 13198 |
+| 3000 | 293, 291 | 7, 9 | 2 | 0 | 23600, 19265 |
+| 6000 | 300, 300 | 0, 0 | 0 | 0 | 24126, 20583 |
+| 12000 | 300, 300 | 0, 0 | 0 | 0 | 24084, 20495 |
+
+Reading (exploratory): the loss is a planner node-budget effect that the correction exposes, not a fault in the
+ownership or the correction bookkeeping. At budget 6000 or more neither arm loses a slip trial, and unified spends
+less total planning time than legacy at every budget. This supports, as the next pre-registered experiment, a replan
+with a larger budget when the replan after an escalation comes back empty. It is not evidence for the Phase 06 gate,
+and the budget was not changed.
+
+#### Phase 06 classification: FAIL
+
+Under the pre-registered gate rule:
+- **FAIL by a reliability failure (H2, slip):** 239 against 247 arrived, allowed loss 3. That alone fixes the class.
+- Every other FAIL condition is clear: H3 and L2 hold (no safety violation in the laps), L1 holds, H1, H4 and H6
+  hold, there is no regression (H5, L3, L4), and no overhead FAIL (H7 acceptable, L5 inconclusive).
+- Without H2 the class would be PARTIAL, not PASS: L5 is inconclusive, and the gate needs H7 and L5 acceptable.
+- Separately from the gate, exclusive input ownership is not established on the live cancel path (finding above),
+  which on the task's own rule keeps the executor off.
+
+`unifiedExecutor` stays default **false**. No criterion was changed, and neither the batch nor the live A/B was
+re-run after its result was seen.
+
+Full suite on the results commit: 1595 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.

@@ -1,12 +1,28 @@
 # Ostinato 2.0 — status
 
+**Phase 06 gate: FAIL. `unifiedExecutor` stays default false** (DECISIONS D16, 2026-11-08).
+- The unified executor owns the physics driver's movement keys behind a default-false flag. It was judged against
+  criteria committed before any run.
+- Ownership held in the headless batch and in every live lap: no early release, overwrite, stale write or
+  conflicting press landed, and no key or lease was left behind (Tier S H3, Tier L L2).
+- **Not exclusive on the live cancel path:** outside the laps, the lap-end cancel released the executor's keys
+  without telling it (43 and 41 early releases in the two seeds), through the `clearAllKeys()` calls in four
+  processes' `onLostControl()`. No key stayed down, but on the task's rule this alone keeps the flag off.
+- Fewer replans in every disturbed headless family, 15% faster under conflicting inputs, cancel in 1 tick (median),
+  and acceptable overhead (Tier S).
+- **Fails on reliability:** on slippery ground it arrived in 239 of 300 headless trials against legacy's 247 (allowed
+  loss 3). The lost trials end with the A* planner returning no plan.
+- Live (Tier L), 2 seeds × 96 laps: IMPROVEMENT, with fewer drift replans in both seeds; 96/96 laps reached in each
+  seed and lap times unchanged; client-tick overhead inconclusive (p95 +0.49 ms, CI +0.06..+1.17).
+- Phase 07 was **not** started.
+
 **Phase 04 gate: PROVISIONAL after live validation** (DECISIONS D14, 2026-11-08).
 - All six modes have validated Tier-L bounds for the 26.3 (D12) model.
 - The flag-on A/B shows no improvement and no regression.
 - Client tick-time overhead with the flag on is inconclusive: p95 +0.59 ms, CI −0.01 .. +1.22 ms, against a 0.5 ms criterion.
 - `predictionTolerance` stays default **false**.
 
-**Phase 05 gate (unchanged): NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. The Phase 04 validation did not touch it. Phase 06 was **not** started.
+**Phase 05 gate (unchanged): NO IMPROVEMENT. Legacy A* retained** (DECISIONS D13). Simulation-derived A* is built, tested, and kept behind `simEdgeSearch` (default **false**). Paired live A/B runs on a 26.3 client showed no reliability regression but slower laps and no gain in prediction accuracy. The Phase 04 validation did not touch it. Phase 06 came later (D16).
 
 **Phase 05B diagnosis: class C, NO IMPROVEMENT** (DECISIONS D15, 2026-11-08).
 - SimEdge's loss is first-plan latency: 12–16 motion states per cell inside the 32-block horizon. It is not the
@@ -14,7 +30,7 @@
 - The one pre-registered experiment ran SimEdge with `simEdgeHorizon` 8 (2 seeds × 96 laps). It cut the wait from
   12–13 ticks to 4–5 and lost no laps.
 - It still did not beat legacy A* (D/A 0.978–1.015), and beat the existing SimEdge on ≥ 2 legs in one seed only.
-- SimEdge stays disabled, kept as research code. No production default changed. Phase 06 was **not** started.
+- SimEdge stays disabled, kept as research code. No production default changed. Phase 06 came later (D16).
 
 ## Where
 
@@ -62,6 +78,16 @@
    - Client tick time, from a new `TickClock` (harness-only).
    - A paired flag on/off A/B on `SimEdgeCourse`, physics stack, 192 laps (seeds 81011, 81012).
    - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase04/`.
+6. **Phase 06** (2026-11-08; DECISIONS D16; criteria pre-registered in BENCHMARKS before any data):
+   - `UnifiedExecutor`: one lease, with an epoch, on the physics driver's MOVE, JUMP and SNEAK keys. Stale writes are
+     rejected, other writers' presses are refused while it drives, a cancel is acknowledged only once the player is
+     stopped on the ground, a fall preempts it, and every end releases the keys.
+   - `CorrectionPolicy`: on a predicted-vs-observed miss, one bounded correction, then the existing drift replan.
+   - All behind `unifiedExecutor` (default **false**). The A* planner, every other key writer and
+     `predictionTolerance` are unchanged.
+   - A headless harness and a 1800-trial batch, a live A/B on `SimEdgeCourse` (seeds 81011, 81012), and an
+     exploratory slip diagnostic after the gate.
+   - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase06/`.
 
 ## Phase 04 gate
 
@@ -132,11 +158,20 @@
   - Effect on the Phase 04 gate: none, because it tests Secondo bookkeeping, not physics or tolerance.
   - **Phase 05 dependency: none functionally.** But the full suite can never run green until the owner updates
     Secondo bookkeeping, so "full suite green" cannot serve as a gate signal. Gates use named test classes instead.
-- **B6. Direct key writers bypass the arbiter: OPEN, unchanged** (F-M3).
+- **B6. Direct key writers bypass the arbiter: OPEN** (F-M3).
   - 267 `setInputForceState`/`clearAllKeys` sites in 31 production files, recounted on this tree. The Phase 04
     harness `ToleranceTraceTest` adds 5 sites in 1 harness-only file, off by default.
-  - Only `FallController`/`FallInput` use the arbiter.
-  - It blocks turning `inputArbitration` on in production.
+  - **Phase 06 recount** (raw `grep`, which also counts comments and the harness): 277 matches in 33 files at the
+    Phase 06 base `b27153fdf`, 279 at its head. Phase 06 migrated none of them. Only the `PhysicsTravel` path is
+    owned, and only with `unifiedExecutor` on: while that lease is held, the gate refuses other writers' presses on
+    MOVE, JUMP and SNEAK. With the flag off nothing changed.
+  - **Phase 06 live finding:** releases always pass the gate, and on the lap-end cancel
+    `PathingBehavior.cancelEverything()` reaches `onLostControl()` in `BastionProcess`, `GetToBlockProcess`,
+    `PveProcess` and `PvpProcess`, which call `clearAllKeys()` directly. They release the executor's keys without
+    telling it (43 and 41 early releases outside the laps). Follow-up: `cancelEverything()` tells the executor
+    first, and those calls go through the arbiter.
+  - Only `FallController`/`FallInput` use the arbiter (and the unified executor, flag on).
+  - It blocks turning `inputArbitration` on in production, and it limits what the unified executor can own.
   - Effect on the Phase 04 gate: none.
   - **Phase 05 dependency: none.** `SimEdge` writes no keys, and Phase 05 paths execute through the legacy `Movement`
     classes and drivers. A future Phase 05 retry that adds a new driver would add a writer to this list.
@@ -199,21 +234,67 @@ default change; nothing pushed or merged.
 - **Archive rule:** steps D/A ≤ 0.99 in both seeds, so keep SimEdge as disabled research code.
 - **Full suite** at the results commit: see BENCHMARKS "Phase 05B". The known SecondoTest failure is expected.
 
+## Phase 06 (unified executor, 2026-11-08)
+
+Scope: one owner for the physics driver's input, a predicted-vs-observed check, one bounded correction, all behind a
+default-false flag. No A* replacement, no migration of other input sites, no `predictionTolerance` change, nothing
+pushed or merged.
+
+- **Commits** (local, `ostinato2/claude-review`, base `b27153fdf`):
+
+  | commit | content |
+  |---|---|
+  | `2bdbca77c` | executor wiring behind the default-false flag |
+  | `d22d54c63` | ownership tests |
+  | `893f289e4` | the correction verdict moved into `CorrectionPolicy` |
+  | `5159b4215` | correction policy tests |
+  | `ba54b8934` | headless scenarios |
+  | `a6ed76df8` | the live harness's unified arm |
+  | `5138d1b15` | the headless batch bench and the analysis scripts |
+  | `f7ad9d0af` | pre-registration, written before any run |
+  | `dbade5d5d` | the exploratory slip diagnostic, after the gate |
+  | the commit that last touched this file | results |
+
+- **Tests:** `UnifiedExecutorTest` (27), `CorrectionPolicyTest` (17), `UnifiedHeadlessTest` (12) pass. Full suite:
+  1595 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.
+- **Evidence** (BENCHMARKS "Phase 06 results"):
+
+  | tier | result |
+  |---|---|
+  | S, headless batch, 1800 trials × 2 | H1 clean identical (0 mismatches over 300). **H2 FAILS on slip**: 239 vs 247 arrived (allowed 3). H3 safety holds. H4 bounded. H5 fewer replans in all 4 disturbed families, no regression, conflict 15% faster. H6 cancel median 1 tick, max 12. H7 overhead acceptable (p95 +0.6 µs). |
+  | L, seed 81011, 96 laps | Reliability holds (96/96, no stuck key, death or new fault). L2 holds per lap. Drift replans lower in both pairs (−0.458 and −0.542 a lap). Lap ticks unchanged; one slow leg (D/C ridges 1.033) does not repeat. |
+  | L, seed 81012, 96 laps | Reproduces 81011: 96/96, L2 holds per lap, drift replans lower in both pairs (−0.458 a lap each), lap ticks unchanged. Overhead, both seeds pooled: p95 +0.491 ms (CI +0.061..+1.170), **inconclusive**. Tier L verdict: **IMPROVEMENT**. |
+  | exploratory, after the gate | Slip loss is a planner node-budget effect. At 1500 (the production budget too) it reproduces the batch exactly; at ≥ 6000 both arms arrive 300/300, and unified spends less plan time. Not gate evidence. |
+
+- **Classification: FAIL** (pre-registered rule: a reliability failure, H2). `unifiedExecutor` stays default false.
+  The criterion was not changed and the batch was not re-run.
+- **Ownership is not exclusive on the live cancel path** (BENCHMARKS, finding outside the laps; B6). On the
+  task's rule this alone keeps the executor off, whatever the gate.
+
 ## Next task
 
-**Owner decisions. Phase 05B is complete. Phase 06 was not started.**
+**Owner decisions. Phase 06 is complete (gate FAIL). Phase 07 was not started.**
 
-1. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
+1. Phase 06 (D16):
+   - Keep `unifiedExecutor` off.
+   - Close the cancel path first (B6): `PathingBehavior.cancelEverything()` tells the executor before
+     `onLostControl()` runs, and the `onLostControl()` `clearAllKeys()` calls go through the arbiter.
+   - Fix the slip loss before any new evaluation, as its own pre-registered run on fresh seeds. Two candidate
+     directions: replan with a larger budget (or fall back to the legacy replan) when the replan after a correction
+     comes back empty; or do not keep the plan after a miss caused by a surface slipperier than the model.
+     The slip diagnostic (exploratory) supports the first: at budget ≥ 6000 neither arm loses a slip trial.
+   - Only after that, a live run with the flag on, and only after that a default change.
+2. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
    pre-registered drift-check design (bound × margin, or persistence) and its own A/B.
-2. SimEdge (D15):
+3. SimEdge (D15):
    - Keep it disabled.
    - Do not fund another latency fix on this course: even zero wait gains about 2–3% on steps only.
    - It can only pay off on momentum-decided routes (gaps, sprint jumps, long ascent chains). That needs a new
      pre-registered scenario family as its own phase. Otherwise archive it.
-3. Separately:
+4. Separately:
    - `SimTrace`'s land prediction on water ticks (D14 finding 2);
    - B5 Secondo bookkeeping;
-   - B6 key-writer migration;
+   - B6 key-writer migration, which also bounds what the unified executor can own;
    - B4 execution tier.
 
 ## Previous status (Grok, REPORTED; kept as written)

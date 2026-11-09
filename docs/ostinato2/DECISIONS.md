@@ -404,3 +404,95 @@ BENCHMARKS ("Phase 05B", commit `5b26423b5`) before any experiment data. Evidenc
 - SimEdge can only pay off where momentum decides the route: gaps, sprint jumps, long ascent chains. That would need
   a new pre-registered scenario family and its own phase, not a retuning of this one.
 - If no such scenario is wanted, archive SimEdge.
+
+## D16. Phase 06: unified executor for the physics driver; safe and fewer replans, but loses slip arrivals; gate FAIL, `unifiedExecutor` stays off
+
+The task: one owner for the physics driver's movement input (lease, epoch, stale rejection, cancel acknowledgement,
+emergency preemption, no stuck keys), a predicted-vs-observed check every tick, one bounded correction before the
+existing drift replan, all behind a default-false flag. A* is not replaced and no other input site is migrated. The
+criteria were committed to BENCHMARKS ("Phase 06", commit `f7ad9d0af`) before the batch or the live A/B ran.
+Evidence is in BENCHMARKS "Phase 06 results" and `docs/ostinato2/raw/phase06/`.
+
+**Added (all inert while `unifiedExecutor` is false):**
+
+- Setting `unifiedExecutor` (default **false**), registered in `SettingCategorizer` and `setting-descriptions.json`.
+- `baritone.pathing.unified.UnifiedExecutor`:
+  - a lease on MOVE, JUMP and SNEAK from the existing `InputArbiter` (priority 5, below the fall controller's 10, so a
+    fall preempts it), with an epoch per lease; a write from a stale epoch is rejected and counted;
+  - a gate in `InputOverrideHandler.setInputForceState`: once the driver has written in a pass, other writers'
+    presses on the leased keys are refused and counted until the tick ends; releases always pass;
+  - every end of the driving (completion, yield to another driver, empty plan, M01, executor or segment cancel,
+    emergency, pause, world change, flag off) hands the lease back, releases the owned keys, and records an outcome
+    (`COMPLETED_VERIFIED`, `FAILED`, `CANCELLED_CONFIRMED` or `UNKNOWN`) and a cause;
+  - a cancel is acknowledged only once the player is stopped on the ground with the keys up;
+  - counters in one array, no per-tick allocation.
+- `baritone.pathing.physics.CorrectionPolicy`: on a predicted-vs-observed miss, replay the rest of the current plan
+  from where the player really is. If the replay still ends on the goal, keep the plan (one correction per plan);
+  otherwise, or on a second miss, escalate to the existing drift replan.
+- Wiring in `PhysicsTravel`, `PathExecutor`, `PathingBehavior`, `GameEventHandler` and `Baritone` (tick frame,
+  yield, failure and cancel hooks).
+- Tests: `UnifiedExecutorTest` (27), `CorrectionPolicyTest` (17), `UnifiedHeadlessTest` (12 fixed scenarios on the
+  headless `UnifiedHarness`), and the env-gated `UnifiedBatchBench`.
+- Harness arms `-Dostinato.legatotest.arms=unified` in `LegatoLiveTest` (A, C off; B, D on), with per-lap executor
+  counters and a per-tick `unified-ticks.csv`.
+- Scripts: `scripts/unified-batch.py` and `scripts/unified-ab.py`, the pre-registered analyses.
+- After the gate (exploratory, not gate evidence): `UnifiedSlipDiagnostic`, and two default-off hooks in
+  `UnifiedHarness` (`trace`, `nodeBudget`) that the bench never sets.
+
+**Not changed:**
+
+- the A* planner (`PhysicsPathfinder`, its node budget, and the legacy `AStarPathFinder`);
+- every key-writer site except the `PhysicsTravel` path: 277 raw `setInputForceState`/`clearAllKeys` matches in 33
+  files at the base `b27153fdf`, 279 at the head (+1 `clearAllKeys` in `PhysicsTravel`'s cancel stop, +1 javadoc
+  mention in `InputOverrideHandler`). None was migrated (B6);
+- `predictionTolerance` (default false, off in every arm);
+- `inputArbitration` (default false); the executor uses the arbiter object directly, behind its own flag;
+- the pre-registered criteria.
+
+**Findings:**
+
+1. **Ownership is safe inside the runs (H3 Tier S; L2 holds per lap in both seeds).** No early release, no
+   overwrite, no stale write, and no conflicting press landed in any unified run or B/D lap. Every end left no key
+   down and no lease held, in the state its outcome names. **It is not exclusive on the live cancel path:** outside
+   the laps, the lap-end cancel released the executor's keys 43 times (81011) and 41 times (81012) without telling
+   it, through the `clearAllKeys()` calls in four processes' `onLostControl()`. No key stayed down and no
+   conflicting press landed, but on the task's rule this alone keeps the executor off.
+2. **The correction cuts replans** in every disturbed family (H5, Tier S): plans −0.07 (edge) to −8.3 (conflict) per
+   run, all CIs below 0. In conflict the gate refuses the other behaviour's presses before the tick, so unified never
+   diverges and is 15% faster (ratio 0.853). Elsewhere the tick counts are equal.
+3. **Cancel is fast** (H6, Tier S): median 1 tick, max 12, against legacy's median 35, which waits for the run to end.
+4. **Overhead is acceptable** (H7, Tier S): p95 +0.6 µs. The p99 equals the slowest tick in every run, which is a
+   planning tick, so it measures replanning, not the executor.
+5. **Reliability fails on slip (H2).** On worlds slipperier than the model (0.65–0.98 against 0.6), unified arrived
+   in 239 of 300 trials against legacy's 247 (allowed loss 3). Every lost trial ended EMPTY_PLAN: the A* planner used
+   up its 1500-node harness budget and returned nothing. In 8 of the 9 unified-only losses unified failed by tick 3
+   to 7, after one accepted correction and one escalation; legacy, replanning every tick, arrived in 48–69 ticks.
+   A slip diagnostic run after the gate (exploratory, BENCHMARKS) reproduces this exactly and shows a
+   node-budget effect: from unified's failing states 1500 nodes find no plan and 3000 do, and at 6000 or more
+   both arms arrive in 300 of 300. Production uses the same 1500 budget.
+6. **Live (Tier L):** two seeds × 96 laps, IMPROVEMENT. 96/96 reached per seed in every mode, with no stuck key, death or
+   new fault. Drift replans lower in both pairs and both seeds (−0.458 to −0.542 a lap). Physics plans and lap ticks
+   no different (one slow leg, D/C ridges 1.033 in 81011, not repeated). Client-tick overhead inconclusive (pooled
+   p95 +0.491 ms, CI +0.061..+1.170): the client tick includes rendering and the server. Cancel latency not measured
+   live.
+
+**Decision:**
+
+- **Gate FAIL** (pre-registered rule: a reliability failure, H2). `unifiedExecutor` stays default **false**.
+- Exclusive input ownership is not established on the live cancel path, which on its own keeps it off.
+- The criterion is not redefined and the batch is not re-run until it passes. The slip diagnostic was run after the
+  gate was judged and is not evidence for it.
+- The code stays in the tree, off. Off, the physics driver runs the pre-Phase-06 path (H1: 0 mismatches over 300
+  clean trials; full suite 1595 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped).
+
+**Recommended next action (owner decision):**
+
+- Close the cancel path first (B6): `PathingBehavior.cancelEverything()` tells the executor before
+  `onLostControl()` runs, and the `onLostControl()` `clearAllKeys()` calls go through the arbiter.
+- Fix the slip loss before any new evaluation. Two directions, either as its own pre-registered run on fresh seeds:
+  - escalate to a replan with a larger node budget (or fall back to the legacy replan) when the replan after a
+    correction comes back empty (the slip diagnostic supports this);
+  - or do not accept a REPLAY when the divergence comes from a surface slipperier than the model, so the plan is
+    replaced from a slower, less drifted state, as legacy does.
+- Only then consider a live run with the flag on, and only after that a default change.
+- B6 stays open: the gate refuses other writers only on the `PhysicsTravel` path, and only with the flag on.
