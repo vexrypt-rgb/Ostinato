@@ -73,7 +73,9 @@ public final class UnifiedExecutor {
     /** Why the last command ended. */
     public enum Cause {
         DROP, YIELD, EMPTY_PLAN, M01, EXECUTOR_CANCEL, SEGMENT_CANCEL, EMERGENCY, PAUSE, SOFT_CANCEL, STALE,
-        SEGMENT_END, FLAG_OFF, HOLDER_CHANGE, REFUSED, WORLD_CHANGE, IDLE, CANCEL_STOP
+        SEGMENT_END, FLAG_OFF, HOLDER_CHANGE, REFUSED, WORLD_CHANGE, IDLE, CANCEL_STOP,
+        /** Every process was cancelled while the segment cancel was refused. */
+        PROCESS_CANCEL
     }
 
     public enum Counter {
@@ -90,7 +92,9 @@ public final class UnifiedExecutor {
         INTACT_TICKS, OWNED_TICKS,
         DIVERGENCE_CHECKS, DIVERGENCES, PREDICTION_UNAVAILABLE,
         CORRECTIONS, CORRECTIONS_ACCEPTED, ESCALATIONS,
-        CANCEL_LATENCY_SUM, CANCEL_LATENCY_MAX
+        CANCEL_LATENCY_SUM, CANCEL_LATENCY_MAX,
+        /** Leases given up, verified, because every process was about to be cancelled while the segment ran on. */
+        PROCESS_CANCELS
     }
 
     private final InputArbiter arbiter;
@@ -359,6 +363,24 @@ public final class UnifiedExecutor {
                 latency();
             }
         }
+        clearStreak();
+    }
+
+    /**
+     * Every process is about to lose control while the segment cancel was refused. A process's {@code onLostControl}
+     * may clear every key, the driver's included, so the driver gives up its lease first: it lifts its own keys and the
+     * lease ends here, acknowledged. If the segment runs on, the driver takes a new lease on its next write, and a
+     * cancel request starts its count over. Records no cancel latency: this ends the lease, not the segment.
+     */
+    public void processesCancelled() {
+        if (lease == null) {
+            return;
+        }
+        releaseFrame();
+        arbiter.confirmRelease(OWNER);
+        boolean ok = verified();
+        lease = null;
+        end(ok ? Outcome.CANCELLED_CONFIRMED : Outcome.UNKNOWN, Cause.PROCESS_CANCEL, ok ? Counter.PROCESS_CANCELS : Counter.UNKNOWNS);
         clearStreak();
     }
 

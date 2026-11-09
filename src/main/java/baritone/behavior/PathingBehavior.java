@@ -532,6 +532,11 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             secretInternalSegmentCancel();
         } else {
             cancelRefused();
+            UnifiedExecutor ux = unified();
+            if (ux != null) {
+                // onLostControl below may clear every key; the driver gives up its lease first, so none goes up behind it
+                ux.processesCancelled();
+            }
         }
         baritone.getPathingControlManager().cancelEverything(); // regardless of if we can stop the current segment, we can still stop the processes
         return doIt;
