@@ -1190,3 +1190,224 @@ code changed. Nothing in the baseline changed:
 Same command as Phase 04: 1537 tests, 1 failed, 21 skipped, 4 min 26 s. The failure is the pre-existing B5
 `SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop`. The 2 extra tests and 2 extra skips against Phase 04
 are the env-gated `SimEdgeProfileTest` and `SimEdgeDivergenceTest`, which skip without their variables.
+
+## Phase 06: unified executor (2026-11-08, branch `ostinato2/claude-review`, local only)
+
+Scope: the `unifiedExecutor` setting (default **false**).
+- When on, the physics driver path (`PhysicsTravel`) drives the player's movement keys under one owner:
+  - a `UnifiedExecutor` lease with an epoch;
+  - writes from a stale epoch are rejected;
+  - a cancel is acknowledged only once the player is stopped on the ground;
+  - an emergency can preempt the lease;
+  - the keys are released when the lease ends.
+- Each tick, the driver compares its prediction with what the client observed. On a miss it gets one bounded
+  correction (`CorrectionPolicy`). If the correction does not bring it back, it escalates to the existing drift
+  replan.
+- Unchanged:
+  - the A* planner;
+  - every other input site (only the `PhysicsTravel` path is migrated);
+  - `predictionTolerance`.
+- The flag stays default false in Phase 06, whatever the result below.
+
+### Pre-registered criteria (written 2026-11-08, before any data was collected)
+
+**Already seen, not gate evidence.**
+- The 12 fixed scenarios in `UnifiedHeadlessTest` were run during development: walk, turn, sprint, jump,
+  collision, velocity change, nudge, slippery ground, cancel, cancel mid jump, conflicting inputs, and release after
+  failure.
+- Their results were seen before this was written. They are unit evidence only and are not used for any criterion
+  below.
+- The batch draws fresh trials from seeds that were never run.
+
+**Tiers.**
+- **Tier S** is the headless batch. `UnifiedHarness` copies the driver tick on block worlds. It is not `PhysicsTravel`
+  and not the client.
+- **Tier L** is the live A/B on the 26.3 client.
+- No Tier-L claim is made from headless results.
+
+**Statistics.** Every bootstrap here uses:
+- 10,000 resamples;
+- `random.Random(20261108)`;
+- the percentile 95% interval (sorted resample index 250 and 9749).
+
+#### Tier S: headless batch (`UnifiedBatchBench`, judged by `scripts/unified-batch.py`)
+
+**Run.**
+- Command: `-Postinato_bench --tests "*UnifiedBatchBench"`.
+- Trials: N = 300 per family, six families, so 1800 trials and 3600 runs.
+- Seeds:
+  - Family `k` (0-based, in the order below) draws from `new Random(6061 + k)`.
+  - Every trial is generated before any run.
+  - The warm-up draws from 7071 (4 trials per family, both arms) and is thrown away.
+- Arm order alternates: legacy first on even trials, unified first on odd.
+- Per run, the bench records:
+  - outcome, ticks, plans, drift replans, jumps and sprints;
+  - the end position and end state;
+  - the keys down at the end, and whether the lease is still held;
+  - cancel latency;
+  - per-tick driver time (p50/p95/p99/max) and plan time;
+  - thread CPU time and allocated bytes;
+  - every executor counter.
+
+**Families.** The model always assumes slipperiness 0.6. Start (0.5, 0.5) unless noted. 200 ticks max unless noted.
+
+| Family | World | Draws |
+|---|---|---|
+| clean | ground x −3..3, z −1..14 | start x ∈ {−2.5 … 3.5} (integer + 0.5); goal x likewise; goal z ∈ {4.5 … 13.5} |
+| kick | ground x −4..4, z −1..14; goal (0.5, 10.5) | velocity kick at tick 2..15; angle uniform 0..2π; magnitude uniform 0.05..0.6 |
+| slip | ground x −3..3, z −1..14 | the world's slipperiness uniform 0.65..0.98; goal as in clean; 400 ticks max |
+| conflict | ground x −4..4, z −1..12; goal z ∈ {5.5 … 10.5} | another behaviour presses `after` (LEFT, RIGHT or BACK) once the driver has written, and `before` (none, LEFT or RIGHT) ahead of it, from tick 1..8 for 3..20 more ticks, every 1..3 ticks |
+| cancel | 50/50: the gap world (two pads, goal z 6.5) or the long world (x −1..1, z −1..20, goal z 16.5) | a cancel request every tick from tick 2..25 |
+| edge | a 1-wide walkway z −1..14; goal (0.5, 12.5) | sideways kick at tick 2..15, vx = ±uniform(0.1, 1.0) |
+
+The disturbed families are kick, slip, conflict and edge.
+
+**H1. Clean: the flag changes nothing where nothing pushes the player.**
+- Holds when, in every clean trial, legacy and unified are equal on outcome, ticks, plans, drift replans, end x/y/z,
+  jumps and sprints.
+- Also required: unified DIVERGENCES = 0, legacy drift replans = 0, and n > 0.
+
+**H2. Reliability.** Per family, with allowed = ceil(1% of n):
+- Non-cancel families: unified ARRIVED ≥ legacy ARRIVED − allowed.
+- Cancel family: a cancel stop is the intended outcome, so the test is the other way round. Unified outcomes other
+  than ARRIVED or CANCEL_STOP must be ≤ legacy outcomes other than ARRIVED, + allowed.
+- Any REFUSED outcome in either arm fails H2. REFUSED means the executor refused its only driver.
+
+**H3. Safety, every unified trial.**
+- RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0.
+- No conflicting press lands while the lease is held.
+- For every outcome except TIMEOUT:
+  - no key is down at the end;
+  - the lease is not held;
+  - the executor's final state matches the outcome:
+
+    | Outcome | Final state |
+    |---|---|
+    | ARRIVED | COMPLETED_VERIFIED |
+    | CANCEL_STOP | CANCELLED_CONFIRMED |
+    | EMPTY_PLAN | FAILED |
+
+- Every CANCEL_STOP ends on the ground.
+- TIMEOUT outcomes are counted and reported, not judged on keys and lease: the harness does not hand the lease back
+  on a timeout.
+- CONFLICTS (presses refused) and ERASED are diagnostic.
+
+**H4. The correction is bounded and counted.** Every unified trial must satisfy:
+- CORRECTIONS ≤ plans;
+- CORRECTIONS_ACCEPTED ≤ CORRECTIONS;
+- ESCALATIONS = drift replans.
+
+In addition, every legacy trial has all executor counters at 0.
+
+**H5. Disturbed families: plans and ticks, paired unified − legacy.**
+- Plans:
+  - Statistic: the mean paired difference, with its bootstrap CI.
+  - Recorded as **fewer replans** (Tier S) if the CI upper bound is < 0.
+- Ticks:
+  - Statistic: the mean of the unified/legacy ratio, over pairs where both arrived, with its bootstrap CI.
+  - **Regression** if the CI lower bound is > 1.03.
+  - **Faster** (Tier S) if the CI upper bound is < 0.97.
+
+**H6. Cancel latency.** Cancel latency is the number of ticks from the first request to the stop. Legacy waits for the
+run to end. Over cancel-family trials where the unified request came before arrival, H6 holds when:
+- no unified trial lacks a stop or an arrival after the request;
+- the median of the unified latencies is ≤ 10 ticks and the max is ≤ 20 ticks;
+- among pairs where both latencies are defined and legacy's is ≥ 5, unified is strictly lower in ≥ 90% (1.0 when
+  there are no such pairs).
+
+Notes:
+- Unified slower than legacy in a pair is reported, not gated. A mid-air request waits for the landing, and legacy can
+  arrive first.
+- No such trial at all fails H6.
+
+**H7. Overhead.**
+- Data: per-run driver tick time, p95 and p99, paired unified − legacy, all families pooled (plan ticks included).
+- Statistic: the median paired difference, with its bootstrap CI.
+- **Acceptable:** the CI upper bound is ≤ 0.5 ms for both p95 and p99.
+- **FAIL:** a CI lower bound is > 0.5 ms.
+- **Otherwise:** inconclusive.
+- Diagnostic only: p50, max, per-family plan time, CPU and allocation, and the clean-only p50 difference.
+
+**Tier S fails** if any of H1–H6 fails or H7 is FAIL.
+
+#### Tier L: live A/B (`LegatoLiveTest`, judged by `scripts/unified-ab.py`)
+
+**Run.**
+- Properties: `-Dostinato.legatotest.arms=unified -Dostinato.legatotest.stack=physics`, 6 reps, on the simedge course
+  (slalom, ridges, bumps, steps), so 96 laps per seed.
+- Seeds: 81011, then 81012 for reproducibility.
+- Arms: A and C have `unifiedExecutor` off; B and D have it on. `predictionTolerance` is at its default (off) in
+  every arm.
+- Replications: B/A and D/C. Noise: C/A (A against A′).
+- Why `physics`: the executor only owns the `PhysicsTravel` path. The same reason is given in Phase 04 B3.
+
+**L1. Reliability, in each seed.** All of the following must hold:
+- the flag is on in every B/D lap and off in every A/C lap, and `predictionTolerance` is off in every lap;
+- reached(B) ≥ reached(A) − 1 and reached(D) ≥ reached(C) − 1;
+- no stuck-key log line;
+- no death;
+- no fault code in B/D that A/C never show.
+
+**L2. Ownership safety, in each seed.** All of the following must hold:
+- in every B/D lap, RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0;
+- no executor counter except CANCEL_LATENCY_MAX moves in an A/C lap;
+- OWNED_TICKS > 0 over the B/D laps (otherwise nothing was tested);
+- every B/D lap has CORRECTIONS ≤ physics plans and ESCALATIONS = drift replans.
+
+**L3. Completion time.**
+- Statistic: per leg, the median paired lap-ticks ratio over pairs where both laps reached.
+- A leg is:
+  - **fast** when the ratio is ≤ 0.97 and 1 − ratio exceeds that leg's |C/A − 1|;
+  - **slow** when the ratio is ≥ 1.03 and ratio − 1 exceeds that leg's |C/A − 1|.
+- A pair (B/A or D/C) shows:
+  - a **time improvement** with ≥ 2 fast legs and no leg ≥ 1.03 at all;
+  - **slower** with ≥ 2 slow legs.
+
+**L4. Replans and recovery.**
+- Measures, per lap: physics plans, drift replans, and cancels + rewinds.
+- Statistic: the mean paired difference (on − off) over all pairs, with its bootstrap CI.
+- **Lower** if the mean is < 0 and the CI upper bound is < 0.
+- **Higher** if the CI lower bound is > 0.
+- Also recorded: whether strictly more laps reached with the flag on.
+
+**L5. Overhead.**
+- Data: client tick time, p95 and p99 per lap, paired on − off for the same seed, leg and repetition, both seeds pooled.
+- Statistic: the median paired difference, with its bootstrap CI.
+- **Acceptable:** the CI upper bound is ≤ 0.5 ms for both p95 and p99.
+- **FAIL:** a CI lower bound is > 0.5 ms.
+- **Otherwise:** inconclusive.
+- Diagnostic only: p50, max and allocation.
+
+**L6. Cancel latency: not measured live.** The course cancels only at lap end, so the live number would not mean
+anything. Cancel latency is a Tier-S result only (H6).
+
+**Tier L verdict.**
+- **FAIL:** any of the following:
+  - L1 or L2 fails in either seed;
+  - L3 is slower in both replications and both seeds;
+  - physics plans are higher (L4) in both replications and both seeds;
+  - L5 is FAIL.
+- **IMPROVEMENT:** any one of time (L3), physics plans, drift replans, cancels + rewinds (L4), or strictly more
+  reached improves in both replications and both seeds.
+- **Otherwise:** "no improvement, no regression".
+
+If the live run cannot be done, that is recorded as a blocker, and no Tier-L claim is made.
+
+#### Phase 06 gate
+
+- **PASS:** all of the following:
+  - Tier S does not fail;
+  - H3 and L2 hold;
+  - H7 and L5 are acceptable;
+  - the Tier L verdict is IMPROVEMENT.
+- **FAIL:** any of the following:
+  - a safety violation (H3 or L2);
+  - a reliability failure (H2 or L1);
+  - H1, H4 or H6 fails;
+  - a regression (H5 regression, L3 slower, or L4 more plans as defined above);
+  - overhead FAIL (H7 or L5).
+- **PARTIAL:** anything else. For example:
+  - safety holds and nothing regresses, but improvements are Tier S only;
+  - the live evidence is missing or incomplete;
+  - an overhead result is inconclusive.
+- Whatever the class, `unifiedExecutor` stays default false in Phase 06. Enabling it is a later decision.
