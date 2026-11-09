@@ -18,6 +18,7 @@
 package baritone.pathing.physics;
 
 import baritone.pathing.kinematic.PlayerSim;
+import baritone.pathing.unified.UnifiedExecutor;
 
 import java.util.List;
 
@@ -36,6 +37,86 @@ public final class CorrectionPolicy {
     static final double FLOOR = 1.0;
 
     private CorrectionPolicy() {}
+
+    /** What the predicted-vs-observed check came to on one tick. */
+    public enum Verdict {
+        /** No prediction to check: the plan is new this tick, or there is none. */
+        UNAVAILABLE(false, false),
+        /** The player is where the last tick said it would be. */
+        ON_PLAN(false, false),
+        /** Drifted, and a correction is due: replay the plan, then {@link #replayed}. Never final. */
+        REPLAY(false, true),
+        /** Drifted, and the replay from where the player is still reaches the goal: the plan is kept. */
+        CORRECTED(false, true),
+        /** Drifted, and the replay misses: the correction is spent and the drift replans. */
+        MISSED(true, true),
+        /** Drifted with the correction already spent, or with the plan done or aimed elsewhere: replan. */
+        ESCALATED(true, false);
+
+        /** Whether the drift replans. */
+        public final boolean replan;
+        /** Whether this spent the plan's correction. */
+        public final boolean spent;
+
+        Verdict(boolean replan, boolean spent) {
+            this.replan = replan;
+            this.spent = spent;
+        }
+
+        /** Counts this verdict on the executor's divergence counters. */
+        public void count(UnifiedExecutor ux) {
+            if (this == REPLAY) {
+                throw new IllegalStateException("a replay has to be judged before it is counted");
+            }
+            if (this == UNAVAILABLE) {
+                ux.bump(UnifiedExecutor.Counter.PREDICTION_UNAVAILABLE);
+                return;
+            }
+            ux.bump(UnifiedExecutor.Counter.DIVERGENCE_CHECKS);
+            if (this == ON_PLAN) {
+                return;
+            }
+            ux.bump(UnifiedExecutor.Counter.DIVERGENCES);
+            if (spent) {
+                ux.bump(UnifiedExecutor.Counter.CORRECTIONS);
+            }
+            if (this == CORRECTED) {
+                ux.bump(UnifiedExecutor.Counter.CORRECTIONS_ACCEPTED);
+            }
+            if (replan) {
+                ux.bump(UnifiedExecutor.Counter.ESCALATIONS);
+            }
+        }
+    }
+
+    /**
+     * The check before any replay. {@link Verdict#REPLAY} means spend the correction: replay the plan with
+     * {@link #replayReaches} and pass the answer to {@link #replayed}.
+     *
+     * @param predicted  whether last tick left a prediction for this one
+     * @param drifted    whether the player left it, by the drift check as it stands
+     * @param used       corrections this plan has spent
+     * @param planDone   whether the plan has no steps left
+     * @param retargeted whether the path moved the goal since the plan was made
+     */
+    public static Verdict judge(boolean predicted, boolean drifted, int used, boolean planDone, boolean retargeted) {
+        if (!predicted) {
+            return Verdict.UNAVAILABLE;
+        }
+        if (!drifted) {
+            return Verdict.ON_PLAN;
+        }
+        // A plan that is done or aimed elsewhere is replanned anyway: a correction would save nothing.
+        if (used >= BUDGET || planDone || retargeted) {
+            return Verdict.ESCALATED;
+        }
+        return Verdict.REPLAY;
+    }
+
+    /** The verdict once the replay a {@link Verdict#REPLAY} asked for has run. */
+    public static Verdict replayed(boolean reached) {
+        return reached ? Verdict.CORRECTED : Verdict.MISSED;
+    }
 
     /**
      * Whether {@code plan} from {@code step} on, flown from {@code from}, ends on the ground within {@code radius}

@@ -223,31 +223,19 @@ public final class PhysicsTravel {
      * @return whether to replan for drift
      */
     private boolean checkDivergence(UnifiedExecutor ux, boolean drifted, int end, BetterBlockPos goal) {
-        if (plan == null || step == 0) {
-            ux.bump(UnifiedExecutor.Counter.PREDICTION_UNAVAILABLE);
-            return drifted;
+        boolean predictedTick = plan != null && step > 0;
+        CorrectionPolicy.Verdict v = CorrectionPolicy.judge(predictedTick, drifted, corrections,
+                predictedTick && step >= plan.size(), end != target);
+        if (v == CorrectionPolicy.Verdict.REPLAY) {
+            corrections++;
+            if (scratch == null) {
+                scratch = new PlayerSim(world);
+            }
+            v = CorrectionPolicy.replayed(CorrectionPolicy.replayReaches(scratch, real, plan, step,
+                    goal.x + 0.5, goal.y, goal.z + 0.5, 0.35));
         }
-        ux.bump(UnifiedExecutor.Counter.DIVERGENCE_CHECKS);
-        if (!drifted) {
-            return false;
-        }
-        ux.bump(UnifiedExecutor.Counter.DIVERGENCES);
-        // A plan that is done or aimed elsewhere is replanned anyway: a correction would save nothing.
-        if (corrections >= CorrectionPolicy.BUDGET || step >= plan.size() || end != target) {
-            ux.bump(UnifiedExecutor.Counter.ESCALATIONS);
-            return true;
-        }
-        corrections++;
-        ux.bump(UnifiedExecutor.Counter.CORRECTIONS);
-        if (scratch == null) {
-            scratch = new PlayerSim(world);
-        }
-        if (CorrectionPolicy.replayReaches(scratch, real, plan, step, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35)) {
-            ux.bump(UnifiedExecutor.Counter.CORRECTIONS_ACCEPTED);
-            return false;
-        }
-        ux.bump(UnifiedExecutor.Counter.ESCALATIONS);
-        return true;
+        v.count(ux);
+        return v.replan;
     }
 
     /** Hands the controls back. With the unified executor on, the keys this driver pressed are lifted first. */
