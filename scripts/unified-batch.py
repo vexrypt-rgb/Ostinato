@@ -1,6 +1,8 @@
 # Ostinato 2.0 Phase 06, Tier S: the headless batch (UnifiedBatchBench), legacy against unified, judged against the
-# pre-registered criteria H1-H7 in docs/ostinato2/BENCHMARKS.md ("Phase 06 pre-registration").
-# Usage: python scripts/unified-batch.py docs/ostinato2/raw/phase06/headless-batch.csv
+# pre-registered criteria H1-H7 in docs/ostinato2/BENCHMARKS.md ("Phase 06 pre-registration"), and Phase 06A's R1, R2
+# and slip mechanism check ("Phase 06A: executor safety and reliability recovery").
+# Usage: python scripts/unified-batch.py docs/ostinato2/raw/phase06a/headless-batch.csv
+# A Phase 06 CSV (no retry columns) still loads; the Phase 06A checks then find nothing exercised.
 import csv
 import math
 import random
@@ -16,12 +18,15 @@ NON_CANCEL = ("clean", "kick", "slip", "conflict", "edge")
 STATE_FOR = {"ARRIVED": "COMPLETED_VERIFIED", "CANCEL_STOP": "CANCELLED_CONFIRMED", "EMPTY_PLAN": "FAILED"}
 INTS = ("trial", "order", "ticks", "plans", "driftReplans", "collided", "kickedAt", "cancelFrom", "cancelRefusals",
         "cancelLatency", "preLanded", "conflictLanded", "jumps", "sprints", "tickN", "tickP50Ns", "tickP95Ns", "tickP99Ns",
-        "tickMaxNs", "planNs", "cpuNs", "allocBytes")
+        "tickMaxNs", "planNs", "cpuNs", "allocBytes", "retryNs", "retryNsMax")
 COUNTERS = ("ACQUIRES", "ACQUIRE_REFUSED", "COMPLETIONS", "HANDOVERS", "FAILURES", "CANCELS", "CANCEL_STOPS",
             "CANCEL_REFUSALS", "STALE_REJECTS", "PREEMPTIONS", "UNKNOWNS", "CONFLICTS", "ERASED", "OVERWRITTEN",
             "RELEASED_EARLY", "INTACT_TICKS", "OWNED_TICKS", "DIVERGENCE_CHECKS", "DIVERGENCES",
             "PREDICTION_UNAVAILABLE", "CORRECTIONS", "CORRECTIONS_ACCEPTED", "ESCALATIONS", "CANCEL_LATENCY_SUM",
-            "CANCEL_LATENCY_MAX")
+            "CANCEL_LATENCY_MAX", "PROCESS_CANCELS", "CORRECTION_RETRIES", "CORRECTION_RETRY_PLANS")
+# Phase 06A, R2 (milliseconds): bounds on the per-run largest retry and largest tick, over unified runs that retried.
+RETRY_P95_MS, RETRY_MAX_MS = 150, 250
+TICK_P95_MS, TICK_MAX_MS = 250, 400
 
 
 def boot(xs, stat):
@@ -147,7 +152,7 @@ def h4(pairs):
         if not (u["CORRECTIONS"] <= u["plans"] and u["ESCALATIONS"] == u["driftReplans"]
                 and u["CORRECTIONS_ACCEPTED"] <= u["CORRECTIONS"]):
             bad.append((f"{fam}-{t}", u["CORRECTIONS"], u["CORRECTIONS_ACCEPTED"], u["plans"], u["ESCALATIONS"], u["driftReplans"]))
-        if any(p["legacy"][c] != 0 for c in COUNTERS):
+        if any(p["legacy"].get(c, 0) != 0 for c in COUNTERS):
             bad.append((f"{fam}-{t}", "legacy counters moved"))
     print("| family | divergences | corrections | accepted | escalations | unified driftReplans | legacy driftReplans |")
     print("|---|---|---|---|---|---|---|")
@@ -260,9 +265,77 @@ def h7(pairs):
     return final
 
 
+def nearest_rank(xs, q):
+    s = sorted(xs)
+    return s[max(0, math.ceil(q * len(s)) - 1)]
+
+
+def retry_bounded(pairs):
+    print("\n## R1 (Phase 06A) the retry is bounded and counted, every unified run")
+    bad = []
+    for (fam, t), p in pairs.items():
+        u = p["unified"]
+        n, found, esc = u.get("CORRECTION_RETRIES", 0), u.get("CORRECTION_RETRY_PLANS", 0), u["ESCALATIONS"]
+        if not (n <= esc and found <= n and n - found <= 1) or (n - found == 1 and u["end"] != "EMPTY_PLAN"):
+            bad.append((f"{fam}-{t}", n, found, esc, u["end"]))
+    print("| family | escalations | retries | retry plans | runs that retried | failed retry ended EMPTY_PLAN |")
+    print("|---|---|---|---|---|---|")
+    for fam in families(pairs):
+        us = [p["unified"] for (f, _), p in pairs.items() if f == fam]
+        s = lambda k: sum(u.get(k, 0) for u in us)
+        failed = [u for u in us if u.get("CORRECTION_RETRIES", 0) - u.get("CORRECTION_RETRY_PLANS", 0) == 1]
+        print(f"| {fam} | {s('ESCALATIONS')} | {s('CORRECTION_RETRIES')} | {s('CORRECTION_RETRY_PLANS')} | "
+              f"{sum(u.get('CORRECTION_RETRIES', 0) > 0 for u in us)} | {sum(u['end'] == 'EMPTY_PLAN' for u in failed)}/{len(failed)} |")
+    print(f"violations {len(bad)} {bad[:10]}")
+    ok = not bad
+    print(f"R1: {'holds' if ok else 'FAILS'}")
+    return ok
+
+
+def retry_time(pairs):
+    print("\n## R2 (Phase 06A) search and tick time, unified runs with at least one retry (nearest-rank p95)")
+    us = [p["unified"] for p in pairs.values() if p["unified"].get("CORRECTION_RETRIES", 0) > 0]
+    if not us:
+        print("no unified run retried")
+        print("R2: not exercised")
+        return "not exercised"
+    rm = [u["retryNsMax"] / 1e6 for u in us]
+    tm = [u["tickMaxNs"] / 1e6 for u in us]
+    rp, rx, tp, tx = nearest_rank(rm, 0.95), max(rm), nearest_rank(tm, 0.95), max(tm)
+    ok = rp <= RETRY_P95_MS and rx <= RETRY_MAX_MS and tp <= TICK_P95_MS and tx <= TICK_MAX_MS
+    print(f"runs {len(us)}; retryNsMax p95 {rp:.2f} ms (<= {RETRY_P95_MS}), max {rx:.2f} ms (<= {RETRY_MAX_MS}); "
+          f"tickMaxNs p95 {tp:.2f} ms (<= {TICK_P95_MS}), max {tx:.2f} ms (<= {TICK_MAX_MS}); "
+          f"retryNsMax median {statistics.median(rm):.2f} ms")
+    print("\ndiagnostic, per family: unified retry time and its share of unified plan time")
+    print("| family | runs that retried | retry ms total | plan ms total | share |")
+    print("|---|---|---|---|---|")
+    for fam in families(pairs):
+        fs = [p["unified"] for (f, _), p in pairs.items() if f == fam]
+        rt = sum(u.get("retryNs", 0) for u in fs) / 1e6
+        pt = sum(u["planNs"] for u in fs) / 1e6
+        print(f"| {fam} | {sum(u.get('CORRECTION_RETRIES', 0) > 0 for u in fs)} | {rt:.1f} | {pt:.1f} | {(rt / pt if pt else 0):.1%} |")
+    v = "holds" if ok else "missed"
+    print(f"R2: {v}")
+    return v
+
+
+def slip_mechanism(pairs):
+    print("\n## Slip mechanism (Phase 06A): retry plans over the unified slip runs")
+    us = [p["unified"] for (f, _), p in pairs.items() if f == "slip"]
+    found = sum(u.get("CORRECTION_RETRY_PLANS", 0) for u in us)
+    rescued = [u for u in us if u.get("CORRECTION_RETRY_PLANS", 0) > 0]
+    ends = {}
+    for u in rescued:
+        ends[u["end"]] = ends.get(u["end"], 0) + 1
+    print(f"retry plans {found}; runs with a retry plan {len(rescued)}, their ends {ends} (arrived {ends.get('ARRIVED', 0)})")
+    ok = found > 0
+    print(f"slip mechanism: {'holds' if ok else 'FAILS'}")
+    return ok
+
+
 def main(path):
     pairs = load(path)
-    print(f"# Phase 06 headless batch: {len(pairs)} paired trials, families {families(pairs)}")
+    print(f"# Phase 06/06A headless batch: {len(pairs)} paired trials, families {families(pairs)}")
     orders = {}
     for p in pairs.values():
         orders[p["unified"]["order"]] = orders.get(p["unified"]["order"], 0) + 1
@@ -271,11 +344,14 @@ def main(path):
     r5, fewer, faster = h5(pairs)
     r6 = h6(pairs)
     r7 = h7(pairs)
+    q1, q2, sm = retry_bounded(pairs), retry_time(pairs), slip_mechanism(pairs)
     print("\n# Tier S summary")
-    print(f"H1 {r1}; H2 {r2}; H3 {r3}; H4 {r4}; H5 no regression {r5}; H6 {r6}; H7 {r7}")
-    fail = not (r1 and r2 and r3 and r4 and r5 and r6) or r7 == "FAIL"
+    print(f"H1 {r1}; H2 {r2}; H3 {r3}; H4 {r4}; H5 no regression {r5}; H6 {r6}; H7 {r7}; R1 {q1}; R2 {q2}; slip mechanism {sm}")
+    fail = not (r1 and r2 and r3 and r4 and r5 and r6 and q1) or r7 == "FAIL"
     print(f"Tier S: {'FAIL' if fail else 'no failure'}; fewer replans in {[f for f, v in fewer.items() if v]}; "
           f"faster in {[f for f, v in faster.items() if v]} (Tier S only)")
+    s2 = r2 and q1 and q2 == "holds" and sm
+    print(f"S2 (slip blocker): {'resolved' if s2 else 'not resolved'} (H2 every family {r2}, R1 {q1}, R2 {q2}, slip mechanism {sm})")
 
 
 if __name__ == "__main__":

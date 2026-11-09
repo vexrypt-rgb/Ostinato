@@ -1,5 +1,6 @@
 # Ostinato 2.0 Phase 06, Tier L: the unifiedExecutor live A/B, judged against the pre-registered criteria L1-L6 in
-# docs/ostinato2/BENCHMARKS.md ("Phase 06 pre-registration").
+# docs/ostinato2/BENCHMARKS.md ("Phase 06 pre-registration"), and Phase 06A's L2' (ownership across lap boundaries,
+# from the run totals) in "Phase 06A: executor safety and reliability recovery".
 # Arms (LegatoLiveTest arms=unified): A off, B on, C off, D on. Replications: B/A and D/C. Noise: C/A.
 # Usage: python scripts/unified-ab.py <seed-1 legatotest lines> <seed-2 legatotest lines>
 import random
@@ -16,7 +17,10 @@ FAST, SLOW = 0.97, 1.03
 SAFETY = ("RELEASED_EARLY", "OVERWRITTEN", "STALE_REJECTS")
 SHOWN = ("ACQUIRES", "COMPLETIONS", "HANDOVERS", "FAILURES", "CANCELS", "CANCEL_STOPS", "PREEMPTIONS", "UNKNOWNS",
          "CONFLICTS", "ERASED", "OVERWRITTEN", "RELEASED_EARLY", "STALE_REJECTS", "DIVERGENCE_CHECKS", "DIVERGENCES",
-         "PREDICTION_UNAVAILABLE", "CORRECTIONS", "CORRECTIONS_ACCEPTED", "ESCALATIONS")
+         "PREDICTION_UNAVAILABLE", "CORRECTIONS", "CORRECTIONS_ACCEPTED", "ESCALATIONS", "PROCESS_CANCELS",
+         "CORRECTION_RETRIES", "CORRECTION_RETRY_PLANS")
+# Phase 06A, L2': these run totals must be 0 (they include the ticks between laps, which the lap rows do not).
+GAP_SAFETY = ("RELEASED_EARLY", "OVERWRITTEN", "STALE_REJECTS", "UNKNOWNS")
 
 
 def boot(diffs, stat):
@@ -108,6 +112,23 @@ def analyse(label, laps, stuck, totals):
     print(f"safety violations {len(viol)} {viol[:10]}; corrections bounded and escalations == driftReplans in every lap: {bounded}")
     print(f"L2: {'holds' if l2 else 'FAILS'}" + ("" if owned > 0 else " (the executor never owned a tick: nothing was tested)"))
 
+    print("\n## L2' (Phase 06A) ownership across lap boundaries, from the run totals")
+    if not totals:
+        l2p = "FAILS"
+        print("no 'unified totals' line in the log: the run did not finish")
+    else:
+        bad = {k: totals.get(k, 0) for k in GAP_SAFETY if totals.get(k, 0)}
+        pc = totals.get("PROCESS_CANCELS", 0)
+        l2p = "FAILS" if bad or stuck else "holds" if pc > 0 else "not exercised"
+        print(f"run totals {', '.join(f'{k}={totals.get(k, 0)}' for k in GAP_SAFETY)}; PROCESS_CANCELS={pc}; stuck-key lines {len(stuck)}")
+        lapsum = {k: sum(l["ux"].get(k, 0) for l in laps) for k in totals if k != "CANCEL_LATENCY_MAX"}
+        gap = {k: totals[k] - v for k, v in lapsum.items() if totals[k] - v}
+        print(f"diagnostic, run total - lap sum (events between laps): {gap}")
+    rt = sum(l["ux"].get("CORRECTION_RETRIES", 0) for l in laps if l["mode"] in "BD")
+    rp = sum(l["ux"].get("CORRECTION_RETRY_PLANS", 0) for l in laps if l["mode"] in "BD")
+    print(f"diagnostic, B/D laps: CORRECTION_RETRIES {rt}, CORRECTION_RETRY_PLANS {rp}")
+    print(f"L2': {l2p}")
+
     print("\n## L3 paired lap ticks (reached pairs), per leg: median ratio arm/base")
     print("| leg | B/A n | B/A | D/C n | D/C | C/A (A/A' noise) |")
     print("|---|---|---|---|---|---|")
@@ -171,7 +192,7 @@ def analyse(label, laps, stuck, totals):
     calls["B/A"]["reached"] = reached["B"] > reached["A"]
     calls["D/C"]["reached"] = reached["D"] > reached["C"]
     print(f"strictly more reached: B>A {calls['B/A']['reached']}, D>C {calls['D/C']['reached']}")
-    return dict(rel=rel, safe=l2, calls=calls, laps=laps)
+    return dict(rel=rel, safe=l2, gap=l2p, calls=calls, laps=laps)
 
 
 def overhead(all_laps):
@@ -229,6 +250,9 @@ def main(paths):
     regress = not rel or not safe or slow or more_plans
     verdict = "FAIL" if regress or ov == "FAIL" else "IMPROVEMENT" if any(improve.values()) else "no improvement, no regression"
     print(f"Tier L verdict: {verdict}; L5 overhead: {ov}; L6: live cancel latency not measured (cancels come only at lap end)")
+    gaps = [r["gap"] for r in results]
+    print(f"L2' per seed: {gaps}; holds and exercised in every seed: {all(g == 'holds' for g in gaps)}"
+          f"; any FAILS: {'FAILS' in gaps}")
 
 
 if __name__ == "__main__":
