@@ -1,5 +1,19 @@
 # Ostinato 2.0 — status
 
+**Phase 07 gate: FAIL. `pathingStateIdCache` stays default false** (DECISIONS D18, 2026-11-09).
+- Long-distance routing. No new hierarchy: planning wait is 0.26% of trip ticks over 116 held-out headless trips, so
+  a global layer has almost no travel time to save. The existing hierarchy stays off.
+- The slice is a 1024-entry block-state id cache at the profiled hotspot (Option A), behind a new default-false flag.
+  It changes no id and no cost.
+- Held out (Tier S): about 4% less planning time per node (long routes 0.9624, CI 0.9565–0.9686; PathBench SHORT
+  0.9429). No reliability or travel change, and cancel is unchanged.
+- **Why FAIL:**
+  - Guard G3 (exact equivalence) fails as written on 8 goal-mode pairs. The verified cause is a harness pairing
+    defect: the two arms switch to different goals. Every correctly paired trip is identical.
+  - The 30% target (P1) is missed in any case: the "40%" profile hotspot was safepoint bias, about 6% in truth.
+- The live A/B was not run (the failure rule: stop). Nothing is claimed at Tier L.
+- Phase 08 was **not** started.
+
 **Phase 06A gate: PASS. `unifiedExecutor` stays default false** (DECISIONS D17, 2026-11-09).
 - Phase 06A resolved the two Phase 06 blockers behind the same default-false flag. Phase 06 stays **FAIL** (below).
 - **S1, input ownership:** on the lap-end cancel, `PathingBehavior.cancelEverything()` now tells the executor before
@@ -11,7 +25,7 @@
 - Live (Tier L), 2 fresh seeds × 96 laps: no improvement, no regression; 96/96 laps reached in each seed;
   client-tick overhead inconclusive (p95 +0.27 ms, CI −0.20..+0.91).
 - **Promotion: not met.** Enabling the flag needs promotion evidence and the owner's separate authorization.
-- Phase 07 was **not** started.
+- Phase 07 came later (D18).
 
 **Phase 06 gate: FAIL. `unifiedExecutor` stays default false** (DECISIONS D16, 2026-11-08).
 - The unified executor owns the physics driver's movement keys behind a default-false flag. It was judged against
@@ -27,7 +41,7 @@
   loss 3). The lost trials end with the A* planner returning no plan.
 - Live (Tier L), 2 seeds × 96 laps: IMPROVEMENT, with fewer drift replans in both seeds; 96/96 laps reached in each
   seed and lap times unchanged; client-tick overhead inconclusive (p95 +0.49 ms, CI +0.06..+1.17).
-- Phase 07 was **not** started.
+- Phase 07 came later (D18).
 
 **Phase 04 gate: PROVISIONAL after live validation** (DECISIONS D14, 2026-11-08).
 - All six modes have validated Tier-L bounds for the 26.3 (D12) model.
@@ -110,6 +124,13 @@
      are unchanged.
    - A 1800-trial headless batch (seed 9091) and a live A/B on `SimEdgeCourse` (seeds 86021, 86022).
    - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase06a/`.
+8. **Phase 07** (2026-11-09; DECISIONS D18; criteria pre-registered in BENCHMARKS before any held-out or live run):
+   - Audit of the long-trip path, and `LongRouteSim`, a headless whole-trip simulator over 8 synthetic families and
+     5 modes (known, horizon, change, goal, cancel).
+   - Baseline, dev corpus and a JFR profile, then a decision gate (Option A, no new hierarchy).
+   - `StateIdCache` behind `pathingStateIdCache` (default **false**).
+   - A held-out headless A/B (long routes, seeds 3001 and 3002; PathBench, seed 3101).
+   - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase07/`.
 
 ## Phase 04 gate
 
@@ -333,11 +354,68 @@ recovery framework, no broad migration of input writers, no default change, noth
 - **Ownership is established on the lap-end cancel path only** (the refused branch of
   `PathingBehavior.cancelEverything()`). B6 stays open.
 
+## Phase 07 (long-distance routing, 2026-11-09)
+
+Scope: improve long-distance navigation per unit of compute and complexity, with a hierarchy as one hypothesis.
+
+Not in scope:
+- Phase 08;
+- a new physics engine, local planner, executor or scheduler;
+- a default change.
+
+Start HEAD `db28a1cc3` (clean).
+
+- **Commits** (local, `ostinato2/claude-review`):
+
+  | commit | content |
+  |---|---|
+  | `9591d363a` | long-route simulator and corpus |
+  | `fa7165a32` | goal switch at a fixed travel time, summary checks, dev raw |
+  | `2fc753991` | audit, baseline, dev corpus, profile, decision gate (Option A) |
+  | `57364373c` | `StateIdCache` behind `pathingStateIdCache` (default false), tests |
+  | `92961cddf` | dev A/B, profile diagnosis, pre-registration, held-out hooks, live arm, tools |
+  | the commit that last touched this file | held-out raw evidence and results |
+
+- **Flags:** `pathingStateIdCache`, new, default **false**. `pathingHierarchical` is unchanged (false).
+- **Harness switches** (test or harness only):
+  - `OSTINATO_LONGROUTE*`;
+  - `OSTINATO_BENCH_STATEIDS`;
+  - `OSTINATO_BENCH_SEED`;
+  - `-Dostinato.legatotest.arms=stateids`.
+- **Tests:** `StateIdCacheTest` (2), `LongRouteSimTest` (7, 1 skipped), `PathBenchTest` (4, 3 skipped) and
+  `SettingCatalogTest` (3) pass.
+  - Full suite at `57364373c`: 1613 tests, 2 failed, 24 skipped.
+  - The failures were B5 and `SettingCatalogTest.descriptionsJsonIsUpToDate`, caused by the new setting. That one was
+    fixed in `92961cddf` by regenerating `setting-descriptions.json`.
+  - The full suite was not re-run after the fix.
+- **Evidence** (BENCHMARKS "Phase 07 results"):
+
+  | tier | result |
+  |---|---|
+  | S, long routes, seeds 3001/3002, 113 pairs | ms per node 0.9624 (CI 0.9565–0.9686): **P1 missed** (target ≤ 0.70). G1 lost 0 / gained 0. G2 total ticks 1.0000. **G3: 8 of 88 differ, all goal mode**: a harness pairing defect, every other pair identical. Cancel 0.01 ms. |
+  | S, PathBench, seed 3101, 60 queries | G1 failed rows 30 vs 30. G4 SHORT 0.9429 (CI 0.9383–0.9699). ALL 0.9595. Travel cost identical. |
+  | L | not run (stopped on FAIL) |
+
+- **Classification: FAIL** (G3 as written). On valid pairs alone it would at best have been PARTIAL, since P1 is
+  missed either way.
+- **Harness defect (open):** `LongRouteSimTest.corpus` draws the goal-mode switch goal inside the per-arm loop (lines
+  223 and 237). Draw it once per route before reusing the goal mode.
+
 ## Next task
 
-**Owner decisions. Phase 06A is complete (gate PASS). Phase 07 was not started.**
+**Owner decisions. Phase 07 is complete (gate FAIL). Phase 08 was not started.**
 
-1. Phase 06A (D17):
+1. Phase 07 (D18):
+   - Keep `pathingStateIdCache` off. It is behaviour-identical and saves about 4% of planner CPU (Tier S); it cannot
+     meet a 30% target.
+   - Either archive it, or approve a new pre-registered confirmation: goal-mode pairing fixed, the live A/B run, and
+     a target sized for a 4% change.
+   - Do not fund a new long-distance hierarchy for travel time: planning wait is about 0.3% of trip ticks headless.
+   - If planner CPU matters, profile live with `-XX:+DebugNonSafepoints` first.
+   - Fix the goal-mode pairing in `LongRouteSimTest.corpus` before the harness is reused.
+   - The "about 4% longer" hierarchy note in `docs/pathbench/LONG_HORIZON.md:34` and `docs/guides/movement.md:41`
+     compares different query sets (0.9658 on the queries both solved). Not edited.
+2. Phase 06A (D17):
    - Keep `unifiedExecutor` off. Enabling it needs promotion evidence and the owner's separate authorization.
    - Before any default change, finish B6 on the paths the executor can run on: the four `onLostControl()`
      `clearAllKeys()` calls and the other direct `onLostControl()` callers go through the arbiter or tell the
@@ -345,14 +423,14 @@ recovery framework, no broad migration of input writers, no default change, noth
    - Decide whether to fund promotion evidence as its own pre-registered phase: an overhead measure that can resolve
      0.5 ms (96 client-tick pairs could not, in Phase 06 or in Phase 06A), and a live course where corrections
      escalate and the retry has occasion to fire.
-2. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
+3. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
    pre-registered drift-check design (bound × margin, or persistence) and its own A/B.
-3. SimEdge (D15):
+4. SimEdge (D15):
    - Keep it disabled.
    - Do not fund another latency fix on this course: even zero wait gains about 2–3% on steps only.
    - It can only pay off on momentum-decided routes (gaps, sprint jumps, long ascent chains). That needs a new
      pre-registered scenario family as its own phase. Otherwise archive it.
-4. Separately:
+5. Separately:
    - `SimTrace`'s land prediction on water ticks (D14 finding 2);
    - B5 Secondo bookkeeping;
    - B6 key-writer migration, which also bounds what the unified executor can own;

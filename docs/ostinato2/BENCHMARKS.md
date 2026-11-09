@@ -2670,3 +2670,95 @@ guard holds.
 - A run that fails to complete (gradle error, client crash) is rerun once with the same seed. If it fails again, it is
   recorded as a blocker and its tier is not claimed.
 - A death or stuck key in the first live seed is LR FAIL. The second seed is then not run, and the class is FAIL.
+
+### Phase 07 results: confirmatory A/B of `pathingStateIdCache` (VERIFIED, Tier S; Tier L not run)
+
+All held-out runs were made at `92961cddf`, the pre-registration commit, with a clean tree apart from their own
+outputs. The criteria are the ones above, unchanged.
+
+**H, long routes** (`raw/phase07/longroute/p07-ho-*`):
+- Seeds 3001 and 3002, 2 trips per route type: 116 trips per arm, 113 pairs that both arms reached, plus 12 cancel
+  repetitions per arm and family on MAZE and BREAK_PLACE.
+- Command: `docs/ostinato2/tools/phase07/p07-longroute.ps1 -label p07-ho -set heldout -seeds 3001,3002 -trips 2 -arms
+  PROD,IDS`, 818 s, exit 0.
+- Read with `python docs/ostinato2/tools/longroute_summary.py --arms=PROD,IDS docs/ostinato2/raw/phase07/longroute
+  p07-ho`, saved as `p07-ho-summary.txt`.
+
+**P, PathBench** (`raw/phase07/ids/p07-ids-ho-*`):
+- `wa:2` with seed 3101, 3 repetitions, in the order off, on, on, off: 416–435 s per run, all exit 0.
+- Command: `docs/ostinato2/tools/phase07/p07-ids-bench.ps1 -prefix p07-ids-ho -order off,on,on,off -seed 3101`.
+- Read with `python docs/ostinato2/tools/ids_bench_ab.py docs/ostinato2/raw/phase07/ids
+  p07-ids-ho-off-1,p07-ids-ho-off-4 p07-ids-ho-on-2,p07-ids-ho-on-3`, saved as `p07-ids-ho-summary.txt`.
+
+**Results against the pre-registration:**
+
+| criterion | rule | result | verdict |
+|---|---|---|---|
+| P1, planning cost | H ms-per-node ON/OFF median ≤ 0.70, CI upper < 1.0 | **0.9624** (0.9565–0.9686), 113 pairs | **missed**: the reduction is demonstrated (CI upper < 1), but it is 3.8%, not 30% |
+| G1, reliability (H) | net losses ≤ 0 | lost 0, gained 0. The 3 trips not reached (BREAK_PLACE known ×1, CAVES horizon ×2) failed in both arms | holds |
+| G1, reliability (P) | failed rows ON ≤ OFF | 30 and 30 (the same 5 budget-bound LONG queries) | holds |
+| G2, travel (H) | total-ticks ratio median ≤ 1.01, CI upper ≤ 1.02 | 1.0000 (1.0000–1.0000) | holds |
+| G3, equivalence (H) | pairs with no timed-out search are identical in ok, travel, nodes, segments, searches and end distance; any mismatch is a FAIL | 88 such pairs, **8 differ**. All 8 are goal mode (OPEN and MIXED, 1000 blocks, both seeds); the other 80 are identical | **FAIL as written** (cause below) |
+| G4, short distance (P) | SHORT same-search ms ratio median ≤ 1.02, CI lower ≤ 1.0 | 0.9429 (0.9383–0.9699), 20 queries | holds |
+| G5, LR, LT, LP (live) | per the pre-registration | **not run** (below) | — |
+
+**Other H numbers:**
+
+| quantity | value |
+|---|---|
+| planning ms, ON/OFF | median 0.969 (0.960–0.981) |
+| PROD planning wait, share of trip ticks | 0.26% over 116 trips; worst cell CAVES known, 2.00% |
+| cancel latency, both arms | median 0.01 ms; max 0.04 (PROD BREAK_PLACE), 0.09 (PROD MAZE), 0.03 (IDS) |
+
+Per family, the ms-per-node point estimate is below 1 in 17 of 21 cells. The 4 above 1 are cells where planning is
+under 0.5 s per trip and the CI spans 1.
+
+**Other P numbers:**
+
+| group | queries | ON/OFF ms median (CI) |
+|---|---|---|
+| ALL | 55 | 0.9595 (0.9433–0.9661) |
+| MEDIUM | 20 | 0.9558 (0.9399–0.9782) |
+| LONG | 15 | 0.9607 (0.9446–0.9810) |
+
+- The 5 differing queries are the budget-bound ones (10 s). ON expands 2.3–6.6% more nodes in the same time, with a
+  ms-per-node ratio of 0.94–0.98.
+- Mean travel cost over the 55 queries both solved is 1332.40 in both arms.
+
+**Bounded diagnosis of G3: the goal-mode pairs are not pairs.**
+- In `LongRouteSimTest.corpus`, the goal-mode event is built inside the per-arm loop (`for (LongRouteSim.Arm arm :
+  order)`, line 223). Its new goal's z comes from `qr.nextInt(SIZE_Z - 16)` (line 237), on a `Random` shared across
+  the arms. The second arm therefore switches to a different goal from the first.
+- The data agree. In all 8 differing pairs:
+  - search 0, before the switch, is identical in both arms (the same node count: 1000, 937, 954, 970, 7942, 8761,
+    37411 and 40675);
+  - search 1, the replan to the switched goal, differs;
+  - the end distances differ by up to 4.9 blocks, which a single cost change would not explain.
+- No trip in the other modes differs. Those modes draw nothing inside the arm loop, and they cover 80 pairs over all
+  8 families.
+- The defect was introduced with the harness in this phase (`9591d363a`). It also affects the dev goal-mode rows, and
+  the HPA comparison in the dev corpus, which excluded goal mode for a different reason.
+- The fix is to draw the switch goal once per route, before the arm loop. It is **not** applied: the rule says any
+  mismatch is a FAIL, and a rerun to change an outcome is not allowed.
+- So, on the evidence, the cache changed no cost on any valid pair. But G3 was written without an exception, and it is
+  scored as written.
+
+**Live A/B (Tier L): not run.**
+- The class is already FAIL on a guard, so the live runs cannot change it.
+- The task's failure rule is to preserve the evidence, diagnose within bounds, keep legacy active and stop. So the two
+  live seeds were not run.
+- The live arm (`-Dostinato.legatotest.arms=stateids`), `docs/ostinato2/tools/phase07/p07-live.ps1` and
+  `scripts/stateids-ab.py` are committed and ready.
+- G5, LR, LT and LP are **not evaluated**, and nothing is claimed at Tier L. In particular, the cache's effect on
+  client-thread cost checks is unmeasured.
+
+#### Phase 07 classification: FAIL
+
+- **G3 fails as written:** 8 of 88 equivalence pairs differ.
+- The verified cause is a harness pairing defect in goal mode, not the cache. Every pair the harness built correctly
+  is identical.
+- Independently of G3, **P1 is missed**: 3.8% less planning time per node, against a 30% target.
+- Had G3 been scored on valid pairs only, the headless evidence would at best have supported PARTIAL, with the live
+  guards still open. That is recorded as context for the owner, not as the class.
+- `pathingStateIdCache` stays default **false**. The existing A* planner, the executor, the hierarchy (default
+  false) and every default setting are unchanged.

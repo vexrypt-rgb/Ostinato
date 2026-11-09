@@ -597,3 +597,157 @@ was written and before any Phase 06A run. Phase 06 stays **FAIL** as recorded in
 - Phase 07 was not started.
 - B6 stays open: the executor owns only the `PhysicsTravel` path, only with the flag on, and is told of a cancel only
   through `PathingBehavior.cancelEverything()`.
+
+## D18. Phase 07: long-distance routing; no new hierarchy, a block-state id cache at the measured hotspot; gate FAIL, `pathingStateIdCache` stays off
+
+The task: improve long-distance navigation per unit of compute and complexity. A hierarchy was one hypothesis, not a
+requirement. The priorities, in order:
+1. reliability;
+2. travel time;
+3. planning latency;
+4. robustness to terrain change;
+5. movement constraints;
+6. bounded memory;
+7. compatibility;
+8. maintainability.
+
+Out of scope:
+- Phase 08;
+- a new physics engine, local planner, executor or scheduler;
+- replacing the A* planner or the executor;
+- any default change.
+
+Phase start HEAD: `db28a1cc3`, clean. End: the commit that last touched this file. Local commits only; nothing pushed
+or merged.
+
+The criteria were committed in BENCHMARKS "Pre-registration: confirmatory A/B of `pathingStateIdCache`" (`92961cddf`),
+before any held-out or live run. Evidence is in BENCHMARKS "Phase 07: long-distance routing" and
+`docs/ostinato2/raw/phase07/`.
+
+**Commits:**
+
+| commit | content |
+|---|---|
+| `9591d363a` | `LongRouteSim` trip simulator, `LongTerrain` (FOREST, MOUNTAINS, MAZE), `LongRouteSimTest.corpus` |
+| `fa7165a32` | goal switch at a fixed travel time, summary checks, dev corpus raw |
+| `2fc753991` | audit, baseline, dev corpus, profile and decision gate (Option A), written before any implementation |
+| `57364373c` | the slice: `StateIdCache` behind `pathingStateIdCache` (default false), tests |
+| `92961cddf` | dev A/B, profile diagnosis, pre-registration, `OSTINATO_BENCH_SEED`, the live `stateids` arm, analysis tools, `setting-descriptions.json` regenerated |
+| the commit that last touched this file | held-out raw evidence and results |
+
+**Architecture (audit):**
+- Goal → `PathingBehavior.findPathInNewThread` (budgets, escalation, hold at drops) → `createPathfinder` (GoalXZ
+  simplification, Favoring, dead set, far weight 2.0) → A* `calculate` (route reuse, cutoffs) → `PathExecutor`, with
+  the plan-ahead chaining segments.
+- No global route layer in production. A default-off hierarchy exists (`pathingHierarchical`: `SectionGraph`,
+  `CoarseGraph`, `BidirectionalRoute`, `CostToGoMap`), with gaps 1–7 (below).
+
+**Bottlenecks (measured, Tier S):**
+- Planning is not a travel bottleneck. Its wait is 0.25% of trip ticks on the dev corpus and 0.26% held-out, at
+  most 2.00% in one cell.
+- It is a CPU cost: up to 27 s of planning per hard-terrain trip.
+- Cost evaluation dominates planner CPU. Within it, CPU is spread flat: no single frame exceeds 17% once safepoint bias
+  is removed.
+
+**Chosen: Option A,** a cache at the measured hotspot.
+- The first profile credited 40% of planner samples to the block-state id lookup
+  (`Block.BLOCK_STATE_REGISTRY.getId`).
+- Added `StateIdCache`: a static, direct-mapped cache of 1024 immutable (state, id) entries.
+  - A hit compares the state by identity, so the id is always the registry's.
+  - A miss or a collision asks the registry.
+  - It is bounded, lock-free, and never stale: ids are fixed once the registry is built, so no invalidation is needed.
+- `PrecomputedData` (`canWalkOn`, `canWalkThrough`, `fullyPassable`) and `MovementHelper.isBlockNormalCube` use it
+  only when `pathingStateIdCache` is true. The setting defaults to false; off, every site runs the registry lookup as
+  before.
+
+**Rejected:**
+- **Option B, a new hierarchy.** The existing one is never faster in total ticks (median 1.0018 on the dev corpus) and
+  costs 2–40× more planning. It is inert beyond loaded terrain and slow to cancel. A new layer would duplicate it, aimed
+  at a 0.25% cost.
+- **Repairing the existing hierarchy's gaps.** Most of the work, and the best case is no faster in total ticks.
+- **Option C, no change.** Rejected at the gate on the 40% profile. That profile later proved an artefact (finding 2),
+  so in hindsight the case against C was weaker than recorded.
+- **A mixin on `BlockState`.** It patches a vanilla class, and it cannot run headless.
+- **Relaxing the hold at drops.** Safety for at most about 2% of one cell's ticks.
+- **The open set.** Already the tuned binary heap.
+
+**Added:**
+- `StateIdCache` and the setting `pathingStateIdCache` (default false).
+- Tests: `StateIdCacheTest` (every state, collisions, 4 racing threads); the `LongRouteSim` arm IDS with a
+  trip-equality test.
+- Harness and tools:
+  - `LongRouteSim`, `LongRouteSimTest.corpus`, `LongTerrain`;
+  - the PathBench hooks `OSTINATO_BENCH_STATEIDS` and `OSTINATO_BENCH_SEED` (held-out worlds and queries; unset, the
+    bench is unchanged);
+  - the `LegatoLiveTest` arm `stateids`;
+  - `docs/ostinato2/tools/longroute_summary.py`, `ids_bench_ab.py` and `jfr_planner_split.py`;
+  - the scripts in `docs/ostinato2/tools/phase07/` and `scripts/stateids-ab.py`.
+- `setting-descriptions.json` regenerated for the new setting, which fixes the `SettingCatalogTest` failure it
+  caused.
+
+**Not changed:**
+- the A* planner, its budgets and costs;
+- the executor;
+- the existing hierarchy and its default (`pathingHierarchical` false);
+- every default setting;
+- the pre-registered criteria.
+
+**Findings:**
+
+1. **Long-distance planning is not where travel time goes.** Over 116 held-out trips the planning wait is 0.26% of
+   ticks. A faster planner can save CPU, not meaningful travel time, on this corpus.
+2. **The 40% hotspot was a profiling artefact.**
+   - With `-XX:+DebugNonSafepoints`, the id lookup is 5.9% of planner samples, and the cache's own frame is 6.5%.
+   - The saving is about 6% of samples, and shows up as cheaper neighbouring memory reads.
+   - The gate's expected 20–40% was falsified by dev data. It was not revised.
+3. **The cache saves about 4%, everywhere, and nothing else changes.**
+   - Held out, the long-route ms-per-node ratio is 0.9624 (CI 0.9565–0.9686) and PathBench is 0.9595 (0.9433–0.9661).
+     SHORT is 0.9429, so there is no short-distance cost.
+   - No reliability change (lost 0, gained 0; failed rows 30 and 30), and total ticks have a ratio of exactly 1.0000.
+   - Every correctly paired trip is identical, and cancel stays at 0.01 ms.
+4. **The harness pairs goal mode wrongly.**
+   - `LongRouteSimTest.corpus` draws the switch goal from a shared `Random` inside the per-arm loop (lines 223 and
+     237), so the two arms of a goal-mode pair switch to different goals.
+   - In all 8 held-out goal-mode pairs, the search before the switch is identical and the one after it differs.
+   - The defect came in with the harness (`9591d363a`) and is not fixed here (no rerun to change an outcome).
+   - Fix: draw the switch goal once per route, before the arm loop.
+5. **The "~4% longer" hierarchy note** in `docs/pathbench/LONG_HORIZON.md:34` and `docs/guides/movement.md:41` compares different query
+   sets. On the queries both solved, hpa1bi/wa2 travel is 0.9658. Not edited, as outside this phase's docs.
+6. **Existing hierarchy gaps** (BENCHMARKS audit; for whoever revisits it):
+   1. inert for GoalXZ, i.e. every `#goto x z` and every goal in unloaded terrain;
+   2. budget signals not passed on;
+   3. a corridor timeout wastes the budget;
+   4. no dead set;
+   5. unbounded `SectionGraph.edges`;
+   6. no invalidation on world change;
+   7. cancel takes 140–280 ms.
+7. **Not measured:**
+   - Tier L: the live A/B was not run, so client-thread cost-check overhead and live planning time are unknown;
+   - real worlds, mobs and chunk-load latency;
+   - executor dynamics.
+
+**Decision:**
+- **Gate FAIL** (the pre-registered rule). G3 fails as written: 8 of 88 equivalence pairs differ.
+- The verified cause is the goal-mode pairing defect (finding 4), not the cache. On valid pairs the headless evidence
+  would at best have supported PARTIAL. That is context, not the class.
+- P1 is missed in any case: 3.8%, not ≥ 30%.
+- The live A/B was not run: it could not change the class, and the failure rule is to stop.
+- `pathingStateIdCache` stays default **false**. Legacy lookup active; no production default changed.
+- No criterion was changed after a result was seen, and no run was repeated.
+- Full suite at `57364373c`: 1613 tests, 2 failed, 24 skipped. One is the pre-existing B5 `SecondoTest`. The
+  other, `SettingCatalogTest.descriptionsJsonIsUpToDate`, was this phase's own: fixed in `92961cddf` and re-run green
+  with `StateIdCacheTest`, `LongRouteSimTest` and `PathBenchTest`. The full suite was not re-run after that fix.
+
+**Recommended next action (owner decision):**
+- Do not fund a new hierarchy for travel time. The planning wait it could remove is about 0.3% of trip ticks on this
+  corpus.
+- The cache is a small, behaviour-identical CPU saving (about 4%). Either:
+  - keep it off and archive it;
+  - or, if 4% planner CPU is worth having, approve a new pre-registered confirmation with the goal-mode pairing fixed
+    and the live A/B, judged against a target that fits a 4% change.
+
+  It cannot meet this phase's 30% target.
+- If planner CPU matters, profile live with `DebugNonSafepoints` before choosing a target. Headless, CPU is spread
+  flat across cost evaluation.
+- Fix the goal-mode pairing in `LongRouteSimTest.corpus` before the harness is used again.
+- Phase 08 was not started.
