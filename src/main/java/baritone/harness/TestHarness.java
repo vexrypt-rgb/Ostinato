@@ -40,6 +40,7 @@ public final class TestHarness {
         if (Boolean.getBoolean("ostinato.cadenzatest")) sb.append("ostinato.cadenzatest ");
         if (Boolean.getBoolean("ostinato.bombardtest")) sb.append("ostinato.bombardtest ");
         if (Boolean.getBoolean("ostinato.tolerancetrace")) sb.append("ostinato.tolerancetrace ");
+        if (Boolean.getBoolean("ostinato.interacttest")) sb.append("ostinato.interacttest ");
         return sb.toString().trim();
     }
 
@@ -63,5 +64,6 @@ public final class TestHarness {
         baritone.bombard.BombardLiveTest.install(b);
         baritone.scherzo.ScherzoSparTest.install(b); // Ostinato: Scherzo LIVE/OBSERVE spar A/B harness
         baritone.contract.ToleranceTraceTest.install(b); // Ostinato 2.0 Phase 04 validation: live PredictionTolerance traces
+        InteractLiveTest.install(b); // Ostinato 2.0 Phase 08: navigate -> interact -> verify
     }
 }
