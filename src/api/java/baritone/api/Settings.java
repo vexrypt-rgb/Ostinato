@@ -970,6 +970,14 @@ public final class Settings {
     public final Setting<Boolean> predictionTolerance = new Setting<>(false);
 
     /**
+     * Ostinato 2.0 Phase 06: when on, the physics driver runs under one movement lease. While it presses keys it is
+     * the only writer of the movement, jump and sneak keys; other writers are refused and counted, releases still
+     * pass. It checks the predicted tick, tries one re-anchor on drift before replanning, and records how each
+     * stretch ended. Off, the physics driver runs as before. Default off until a live run shows it is no worse.
+     */
+    public final Setting<Boolean> unifiedExecutor = new Setting<>(false);
+
+    /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
      */
     public final Setting<Double> pathTieBreak = new Setting<>(0.0);

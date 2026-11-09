@@ -64,11 +64,19 @@ public final class GameEventHandler implements IEventBus, Helper {
         } else {
             baritone.bsi = null;
         }
+        // Ostinato 2.0 Phase 06: opens the tick frame. A counter and two fields; nothing else runs while the flag is off.
+        if (event.getType() == TickEvent.Type.IN) {
+            baritone.getUnifiedExecutor().beginTick();
+        }
         // Ostinato: physical keys. Off, neither call runs, and the listeners see the same tick they always have.
         if (event.getType() == TickEvent.Type.IN && Baritone.settings().physicalInput.value) {
             baritone.getInputOverrideHandler().openPhysicalTick();
         }
         listeners.forEach(l -> l.onTick(event));
+        if (event.getType() == TickEvent.Type.IN) {
+            // Ostinato 2.0 Phase 06: checks the owned keys and hands back a lease nobody drove. No-op with no lease.
+            baritone.getUnifiedExecutor().endTick(Baritone.settings().unifiedExecutor.value);
+        }
         if (event.getType() == TickEvent.Type.IN && Baritone.settings().physicalInput.value) {
             baritone.getInputOverrideHandler().realizePhysicalKeys();
         }
