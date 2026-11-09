@@ -45,6 +45,9 @@ final class UnifiedHarness {
 
     /** PhysicsTravel's search budget. */
     static final int NODE_BUDGET = 1500;
+    /** Diagnostics only (the bench never sets these): the budget {@link #run} plans with, and whether it keeps every tick's state. */
+    static int nodeBudget = NODE_BUDGET;
+    static boolean trace;
     /** PhysicsTravel's goal radius. */
     static final double RADIUS = 0.35;
     /** The path object the lease is held for. One path a run. */
@@ -232,6 +235,10 @@ final class UnifiedHarness {
         int conflictLanded;
         boolean onGroundAtEnd;
         double endX, endY, endZ;
+        /** With {@link #trace}: the player at the start of every tick, tick 1 first. */
+        final List<PlayerSim> states = new ArrayList<>();
+        /** With {@link #trace}: the player when a plan came back empty. */
+        PlayerSim failState;
 
         Result(String name, boolean unified, UnifiedExecutor ux, FakeKeys keys) {
             this.name = name;
@@ -296,12 +303,15 @@ final class UnifiedHarness {
         PlayerSim real = standing(s.truth, s.sx, s.sz);
         PlayerSim predicted = new PlayerSim(s.model);
         PlayerSim scratch = new PlayerSim(s.model);
-        PhysicsPathfinder finder = new PhysicsPathfinder(s.model, NODE_BUDGET);
+        PhysicsPathfinder finder = new PhysicsPathfinder(s.model, nodeBudget);
         List<PhysicsPathfinder.Action> plan = null;
         int step = 0, corrections = 0;
         int cancelFrom = s.cancelTick;
         boolean kicked = false;
         for (int t = 1; t <= s.maxTicks; t++) {
+            if (trace) {
+                r.states.add(new PlayerSim(s.truth).copyFrom(real));
+            }
             if (ux != null) {
                 ux.beginTick();
             }
@@ -358,6 +368,9 @@ final class UnifiedHarness {
                 plan = finder.plan(real, s.gx, s.gy, s.gz, RADIUS);
                 r.planNanos += System.nanoTime() - p0;
                 if (plan == null || plan.isEmpty()) {
+                    if (trace) {
+                        r.failState = new PlayerSim(s.truth).copyFrom(real);
+                    }
                     if (ux != null) {
                         ux.fail(UnifiedExecutor.Cause.EMPTY_PLAN);
                         ux.handback(UnifiedExecutor.Cause.DROP, 0);

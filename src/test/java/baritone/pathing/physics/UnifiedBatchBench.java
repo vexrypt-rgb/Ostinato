@@ -59,7 +59,7 @@ public class UnifiedBatchBench {
     private static final Input[] BEFORE = {null, Input.MOVE_LEFT, Input.MOVE_RIGHT};
 
     /** One generated scenario and the parameters that made it. */
-    private static final class Trial {
+    static final class Trial {
         final String family;
         final int index;
         final Scenario scenario;
