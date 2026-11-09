@@ -81,6 +81,7 @@ public class UnifiedExecutorTest {
         ux.handback(Cause.DROP, 3);
         ux.stopForCancel();
         ux.worldChanged();
+        ux.processesCancelled();
         ux.endTick(true);
         assertNull(ux.state());
         assertFalse(ux.refusesPress(Input.MOVE_BACK));
@@ -439,5 +440,130 @@ public class UnifiedExecutorTest {
         assertTrue(ux.beginWrite(path, 0));
         assertTrue(ux.held());
         assertEquals(2, ux.count(Counter.ACQUIRES));
+    }
+
+    // ---- every process cancelled while the segment cancel is refused (PathingBehavior.cancelEverything) ----
+
+    /** One tick in which the driver writes and then, later in the tick, every process is cancelled while unsafe. */
+    private void writeThenCancelProcesses(int pos, boolean notify) {
+        ux.beginTick();
+        assertTrue(ux.beginWrite(path, pos));
+        keys.down.add(Input.MOVE_FORWARD);
+        ux.endWrite(true, false, false);
+        ux.cancelRefused();
+        if (notify) {
+            ux.processesCancelled();
+        }
+        keys.down.clear(); // a process's onLostControl clears every key
+        ux.endTick(true);
+    }
+
+    @Test
+    public void keysClearedBehindAHeldLeaseAreReleasedEarly() {
+        // the Phase 06 defect: nothing tells the executor, so its own keys go up behind its lease
+        drive(0);
+        writeThenCancelProcesses(1, false);
+        assertEquals(1, ux.count(Counter.RELEASED_EARLY));
+        assertTrue("the lease is still held", ux.leased());
+        ux.beginTick();
+        ux.endTick(true);
+        assertEquals("handed back a tick later, unacknowledged", 1, ux.count(Counter.HANDOVERS));
+    }
+
+    @Test
+    public void processCancelMidMoveGivesUpTheLeaseBeforeTheKeysGoUp() {
+        drive(0);
+        ux.beginTick();
+        assertTrue(ux.beginWrite(path, 1));
+        keys.down.add(Input.MOVE_FORWARD);
+        ux.endWrite(true, false, false);
+        ux.cancelRefused();
+        ux.processesCancelled();
+        assertFalse("the driver lifted its own key", keys.down.contains(Input.MOVE_FORWARD));
+        assertFalse(ux.leased());
+        keys.down.clear();
+        ux.endTick(true);
+        assertEquals(Outcome.CANCELLED_CONFIRMED, ux.state());
+        assertEquals(Cause.PROCESS_CANCEL, ux.lastCause());
+        assertEquals(1, ux.count(Counter.PROCESS_CANCELS));
+        assertEquals(1, ux.count(Counter.CANCEL_REFUSALS));
+        assertEquals(0, ux.count(Counter.RELEASED_EARLY));
+        assertEquals(0, ux.count(Counter.HANDOVERS));
+        assertEquals(0, ux.count(Counter.UNKNOWNS));
+        assertEquals("ends the lease, not the segment: no cancel latency", 0, ux.count(Counter.CANCEL_LATENCY_SUM));
+        assertFalse(ux.refusesPress(Input.MOVE_BACK));
+        assertFalse(ux.refusesAnalog());
+        assertTrue("nobody is left holding MOVE",
+                arb.claim("other", 1, false, InputArbiter.Resource.MOVE).holds(InputArbiter.Resource.MOVE));
+    }
+
+    @Test
+    public void processCancelBetweenLapsLeavesNothingForTheNextTicks() {
+        drive(0);
+        writeThenCancelProcesses(1, true);
+        long[] after = ux.snapshot();
+        ux.beginTick();
+        ux.endTick(false); // the harness switched arms: flag off
+        ux.beginTick();
+        ux.endTick(true);
+        long[] later = ux.snapshot();
+        for (int i = 0; i < after.length; i++) {
+            assertEquals(Counter.values()[i].name(), after[i], later[i]);
+        }
+        assertEquals(0, ux.count(Counter.HANDOVERS));
+        assertEquals(0, ux.count(Counter.RELEASED_EARLY));
+        assertEquals(0, ux.count(Counter.COMPLETIONS));
+        assertEquals(Cause.PROCESS_CANCEL, ux.lastCause());
+    }
+
+    @Test
+    public void segmentRunningOnAfterProcessCancelTakesAFreshLeaseAndStopsLater() {
+        drive(0);
+        writeThenCancelProcesses(1, true);
+        // next tick: preTick asks the segment to cancel before the driver writes; there is no lease, so it does not count
+        ux.beginTick();
+        ux.cancelRefused();
+        assertEquals(1, ux.count(Counter.CANCEL_REFUSALS));
+        assertFalse(ux.cancelDue(true));
+        assertTrue(ux.beginWrite(path, 2));
+        assertTrue(ux.held());
+        assertEquals(2, ux.count(Counter.ACQUIRES));
+        keys.down.add(Input.MOVE_FORWARD);
+        ux.endWrite(true, false, false);
+        ux.endTick(true);
+        // the count starts over from the new lease
+        ux.beginTick();
+        ux.cancelRefused();
+        assertFalse("one refusal on the new lease is not enough", ux.cancelDue(true));
+        assertTrue(ux.beginWrite(path, 3));
+        ux.endWrite(true, false, false);
+        ux.endTick(true);
+        ux.beginTick();
+        ux.cancelRefused();
+        assertTrue(ux.cancelDue(true));
+        keys.down.clear();
+        ux.stopForCancel();
+        assertTrue(ux.stoppedForCancel());
+        ux.endTick(true);
+        assertEquals(1, ux.count(Counter.CANCEL_STOPS));
+        assertEquals(1, ux.count(Counter.PROCESS_CANCELS));
+        assertEquals("latency counts from the first refusal on the new lease", 1, ux.count(Counter.CANCEL_LATENCY_MAX));
+        assertEquals(0, ux.count(Counter.RELEASED_EARLY));
+        assertEquals(0, ux.count(Counter.HANDOVERS));
+        assertEquals(0, ux.count(Counter.UNKNOWNS));
+        assertFalse(ux.leased());
+    }
+
+    @Test
+    public void processCancelOnAPartlyPreemptedLeaseLeavesThePreemptorItsResource() {
+        drive(0);
+        arb.claim("fall", 10, false, InputArbiter.Resource.MOVE);
+        ux.processesCancelled();
+        // same as the other cancel paths: the lease is still alive in the arbiter, so it ends as a release
+        assertEquals(Cause.PROCESS_CANCEL, ux.lastCause());
+        assertFalse(ux.leased());
+        assertTrue("fall keeps MOVE", arb.claim("fall", 10, false, InputArbiter.Resource.MOVE).holds(InputArbiter.Resource.MOVE));
+        assertTrue("the driver let go of JUMP",
+                arb.claim("other", 1, false, InputArbiter.Resource.JUMP).holds(InputArbiter.Resource.JUMP));
     }
 }
