@@ -1,11 +1,12 @@
 """Ostinato 2.0 Phase 07: summarise LongRouteSimTest.corpus output (<label>-trips.csv, <label>-searches.csv).
 
-usage: python longroute_summary.py <dir> <label> [<label> ...]
+usage: python longroute_summary.py [--skip-modes=goal,...] <dir> <label> [<label> ...]
 
 Prints, per family x mode x arm: trips reached, travel / wait / total ticks (planner tier), wait share, plan ms,
 first-search ms, per-search p50/p95/p99, nodes, allocation, escalations, plan-ahead retries, sealed; then the paired
 HPA/PROD ratios per route (total ticks, plan ms) with a bootstrap 95% CI of the median ratio (10,000 resamples,
-random.Random(20261108), percentile interval), and the cancel latencies.
+random.Random(20261108), percentile interval), the cancel latencies, and the held-out checks: PROD wait share overall
+and its largest cell (C1), and the outcomes of HPA searches whose goal was simplified (C3).
 """
 import csv
 import random
@@ -33,13 +34,21 @@ def boot_median(xs, n=10000):
 
 
 def main():
-    d = sys.argv[1]
+    args = sys.argv[1:]
+    skip = set()
+    if args and args[0].startswith("--skip-modes="):
+        skip = set(args.pop(0).split("=", 1)[1].split(","))
+    d = args[0]
     trips, searches = [], []
-    for label in sys.argv[2:]:
+    for label in args[1:]:
         with open(f"{d}/{label}-trips.csv", newline="") as f:
             trips += list(csv.DictReader(f))
         with open(f"{d}/{label}-searches.csv", newline="") as f:
             searches += list(csv.DictReader(f))
+    trips = [t for t in trips if t["mode"] not in skip]
+    searches = [s for s in searches if s["mode"] not in skip]
+    if skip:
+        print(f"skipped modes: {','.join(sorted(skip))}")
     cancel = [s for s in searches if s["type"] == "CANCEL_LATENCY"]
     searches = [s for s in searches if s["type"] != "CANCEL_LATENCY"]
 
@@ -72,6 +81,7 @@ def main():
     rt = defaultdict(list)
     rp = defaultdict(list)
     lost = defaultdict(int)
+    gained = defaultdict(int)
     for key, arms in pair.items():
         if "PROD" not in arms or "HPA" not in arms:
             continue
@@ -79,23 +89,59 @@ def main():
         g = (key[2], key[3])
         if a["ok"] == "true" and b["ok"] != "true":
             lost[g] += 1
+        if a["ok"] != "true" and b["ok"] == "true":
+            gained[g] += 1
         if a["ok"] == "true" and b["ok"] == "true":
             rt[g].append(float(b["total"]) / float(a["total"]))
             rp[g].append(float(b["planMs"]) / max(1e-3, float(a["planMs"])))
     print()
-    print("family,mode,pairs,hpaLost,totalRatioMed,CI,planRatioMed,CI")
-    for g in sorted(rt):
+    print("family,mode,pairs,hpaLost,hpaGained,totalRatioMed,CI,planRatioMed,CI,promotion")
+    promoted = []
+    for g in sorted(set(rt) | set(lost) | set(gained)):
         lo, hi = boot_median(rt[g])
         plo, phi = boot_median(rp[g])
-        print(f"{g[0]},{g[1]},{len(rt[g])},{lost[g]},{statistics.median(rt[g]):.4f},[{lo:.4f};{hi:.4f}],"
-              f"{statistics.median(rp[g]):.3f},[{plo:.3f};{phi:.3f}]")
+        tm = statistics.median(rt[g]) if rt[g] else float("nan")
+        pm = statistics.median(rp[g]) if rp[g] else float("nan")
+        # C2: the task's provisional promotion target, per family, judged in known mode
+        meets = (pm <= 0.70 and phi < 1.0 and lost[g] - gained[g] <= 0 and tm <= 1.01 and hi <= 1.03)
+        if meets and g[1] == "known":
+            promoted.append(g[0])
+        print(f"{g[0]},{g[1]},{len(rt[g])},{lost[g]},{gained[g]},{tm:.4f},[{lo:.4f};{hi:.4f}],"
+              f"{pm:.3f},[{plo:.3f};{phi:.3f}],{'MEETS' if meets else 'no'}")
     allt = [x for v in rt.values() for x in v]
     allp = [x for v in rp.values() for x in v]
     if allt:
         lo, hi = boot_median(allt)
         plo, phi = boot_median(allp)
-        print(f"ALL,,{len(allt)},{sum(lost.values())},{statistics.median(allt):.4f},[{lo:.4f};{hi:.4f}],"
-              f"{statistics.median(allp):.3f},[{plo:.3f};{phi:.3f}]")
+        print(f"ALL,,{len(allt)},{sum(lost.values())},{sum(gained.values())},{statistics.median(allt):.4f},"
+              f"[{lo:.4f};{hi:.4f}],{statistics.median(allp):.3f},[{plo:.3f};{phi:.3f}],")
+    print(f"C2 known-mode families meeting the promotion target: {','.join(promoted) or 'none'}")
+
+    # C1: PROD wait share overall and its largest family x mode cell
+    prod = [t for t in trips if t["arm"] == "PROD"]
+    if prod:
+        tw = sum(float(t["wait"]) for t in prod)
+        tt = sum(float(t["travel"]) + float(t["wait"]) for t in prod)
+        cells = defaultdict(lambda: [0.0, 0.0])
+        for t in prod:
+            c = cells[(t["family"], t["mode"])]
+            c[0] += float(t["wait"])
+            c[1] += float(t["travel"]) + float(t["wait"])
+        worst = max(cells, key=lambda k: cells[k][0] / max(1e-9, cells[k][1]))
+        print()
+        print(f"C1 PROD wait share: overall {100 * tw / tt:.2f}% over {len(prod)} trips; largest cell "
+              f"{worst[0]} {worst[1]} {100 * cells[worst][0] / cells[worst][1]:.2f}%")
+
+    # C3: outcomes of HPA searches whose goal was simplified (unloaded GoalBlock -> GoalXZ)
+    simp = defaultdict(int)
+    for s in searches:
+        if s["arm"] == "HPA" and s["simplified"] == "true":
+            simp[(s["mode"], s["outcome"])] += 1
+    if simp:
+        print()
+        print("C3 HPA searches with a simplified goal (mode,outcome: n)")
+        for k in sorted(simp):
+            print(f"{k[0]},{k[1]}: {simp[k]}")
 
     if cancel:
         print()

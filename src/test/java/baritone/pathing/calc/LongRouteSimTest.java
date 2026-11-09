@@ -6,6 +6,7 @@ package baritone.pathing.calc;
 import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.pathing.goals.GoalBlock;
+import baritone.api.pathing.movement.ActionCosts;
 import baritone.api.utils.BetterBlockPos;
 import baritone.pathing.calc.bench.LongTerrain;
 import baritone.pathing.calc.bench.SyntheticWorld;
@@ -140,7 +141,7 @@ public class LongRouteSimTest {
         LongRouteSim.Route r = route(small, 20, 440);
         BetterBlockPos back = LongRouteSim.spot(small, false, 120, 50);
         LongRouteSim sim = new LongRouteSim(small, LongRouteSim.Arm.PROD, 0);
-        LongRouteSim.Trip t = quiet(() -> sim.run(0, r.start(), goal(r.goal()), new LongRouteSim.GoalSwitch(goal(back), 0.5)));
+        LongRouteSim.Trip t = quiet(() -> sim.run(0, r.start(), goal(r.goal()), new LongRouteSim.GoalSwitch(goal(back), 500)));
         assertTrue(t.reason, t.ok);
         assertEquals(1, t.goalSwitches);
         assertFalse(Double.isNaN(t.replanMs));
@@ -218,7 +219,8 @@ public class LongRouteSimTest {
                             LongRouteSim sim = new LongRouteSim(w, arm, mode.equals("horizon") ? HORIZON : 0);
                             LongRouteSim.Events ev = switch (mode) {
                                 case "change" -> new LongRouteSim.Barrier();
-                                case "goal" -> new LongRouteSim.GoalSwitch(goal(LongRouteSim.spot(w, fam.underground(), r.start().x + r.length() / 4, 8 + qr.nextInt(SIZE_Z - 16))), 0.4);
+                                case "goal" -> new LongRouteSim.GoalSwitch(goal(LongRouteSim.spot(w, fam.underground(), r.start().x + r.length() / 4, 8 + qr.nextInt(SIZE_Z - 16))),
+                                        0.4 * r.length() * ActionCosts.SPRINT_ONE_BLOCK_COST); // after 40% of the straight run's sprint time
                                 default -> LongRouteSim.NO_EVENTS;
                             };
                             LongRouteSim.Trip t = sim.run(k, r.start(), goal(r.goal()), ev);

@@ -1,0 +1,6 @@
+p07-astar exit=0 secs=388
+p07-wa2 exit=0 secs=167
+p07-hpa1bi exit=0 secs=228
+p07-hpa1bi-fw exit=0 secs=134
+p07-hpa1bi-fw-warm exit=0 secs=119
+DONE

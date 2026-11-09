@@ -587,22 +587,26 @@ public final class LongRouteSim {
         }
     }
 
-    /** Goal change: {@code fraction} of the way (by cost) along the first segment, the goal moves to {@code next}. */
-    public record GoalSwitch(Goal next, double fraction) implements Events {
+    /**
+     * Goal change: once the bot has walked {@code atTicks} (planner ticks, counted across segments), the goal moves to
+     * {@code next}. A fixed walking time, not a point on the arm's own segment, so both arms switch after the same
+     * amount of travel.
+     */
+    public record GoalSwitch(Goal next, double atTicks) implements Events {
         @Override
         public Change goalChange(LongRouteSim sim, Trip t, IPath segment) {
-            if (t.goalSwitches > 0 || t.segments > 1) {
+            if (t.goalSwitches > 0) {
                 return null;
             }
             List<IMovement> mv = segment.movements();
-            double want = cost(segment, 0, mv.size()) * fraction, c = 0;
+            double c = t.travel;
             for (int i = 0; i < mv.size(); i++) {
                 c += mv.get(i).getCost();
-                if (c >= want) {
+                if (c >= atTicks) {
                     return new Change(i + 1, next);
                 }
             }
-            return new Change(mv.size(), next);
+            return null; // later in the trip, if it lasts that long
         }
     }
 
