@@ -1,0 +1,111 @@
+# Phase 06/06A headless batch: 1800 paired trials, families ['clean', 'kick', 'slip', 'conflict', 'cancel', 'edge']
+unified ran first in 900 trials, second in 900
+
+## H1 clean: the flag changes nothing where nothing pushes the player
+clean trials 300; legacy ends {'ARRIVED': 255, 'EMPTY_PLAN': 45}; mismatches 0 []
+H1: holds
+
+## H2 reliability: arrivals per family, unified against legacy
+| family | n | legacy arrived | unified arrived | legacy ends | unified ends | allowed loss | holds |
+|---|---|---|---|---|---|---|---|
+| clean | 300 | 255 | 255 | {'ARRIVED': 255, 'EMPTY_PLAN': 45} | {'ARRIVED': 255, 'EMPTY_PLAN': 45} | 3 | yes |
+| kick | 300 | 300 | 300 | {'ARRIVED': 300} | {'ARRIVED': 300} | 3 | yes |
+| slip | 300 | 249 | 252 | {'EMPTY_PLAN': 51, 'ARRIVED': 249} | {'EMPTY_PLAN': 48, 'ARRIVED': 252} | 3 | yes |
+| conflict | 300 | 300 | 300 | {'ARRIVED': 300} | {'ARRIVED': 300} | 3 | yes |
+| cancel | 300 | 300 | 300 (incl. stops) | {'ARRIVED': 300} | {'CANCEL_STOP': 251, 'ARRIVED': 49} | 3 | yes |
+| edge | 300 | 228 | 256 | {'ARRIVED': 228, 'EMPTY_PLAN': 72} | {'ARRIVED': 256, 'EMPTY_PLAN': 44} | 3 | yes |
+H2: holds
+
+## H3 safety, every unified trial
+RELEASED_EARLY: 0 []
+OVERWRITTEN: 0 []
+STALE_REJECTS: 0 []
+conflictLanded: 0 []
+keysDown: 0 []
+leased: 0 []
+state: 0 []
+cancelAir: 0 []
+unified TIMEOUT ends (keys and lease not judged): 0
+diagnostic: CONFLICTS refused 2242, ERASED 1454; legacy conflictLanded 2320
+H3: holds
+
+## H4 the correction is bounded and counted
+| family | divergences | corrections | accepted | escalations | unified driftReplans | legacy driftReplans |
+|---|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | 0 | 0 |
+| kick | 286 | 286 | 36 | 250 | 250 | 286 |
+| slip | 2129 | 1370 | 789 | 1340 | 1340 | 1961 |
+| conflict | 0 | 0 | 0 | 0 | 0 | 2314 |
+| cancel | 0 | 0 | 0 | 0 | 0 | 0 |
+| edge | 300 | 300 | 14 | 286 | 286 | 300 |
+violations 0 []
+H4: holds
+
+## H5 disturbed families: plans and ticks, paired unified - legacy
+| family | n | plans mean diff | 95% CI | fewer replans | arrived pairs | ticks mean ratio | 95% CI | median | faster/equal/slower | regression |
+|---|---|---|---|---|---|---|---|---|---|---|
+| kick | 300 | -0.120 | -0.157..-0.083 | yes | 300 | 1.0002 | 1.0000..1.0005 | 1.0000 | 0/298/2 | no |
+| slip | 300 | -2.023 | -2.480..-1.567 | yes | 249 | 1.0004 | 0.9993..1.0015 | 1.0000 | 16/217/16 | no |
+| conflict | 300 | -7.713 | -8.257..-7.180 | yes | 300 | 0.8645 | 0.8534..0.8752 | 0.8929 | 296/4/0 | no |
+| edge | 300 | -0.047 | -0.073..-0.023 | yes | 228 | 1.0009 | 1.0004..1.0015 | 1.0000 | 0/219/9 | no |
+fewer replans (CI upper < 0): ['kick', 'slip', 'conflict', 'edge']; faster (Tier S, CI upper < 0.97): ['conflict']
+H5: no regression
+
+## H6 cancel latency (ticks from the first request to the stop; legacy waits for the run to end)
+trials with a request 262; unified ends {'CANCEL_STOP': 251, 'ARRIVED': 11}; unified latency median 1.0 max 12; legacy median 35.0 (legacy never stopped while driving in 0)
+unified without a stop or arrival after the request 0 []; unified slower than legacy 0 []
+legacy latency >= 5: 222 trials, unified strictly lower in 222 (100.0%)
+H6: holds
+
+## H7 overhead: per-run driver tick time, paired unified - legacy, all families pooled (plan ticks included)
+tickP95Ns: n=1800 median diff +0.65 us, 95% CI +0.60..+0.70 us; median legacy 465.10 us, unified 26.25 us -> acceptable
+tickP99Ns: n=1800 median diff -23.65 us, 95% CI -51.10..+2.85 us; median legacy 14576.50 us, unified 14242.30 us -> acceptable
+tickP50Ns: n=1800 median diff +0.00 us, 95% CI +0.00..+0.00 us; median legacy 0.30 us, unified 0.30 us (diagnostic)
+tickMaxNs: n=1800 median diff -23.65 us, 95% CI -51.10..+2.85 us; median legacy 14576.50 us, unified 14242.30 us (diagnostic)
+
+diagnostic, per family (medians): tick p50 us legacy/unified, plan ms per run, cpu ms per run, alloc KB per run
+| family | p50 legacy | p50 unified | plan ms legacy | plan ms unified | cpu ms legacy | cpu ms unified | alloc KB legacy | alloc KB unified |
+|---|---|---|---|---|---|---|---|---|
+| clean | 0.30 | 0.40 | 14.459 | 13.805 | 15.625 | 15.625 | 41789.8 | 41791.1 |
+| kick | 0.30 | 0.30 | 11.216 | 10.842 | 15.625 | 15.625 | 34277.6 | 32679.6 |
+| slip | 0.30 | 0.30 | 34.908 | 28.960 | 31.250 | 31.250 | 100322.8 | 86145.1 |
+| conflict | 0.30 | 0.30 | 22.657 | 2.929 | 15.625 | 0.000 | 69181.1 | 7789.7 |
+| cancel | 0.20 | 0.30 | 23.494 | 23.484 | 31.250 | 15.625 | 72145.5 | 72131.0 |
+| edge | 0.30 | 0.30 | 31.010 | 30.656 | 31.250 | 31.250 | 88065.9 | 87181.8 |
+clean only (same work both arms), tick p50 diff median +0.100 us, 95% CI +0.100..+0.100 us
+H7: acceptable
+
+## R1 (Phase 06A) the retry is bounded and counted, every unified run
+| family | escalations | retries | retry plans | runs that retried | failed retry ended EMPTY_PLAN |
+|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | 0/0 |
+| kick | 250 | 0 | 0 | 0 | 0/0 |
+| slip | 1340 | 11 | 11 | 11 | 0/0 |
+| conflict | 0 | 0 | 0 | 0 | 0/0 |
+| cancel | 0 | 0 | 0 | 0 | 0/0 |
+| edge | 286 | 72 | 28 | 72 | 44/44 |
+violations 0 []
+R1: holds
+
+## R2 (Phase 06A) search and tick time, unified runs with at least one retry (nearest-rank p95)
+runs 83; retryNsMax p95 87.63 ms (<= 150), max 104.00 ms (<= 250); tickMaxNs p95 123.67 ms (<= 250), max 147.77 ms (<= 400); retryNsMax median 71.75 ms
+
+diagnostic, per family: unified retry time and its share of unified plan time
+| family | runs that retried | retry ms total | plan ms total | share |
+|---|---|---|---|---|
+| clean | 0 | 0.0 | 6152.3 | 0.0% |
+| kick | 0 | 0.0 | 3783.9 | 0.0% |
+| slip | 11 | 605.4 | 13293.4 | 4.6% |
+| conflict | 0 | 0.0 | 1606.4 | 0.0% |
+| cancel | 0 | 0.0 | 7141.0 | 0.0% |
+| edge | 72 | 4765.7 | 14231.6 | 33.5% |
+R2: holds
+
+## Slip mechanism (Phase 06A): retry plans over the unified slip runs
+retry plans 11; runs with a retry plan 11, their ends {'ARRIVED': 11} (arrived 11)
+slip mechanism: holds
+
+# Tier S summary
+H1 True; H2 True; H3 True; H4 True; H5 no regression True; H6 True; H7 acceptable; R1 True; R2 holds; slip mechanism True
+Tier S: no failure; fewer replans in ['kick', 'slip', 'conflict', 'edge']; faster in ['conflict'] (Tier S only)
+S2 (slip blocker): resolved (H2 every family True, R1 True, R2 holds, slip mechanism True)
