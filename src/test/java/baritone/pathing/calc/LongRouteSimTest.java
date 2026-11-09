@@ -48,7 +48,7 @@ public class LongRouteSimTest {
                 s.failureTimeoutMaxMS, s.planAheadPrimaryTimeoutMS, s.planAheadFailureTimeoutMS, s.planningTickLookahead,
                 s.pathingHierarchyLevels, s.pathingHierarchyCandidates, s.pathingHierarchyBidirectional, s.pathingHierarchyHeuristicFactor,
                 s.pathingHierarchyCorridorRadius, s.pathingHierarchyCoarseFactorShift, s.pathingHierarchyFarTerrain, s.simplifyUnloadedYCoord,
-                s.maxPathLengthBlocks, s.cutoffAtLoadBoundary, s.costVerificationLookahead)) {
+                s.maxPathLengthBlocks, s.cutoffAtLoadBoundary, s.costVerificationLookahead, s.pathingStateIdCache)) {
             reset(x);
         }
     }
@@ -146,6 +146,21 @@ public class LongRouteSimTest {
         assertEquals(1, t.goalSwitches);
         assertFalse(Double.isNaN(t.replanMs));
         assertTrue(goal(back).isInGoal(t.end));
+    }
+
+    @Test
+    public void stateIdCacheLeavesAnUnbudgetedTripUnchanged() {
+        LongRouteSim.Route r = route(small, 20, 440);
+        LongRouteSim.Trip a = quiet(() -> new LongRouteSim(small, LongRouteSim.Arm.PROD, 0).run(0, r.start(), goal(r.goal()), LongRouteSim.NO_EVENTS));
+        LongRouteSim.Trip b = quiet(() -> new LongRouteSim(small, LongRouteSim.Arm.IDS, 0).run(0, r.start(), goal(r.goal()), LongRouteSim.NO_EVENTS));
+        assertTrue(a.reason, a.ok);
+        assertTrue(b.reason, b.ok);
+        assertFalse(a.searches.stream().anyMatch(LongRouteSim.Search::timedOut));
+        assertEquals(a.travel, b.travel, 0);
+        assertEquals(a.nodes(), b.nodes());
+        assertEquals(a.segments, b.segments);
+        assertEquals(a.end, b.end);
+        assertTrue(Baritone.settings().pathingStateIdCache.value); // the IDS arm turned it on for its searches
     }
 
     // ---- corpus ----

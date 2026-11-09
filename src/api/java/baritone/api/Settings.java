@@ -653,6 +653,13 @@ public final class Settings {
     public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
 
     /**
+     * Ostinato 2.0 Phase 07: look block-state ids up through a small direct-mapped cache (StateIdCache) instead of the
+     * block-state registry's identity hash map, in the planner's per-state property tables. Same ids, so the same
+     * costs; only faster. Off until proven.
+     */
+    public final Setting<Boolean> pathingStateIdCache = new Setting<>(false);
+
+    /**
      * Ostinato: let the trained path decision matrix pick the backend (A*, weighted A*, hierarchical) per segment from its
      * terrain and distance category. Off until proven; with no matrix file or a thin row the settings above decide.
      */

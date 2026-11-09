@@ -17,6 +17,7 @@
 
 package baritone.pathing.precompute;
 
+import baritone.Baritone;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BlockStateInterface;
 import net.minecraft.world.level.block.Block;
@@ -25,6 +26,13 @@ import net.minecraft.world.level.block.state.BlockState;
 public class PrecomputedData {
 
     private final byte[] data = new byte[Block.BLOCK_STATE_REGISTRY.size()];
+
+    // Ostinato 2.0 Phase 07: pathingStateIdCache, read once per context (one search)
+    private final boolean idCache = Baritone.settings().pathingStateIdCache.value;
+
+    private int id(BlockState state) {
+        return idCache ? StateIdCache.id(state) : Block.BLOCK_STATE_REGISTRY.getId(state);
+    }
 
     /**
      * byte layout
@@ -70,7 +78,7 @@ public class PrecomputedData {
     }
 
     public boolean canWalkOn(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
-        int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+        int id = id(state);
         int blockData = data[id];
 
         if ((blockData & COMPLETED_MASK) == 0) { // we need to fill in the data
@@ -87,7 +95,7 @@ public class PrecomputedData {
     public boolean canWalkThrough(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
         // the per-state cache is position-blind: a position blacklist (stuck detectors) must be checked first or it is ignored
         if (!baritone.altoclef.AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().isEmpty() && baritone.altoclef.AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) return false;
-        int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+        int id = id(state);
         int blockData = data[id];
 
         if ((blockData & COMPLETED_MASK) == 0) { // we need to fill in the data
@@ -103,7 +111,7 @@ public class PrecomputedData {
 
     public boolean fullyPassable(BlockStateInterface bsi, int x, int y, int z, BlockState state) {
         if (!baritone.altoclef.AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().isEmpty() && baritone.altoclef.AltoClefSettings.getInstance().shouldAvoidWalkThroughForce(x, y, z)) return false;
-        int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+        int id = id(state);
         int blockData = data[id];
 
         if ((blockData & COMPLETED_MASK) == 0) { // we need to fill in the data

@@ -50,8 +50,11 @@ import java.util.*;
  */
 public final class LongRouteSim {
 
-    /** PROD: createPathfinder as shipped (A*, far segments weighted). HPA: the same with pathingHierarchical on. */
-    public enum Arm { PROD, HPA }
+    /**
+     * PROD: createPathfinder as shipped (A*, far segments weighted). HPA: the same with pathingHierarchical on. IDS: PROD
+     * with pathingStateIdCache on (Phase 07's slice).
+     */
+    public enum Arm { PROD, HPA, IDS }
 
     private static final IBaritone NONE = (IBaritone) Proxy.newProxyInstance(IBaritone.class.getClassLoader(), new Class<?>[]{IBaritone.class}, (p, m, a) -> null);
     private static final Field BARITONE;
@@ -333,6 +336,7 @@ public final class LongRouteSim {
     /** One whole trip from {@code start} to {@code goal0}. */
     public Trip run(int tripId, BetterBlockPos start, Goal goal0, Events ev) {
         this.tripId = tripId;
+        Baritone.settings().pathingStateIdCache.value = arm == Arm.IDS; // read by each search's context
         RouteReuse.clear();
         graph = new SectionGraph();
         goal = goal0;
@@ -616,6 +620,7 @@ public final class LongRouteSim {
      */
     public double cancelLatency(BetterBlockPos start, Goal goal0, long delayMs) throws InterruptedException {
         goal = goal0;
+        Baritone.settings().pathingStateIdCache.value = arm == Arm.IDS;
         graph = new SectionGraph();
         RouteReuse.clear();
         AbstractNodeCostSearch f = create(start, context(world), null);
