@@ -47,6 +47,9 @@ import java.util.Random;
  * <p>
  * Off by default: {@code gradlew test -Postinato_bench --tests "*UnifiedBatchBench"}. With OSTINATO_WRITE_DOCS=1 the
  * raw files go to docs/ostinato2/raw/phase06, else to build/ostinato2/raw/phase06.
+ * <p>
+ * Phase 06A: OSTINATO_BATCH_SEED and OSTINATO_BATCH_WARMUP_SEED replace the two seeds, and OSTINATO_BATCH_PHASE the
+ * phase06 directory name. Unset, the Phase 06 values stand.
  */
 public class UnifiedBatchBench {
 
@@ -181,11 +184,27 @@ public class UnifiedBatchBench {
     static {
         StringBuilder b = new StringBuilder("family,trial,arm,order,end,ticks,plans,driftReplans,collided,kickedAt,cancelFrom,cancelRefusals,cancelLatency,"
                 + "onGroundAtEnd,endX,endY,endZ,keysDown,leased,state,cause,preLanded,conflictLanded,jumps,sprints,maxSpeed,"
-                + "tickN,tickP50Ns,tickP95Ns,tickP99Ns,tickMaxNs,planNs,cpuNs,allocBytes");
+                + "tickN,tickP50Ns,tickP95Ns,tickP99Ns,tickMaxNs,planNs,cpuNs,allocBytes,retryNs,retryNsMax");
         for (Counter c : Counter.values()) {
             b.append(',').append(c);
         }
         HEAD = b.append(",params").toString();
+    }
+
+    private static long env(String name, long fallback) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? fallback : Long.parseLong(v.trim());
+    }
+
+    private static String phase() {
+        String v = System.getenv("OSTINATO_BATCH_PHASE");
+        if (v == null || v.isBlank()) {
+            return "phase06";
+        }
+        if (!v.matches("[a-z0-9]+")) {
+            throw new IllegalArgumentException("OSTINATO_BATCH_PHASE must be [a-z0-9]+: " + v);
+        }
+        return v;
     }
 
     private static String row(Trial t, Result r, int order, long cpu, long alloc) {
@@ -202,7 +221,8 @@ public class UnifiedBatchBench {
                 .append(',').append(fmt("%.4f", r.maxSpeed)).append(',').append(r.tickNanos.size())
                 .append(',').append(UnifiedHarness.quantile(r.tickNanos, 0.50)).append(',').append(UnifiedHarness.quantile(r.tickNanos, 0.95))
                 .append(',').append(UnifiedHarness.quantile(r.tickNanos, 0.99)).append(',').append(UnifiedHarness.quantile(r.tickNanos, 1.0))
-                .append(',').append(r.planNanos).append(',').append(cpu).append(',').append(alloc);
+                .append(',').append(r.planNanos).append(',').append(cpu).append(',').append(alloc)
+                .append(',').append(r.retryNanos).append(',').append(r.retryNanosMax);
         for (Counter c : Counter.values()) {
             b.append(',').append(r.count(c));
         }
@@ -216,14 +236,17 @@ public class UnifiedBatchBench {
         long thread = Thread.currentThread().getId();
 
         // Warm-up, from its own seed, thrown away.
-        List<Trial> warm = generateAll(WARMUP_SEED, WARMUP / FAMILIES.length + 1);
+        long seed = env("OSTINATO_BATCH_SEED", SEED);
+        long warmupSeed = env("OSTINATO_BATCH_WARMUP_SEED", WARMUP_SEED);
+        String phase = phase();
+        List<Trial> warm = generateAll(warmupSeed, WARMUP / FAMILIES.length + 1);
         for (Trial t : warm) {
             UnifiedHarness.run(t.scenario, false);
             UnifiedHarness.run(t.scenario, true);
         }
 
-        List<Trial> trials = generateAll(SEED, N);
-        Path dir = "1".equals(System.getenv("OSTINATO_WRITE_DOCS")) ? project("docs/ostinato2/raw/phase06") : Paths.get("build", "ostinato2", "raw", "phase06");
+        List<Trial> trials = generateAll(seed, N);
+        Path dir = "1".equals(System.getenv("OSTINATO_WRITE_DOCS")) ? project("docs/ostinato2/raw/" + phase) : Paths.get("build", "ostinato2", "raw", phase);
         Files.createDirectories(dir);
         long started = System.nanoTime();
         try (BufferedWriter out = Files.newBufferedWriter(dir.resolve("headless-batch.csv"), StandardCharsets.UTF_8)) {
@@ -245,7 +268,7 @@ public class UnifiedBatchBench {
             }
         }
         long took = (System.nanoTime() - started) / 1_000_000;
-        String summary = "UNIFIED-BATCH seed=" + SEED + " warmupSeed=" + WARMUP_SEED + " n=" + N + " families=" + String.join("/", FAMILIES)
+        String summary = "UNIFIED-BATCH phase=" + phase + " seed=" + seed + " warmupSeed=" + warmupSeed + " n=" + N + " families=" + String.join("/", FAMILIES)
                 + " trials=" + trials.size() + " runs=" + trials.size() * 2 + " wallMs=" + took
                 + " java=" + System.getProperty("java.version") + " os=" + System.getProperty("os.name") + " cpus=" + Runtime.getRuntime().availableProcessors();
         System.out.println(summary);

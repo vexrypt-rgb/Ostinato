@@ -35,6 +35,11 @@ public final class CorrectionPolicy {
     public static final int BUDGET = 1;
     /** How far below the lower of start and goal the replay may go before it counts as a fall. */
     static final double FLOOR = 1.0;
+    /**
+     * Ostinato 2.0 Phase 06A: the node budget of the one retry a correction-triggered replan gets when its first search
+     * comes back empty. Twice the driver's own budget; chosen from the Phase 06 slip diagnostic.
+     */
+    public static final int RETRY_NODES = 3000;
 
     private CorrectionPolicy() {}
 

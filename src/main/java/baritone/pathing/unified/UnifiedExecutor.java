@@ -94,7 +94,11 @@ public final class UnifiedExecutor {
         CORRECTIONS, CORRECTIONS_ACCEPTED, ESCALATIONS,
         CANCEL_LATENCY_SUM, CANCEL_LATENCY_MAX,
         /** Leases given up, verified, because every process was about to be cancelled while the segment ran on. */
-        PROCESS_CANCELS
+        PROCESS_CANCELS,
+        /** Phase 06A: second, deeper searches after a correction-triggered replan found no path. One at most a replan. */
+        CORRECTION_RETRIES,
+        /** Phase 06A: the retries that found a plan. */
+        CORRECTION_RETRY_PLANS
     }
 
     private final InputArbiter arbiter;

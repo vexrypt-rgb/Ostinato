@@ -56,6 +56,8 @@ public final class PhysicsTravel {
     /** Ostinato 2.0 Phase 06: corrections spent on the current plan, and the sim the correction replays in (made on first use). */
     private int corrections;
     private PlayerSim scratch;
+    /** Ostinato 2.0 Phase 06A: the deeper planner of the one retry after a correction-triggered replan found no path (made on first use). */
+    private PhysicsPathfinder retryFinder;
     /** Ostinato 2.0 Phase 04 validation: searches started, and how many of them the drift check started. Counters only. */
     public static final java.util.concurrent.atomic.AtomicLong plans = new java.util.concurrent.atomic.AtomicLong(),
             driftReplans = new java.util.concurrent.atomic.AtomicLong();
@@ -149,6 +151,14 @@ public final class PhysicsTravel {
             plans.incrementAndGet();
             if (drifted) driftReplans.incrementAndGet();
             plan = finder.nativeSearch(Baritone.settings().nativeAcceleration.value).plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
+            if ((plan == null || plan.isEmpty()) && ux != null && drifted) {
+                // Ostinato 2.0 Phase 06A: the correction sent this replan and it found nothing. Search once more, deeper;
+                // not a plan or a drift replan of its own. Empty again, the failure below runs as before.
+                ux.bump(UnifiedExecutor.Counter.CORRECTION_RETRIES);
+                if (retryFinder == null) retryFinder = new PhysicsPathfinder(world, CorrectionPolicy.RETRY_NODES).viz(viz);
+                plan = retryFinder.nativeSearch(Baritone.settings().nativeAcceleration.value).plan(real, goal.x + 0.5, goal.y, goal.z + 0.5, 0.35);
+                if (plan != null && !plan.isEmpty()) ux.bump(UnifiedExecutor.Counter.CORRECTION_RETRY_PLANS);
+            }
             if (plan == null || plan.isEmpty()) {
                 cooldown = 20;
                 if (ux != null) ux.fail(UnifiedExecutor.Cause.EMPTY_PLAN);

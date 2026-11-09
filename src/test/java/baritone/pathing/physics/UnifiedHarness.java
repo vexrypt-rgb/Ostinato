@@ -219,6 +219,10 @@ final class UnifiedHarness {
         int ticks;
         int plans, driftReplans;
         long planNanos;
+        /** Phase 06A: time in the deeper retry search, in all (also counted in {@link #planNanos}) and the longest one. */
+        long retryNanos, retryNanosMax;
+        /** Phase 06A: the most nodes one retry popped, or -1 if none ran. */
+        int retryExpansionsMax = -1;
         final List<Long> tickNanos = new ArrayList<>();
         int jumps, sprints, collidedTicks;
         /** The tick the shove landed, or -1. */
@@ -304,6 +308,7 @@ final class UnifiedHarness {
         PlayerSim predicted = new PlayerSim(s.model);
         PlayerSim scratch = new PlayerSim(s.model);
         PhysicsPathfinder finder = new PhysicsPathfinder(s.model, nodeBudget);
+        PhysicsPathfinder retryFinder = null;
         List<PhysicsPathfinder.Action> plan = null;
         int step = 0, corrections = 0;
         int cancelFrom = s.cancelTick;
@@ -367,6 +372,23 @@ final class UnifiedHarness {
                 long p0 = System.nanoTime();
                 plan = finder.plan(real, s.gx, s.gy, s.gz, RADIUS);
                 r.planNanos += System.nanoTime() - p0;
+                if ((plan == null || plan.isEmpty()) && ux != null && drifted) {
+                    // PhysicsTravel's Phase 06A retry: one deeper search after a correction-triggered replan found nothing.
+                    ux.bump(UnifiedExecutor.Counter.CORRECTION_RETRIES);
+                    if (retryFinder == null) {
+                        retryFinder = new PhysicsPathfinder(s.model, CorrectionPolicy.RETRY_NODES);
+                    }
+                    long q0 = System.nanoTime();
+                    plan = retryFinder.plan(real, s.gx, s.gy, s.gz, RADIUS);
+                    long q = System.nanoTime() - q0;
+                    r.planNanos += q;
+                    r.retryNanos += q;
+                    r.retryNanosMax = Math.max(r.retryNanosMax, q);
+                    r.retryExpansionsMax = Math.max(r.retryExpansionsMax, retryFinder.lastExpansions());
+                    if (plan != null && !plan.isEmpty()) {
+                        ux.bump(UnifiedExecutor.Counter.CORRECTION_RETRY_PLANS);
+                    }
+                }
                 if (plan == null || plan.isEmpty()) {
                     if (trace) {
                         r.failState = new PlayerSim(s.truth).copyFrom(real);
