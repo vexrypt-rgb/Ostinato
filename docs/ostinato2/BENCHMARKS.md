@@ -2228,3 +2228,294 @@ and H7 is acceptable, but L5 is inconclusive rather than acceptable, and the Tie
 re-run after its result was seen.
 
 Full suite on the results code (`deec15be1`): 1604 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.
+
+
+## Phase 07: long-distance routing (2026-11-09, branch `ostinato2/claude-review`, local only)
+
+The task: improve long-distance navigation per unit of compute and complexity. A hierarchical global layer is one
+hypothesis, not a requirement. Phase start HEAD `db28a1cc3` (clean tree). The planner, the executor and every default
+setting are left as they are; the existing hierarchy (`pathingHierarchical`) stays default **false**.
+
+### Audit: how a long trip is planned today (VERIFIED, read from `db28a1cc3`)
+
+```
+Goal (#goto x y z / x z, a process's goal)
+  │
+  ▼
+PathingBehavior.findPathInNewThread ─ budgets: first search 500/2000 ms; plan-ahead 4000/5000 ms;
+  │                                    a start searched again for the same goal doubles, up to failureTimeoutMaxMS 16000
+  │                                    (mayEscalate while below it); holdAtDrops when the goal's chunk is loaded
+  ▼
+createPathfinder ─ GoalBlock in an unloaded chunk → GoalXZ (simplifyUnloadedYCoord, default true)
+  │              ─ Favoring(previous path, 0.5 backtrack), dead set (A* branch), farSegmentWeight 2.0 at ≥ 128 blocks
+  │              ─ pathingHierarchical (default false) → HierarchicalPathFinder; otherwise AStarPathFinder
+  ▼
+AbstractNodeCostSearch.calculate ─ RouteReuse.cut → calculate0 (A*: stops at 50 unloaded-chunk border hits)
+  │                               → postProcess → cutoffAtLoadedChunks (off) → staticCutoff 0.9 (min 30)
+  │                               → hold at the first irreversible drop (timed-out searches) → SUCCESS_TO_GOAL / SEGMENT
+  ▼
+PathExecutor ─ walks the segment; checks movements p+1..p+4 each tick (costVerificationLookahead 5), cancels on COST_INF
+  │
+  └─ plan-ahead: when the movements after the current one cost < planningTickLookahead (150 ticks), the next segment is
+     searched from this one's end while the bot walks on; NEXT_CALC_FAILED retries next tick; an exhausted plan-ahead
+     that does not reach the goal bans the pocket (markDead) and replans
+```
+
+There is no global route layer in the production path. A long trip is a chain of segments, each one an A* search toward
+the final goal that ends where the search budget or the loaded terrain runs out, joined by the plan-ahead.
+
+**The existing hierarchy (default off, `pathingHierarchical`).**
+- What it is: `HierarchicalPathFinder` over `SectionGraph` (16³ sections, edges priced on demand), with
+  `BidirectionalRoute`, `CostToGoMap` and an optional `CoarseGraph` level. The abstract route becomes a corridor of
+  sections (`nodeFilter`) for an inner A*.
+- When it engages: only when the goal has a position (`IGoalRenderPos`) and is ≥ 64 blocks away. It falls back to plain
+  A* on no abstract route or a corridor miss.
+
+**Gaps in the existing hierarchy (VERIFIED by reading; each one measured below where marked).**
+1. **Inert for typical long-distance goals.** `#goto x z` is a GoalXZ, and a GoalBlock in an unloaded chunk is
+   simplified to one. GoalXZ has no position, so the hierarchy falls back ("goal has no position"). It engages only for
+   goals inside loaded terrain (render distance, a few hundred blocks). Measured: every HORIZON-mode search.
+2. **Budget signals are not passed on.** `timedOut`/`exhausted` of the inner A* are not copied to the wrapper. A
+   timed-out first search is not escalated, a timed-out search is not held at drops, and `markDead` never fires.
+3. **A corridor timeout wastes the budget.** When the corridor A* runs out of time short of the goal, its partial path
+   is thrown away (unless the goal is in unknown terrain) and plain A* gets only what time is left. Measured: MAZE,
+   where the fallback gets about 1 ms and returns 64-node segments.
+4. **No dead set:** the hierarchical branch returns before `avoidDead`.
+5. **Unbounded cache:** `SectionGraph.edges` has no size limit.
+6. **No invalidation on world or dimension change:** `onWorldEvent` does not clear `SectionGraph.INSTANCE`.
+7. **Slow cancel:** the abstract search does not check `cancelRequested`. Measured on the dev corpus: a median of 142 ms
+   (BREAK_PLACE) and 230 ms (MAZE) from `cancel()` to return, max 280 ms, against ≤ 0.12 ms for A*.
+8. **Bench weight (fixed in this phase):** PathBench's hpa arm searched the corridor at weight 1, while production passes
+   2.0 beyond 128 blocks. The new `fw` token passes production's weight.
+9. **A doc artifact:** "hierarchy ~4% longer than wa2" in the earlier long-horizon notes compares different query sets.
+   Recomputed on the queries both solved, hpa1bi/wa2 = 0.9658.
+
+### Audit answers (VERIFIED by reading, and by the runs below where marked)
+
+1. **Is there existing hierarchical or segmented routing?**
+   - Production is segmented: a long trip is a chain of A* segments joined by the plan-ahead.
+   - A hierarchy exists, default off: `HierarchicalPathFinder`, `SectionGraph`, `CoarseGraph`, `BidirectionalRoute` and
+     `CostToGoMap`.
+2. **Are chunk-level abstractions used?**
+   - Only in that default-off hierarchy: 16³ sections, plus the optional coarse level.
+   - Production A* reads blocks, falling back to the lossy world cache in unloaded chunks.
+3. **Are long searches a bottleneck?**
+   - Not for travel. Planning runs off the client thread and is mostly hidden behind the plan-ahead. Production's
+     planning wait is 0.25% of trip ticks over the dev corpus, and 1.80% in its worst cell (below).
+   - They are a CPU cost: a known-terrain BREAK_PLACE trip of 1000 blocks plans for 4–17 s, and a CAVES trip for up to
+     27 s.
+4. **Does search, world access or cost evaluation dominate?** Cost evaluation dominates, and within it a single
+   block-state id lookup (profile below).
+5. **Would a new layer duplicate existing functionality?** Yes: the section graph, the coarse graph and the
+   bidirectional route already exist.
+6. **Which search assumptions would a hierarchy invalidate?**
+   - Every search heads for the final goal, which the plan-ahead, route reuse and Favoring rely on.
+   - The search space is unrestricted. The corridor filter gives this up, and with it the guarantee of a weighted-A*
+     path.
+   - GoalXZ goals beyond loaded terrain.
+   - The dead set and the hold at drops, both driven by the inner search's timeout and exhaustion signals.
+   - Cancel within a millisecond.
+
+### Baseline: PathBench (VERIFIED, Tier S, `raw/phase07/pathbench/`)
+
+60 fixed queries per arm: 5 terrains × 3 lengths × 4 queries, 3 repetitions, a 10 s budget. LONG medians, in ms:
+
+| arm | FLAT | HILLS | CAVES | WATER | BREAK_PLACE | fails | all-length median / p95 ms | MB alloc | mean travel |
+|---|---|---|---|---|---|---|---|---|---|
+| `astar` (weight 1) | 8.4 | 2763.3 | 230.4 | 1156.7 | 10008.6 | 4/60 | 126.6 / 10007.9 | 4904 | 1202.1 |
+| `wa:2` (production's far weight) | 3.6 | 17.8 | 91.9 | 4.9 | 4031.8 | 1/60 | 7.0 / 4031.8 | 997 | 1383.5 |
+| hierarchy, weight 1 | 92.1 | 1790.4 | 265.5 | 757.8 | 5117.1 | 0/60 | 150.0 / 5012.8 | 3135 | 1385.5 |
+| hierarchy, production weight (`fw`) | 87.3 | 129.8 | 158.9 | 225.2 | 2615.6 | 0/60 | 89.3 / 2615.6 | 798 | 1428.5 |
+| same, warm section graph | 3.9 | 21.0 | 70.4 | 5.8 | 2499.8 | 0/60 | 6.7 / 2499.8 | 733 | 1428.5 |
+
+- Command: `scripts`-style loop over `OSTINATO_BENCH_FINDER` = `astar`, `wa:2`, `hpa:0:1:1:2:1:bi` and
+  `hpa:0:1:1:2:1:bi:fw` (the last also with `OSTINATO_BENCH_WARM=1`), each with `OSTINATO_BENCH_REPS=3`, running
+  `gradlew --offline --no-daemon --no-build-cache --max-workers=2 cleanTest test -x nativeHost -Postinato_bench
+  --tests baritone.pathing.calc.PathBenchTest.benchmark`.
+- The earlier long-horizon notes say the hierarchy is "~4% longer than wa2". That compares different query sets. On the
+  queries both solved, hpa1bi/wa2 travel = 0.9658 (gap 9).
+
+
+### Long-distance corpus (new harness, Tier S)
+
+**`LongRouteSim`** (`src/test/java/baritone/pathing/calc/LongRouteSim.java`, `9591d363a`).
+- A whole trip runs headless. Each segment is searched by `createPathfinder`'s logic, with
+  `findPathInNewThread`'s budgets, and then walked with no physics: travel is the segment's planned cost.
+- What it reproduces from production:
+  - first search 500/2000 ms;
+  - plan-ahead 4000/5000 ms, started when the movements after the current one cost < 150 ticks;
+  - a start searched again for the same goal doubles its budget, up to 16000 ms;
+  - GoalBlock in an unloaded chunk → GoalXZ;
+  - far-segment weight 2.0 at ≥ 128 blocks and Favoring;
+  - the whole `calculate()` wrapper: route reuse, cutoffs, and the hold at an irreversible drop on a timed-out
+    search.
+- Not modelled:
+  - the executor (a segment always walks in its cost unless a world change stops it);
+  - the dead set: an exhausted plan-ahead that misses the goal ends the trip as "sealed", where production would
+    ban the pocket and replan;
+  - mobs, and the soft-cancel timing of a goal change.
+- **Travel** is in planner ticks, which are NOT_EQUIVALENT to live ticks.
+- **Wait** is the ticks the bot stands still for a plan:
+  - the whole first search;
+  - a plan-ahead's overrun past the segment's end;
+  - a replan after a stop.
+- **Total** = travel + wait.
+- The searches run on the test thread, timed with `System.nanoTime` and per-thread allocation.
+- **Horizon mode:** only chunks within 160 blocks of the bot's x are loaded, and more are revealed as it moves, so the
+  goal starts in unloaded terrain.
+- **Events:**
+  - Barrier: a full wall dropped across the route mid-trip; the executor's cost check stops the segment where the wall
+    is first seen.
+  - GoalSwitch: a new goal after a fixed travel time.
+  - cancel: `cancel()` 150 ms into a search; the latency is measured to return.
+- **Guards:** 400 searches, 240 s of planning, 100 ticks of travel per straight-line block, or 25 segments without
+  progress. A guard fails the trip.
+- `LongRouteSim.bindItemComponents()` binds empty item components in the test JVM. Headless MC 26.3 does not bind
+  them, and `MovementFall` builds an `ItemStack` in its static initializer.
+
+**Terrain** (`bench/LongTerrain`, seeded, all synthetic; no real-world map is covered).
+- OPEN, CAVES, WATER, MIXED (hills) and BREAK_PLACE reuse PathBench's generators at 2400 × 128.
+- New:
+  - FOREST: gentle ground, stone boulders and trees at 5%;
+  - MOUNTAINS: broad ridges up to ~34 blocks with rough 1–3-block detail;
+  - MAZE: corridors with alternatives, i.e. full-height walls every 48–72 blocks, each with 1–3 gaps 1–3 wide.
+
+**Coverage against the task's 12 families.**
+
+| task family | covered by | tier |
+|---|---|---|
+| open | OPEN | S |
+| forest | FOREST | S |
+| mountains | MOUNTAINS | S |
+| caves | CAVES (underground start and goal) | S |
+| water | WATER | S |
+| mixed | MIXED | S |
+| corridors with alternatives | MAZE | S |
+| mining | BREAK_PLACE (break) | S |
+| placement | BREAK_PLACE (place) | S |
+| unloaded or partially known terrain | horizon mode (160-block load radius), every family | S |
+| world change | change mode: a wall across the route (OPEN, FOREST, MIXED) | S |
+| goal change or cancel | goal mode: switch (OPEN, MIXED); cancel latency (MAZE, BREAK_PLACE) | S |
+
+Not covered: real worlds, mobs, the lossy world cache, chunk loading latency, and executor dynamics (falls, slips,
+corrections). No Tier-L run was made (nothing in production changed).
+
+**Modes per family and seed.**
+- known: routes of 500 and 1000 blocks, all terrain loaded;
+- horizon: 2000 blocks, loaded 160 blocks ahead;
+- change: OPEN, FOREST and MIXED, 500 blocks;
+- goal: OPEN and MIXED, 1000 blocks;
+- cancel: MAZE and BREAK_PLACE, 1000 blocks, 3 repetitions.
+
+Each route type is run `TRIPS` times, and both arms run each route back to back, in alternating order.
+
+### Dev corpus, world seed 2000 (VERIFIED, Tier S, `raw/phase07/longroute/p07-dev-*`)
+
+PROD against HPA, the existing hierarchy at its defaults with production's weight; 2 trips per route type, 54 pairs.
+Goal-mode rows are excluded: the switch point then depended on each arm's first segment, which was fixed afterwards
+(`fa7165a32`).
+
+| family | PROD known: plan ms per trip | PROD wait share, known | HPA/PROD total ticks, known (CI) | HPA/PROD plan ms, known (CI) |
+|---|---|---|---|---|
+| OPEN | 9–25 | 0.01% | 1.0014 (0.9988–1.0049) | 20.1 (5.5–50.7) |
+| FOREST | 8–17 | 0.01% | 1.0023 (0.9785–1.0355) | 31.0 (20.5–47.3) |
+| MOUNTAINS | 12–422 | 0.08% | 1.0031 (0.9994–1.0186) | 7.4 (2.0–16.1) |
+| CAVES | 71–26748 | 1.80% | 1.0183 (1.0012–1.2822) | 4.9 (0.26–5.0) |
+| WATER | 7–30 | 0.01% | 1.0143 (0.9865–1.0644) | 39.9 (23.7–60.9) |
+| MIXED | 18–107 | 0.04% | 1.0281 (1.0182–1.1043) | 9.1 (3.1–25.8) |
+| MAZE | 467–4329 | 0.29% | 1.0143 (1.0080–1.1059) | 2.2 (1.2–14.8) |
+| BREAK_PLACE | 4154–17264 | 1.01% | 1.0153 (1.0000–1.0328) | 2.6 (0.77–6.8) |
+
+- Every trip reached its goal on both arms; no guard fired.
+- PROD's wait share is 0.25% over all trips.
+- **Horizon mode (2000 blocks, loaded 160 ahead):** total-tick ratios 1.0000–1.0002. All 297 HPA searches had a
+  simplified goal and ended "fallback:goal has no position", so the hierarchy is inert there (gap 1).
+- **Change mode (a wall across the route):** both arms recovered every time. HPA costs 4.6–28.8× more planning.
+- **Cancel latency:** PROD median 0.01–0.04 ms; HPA median 141.8 ms on BREAK_PLACE and 230.0 ms on MAZE, max 279.9
+  (gap 7).
+- The one wait above 5% of a trip is a CAVES 500 PROD trip: 311 ticks, 6.9%. Two plan-ahead searches timed out on a
+  path that began with an irreversible drop. The hold at drops refused them, and a fresh 16 s search followed. That is a
+  safety rule doing its job, not slow search.
+
+### Profile: where production planning time goes (VERIFIED, Tier S, `raw/phase07/profile/`)
+
+- **Run:** JFR CPU samples every 5 ms over the 20 LONG PathBench queries with `wa:2`, 1 repetition.
+- **Command:** `OSTINATO_BENCH=p07-prof-wa2 OSTINATO_BENCH_REPS=1 OSTINATO_BENCH_FINDER=wa:2 OSTINATO_BENCH_ONLY=LONG
+  OSTINATO_BENCH_PROFILE=1`, the same gradle line, then `jfr print --json --stack-depth 64 --events
+  jdk.ExecutionSample` and `python docs/ostinato2/tools/jfr_planner_split.py`.
+- **Samples:** 8630 with an A* frame on the stack.
+- By bucket:
+
+  | bucket | self % | inclusive % |
+  |---|---|---|
+  | jdk / fastutil collections | 41.6 | — |
+  | movement cost (`baritone.pathing.movement`) | 23.1 | 76.5 |
+  | node map / open set | 12.9 | 12.9 |
+  | A* loop (`calculate0`) | 10.2 | 100 |
+  | block properties | 9.9 | 50.8 |
+  | world access | 1.3 | 1.3 |
+
+- **39.8% of all samples are one frame:** `Reference2IntOpenHashMap.getInt`, called only from `IdMapper.getId`, i.e.
+  `Block.BLOCK_STATE_REGISTRY.getId(state)`. The callers:
+  - `PrecomputedData.canWalkThrough`: 1971 samples;
+  - `canWalkOn`: 582;
+  - `fullyPassable`: 345;
+  - `MovementHelper.isBlockNormalCube`: 535.
+
+  Each looks up the state's id to index a per-state byte table. The registry holds every block state (about 30k), so
+  each lookup is an identity-hash probe into tables of about 0.5 MB, while a search touches a few dozen states.
+- The open set's `siftUp` is the next frame, at 9.8%.
+- **Caveat:** world access is a synthetic array here. Live, it reads chunk palettes and costs more, so the id lookup's
+  live share is likely lower than 40%. JFR without `DebugNonSafepoints` can also shift samples between inlined frames.
+  The size of the effect is therefore taken from an A/B timing, not from this profile.
+
+### Decision gate (recorded before any implementation, 2026-11-09)
+
+**Choice: Option A.** Improve the existing planner at the verified bottleneck: a small cache in front of the
+block-state id lookup in cost evaluation, behind a new default-false flag.
+
+**Evidence.**
+- The profile: the id lookup is 40% of planner CPU samples, and cost evaluation is 76.5% inclusive.
+- The dev corpus: planning wait is not a travel bottleneck (0.25% of ticks), but planning CPU is large on hard terrain,
+  up to 27 s per trip.
+- Lower CPU per search serves the task's objective directly: performance per unit of compute. Where a budget binds, it
+  also means more nodes in the same time.
+
+**Rejected.**
+- **Option B, a new hierarchy.**
+  - The existing one is never faster in total ticks on the dev corpus (median 1.0018 overall) and costs 2–40× more
+    planning.
+  - It is inert beyond loaded terrain, and its cancel takes 140–280 ms.
+  - A new layer would duplicate it, and would aim at a cost (planning wait) that is 0.25% of trip time.
+- **Fixing the existing hierarchy's gaps 1–7.** Most of the work, and the best case is still no faster in total ticks.
+  They are listed for handoff instead.
+- **Option C.** It would leave a measured 40% hotspot in every search.
+- **A mixin field on `BlockState`** holding the id or the flags. Faster still, but it patches a vanilla class, and
+  mixins do not run headless, so it cannot be measured or tested there.
+- **Relaxing the hold at drops** (the one CAVES wait). It trades safety for at most ~2% of one cell's ticks.
+- **The open set.** `siftUp` is 9.8%, and the heap is already the tuned binary heap.
+
+**Expected improvement.** Planning ms per expanded node down 20–40% in every family, depending on how much of the 40%
+the cache removes. Paths are unchanged wherever no budget binds, since the same ids give the same costs. Where a budget
+binds, the search expands more nodes and the path may differ.
+
+**Complexity.**
+- One new class of about 30 lines and one setting.
+- The four lookup sites take the cache when the flag is on.
+- No change to the search, the costs, the budgets or the executor.
+
+**Risks.**
+- The gain may be smaller than the profile suggests: the attribution caveat above.
+- A collision in the cache costs a registry lookup. It is never a wrong id, since the state is compared by identity.
+- Thread safety: the entries are immutable, so a racing reader sees a whole entry or none.
+- The main-thread cost checks of the executor take the same path when the flag is on, where the cache should only lower
+  their cost. That is not measured live in this phase.
+
+**Smallest slice.**
+- `StateIdCache`: a static direct-mapped cache of 1024 immutable (state, id) entries.
+  - On a miss or a collision it falls back to the registry.
+  - Bounded: at most 1024 entries.
+  - No invalidation is needed: a state's id is fixed for the life of the JVM once the registry is built.
+- Used by `PrecomputedData` (three sites) and `MovementHelper.isBlockNormalCube` when the new setting
+  `pathingStateIdCache` is true (default **false**).
+- Off, every site runs the existing registry lookup.
