@@ -1,0 +1,182 @@
+EXCEPTION com.mojang.authlib.exceptions.InvalidCredentialsException at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:70)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+INTERACTTEST start laps=54 reps=3 scenarios=9 timeout=600 post=40 seed=88001 flag=absent rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true
+INTERACTTEST row lap=0 scen=OPEN arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=69 lapTicks=70 uses=1 menu=chest active=false keys=- msg="done in 3.5s"
+INTERACTTEST row lap=0 scen=OPEN arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=6023.31
+INTERACTTEST keys still held after lap 0: -
+INTERACTTEST row lap=1 scen=OPEN arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=1 scen=OPEN arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=26.93
+INTERACTTEST keys still held after lap 1: -
+INTERACTTEST row lap=2 scen=CAT arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=2 scen=CAT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=20.18
+INTERACTTEST keys still held after lap 2: -
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=3 scen=CAT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+INTERACTTEST row lap=3 scen=CAT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=13.39
+INTERACTTEST keys still held after lap 3: -
+INTERACTTEST row lap=4 scen=VANISH arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 4: -
+INTERACTTEST row lap=5 scen=VANISH arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 5: -
+INTERACTTEST row lap=6 scen=SEALED arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 6: -
+INTERACTTEST row lap=7 scen=SEALED arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 7: -
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- msg="done in 1.3s"
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=18.13
+INTERACTTEST keys still held after lap 8: -
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- msg="done in 1.3s"
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=12.12
+INTERACTTEST keys still held after lap 9: -
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=14.37
+INTERACTTEST keys still held after lap 10: -
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=16.57
+INTERACTTEST keys still held after lap 11: -
+INTERACTTEST row lap=12 scen=PREEMPT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=12 scen=PREEMPT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=8.74
+INTERACTTEST keys still held after lap 12: -
+INTERACTTEST row lap=13 scen=PREEMPT arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=13 scen=PREEMPT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=11.09
+INTERACTTEST keys still held after lap 13: -
+INTERACTTEST row lap=14 scen=REPLACE arm=B rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=32 lapTicks=47 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=14 scen=REPLACE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=320.50
+INTERACTTEST keys still held after lap 14: -
+INTERACTTEST row lap=15 scen=REPLACE arm=A rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=15 scen=REPLACE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=51.70
+INTERACTTEST keys still held after lap 15: -
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=45.70
+INTERACTTEST keys still held after lap 16: -
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=46.57
+INTERACTTEST keys still held after lap 17: -
+INTERACTTEST row lap=18 scen=OPEN arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=18 scen=OPEN arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=5.47
+INTERACTTEST keys still held after lap 18: -
+INTERACTTEST row lap=19 scen=OPEN arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=19 scen=OPEN arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=11.39
+INTERACTTEST keys still held after lap 19: -
+INTERACTTEST row lap=20 scen=CAT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+INTERACTTEST row lap=20 scen=CAT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=6.06
+INTERACTTEST keys still held after lap 20: -
+INTERACTTEST row lap=21 scen=CAT arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+INTERACTTEST row lap=21 scen=CAT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=8.16
+INTERACTTEST keys still held after lap 21: -
+INTERACTTEST row lap=22 scen=VANISH arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 22: -
+INTERACTTEST row lap=23 scen=VANISH arm=A rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 23: -
+INTERACTTEST row lap=24 scen=SEALED arm=A rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 24: -
+INTERACTTEST row lap=25 scen=SEALED arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 25: -
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- msg="done in 1.3s"
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=11.47
+INTERACTTEST keys still held after lap 26: -
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- msg="done in 1.3s"
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=11.49
+INTERACTTEST keys still held after lap 27: -
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=10.63
+INTERACTTEST keys still held after lap 28: -
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=10.28
+INTERACTTEST keys still held after lap 29: -
+INTERACTTEST row lap=30 scen=PREEMPT arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=30 scen=PREEMPT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=11.73
+INTERACTTEST keys still held after lap 30: -
+INTERACTTEST row lap=31 scen=PREEMPT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=31 scen=PREEMPT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.89
+INTERACTTEST keys still held after lap 31: -
+INTERACTTEST row lap=32 scen=REPLACE arm=A rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=32 lapTicks=47 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=32 scen=REPLACE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=53.65
+INTERACTTEST keys still held after lap 32: -
+INTERACTTEST row lap=33 scen=REPLACE arm=B rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=33 scen=REPLACE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=55.98
+INTERACTTEST keys still held after lap 33: -
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=50.77
+INTERACTTEST keys still held after lap 34: -
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=43.82
+INTERACTTEST keys still held after lap 35: -
+INTERACTTEST row lap=36 scen=OPEN arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=36 scen=OPEN arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=6.39
+INTERACTTEST keys still held after lap 36: -
+INTERACTTEST row lap=37 scen=OPEN arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=37 scen=OPEN arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=12.18
+INTERACTTEST keys still held after lap 37: -
+INTERACTTEST row lap=38 scen=CAT arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+INTERACTTEST row lap=38 scen=CAT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=4.44
+INTERACTTEST keys still held after lap 38: -
+INTERACTTEST row lap=39 scen=CAT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- msg="done in 2.8s"
+INTERACTTEST row lap=39 scen=CAT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=8.46
+INTERACTTEST keys still held after lap 39: -
+INTERACTTEST row lap=40 scen=VANISH arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD,JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 40: -
+INTERACTTEST row lap=41 scen=VANISH arm=B rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 41: -
+INTERACTTEST row lap=42 scen=SEALED arm=B rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=SNEAK msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 42: -
+INTERACTTEST row lap=43 scen=SEALED arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=JUMP msg="no verdict in 600 ticks"
+INTERACTTEST keys still held after lap 43: -
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=29 lapTicks=85 uses=1 menu=chest active=false keys=- msg="done in 1.5s"
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=12.75
+INTERACTTEST keys still held after lap 44: -
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=26 lapTicks=82 uses=1 menu=chest active=false keys=- msg="done in 1.3s"
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=15.32
+INTERACTTEST keys still held after lap 45: -
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=11.75
+INTERACTTEST keys still held after lap 46: -
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- msg="done in 0.1s"
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=16.58
+INTERACTTEST keys still held after lap 47: -
+INTERACTTEST row lap=48 scen=PREEMPT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=48 scen=PREEMPT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.90
+INTERACTTEST keys still held after lap 48: -
+INTERACTTEST row lap=49 scen=PREEMPT arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=49 scen=PREEMPT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.45
+INTERACTTEST keys still held after lap 49: -
+INTERACTTEST row lap=50 scen=REPLACE arm=B rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=32 lapTicks=47 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=50 scen=REPLACE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=68.28
+INTERACTTEST keys still held after lap 50: -
+INTERACTTEST row lap=51 scen=REPLACE arm=A rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- msg="done in 1.6s"
+INTERACTTEST row lap=51 scen=REPLACE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=45.63
+INTERACTTEST keys still held after lap 51: -
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=121.63
+INTERACTTEST keys still held after lap 52: -
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=38 lapTicks=39 uses=1 menu=chest active=false keys=- msg="done in 1.9s"
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=60 uses=0 menu=chest active=false keys=- msg="done in 1.0s"
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=42.74
+INTERACTTEST keys still held after lap 53: -
+INTERACTTEST finish laps=54
