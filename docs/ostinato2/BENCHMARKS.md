@@ -1714,3 +1714,209 @@ Under the pre-registered gate rule:
 re-run after its result was seen.
 
 Full suite on the results commit: 1595 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.
+
+## Phase 06A: executor safety and reliability recovery (2026-11-09, branch `ostinato2/claude-review`, local only)
+
+Phase 06 stays **FAIL** as recorded above (H2 in the slip family: unified 239/300 against legacy 247/300, 3 allowed).
+Nothing in this section reclassifies it. Phase 06A works on the two blockers Phase 06 left, behind the same
+`unifiedExecutor` flag (default **false**), and is judged on fresh seeds against the criteria below.
+
+**S1, input ownership.**
+- The blocker:
+  - In the Phase 06 live A/B, 84 RELEASED_EARLY events (43 in seed 81011, 41 in 81012) fell between laps, outside
+    every lap row.
+  - Cause: the lap-end `PathingBehavior.cancelEverything()` was refused (not safe to cancel). Then
+    `PathingControlManager.cancelEverything()` ran `onLostControl()`, whose `clearAllKeys()` lifted the leased keys
+    without telling the executor.
+- The fix (`0c354b804`):
+  - On the refused branch, `cancelEverything()` now calls `UnifiedExecutor.processesCancelled()` before the processes
+    are cancelled.
+  - The driver releases its frame, confirms the release with the arbiter, and ends its lease as CANCELLED_CONFIRMED,
+    counted as PROCESS_CANCELS. If the arbiter cannot verify the release, the lease ends as UNKNOWN instead.
+  - The safe branch was already in the right order: `secretInternalSegmentCancel()` releases the leases before it
+    clears the keys.
+  - A refused segment may keep running. If it does, its next driver tick takes a fresh lease, so the ownership it
+    holds is notified, not stale.
+- Unit tests (`228d655f0`, `UnifiedExecutorTest`, 32 tests, all passing):
+  - keys cleared behind a held lease are counted as RELEASED_EARLY;
+  - a process cancel mid-move gives up the lease before the keys go up;
+  - a process cancel between laps leaves nothing behind for the next ticks;
+  - a segment that runs on takes a fresh lease and stops later;
+  - a process cancel on a partly preempted lease leaves the preemptor its resource.
+- Not changed:
+  - emergency preemption (still immediate; its existing tests are unchanged);
+  - the other direct key writers (no migration);
+  - the other direct `onLostControl` callers.
+
+**S2, slip reliability.**
+- The 9 slip trials that legacy reached and unified did not all ended EMPTY_PLAN: the replan that followed an escalated
+  correction exhausted the 1500-node budget.
+- The post-hoc diagnostic (`raw/phase06/slip-diagnostic.txt`, Phase 06 seeds, not gate evidence) reran the whole slip
+  family at 3000 nodes:
+  - legacy reached 293 of 300 and unified 291;
+  - every one of the 9 states found a plan.
+
+**S2 recovery: A is selected, B is not attempted.**
+- The options:
+  - **A, bounded retry.** When the replan a correction escalated to returns no path, search once more with a 3000-node
+    budget.
+  - **B, surface-aware correction suppression.** Skip the correction on slippery ground.
+- Why A:
+  - **Correctness.** The diagnostic shows the larger budget finds a plan from every failing state. B has no direct
+    evidence, and it does not address the budget mechanism (52 of the slip empty plans are shared by both arms).
+  - **Complexity.** A adds one constant, a lazily built second planner and two counters. B needs a surface signal the
+    model does not have (the model assumes slipperiness 0.6 everywhere).
+  - **Cost.** A costs time only on an empty correction-triggered replan, and then at most one search of ≤ 3000 nodes.
+    B would remove the correction's benefit on ice.
+- B is not implemented in Phase 06A. If A fails, the slip blocker stays open.
+
+**How A is implemented (decided before the batch).**
+- New constant: `CorrectionPolicy.RETRY_NODES = 3000`.
+- The retry, in `PhysicsTravel` and its mirror in `UnifiedHarness`. It applies only when all of these hold:
+  - the executor is on;
+  - the correction triggered the replan (`drifted` after the divergence check, i.e. a MISSED or ESCALATED verdict);
+  - the 1500-node search returned no plan.
+
+  Then the driver searches once more with a 3000-node planner.
+- New counters:
+  - CORRECTION_RETRIES counts each retry;
+  - CORRECTION_RETRY_PLANS counts each retry that found a plan.
+- A retry does not count as a plan or a drift replan, so H4's ESCALATIONS = drift replans still holds.
+- If the retry is also empty, the existing failure path runs unchanged: cooldown, `fail(EMPTY_PLAN)`, drop.
+- With the flag off, and in legacy, nothing changes and no retry happens.
+- The harness records each run's total and largest retry time (`retryNs`, `retryNsMax`).
+
+### Pre-registered criteria (written 2026-11-09, before any Phase 06A data was collected)
+
+**Already seen, not gate evidence.**
+- The Phase 06 batch and live A/B, the slip diagnostic, and the S1 unit tests above.
+- The 3000-node budget was chosen from the slip diagnostic, on Phase 06 seeds.
+- The Phase 06A batch and live runs use seeds that were never run.
+
+**Tiers and statistics.** As in Phase 06:
+- Tier S is headless.
+- Tier L is live.
+- No Tier-L claim is made from headless results.
+- Every bootstrap uses 10,000 resamples, `random.Random(20261108)`, and the percentile 95% interval.
+
+#### Tier S: headless batch (`UnifiedBatchBench`, judged by `scripts/unified-batch.py`)
+
+**Run.**
+- Command: `-Postinato_bench --tests "*UnifiedBatchBench"`, with the environment
+  `OSTINATO_BATCH_SEED=9091 OSTINATO_BATCH_WARMUP_SEED=9191 OSTINATO_BATCH_PHASE=phase06a OSTINATO_WRITE_DOCS=1`.
+- The overrides change only the seeds and the output directory. Their defaults stay the Phase 06 values.
+- Seeds:
+  - Family `k` draws from `new Random(9091 + k)`.
+  - The warm-up draws from 9191 and is thrown away.
+- Trials, families, arm order and per-run records are as in Phase 06: N = 300 per family, six families, 1800 trials and
+  3600 runs. In addition, each run records `retryNs`, `retryNsMax` and the two new counters.
+- Raw output: `docs/ostinato2/raw/phase06a/`.
+
+**H1–H7.** As in Phase 06, unchanged. H4's rule that every legacy trial has all executor counters at 0 covers the two
+new counters.
+
+**R1. The retry is bounded and counted.** Every unified run must satisfy:
+- CORRECTION_RETRIES ≤ ESCALATIONS;
+- CORRECTION_RETRY_PLANS ≤ CORRECTION_RETRIES;
+- CORRECTION_RETRIES − CORRECTION_RETRY_PLANS ≤ 1, and when it is 1 the run ends EMPTY_PLAN (a failed retry ends the
+  run).
+
+**R2. Search and tick-time budget.**
+- **Search.**
+  - At most one retry follows a replan, so a replan tick searches at most 1500 + 3000 = 4500 nodes.
+  - This holds by construction, and a unit test checks the retry budget and the one-retry limit.
+- **Time** (headless, Java planner), over unified runs with at least one retry. Holds when:
+  - the per-run largest retry time (`retryNsMax`) has p95 ≤ 150 ms and max ≤ 250 ms;
+  - the per-run largest tick time (`tickMaxNs`) has p95 ≤ 250 ms and max ≤ 400 ms.
+- If no run retries, R2 time is "not exercised". That is not a failure on its own, but S2 cannot then be resolved,
+  because the slip mechanism check below requires a retry plan.
+- Diagnostic only:
+  - total retry time per family, and its share of plan time;
+  - the calibration these bounds came from (Phase 06 data): a failed 1500-node search takes about 50 ms; in slip
+    EMPTY_PLAN runs, tickMax had a median of 49 ms and a max of 95 ms.
+
+**Slip mechanism.**
+- Holds when CORRECTION_RETRY_PLANS > 0 over the unified slip runs.
+- Diagnostic: how many of those runs arrived.
+
+**S2 is resolved** when all of the following hold:
+- H2 in every family;
+- R1 and R2;
+- the slip mechanism check.
+
+**Tier S fails** if any of H1–H6 or R1 fails, or H7 is FAIL.
+
+#### Tier L: live A/B (`LegatoLiveTest`, judged by `scripts/unified-ab.py`)
+
+**Run.**
+- As in Phase 06:
+  - properties `-Dostinato.legatotest.arms=unified -Dostinato.legatotest.stack=physics`;
+  - 6 reps on the simedge course, so 96 laps per seed;
+  - A and C with the flag off, B and D with it on, and `predictionTolerance` off in every arm.
+- Seeds: 86021, then 86022.
+- Required live scenarios:
+  - the simedge legs (slalom, ridges, bumps, steps) under both arms;
+  - the lap-end cancel after every lap. When the segment is not safe to cancel, that cancel is refused while the player
+    is still moving. That is the path S1 fixes.
+
+**L1–L6 and the Tier L verdict.** As in Phase 06, unchanged.
+
+**L2′. Ownership across lap boundaries, in each seed.**
+- Data: the log's run totals (`LEGATOTEST unified totals`). Unlike the lap rows, they include the ticks between laps.
+- Holds when all of the following are true:
+  - the run totals of RELEASED_EARLY, OVERWRITTEN, STALE_REJECTS and UNKNOWNS are 0;
+  - there is no stuck-key log line ("keys still held" or "keys held right after");
+  - PROCESS_CANCELS > 0 in the run totals, meaning the refused-cancel path was exercised. If it is 0 and everything
+    else holds, L2′ is "not exercised" rather than holding.
+- Diagnostic only, per counter: run total − lap sum (events between laps).
+  - A segment that keeps running after a refused cancel takes a fresh lease between laps. So ACQUIRES, COMPLETIONS or
+    HANDOVERS may move there.
+  - That is notified ownership, not a violation.
+  - In Phase 06 the gaps held COMPLETIONS +43/+41, HANDOVERS +43/+41 and RELEASED_EARLY +43/+41.
+
+**Live diagnostics.** CORRECTION_RETRIES and CORRECTION_RETRY_PLANS over the B/D laps.
+
+**S1 is resolved** when all of the following hold:
+- the `UnifiedExecutorTest` ownership tests pass;
+- H3 holds;
+- L2 holds in both seeds;
+- L2′ holds, and is exercised, in both seeds.
+
+#### Phase 06A gate
+
+- **PASS:** S1 and S2 are both resolved, and nothing regresses. All of the following:
+  - Tier S does not fail;
+  - L1 holds in both seeds;
+  - there is no H5 regression, no L3 slower and no L4 more plans (as defined in Phase 06);
+  - neither H7 nor L5 is FAIL;
+  - the full suite shows no new failure beyond the pre-existing B5 `SecondoTest`.
+- **FAIL:** any of the following:
+  - a safety violation: H3, L2 or L2′ fails (a non-zero total or a stuck key);
+  - a reliability failure: H2 or L1;
+  - H1, H4, H6 or R1 fails;
+  - a regression, as defined in Phase 06;
+  - overhead FAIL (H7 or L5);
+  - neither blocker is resolved.
+- **PARTIAL:** anything else. For example:
+  - one blocker is resolved and the other is not;
+  - R2 is missed;
+  - the live evidence is unavailable, or L2′ is not exercised.
+
+**Promotion is a separate question.**
+- The Phase 06 PASS rule (Tier S does not fail, H3 and L2 hold, H7 and L5 acceptable, Tier L IMPROVEMENT) is applied
+  to the Phase 06A data and reported on its own line.
+- Even if that rule is met, `unifiedExecutor` stays default false. Enabling it needs the owner's separate
+  authorization.
+
+**Stop conditions.**
+- The focused tests (`UnifiedExecutorTest`, `CorrectionPolicyTest`, `UnifiedHeadlessTest`) must pass before the batch.
+- The batch runs once:
+  - A run that fails before writing its CSV produced no result, and may be repeated once with the same seeds.
+  - A written CSV is final: no re-run and no new seeds.
+- Live:
+  - 86021 runs first.
+  - A stuck key or a death in 86021 is a result (FAIL), and 86022 is not run.
+  - A client crash is recorded with its log, and the same seed runs once more.
+  - A second crash, or the client failing to start twice, makes the live evidence unavailable (PARTIAL at best).
+- No criterion changes after a result is seen.
+- If A fails, B is not attempted in Phase 06A. The slip blocker is recorded as open.
