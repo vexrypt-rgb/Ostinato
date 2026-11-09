@@ -183,8 +183,14 @@ public final class PathBench {
 
     private static final Map<Terrain, SyntheticWorld> WORLDS = new HashMap<>(); // not EnumMap: that would initialise Terrain (and Blocks) before boot()
 
+    /**
+     * Ostinato 2.0 Phase 07: OSTINATO_BENCH_SEED, when set, replaces both the world seed and the query seed, so held-out
+     * worlds and queries can be benchmarked. Unset, the worlds and queries are the fixed ones every earlier run used.
+     */
+    private static final String HELD_OUT_SEED = System.getenv("OSTINATO_BENCH_SEED");
+
     public static synchronized SyntheticWorld world(Terrain t) {
-        return WORLDS.computeIfAbsent(t, k -> k.build(SIZE_X, SIZE_Z, 0x057A7170L));
+        return WORLDS.computeIfAbsent(t, k -> k.build(SIZE_X, SIZE_Z, HELD_OUT_SEED != null ? Long.parseLong(HELD_OUT_SEED) : 0x057A7170L));
     }
 
     public static CalculationContext context(SyntheticWorld w) {
@@ -231,7 +237,7 @@ public final class PathBench {
 
     public static List<Query> queries(Terrain... terrains) {
         List<Query> out = new ArrayList<>();
-        Random r = new Random(1234);
+        Random r = new Random(HELD_OUT_SEED != null ? Long.parseLong(HELD_OUT_SEED) : 1234);
         for (Terrain t : terrains) {
             SyntheticWorld w = world(t);
             for (Length len : Length.values()) {

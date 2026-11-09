@@ -2519,3 +2519,154 @@ binds, the search expands more nodes and the path may differ.
 - Used by `PrecomputedData` (three sites) and `MovementHelper.isBlockNormalCube` when the new setting
   `pathingStateIdCache` is true (default **false**).
 - Off, every site runs the existing registry lookup.
+
+
+### Dev A/B of the slice (VERIFIED, Tier S, dev data, `raw/phase07/ids/p07-ids-dev-*`)
+
+- **Run:** PathBench `wa:2`, all 60 queries (5 terrains × SHORT/MEDIUM/LONG), 3 repetitions per run, four runs in the
+  order off, on, on, off at `57364373c`. These are the same fixed worlds and queries as the baseline, so they are dev
+  data.
+- **Command:** `docs/ostinato2/tools/phase07/p07-ids-bench.ps1 -prefix p07-ids-dev -order off,on,on,off` (the gradle
+  line above, with `OSTINATO_BENCH_FINDER=wa:2`, and `OSTINATO_BENCH_STATEIDS=1` for "on"), then
+  `python docs/ostinato2/tools/ids_bench_ab.py docs/ostinato2/raw/phase07/ids p07-ids-dev-off-1,p07-ids-dev-off-4
+  p07-ids-dev-on-2,p07-ids-dev-on-3`.
+- **Equivalence:** 59 of 60 queries ran the identical search, with the same node count in every row of both arms. The
+  one that differs, BREAK_PLACE/LONG/0, is bound by the 10 s budget and expanded 8% more nodes with the cache on.
+  Failed rows were 6 off and 6 on, and the mean travel cost over the 59 queries both arms solved is 1383.49 in both.
+- **Speed (on/off ms ratio, same-search queries, median and bootstrap 95% CI):**
+
+  | group | queries | median ratio | 95% CI | summed ms ratio |
+  |---|---|---|---|---|
+  | ALL | 59 | 0.954 | 0.951–0.968 | 0.957 |
+  | SHORT | 20 | 0.953 | 0.911–0.976 | 0.948 |
+  | MEDIUM | 20 | 0.951 | 0.919–0.972 | 0.950 |
+  | LONG | 19 | 0.968 | 0.951–0.979 | 0.965 |
+
+- **Result:** about 4.5% less planner time. That is real (the CI excludes 1), but far below the 20–40% the decision gate
+  expected, and below the task's 30% target.
+
+### Diagnosis: the 40% hotspot was a profiling artefact (VERIFIED, Tier S, `raw/phase07/profile/p07-prof2-*`)
+
+- **Question:** why does removing a "40%" lookup save only 4.5%?
+- **Run:** the same profile as above, repeated with `-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints` (passed
+  through `JAVA_TOOL_OPTIONS`), once with the cache off and once with it on. Script:
+  `docs/ostinato2/tools/phase07/p07-profile2.ps1`.
+  Read with `jfr print --events jdk.ExecutionSample --stack-depth 1`, counting top frames.
+- **The callers first.** In the first profile, 3433 of the 3434 `getInt` samples come through the four sites the cache
+  now covers. So the cache does reach every call of the lookup.
+- **Top self frames, with accurate attribution:**
+
+  | frame | off (8715 samples) | on (8192 samples) |
+  |---|---|---|
+  | `AStarPathFinder.calculate0` | 16.8% | 15.2% |
+  | `SyntheticWorld.real` (bench world only) | 10.6% | 7.8% |
+  | `Reference2IntOpenHashMap.getInt` (the id lookup) | 5.9% | — |
+  | `StateIdCache.id` | — | 6.5% |
+  | `FluidState.getType` | 5.4% | 5.3% |
+  | `BlockStateBase.getBlock` | 4.5% | 4.5% |
+
+- **Conclusion.**
+  - The id lookup is about 6% of planner samples, not 40%. Without `DebugNonSafepoints`, samples from the surrounding
+    inlined cost code were attributed to it.
+  - The cache's own frame costs about what the lookup did. The time saved (6% fewer samples) shows up as cheaper
+    neighbouring memory reads (`SyntheticWorld.real` 10.6% → 7.8%), consistent with less cache pollution from the 0.5 MB
+    registry tables.
+  - Planner CPU is spread flat, and no single site exceeds 17%. No change at one site can reach the 30% target. A
+    larger gain would need a broad restructuring of cost evaluation, which is outside this phase's smallest-slice rule
+    and is not attempted.
+- **What this does to the decision.** The slice stays as decided: it is behaviour-identical and a verified small gain.
+  The expected improvement recorded at the gate (20–40%) is falsified by dev data. It is not revised to fit; the
+  confirmatory run below is judged against the criteria as written.
+
+### Pre-registration: confirmatory A/B of `pathingStateIdCache` (committed before any held-out or live run)
+
+Everything below was fixed before any held-out data was produced. The criteria are the task's provisional target and
+guards. The classification rules were drafted before the dev A/B and are not changed after it. From the dev data, the
+primary target is expected to be **missed** (median about 0.95, not ≤ 0.70), so the expected class is PARTIAL if every
+guard holds.
+
+**Arms.**
+- OFF: production defaults (`pathingStateIdCache` false).
+- ON: identical, except `pathingStateIdCache` true.
+- Nothing else differs between the arms.
+
+**Instruments and held-out data.** None of these worlds, queries or seeds has been run before.
+- **H, long routes (Tier S):**
+  - LongRouteSim, held-out world seeds **3001, 3002**, 2 trips per family and mode.
+  - All 8 synthetic families, and all five modes (known, horizon, change, goal, cancel).
+  - Arms PROD (OFF) and IDS (ON).
+  - Command: `docs/ostinato2/tools/phase07/p07-longroute.ps1 -label p07-ho -set heldout -seeds 3001,3002 -trips 2
+    -arms PROD,IDS`.
+  - Read with: `python docs/ostinato2/tools/longroute_summary.py --arms=PROD,IDS docs/ostinato2/raw/phase07/longroute
+    p07-ho`.
+- **P, short/medium/long queries (Tier S):**
+  - PathBench `wa:2`, held-out world and query seed **3101** (`OSTINATO_BENCH_SEED=3101`, new this phase; unset, the
+    bench is unchanged).
+  - 3 repetitions per run, four runs in the order off, on, on, off.
+  - Command: `docs/ostinato2/tools/phase07/p07-ids-bench.ps1 -prefix p07-ids-ho -order off,on,on,off
+    -seed 3101`.
+  - Read with `ids_bench_ab.py` as above.
+- **L, live client (Tier L):**
+  - `LegatoLiveTest`, `-Dostinato.legatotest.arms=stateids` (new this phase), on SimEdgeCourse.
+  - A and C run with the flag off, B and D with it on. The travel stack and every other setting stay at their
+    defaults.
+  - `reps=6`, so 96 laps per seed, in latin order.
+  - Fresh seeds **87071** and **87072**.
+  - The client runs on the second monitor, muted, with no mouse grab, and nothing else running.
+  - Command, per seed: `docs/ostinato2/tools/phase07/p07-live.ps1 -seed <87071|87072>`. It sets
+    `JAVA_TOOL_OPTIONS` as in Phase 06A, with `-Dostinato.legatotest.arms=stateids`, no stack pin,
+    `-Dostinato.legatotest.reps=6` and `-Dostinato.seed=<seed>`, then runs `:fabric:runClient -PclientXmx=1536M`. It
+    keeps `ab-<seed>-lines.txt`, `ab-<seed>-result.txt` and `ab-<seed>-ticks.csv.gz` in `raw/phase07/live/`.
+  - Read with `python scripts/stateids-ab.py docs/ostinato2/raw/phase07/live/ab-87071-lines.txt
+    docs/ostinato2/raw/phase07/live/ab-87072-lines.txt`.
+
+**Statistics.**
+- Paired by route (H), by query (P), or by seed, leg and repetition (L).
+- Median of the per-pair ratio or difference.
+- Bootstrap 95% CI: 10,000 resamples, `random.Random(20261108)`, percentile interval.
+
+**Primary.**
+- **P1, planning cost.** H: the median per-trip ON/OFF ratio of planning ms per expanded node is ≤ 0.70, and its CI
+  upper bound is < 1.0.
+- Ms per node is used, not ms, because a budget-bound search expands more nodes in the same time.
+
+**Guards.** All must hold.
+- **G1, reliability.**
+  - H: net losses ≤ 0. A loss is a route OFF reached and ON did not; a gain is the reverse.
+  - P: no more failed rows ON than OFF.
+- **G2, travel.** H, over pairs both reached: median total-ticks ratio (travel plus planning wait) ≤ 1.01, and CI
+  upper ≤ 1.02.
+- **G3, equivalence.** H: in every pair where neither trip had a timed-out search, ok, travel, nodes, segments,
+  searches and end distance are identical. Any mismatch is a FAIL: it would mean the cache changed a cost.
+- **G4, short distance.**
+  - P: the SHORT same-search ms ratio has a median ≤ 1.02, and its CI lower bound is ≤ 1.0 (no demonstrated
+    slowdown).
+  - Live laps are short trips too, which LT covers.
+- **G5, tick overhead.** L: Phase 06A's L5 rule, on per-lap client tick p95 and p99, paired on − off, both seeds
+  pooled.
+  - **FAIL:** a CI lower bound > 0.5 ms.
+  - **Acceptable:** both CI upper bounds ≤ 0.5 ms.
+  - **Otherwise:** inconclusive.
+- **LR, live reliability.** In each seed:
+  - B ≥ A − 1 and D ≥ C − 1 laps reached;
+  - no stuck key, no death, and no fault code that appears only in B or D;
+  - every lap row's flag matches its arm.
+- **LT, live lap time.** Over reached pairs, both seeds pooled: the ON/OFF lap-ticks ratio has CI upper ≤ 1.03.
+
+**Live direction.**
+- **LP.** Pooled ON/OFF ratio of per-lap A* time (`planUs`), with CI upper < 1.0.
+- Not a guard: it only decides whether the headless gain is confirmed live.
+
+**Classification.**
+- **PASS:** P1, every guard (G1–G5 acceptable, LR, LT) and LP hold.
+- **PARTIAL:** every guard holds (G5 acceptable or inconclusive), and the H ms-per-node CI upper is < 1.0, but P1's
+  median is > 0.70, LP is not confirmed, or G5 is inconclusive.
+- **FAIL:** any guard fails, or the H ms-per-node CI upper is ≥ 1.0 (no demonstrated reduction).
+- A PASS is not a promotion. **No default changes in this phase**: `pathingStateIdCache` stays false whatever the
+  class.
+
+**Stop conditions.**
+- No seeds, repetitions or trips are added after results are seen, and no run is repeated to change an outcome.
+- A run that fails to complete (gradle error, client crash) is rerun once with the same seed. If it fails again, it is
+  recorded as a blocker and its tier is not claimed.
+- A death or stuck key in the first live seed is LR FAIL. The second seed is then not run, and the class is FAIL.
