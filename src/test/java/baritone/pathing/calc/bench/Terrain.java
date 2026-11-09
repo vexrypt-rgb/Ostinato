@@ -78,7 +78,7 @@ public enum Terrain {
         int at(int x, int z);
     }
 
-    private static void fill(SyntheticWorld w, int sx, int sz, H h) {
+    static void fill(SyntheticWorld w, int sx, int sz, H h) { // Ostinato 2.0 Phase 07: package-private for LongTerrain
         for (int x = 0; x < sx; x++) for (int z = 0; z < sz; z++) {
             int top = Math.max(2, Math.min(SyntheticWorld.HEIGHT - 20, h.at(x, z)));
             w.set(x, 0, z, BEDROCK);
@@ -86,7 +86,7 @@ public enum Terrain {
         }
     }
 
-    private static void trees(SyntheticWorld w, Random r, int sx, int sz, double density) {
+    static void trees(SyntheticWorld w, Random r, int sx, int sz, double density) { // Ostinato 2.0 Phase 07: package-private for LongTerrain
         int n = (int) (sx * sz * density);
         for (int i = 0; i < n; i++) {
             int x = 2 + r.nextInt(sx - 4), z = 2 + r.nextInt(sz - 4);
@@ -97,7 +97,7 @@ public enum Terrain {
         }
     }
 
-    private static double[][] noise(Random r, int sx, int sz, int cell, double amp) {
+    static double[][] noise(Random r, int sx, int sz, int cell, double amp) { // Ostinato 2.0 Phase 07: package-private for LongTerrain
         int gx = sx / cell + 2, gz = sz / cell + 2;
         double[][] g = new double[gx][gz];
         for (int i = 0; i < gx; i++) for (int j = 0; j < gz; j++) g[i][j] = r.nextDouble();
