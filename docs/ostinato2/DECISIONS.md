@@ -496,3 +496,104 @@ Evidence is in BENCHMARKS "Phase 06 results" and `docs/ostinato2/raw/phase06/`.
     replaced from a slower, less drifted state, as legacy does.
 - Only then consider a live run with the flag on, and only after that a default change.
 - B6 stays open: the gate refuses other writers only on the `PhysicsTravel` path, and only with the flag on.
+
+## D17. Phase 06A: the executor gives up its lease before the processes are cancelled, and one deeper retry ends the slip loss; gate PASS, `unifiedExecutor` stays off
+
+The task: resolve the two blockers Phase 06 (D16) left, with minimal changes behind the same default-false flag.
+- S1: the lap-end cancel released the executor's keys outside the laps without telling it.
+- S2: the slip reliability loss (H2).
+
+Out of scope: an A* replacement, a physics rewrite, a general recovery framework, a broad migration of input writers,
+and a default change. The criteria were committed to BENCHMARKS ("Phase 06A", commit `5dc9e6b4f`) before the S2 change
+was written and before any Phase 06A run. Phase 06 stays **FAIL** as recorded in D16. Evidence is in BENCHMARKS
+"Phase 06A results" and `docs/ostinato2/raw/phase06a/`.
+
+**Added (all inert while `unifiedExecutor` is false):**
+
+- `UnifiedExecutor.processesCancelled()` (`0c354b804`):
+  - `PathingBehavior.cancelEverything()` calls it on its refused branch, before
+    `PathingControlManager.cancelEverything()` runs every process's `onLostControl()`.
+  - The driver lifts its own keys and the release is checked with the arbiter. The lease ends CANCELLED_CONFIRMED,
+    or UNKNOWN if the release cannot be verified, with the new cause PROCESS_CANCEL and the new counter
+    PROCESS_CANCELS.
+  - No cancel latency is recorded: this ends the lease, not the segment. A segment that runs on takes a fresh lease
+    on its next write.
+- The bounded retry (`374570484`):
+  - New constant `CorrectionPolicy.RETRY_NODES = 3000`.
+  - When the replan that a correction triggered returns no path, `PhysicsTravel` (mirrored in `UnifiedHarness`)
+    searches once more with a lazily built 3000-node planner.
+  - New counters CORRECTION_RETRIES and CORRECTION_RETRY_PLANS. A retry counts as neither a plan nor a drift replan.
+  - An empty retry takes the existing failure path.
+- Tests: 5 ownership tests in `UnifiedExecutorTest` (now 32) and `CorrectionRetryTest` (4).
+- Analysis:
+  - R1, R2 and the slip mechanism in `scripts/unified-batch.py`;
+  - L2′ (run totals against lap sums) and the live retry diagnostic in `scripts/unified-ab.py`;
+  - `retryNs` and `retryNsMax` in the batch rows.
+
+**Not changed:**
+
+- the A* planner, its 1500-node budget for every first search, and the physics model;
+- emergency preemption;
+- every key-writer site: 279 raw `setInputForceState`/`clearAllKeys` matches in 33 files under `src/main`, as at the
+  Phase 06 head. The four `onLostControl()` `clearAllKeys()` calls and the other direct `onLostControl()` callers are
+  not migrated (B6);
+- `predictionTolerance` and `inputArbitration` (both default false), and the flag's default;
+- the pre-registered criteria, and Phase 06's classification.
+
+**Findings:**
+
+1. **S1 is resolved on the lap-end cancel path.**
+   - With the refused branch telling the executor first, no executor counter moved between laps in either live seed.
+     In Phase 06, COMPLETIONS, HANDOVERS and RELEASED_EARLY each moved +43 and +41 there.
+   - The run totals of RELEASED_EARLY, OVERWRITTEN, STALE_REJECTS and UNKNOWNS are 0 in both seeds, and no key stuck.
+   - PROCESS_CANCELS is 41 in each seed, so the path was exercised (L2′).
+   - H3 and L2 hold, and the five new ownership tests pass.
+2. **The retry ends the slip loss at Tier S** (seed 9091, 1800 trials).
+   - Slip: unified 252 against legacy 249 (Phase 06: 239 against 247). 11 slip runs retried; all 11 found a plan and
+     arrived.
+   - Edge: 72 runs retried and 28 found a plan; unified arrived in 256 against legacy's 228. Edge was not a target,
+     so this gain is reported, not claimed.
+   - R1 holds: no run retried twice, and every failed retry ended EMPTY_PLAN.
+   - R2 holds: the largest retry per run has p95 87.63 ms and max 104.00 ms; the largest tick, p95 123.67 ms and max
+     147.77 ms.
+3. **The rest of Tier S repeats Phase 06.** H1 is identical (0 mismatches over 300 clean trials), H3 and H4 hold, and
+   replans are fewer in all four disturbed families. Conflict is 14% faster (ratio 0.8645), cancel takes a median of
+   1 tick (max 12), and H7 is acceptable (p95 +0.65 µs).
+4. **Live (Tier L), two fresh seeds × 96 laps: no improvement, no regression.**
+   - 96/96 laps reached per seed, with no stuck key, death or new fault.
+   - Lap ticks and physics plans show no difference. Drift replans are lower in every point estimate, but no CI
+     excludes 0, so Phase 06's live improvement did not reproduce.
+   - Client-tick overhead is inconclusive again (pooled p95 +0.270 ms, CI −0.203..+0.914).
+5. **The retry never fired live** (CORRECTION_RETRIES 0 in both seeds), so the S2 change is evidenced at Tier S only.
+6. **Not covered (B6):**
+   - the direct key writers: 279 raw matches in 33 files, unchanged;
+   - the four `onLostControl()` `clearAllKeys()` calls;
+   - the direct `onLostControl()` callers in `SwarmBehavior`, `HybridMovementEngine` and `BombardLiveTest`.
+
+   None of them ran with the flag on in this evidence.
+
+**Decision:**
+
+- **Gate PASS** (the pre-registered Phase 06A rule). S1 and S2 are resolved, Tier S does not fail, L1 holds in both
+  seeds, nothing regresses, there is no overhead FAIL, and the full suite has no new failure: 1604 tests, 1 failed (the
+  pre-existing B5 `SecondoTest`), 23 skipped.
+- Phase 06 stays **FAIL** as recorded in D16. This PASS covers the two blockers, not Phase 06's gate.
+- **Promotion: not met.** Under the Phase 06 PASS rule, L5 is inconclusive rather than acceptable, and Tier L shows no
+  improvement.
+- `unifiedExecutor` stays default **false**. Enabling it needs the promotion evidence and the owner's separate
+  authorization.
+- No criterion was changed after a result was seen, and no run was repeated.
+
+**Recommended next action (owner decision):**
+
+- Keep `unifiedExecutor` off.
+- Decide whether to fund promotion evidence, as its own pre-registered phase. It needs two things the simedge A/B did
+  not give:
+  - an overhead measure that can resolve 0.5 ms (96 client-tick pairs could not, in Phase 06 or here);
+  - a live course where corrections escalate and the retry has occasion to fire.
+- Before any default change, finish B6 on the paths the executor can run on. The four `onLostControl()`
+  `clearAllKeys()` calls and the other direct `onLostControl()` callers should go through the arbiter or tell the
+  executor first.
+- Phase 07 was not started.
+- B6 stays open: the executor owns only the `PhysicsTravel` path, only with the flag on, and is told of a cancel only
+  through `PathingBehavior.cancelEverything()`.

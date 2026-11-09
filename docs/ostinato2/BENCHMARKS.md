@@ -1920,3 +1920,311 @@ new counters.
   - A second crash, or the client failing to start twice, makes the live evidence unavailable (PARTIAL at best).
 - No criterion changes after a result is seen.
 - If A fails, B is not attempted in Phase 06A. The slip blocker is recorded as open.
+
+### Phase 06A results
+
+Judged against the criteria above, which were committed (`5dc9e6b4f`) before the S2 change was written and before the
+batch or the live A/B ran. No criterion was changed after a result was seen. Phase 06 stays **FAIL**.
+
+**Focused tests, before the batch** (the stop condition): `CorrectionPolicyTest` 17, `CorrectionRetryTest` 4,
+`UnifiedHeadlessTest` 12 and `UnifiedExecutorTest` 32; all 65 pass, 0 skipped.
+
+#### Tier S: headless batch (VERIFIED, Tier S)
+
+Command: `gradlew test -Postinato_bench --tests "*UnifiedBatchBench"` with `OSTINATO_BATCH_SEED=9091
+OSTINATO_BATCH_WARMUP_SEED=9191 OSTINATO_BATCH_PHASE=phase06a OSTINATO_WRITE_DOCS=1`, at `48fec9906`.
+Analysis: `python scripts/unified-batch.py docs/ostinato2/raw/phase06a/headless-batch.csv`.
+Raw (`docs/ostinato2/raw/phase06a/`):
+- `headless-batch.csv`: one row per run, 3600 rows, every counter, plus `retryNs` and `retryNsMax`;
+- `headless-batch-run.txt`: seeds, n, wall time, JVM, OS;
+- `headless-analysis.txt`: the script's full output.
+
+The run ran once: seed 9091, warm-up seed 9191 (thrown away), n = 300 per family, so 1800 trials and 3600 runs. Wall
+time 96.7 s, Java 25.0.4.1, Windows 11, 8 CPUs. Unified ran first in 900 trials and second in 900. Neither seed had
+been run before.
+
+**H1 clean: holds.** Over 300 clean trials, legacy and unified are equal on every compared field (0 mismatches). Both
+arms end 255 ARRIVED and 45 EMPTY_PLAN.
+
+**H2 reliability: holds in every family.** Allowed loss is ceil(1% of 300) = 3.
+
+| family | legacy arrived | unified arrived | other ends (legacy / unified) | holds |
+|---|---|---|---|---|
+| clean | 255 | 255 | 45 / 45 EMPTY_PLAN | yes |
+| kick | 300 | 300 | — | yes |
+| slip | 249 | **252** | 51 / 48 EMPTY_PLAN | yes (unified +3) |
+| conflict | 300 | 300 | — | yes |
+| cancel | 300 | 49 + 251 CANCEL_STOP | — | yes (0 unintended ends) |
+| edge | 228 | **256** | 72 / 44 EMPTY_PLAN | yes (unified +28) |
+
+There were no REFUSED or TIMEOUT ends in either arm. The edge gain comes from the retry (R1 below: 28 retry plans in
+edge); edge was not a target of Phase 06A, and its gain is reported, not claimed.
+
+**H3 safety: holds.**
+- Over every unified trial: RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0, and no conflicting press landed.
+- Every non-timeout end has no key down, no lease held, and the final state that matches its outcome.
+- Every CANCEL_STOP ended on the ground. There were no TIMEOUT ends.
+- Diagnostic: the gate refused 2242 presses (CONFLICTS), and ERASED is 1454. In the legacy arm, 2320 conflicting
+  presses landed.
+
+**H4 correction bounded and counted: holds** (0 violations). Legacy executor counters, the two new ones included, are
+all 0.
+
+| family | divergences | corrections | accepted | escalations (= unified drift replans) | legacy drift replans |
+|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | 0 |
+| kick | 286 | 286 | 36 | 250 | 286 |
+| slip | 2129 | 1370 | 789 | 1340 | 1961 |
+| conflict | 0 | 0 | 0 | 0 | 2314 |
+| cancel | 0 | 0 | 0 | 0 | 0 |
+| edge | 300 | 300 | 14 | 286 | 300 |
+
+A retry is not counted as a drift replan, so escalations still equal unified drift replans in every family.
+
+**H5 plans and ticks: no regression.** Paired unified − legacy, bootstrap 95% CI:
+
+| family | plans mean diff (CI) | fewer replans | arrived pairs | ticks mean ratio (CI) | faster / equal / slower | regression |
+|---|---|---|---|---|---|---|
+| kick | −0.120 (−0.157..−0.083) | yes | 300 | 1.0002 (1.0000..1.0005) | 0 / 298 / 2 | no |
+| slip | −2.023 (−2.480..−1.567) | yes | 249 | 1.0004 (0.9993..1.0015) | 16 / 217 / 16 | no |
+| conflict | −7.713 (−8.257..−7.180) | yes | 300 | **0.8645** (0.8534..0.8752) | 296 / 4 / 0 | no |
+| edge | −0.047 (−0.073..−0.023) | yes | 228 | 1.0009 (1.0004..1.0015) | 0 / 219 / 9 | no |
+
+Fewer replans in all four disturbed families (Tier S). Faster in conflict only (Tier S).
+
+**H6 cancel latency: holds.**
+- 262 cancel trials had the request before arrival. Unified ended 251 CANCEL_STOP and 11 ARRIVED.
+- Unified latency: median 1 tick, max 12. Legacy, which waits for the run to end: median 35.
+- No unified trial lacked a stop or an arrival after the request. Unified was never slower than legacy.
+- Among the 222 pairs where legacy latency is ≥ 5, unified was strictly lower in 222 (100%).
+
+**H7 overhead: acceptable.** Per-run driver tick time, paired unified − legacy, all families pooled:
+
+| statistic | median diff (95% CI) | legacy median | unified median |
+|---|---|---|---|
+| p95 | +0.65 µs (+0.60..+0.70) | 465.10 µs | 26.25 µs |
+| p99 | −23.65 µs (−51.10..+2.85) | 14576.50 µs | 14242.30 µs |
+| p50 (diagnostic) | +0.00 µs (+0.00..+0.00) | 0.30 µs | 0.30 µs |
+
+As in Phase 06, p99 is the run's slowest tick (every run is under 100 ticks), which is a planning tick. Clean only,
+where both arms do the same work: p50 diff +0.100 µs (CI +0.100..+0.100).
+
+Diagnostic medians per run, legacy → unified:
+
+| family | plan ms | alloc KB |
+|---|---|---|
+| clean | 14.459 → 13.805 | 41789.8 → 41791.1 |
+| kick | 11.216 → 10.842 | 34277.6 → 32679.6 |
+| slip | 34.908 → 28.960 | 100322.8 → 86145.1 |
+| conflict | 22.657 → 2.929 | 69181.1 → 7789.7 |
+| cancel | 23.494 → 23.484 | 72145.5 → 72131.0 |
+| edge | 31.010 → 30.656 | 88065.9 → 87181.8 |
+
+**R1 the retry is bounded and counted: holds** (0 violations over every unified run).
+
+| family | escalations | retries | retry plans | runs that retried | failed retries that ended EMPTY_PLAN |
+|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | — |
+| kick | 250 | 0 | 0 | 0 | — |
+| slip | 1340 | 11 | 11 | 11 | — (none failed) |
+| conflict | 0 | 0 | 0 | 0 | — |
+| cancel | 0 | 0 | 0 | 0 | — |
+| edge | 286 | 72 | 28 | 72 | 44 / 44 |
+
+No run retried more than once. Legacy never retried.
+
+**R2 search and tick time: holds.** Over the 83 unified runs with a retry (nearest-rank p95):
+
+| measure | p95 | bound | max | bound |
+|---|---|---|---|---|
+| largest retry per run (`retryNsMax`) | 87.63 ms | ≤ 150 | 104.00 ms | ≤ 250 |
+| largest tick per run (`tickMaxNs`) | 123.67 ms | ≤ 250 | 147.77 ms | ≤ 400 |
+
+The search bound (≤ 1500 + 3000 nodes on a replan tick) holds by construction and is checked in `CorrectionRetryTest`.
+Diagnostic: retry time is 605 ms of 13293 ms unified plan time in slip (4.6%) and 4766 ms of 14232 ms in edge (33.5%).
+In edge most retries fail (44 of 72), and a failed 3000-node search is the most expensive case.
+
+**Slip mechanism: holds.** 11 retry plans over the unified slip runs, in 11 runs; all 11 arrived.
+
+**Tier S: no failure.** H1, H2, H3, H4, H6, R1 and R2 hold, H5 has no regression, H7 is acceptable, and the slip
+mechanism holds. Fewer replans in kick, slip, conflict and edge, and faster in conflict (Tier S only).
+
+**S2 (slip reliability): resolved at Tier S.** H2 holds in every family, R1 and R2 hold, and the slip mechanism holds.
+Slip went from unified 239 vs legacy 247 (Phase 06, seed 6061) to 252 vs 249 (Phase 06A, seed 9091).
+
+#### Tier L: live A/B on the 26.3 client (VERIFIED, Tier L)
+
+Command, per seed (PowerShell, from the repository root; one client at a time, no other JVM running), at `e65850c7e`
+(the same code as `48fec9906`):
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.tickClock=true -Dostinato.legatotest=true -Dostinato.legatotest.exit=true -Dostinato.legatotest.arms=unified -Dostinato.legatotest.stack=physics -Dostinato.legatotest.reps=6 -Dostinato.seed=<seed>'
+.\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient -PclientXmx=1536M *> ab-<seed>.log
+```
+
+Analysis: `python scripts/unified-ab.py docs/ostinato2/raw/phase06a/ab-86021-lines.txt docs/ostinato2/raw/phase06a/ab-86022-lines.txt`.
+Raw (`docs/ostinato2/raw/phase06a/`):
+- `ab-<seed>-lines.txt`: every `LEGATOTEST` line of the client log, one row per lap with the per-lap executor
+  counters, and the run totals;
+- `ab-<seed>-result.txt`: the harness's own result file;
+- `ab-<seed>-ticks.csv.gz`: the per-tick `unified-ticks.csv`;
+- `ab-analysis.txt`: the script's full output for both seeds.
+
+86021 ran first, then 86022. Each ran once, with no crash. Both seeds ran to the end: 96 of 96 laps per seed, on the
+`physics` stack, the flag on in every B/D lap and off in every A/C lap, `predictionTolerance` off in every lap.
+Neither seed had been run before.
+
+**L1 reliability: holds in both seeds.**
+
+| seed | A reached | B reached | C reached | D reached | stuck-key lines | deaths | new B/D faults |
+|---|---|---|---|---|---|---|---|
+| 86021 | 24/24 | 24/24 | 24/24 | 24/24 | 0 | 0 | none |
+| 86022 | 24/24 | 24/24 | 24/24 | 24/24 | 0 | 0 | none |
+
+Physics plans / drift replans over the 24 laps of each mode (diagnostic):
+
+| seed | A | B | C | D |
+|---|---|---|---|---|
+| 86021 | 777 / 14 | 774 / 11 | 779 / 17 | 779 / 11 |
+| 86022 | 773 / 11 | 783 / 10 | 780 / 18 | 780 / 10 |
+
+**L2 ownership safety: holds in both seeds** (judged per B/D lap, as pre-registered).
+- In every B/D lap, RELEASED_EARLY, OVERWRITTEN and STALE_REJECTS are 0.
+- No executor counter moved in any A/C lap.
+- OWNED_TICKS over the B/D laps: 8709 (86021) and 8798 (86022), of which INTACT_TICKS 8547 and 8644.
+- In every B/D lap, CORRECTIONS ≤ physics plans and ESCALATIONS = drift replans.
+
+Executor counters summed over the laps of each mode:
+
+| seed | mode | ACQUIRES | COMPLETIONS | FAILURES | CANCEL_STOPS | DIVERGENCES | CORRECTIONS | ACCEPTED | ESCALATIONS | PROCESS_CANCELS |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 86021 | B | 137 | 52 | 61 | 4 | 20 | 20 | 9 | 11 | 20 |
+| 86021 | D | 139 | 55 | 60 | 3 | 19 | 19 | 8 | 11 | 21 |
+| 86022 | B | 138 | 57 | 57 | 3 | 12 | 11 | 2 | 10 | 21 |
+| 86022 | D | 135 | 55 | 56 | 4 | 14 | 14 | 4 | 10 | 20 |
+
+In 86022 B, DIVERGENCES (12) is one more than CORRECTIONS (11): one miss came after the plan's correction was used,
+so it escalated at once (ACCEPTED 2 + ESCALATIONS 10 = 12). That is the pre-registered policy, as in Phase 06.
+
+**L2′ ownership across lap boundaries: holds, and is exercised, in both seeds.**
+
+Run total / sum over the laps, from the `LEGATOTEST unified totals` line and the lap rows:
+
+| counter | 81011 (Phase 06) | 81012 (Phase 06) | 86021 | 86022 |
+|---|---|---|---|---|
+| RELEASED_EARLY | 43 / 0 | 41 / 0 | **0 / 0** | **0 / 0** |
+| OVERWRITTEN | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| STALE_REJECTS | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| UNKNOWNS | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| HANDOVERS | 43 / 0 | 41 / 0 | 0 / 0 | 0 / 0 |
+| COMPLETIONS | 155 / 112 | 155 / 114 | 107 / 107 | 112 / 112 |
+| PROCESS_CANCELS | (no counter) | (no counter) | 41 / 41 | 41 / 41 |
+
+- The four safety totals are 0 in both seeds, there is no stuck-key line, and "keys held right after cancel" was never
+  logged. PROCESS_CANCELS is 41 in each seed, so the refused-cancel path was exercised.
+- Diagnostic: run total − lap sum is empty in both seeds. No executor counter moved between laps, against
+  COMPLETIONS, HANDOVERS and RELEASED_EARLY +43/+41 in Phase 06.
+
+Lap-end diagnostic (not a pre-registered measure; counted from the per-lap `ux={…}` counters in
+`ab-<seed>-lines.txt`). B/D laps by (CANCEL_REFUSALS, CANCEL_STOPS, PROCESS_CANCELS) in the lap:
+
+| pattern | 81011 (Phase 06) | 81012 (Phase 06) | 86021 | 86022 |
+|---|---|---|---|---|
+| 1 refusal, no stop, no process cancel | 43 | 41 | 0 | 0 |
+| 1 refusal, no stop, 1 process cancel | — | — | 41 | 41 |
+| 2 refusals, 1 stop | 4 | 7 | 5 | 4 |
+| 3 refusals, 1 stop | 1 | 0 | 2 | 3 |
+
+In Phase 06, the laps with one refused cancel and no stop were the laps whose leases ended after the lap row, by an
+early release. In Phase 06A each such lap records one PROCESS_CANCEL inside the lap: the executor lifts its keys and
+ends its lease before `onLostControl()` runs. The other laps stopped inside the lap, as in Phase 06.
+
+**L3 completion time: no time improvement, not slower.** Median paired lap-ticks ratio per leg, 6 pairs each:
+
+| seed | leg | B/A | D/C | C/A (noise) |
+|---|---|---|---|---|
+| 86021 | slalom | 0.994 | 1.001 | 0.997 |
+| 86021 | ridges | 0.998 | 1.009 | 0.991 |
+| 86021 | bumps | 1.002 | 1.000 | 1.000 |
+| 86021 | steps | 1.005 | 0.977 | 1.037 |
+| 86022 | slalom | 0.997 | 1.001 | 0.997 |
+| 86022 | ridges | 1.009 | 0.995 | 1.000 |
+| 86022 | bumps | 1.002 | 0.998 | 1.002 |
+| 86022 | steps | 0.976 | 1.010 | 0.977 |
+
+No leg in any B/A or D/C pair is ≤ 0.97 or ≥ 1.03.
+
+**L4 replans and recovery: no difference in any pair.** Paired on − off per lap, n = 24, bootstrap 95% CI:
+
+| seed | pair | physics plans | drift replans | cancels + rewinds |
+|---|---|---|---|---|
+| 86021 | B/A | −0.125 (−1.292..+1.042), no difference | −0.125 (−0.417..+0.167), no difference | 0 (0..0) |
+| 86021 | D/C | +0.000 (−1.208..+1.292), no difference | −0.250 (−0.667..+0.208), no difference | 0 (0..0) |
+| 86022 | B/A | +0.417 (−0.917..+1.750), no difference | −0.042 (−0.292..+0.208), no difference | 0 (0..0) |
+| 86022 | D/C | +0.000 (−1.042..+1.042), no difference | −0.333 (−0.708..+0.042), no difference | 0 (0..0) |
+
+Physics plans are not higher anywhere. Strictly more reached: no (24/24 in every mode). Drift replans are lower in
+every point estimate, but no CI excludes 0, so the Phase 06 Tier L improvement (drift replans lower in both
+replications and both seeds) did not reproduce on these seeds. The off arms had fewer drift replans than in Phase 06
+(A/C 14/17 and 11/18, against 20/19 and 19/20).
+
+**L5 overhead: inconclusive.** Client tick time per lap, paired on − off, both seeds pooled, n = 96:
+
+| statistic | median diff (95% CI) | median off | median on | result |
+|---|---|---|---|---|
+| p95 | +0.270 ms (−0.203..+0.914) | 17.82 ms | 17.74 ms | CI upper > 0.5, lower < 0.5 |
+| p99 | −0.476 ms (−1.993..+0.695) | 85.61 ms | 79.40 ms | CI upper > 0.5, lower < 0.5 |
+| p50 (diagnostic) | +0.010 ms (−0.039..+0.051) | 5.21 ms | 5.23 ms | |
+| max (diagnostic) | −0.095 ms (−4.190..+3.032) | 125.24 ms | 124.65 ms | |
+| alloc KB (diagnostic) | +7790.0 (−5582.5..+20609.0) | 1470381.5 | 1474563.0 | |
+
+Not FAIL (no CI lower bound > 0.5 ms), and not acceptable (both CI upper bounds > 0.5 ms). As in Phase 06, 96 pairs
+of client ticks cannot resolve a 0.5 ms bound.
+
+**L6 cancel latency: not measured live**, as pre-registered (the course cancels only at lap end).
+
+**Live retry diagnostic: the retry never fired.** CORRECTION_RETRIES and CORRECTION_RETRY_PLANS are 0 over the B/D
+laps of both seeds, and 0 in both run totals. No replan after a correction came back empty on this course, so the S2
+change had no live occasion to act. Its effect is evidenced at Tier S only.
+
+**Tier L verdict: no improvement, no regression.** L1, L2 and L2′ hold in both seeds. L3 is not slower and physics
+plans are not higher in any pair. L5 is inconclusive, which is not a FAIL.
+
+**S1 (input ownership): resolved** on the path the live harness exercises (the lap-end `cancelEverything()` with a
+refused segment cancel):
+- the five ownership tests in `UnifiedExecutorTest` pass (32 of 32);
+- H3 holds;
+- L2 holds in both seeds;
+- L2′ holds and is exercised in both seeds.
+
+Not covered by S1 and still open (B6): the direct key writers (279 raw matches in 33 files, unchanged), the four
+`onLostControl()` `clearAllKeys()` calls, and the direct `onLostControl()` callers outside
+`PathingBehavior.cancelEverything()` (`SwarmBehavior`, `HybridMovementEngine`, `BombardLiveTest`). None of them ran
+with the flag on in this evidence.
+
+#### Phase 06A classification: PASS
+
+Under the pre-registered gate rule:
+- **S1 resolved** (Tier L above) and **S2 resolved** (Tier S above).
+- Every PASS condition holds:
+  - Tier S does not fail;
+  - L1 holds in both seeds;
+  - there is no H5 regression, no L3 slower and no L4 more plans;
+  - H7 is acceptable and L5 inconclusive, so neither is FAIL;
+  - the full suite shows no new failure beyond the pre-existing B5 `SecondoTest`.
+- No FAIL condition is met: H3, L2 and L2′ hold; H2 and L1 hold; H1, H4, H6 and R1 hold; there is no regression and
+  no overhead FAIL.
+
+Scope of the class:
+- It covers the two Phase 06 blockers. Phase 06 stays **FAIL** as recorded above.
+- S2 is evidenced at Tier S only: the retry never fired live.
+- S1 is established on the path the live harness exercises, the refused branch of the lap-end
+  `PathingBehavior.cancelEverything()`. The other key writers and `onLostControl()` callers stay open (B6).
+
+**Promotion (the Phase 06 PASS rule, applied to the Phase 06A data): not met.** Tier S does not fail, H3 and L2 hold
+and H7 is acceptable, but L5 is inconclusive rather than acceptable, and the Tier L verdict is no improvement.
+
+`unifiedExecutor` stays default **false**. No criterion was changed, and neither the batch nor either live seed was
+re-run after its result was seen.
+
+Full suite on the results code (`deec15be1`): 1604 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.

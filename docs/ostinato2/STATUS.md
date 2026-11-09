@@ -1,5 +1,18 @@
 # Ostinato 2.0 — status
 
+**Phase 06A gate: PASS. `unifiedExecutor` stays default false** (DECISIONS D17, 2026-11-09).
+- Phase 06A resolved the two Phase 06 blockers behind the same default-false flag. Phase 06 stays **FAIL** (below).
+- **S1, input ownership:** on the lap-end cancel, `PathingBehavior.cancelEverything()` now tells the executor before
+  any process's `onLostControl()` runs. Live, no executor counter moved between laps in either seed (Phase 06: 43 and
+  41 early releases there), with 41 process cancels per seed. The other writers stay open (B6).
+- **S2, slip reliability:** one bounded 3000-node retry when the replan after a correction comes back empty. On
+  slippery ground it now arrives in 252 of 300 headless trials against legacy's 249 (Phase 06: 239 against 247).
+  The retry never fired live, so S2 is evidenced at Tier S only.
+- Live (Tier L), 2 fresh seeds × 96 laps: no improvement, no regression; 96/96 laps reached in each seed;
+  client-tick overhead inconclusive (p95 +0.27 ms, CI −0.20..+0.91).
+- **Promotion: not met.** Enabling the flag needs promotion evidence and the owner's separate authorization.
+- Phase 07 was **not** started.
+
 **Phase 06 gate: FAIL. `unifiedExecutor` stays default false** (DECISIONS D16, 2026-11-08).
 - The unified executor owns the physics driver's movement keys behind a default-false flag. It was judged against
   criteria committed before any run.
@@ -88,6 +101,15 @@
    - A headless harness and a 1800-trial batch, a live A/B on `SimEdgeCourse` (seeds 81011, 81012), and an
      exploratory slip diagnostic after the gate.
    - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase06/`.
+7. **Phase 06A** (2026-11-09; DECISIONS D17; criteria pre-registered in BENCHMARKS before the S2 change and before
+   any run):
+   - `UnifiedExecutor.processesCancelled()`: on the refused branch of `PathingBehavior.cancelEverything()`, the
+     executor lifts its keys and ends its lease before any process's `onLostControl()` runs.
+   - One bounded retry (`CorrectionPolicy.RETRY_NODES` = 3000) when the replan after a correction returns no path.
+   - Both behind the default-false flag. The A* first-search budget, the physics model and every other key writer
+     are unchanged.
+   - A 1800-trial headless batch (seed 9091) and a live A/B on `SimEdgeCourse` (seeds 86021, 86022).
+   - Raw rows, per-run outputs and analysis: `docs/ostinato2/raw/phase06a/`.
 
 ## Phase 04 gate
 
@@ -170,6 +192,10 @@
     `PveProcess` and `PvpProcess`, which call `clearAllKeys()` directly. They release the executor's keys without
     telling it (43 and 41 early releases outside the laps). Follow-up: `cancelEverything()` tells the executor
     first, and those calls go through the arbiter.
+  - **Phase 06A:** `PathingBehavior.cancelEverything()` now tells the executor first, on its refused branch
+    (`0c354b804`). Live, no executor counter moved between laps. The four `clearAllKeys()` calls and the other direct
+    `onLostControl()` callers (`SwarmBehavior`, `HybridMovementEngine`, `BombardLiveTest`) are not migrated, and the
+    raw count is unchanged: 279 matches in 33 files.
   - Only `FallController`/`FallInput` use the arbiter (and the unified executor, flag on).
   - It blocks turning `inputArbitration` on in production, and it limits what the unified executor can own.
   - Effect on the Phase 04 gate: none.
@@ -271,19 +297,54 @@ pushed or merged.
 - **Ownership is not exclusive on the live cancel path** (BENCHMARKS, finding outside the laps; B6). On the
   task's rule this alone keeps the executor off, whatever the gate.
 
+## Phase 06A (executor safety and reliability recovery, 2026-11-09)
+
+Scope: resolve the two Phase 06 blockers, S1 (input ownership on the lap-end cancel) and S2 (the slip reliability
+loss), with minimal changes behind the same default-false flag. No A* replacement, no physics rewrite, no general
+recovery framework, no broad migration of input writers, no default change, nothing pushed or merged.
+
+- **Commits** (local, `ostinato2/claude-review`, base `754afb520`):
+
+  | commit | content |
+  |---|---|
+  | `0c354b804` | S1: the executor gives up its lease before the processes are cancelled |
+  | `228d655f0` | ownership tests |
+  | `5dc9e6b4f` | pre-registration, written before the S2 change and before any run |
+  | `374570484` | S2: one bounded 3000-node retry |
+  | `48fec9906` | retry tests and analysis-script checks |
+  | `e65850c7e` | headless batch raw evidence |
+  | `deec15be1` | live A/B raw evidence |
+  | the commit that last touched this file | results |
+
+- **Tests:** `UnifiedExecutorTest` (32), `CorrectionPolicyTest` (17), `CorrectionRetryTest` (4) and
+  `UnifiedHeadlessTest` (12) pass. Full suite: 1604 tests, 1 failed (the pre-existing B5 `SecondoTest`), 23 skipped.
+- **Evidence** (BENCHMARKS "Phase 06A results"):
+
+  | tier | result |
+  |---|---|
+  | S, headless batch, seed 9091, 1800 trials × 2 | **H2 holds on slip**: 252 vs 249 arrived (Phase 06: 239 vs 247). 11 slip runs retried; all found a plan and arrived. R1 (at most one retry, a failed retry ends EMPTY_PLAN) and R2 (largest retry p95 87.63 ms, max 104.00 ms) hold. H1 identical (0 mismatches over 300). H3 holds. H4 bounded. H5 fewer replans in all 4 disturbed families, conflict 14% faster. H6 cancel median 1 tick, max 12. H7 acceptable (p95 +0.65 µs). |
+  | L, seed 86021, 96 laps | 96/96, no stuck key, death or new fault. L2 holds per lap. **L2′: no executor counter moved between laps**, with 41 process cancels. Lap ticks and physics plans unchanged; drift replans lower in point estimate, but no CI excludes 0. The retry never fired. |
+  | L, seed 86022, 96 laps | Reproduces 86021: 96/96, L2 and L2′ hold, 41 process cancels, no difference in any pair, the retry never fired. Overhead, both seeds pooled: p95 +0.270 ms (CI −0.203..+0.914), **inconclusive**. Tier L verdict: **no improvement, no regression**. |
+
+- **Classification: PASS** (the pre-registered Phase 06A rule). Phase 06 stays FAIL (D16): this PASS covers its two
+  blockers, not its gate.
+- **Promotion: not met** (the Phase 06 PASS rule on the Phase 06A data: L5 inconclusive, Tier L no improvement).
+  `unifiedExecutor` stays default false.
+- **Ownership is established on the lap-end cancel path only** (the refused branch of
+  `PathingBehavior.cancelEverything()`). B6 stays open.
+
 ## Next task
 
-**Owner decisions. Phase 06 is complete (gate FAIL). Phase 07 was not started.**
+**Owner decisions. Phase 06A is complete (gate PASS). Phase 07 was not started.**
 
-1. Phase 06 (D16):
-   - Keep `unifiedExecutor` off.
-   - Close the cancel path first (B6): `PathingBehavior.cancelEverything()` tells the executor before
-     `onLostControl()` runs, and the `onLostControl()` `clearAllKeys()` calls go through the arbiter.
-   - Fix the slip loss before any new evaluation, as its own pre-registered run on fresh seeds. Two candidate
-     directions: replan with a larger budget (or fall back to the legacy replan) when the replan after a correction
-     comes back empty; or do not keep the plan after a miss caused by a surface slipperier than the model.
-     The slip diagnostic (exploratory) supports the first: at budget ≥ 6000 neither arm loses a slip trial.
-   - Only after that, a live run with the flag on, and only after that a default change.
+1. Phase 06A (D17):
+   - Keep `unifiedExecutor` off. Enabling it needs promotion evidence and the owner's separate authorization.
+   - Before any default change, finish B6 on the paths the executor can run on: the four `onLostControl()`
+     `clearAllKeys()` calls and the other direct `onLostControl()` callers go through the arbiter or tell the
+     executor first.
+   - Decide whether to fund promotion evidence as its own pre-registered phase: an overhead measure that can resolve
+     0.5 ms (96 client-tick pairs could not, in Phase 06 or in Phase 06A), and a live course where corrections
+     escalate and the retry has occasion to fire.
 2. Accept the Phase 04 gate as PROVISIONAL with `predictionTolerance` off. The alternative is to fund a new
    pre-registered drift-check design (bound × margin, or persistence) and its own A/B.
 3. SimEdge (D15):
