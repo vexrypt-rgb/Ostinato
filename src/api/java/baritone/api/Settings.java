@@ -789,6 +789,15 @@ public final class Settings {
     public final Setting<Boolean> rightClickContainerOnArrival = new Setting<>(true);
 
     /**
+     * Ostinato 2.0 Phase 08: a goto to a container counts as done only once the server opened the matching container
+     * for this request. A timed-out, unreachable or refused right click ends the request as failed (with a reason)
+     * instead of looking like an arrival; a container left open from before is closed first; and with no known
+     * target (none found, vanished, or every one unreachable) it fails instead of exploring. The task builder checks
+     * the result. Off, the old behaviour. Default off until a live run shows it is no worse.
+     */
+    public final Setting<Boolean> verifiedGetToBlock = new Setting<>(false);
+
+    /**
      * When running a goto towards a nether portal block, walk all the way into the portal
      * instead of stopping one block before.
      */

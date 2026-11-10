@@ -32,4 +32,12 @@ public interface IGetToBlockProcess extends IBaritoneProcess {
     }
 
     boolean blacklistClosest();
+
+    /**
+     * Ostinato 2.0 Phase 08: the outcome of the latest {@link #getToBlock} request. With {@code verifiedGetToBlock}
+     * on, a container counts as reached only once the server opened the matching container for this request.
+     */
+    default ProcessOutcome outcome() {
+        return ProcessOutcome.NONE;
+    }
 }
