@@ -10,6 +10,23 @@ inventory, and schematic processes to make it happen. Multi-bot coordination
 (`#swarm`) uses the [SIGIL](https://github.com/vexrypt-rgb/sigil) wire format
 for sealed whispers.
 
+> **New work happens in the monorepo:** 26.3 development of Ostinato and TenorClef now lives in
+> [vexrypt-rgb/ostinato-tenorclef](https://github.com/vexrypt-rgb/ostinato-tenorclef). This repository keeps the
+> release workflow, the version branches (1.21.11, 1.21.4, 1.16.1) and the full history.
+
+## Install
+
+Download `ostinato-mc<version>-unoptimized-fabric-*.jar` for your Minecraft version from the
+[releases](https://github.com/vexrypt-rgb/Ostinato/releases) and put it in `mods/` with Fabric Loader (26.3 needs
+Java 25). Use the `api` jar only as a compile dependency for other mods.
+
+## Experimental features are off by default
+
+Presto, Legato, Maestro, Cadenza, Secondo and the Ostinato 2.0 study flags (`unifiedExecutor`, `inputArbitration`,
+`simEdgeSearch`, `pathingStateIdCache`, `pathingHierarchical`, `verifiedGetToBlock`, `predictionTolerance`,
+`latticeExperiment`) all default to `false`. Grace Note runs in `observe` mode unless the game starts with
+`-Dostinato.graceNote=live`; Bombard and Scherzo need `-Dostinato.bombard` / `-Dostinato.scherzo`. Each has a
+pre-registered evaluation and a decision in [docs/ostinato2/DECISIONS.md](docs/ostinato2/DECISIONS.md).
 ## Compatibility
 
 `gradle.properties` on this branch is the source of truth for the Minecraft
