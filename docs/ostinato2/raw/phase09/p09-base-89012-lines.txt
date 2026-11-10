@@ -1,0 +1,325 @@
+EXCEPTION com.mojang.authlib.exceptions.InvalidCredentialsException at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:70)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+INTERACTTEST start laps=72 reps=4 scenarios=9 timeout=600 post=40 seed=89012 flag=present rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true
+INTERACTTEST begin lap=0 scen=OPEN arm=A rep=0 clearedChests=2
+INTERACTTEST row lap=0 scen=OPEN arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=69 lapTicks=70 uses=1 menu=chest active=false keys=- outcome=1:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTEST row lap=0 scen=OPEN arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=5393.87
+INTERACTTEST keys still held after lap 0: -
+INTERACTTEST begin lap=1 scen=OPEN arm=B rep=0 clearedChests=38
+INTERACTTEST row lap=1 scen=OPEN arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=2:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=1 scen=OPEN arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=24.08
+INTERACTTEST keys still held after lap 1: -
+INTERACTTEST begin lap=2 scen=CAT arm=B rep=0 clearedChests=17
+INTERACTTEST row lap=2 scen=CAT arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=3:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTEST row lap=2 scen=CAT arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=5 runnerUs=25.88
+INTERACTTEST keys still held after lap 2: -
+INTERACTTEST begin lap=3 scen=CAT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=3 scen=CAT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=4:FAILED/TIMEOUT msg="done in 2.8s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=3 scen=CAT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=11.30
+INTERACTTEST keys still held after lap 3: -
+INTERACTTEST begin lap=4 scen=VANISH arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=4 scen=VANISH arm=A rep=0 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=88 lapTicks=89 uses=0 menu=none active=false keys=- outcome=5:FAILED/INVALIDATED_GOAL msg="done in 4.4s"
+INTERACTTEST row lap=4 scen=VANISH arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=12.30
+INTERACTTEST keys still held after lap 4: -
+INTERACTTEST begin lap=5 scen=VANISH arm=B rep=0 clearedChests=3
+INTERACTTEST row lap=5 scen=VANISH arm=B rep=0 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=31 lapTicks=32 uses=0 menu=none active=false keys=- outcome=6:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTEST row lap=5 scen=VANISH arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=15.14
+INTERACTTEST keys still held after lap 5: -
+INTERACTTEST begin lap=6 scen=SEALED arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=6 scen=SEALED arm=B rep=0 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=30 lapTicks=31 uses=0 menu=none active=false keys=- outcome=7:FAILED/INVALIDATED_GOAL msg="get to block failed: invalidated goal"
+INTERACTTEST row lap=6 scen=SEALED arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=21.33
+INTERACTTEST keys still held after lap 6: -
+INTERACTTEST begin lap=7 scen=SEALED arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=7 scen=SEALED arm=A rep=0 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=78 lapTicks=79 uses=0 menu=none active=false keys=- outcome=8:FAILED/INVALIDATED_GOAL msg="done in 3.9s"
+INTERACTTEST row lap=7 scen=SEALED arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.14
+INTERACTTEST keys still held after lap 7: -
+INTERACTTEST begin lap=8 scen=CANCEL_MOVE arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=9:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=10:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=8 scen=CANCEL_MOVE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=16.88
+INTERACTTEST keys still held after lap 8: -
+INTERACTTEST begin lap=9 scen=CANCEL_MOVE arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=11:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=12:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=9 scen=CANCEL_MOVE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=16.63
+INTERACTTEST keys still held after lap 9: -
+INTERACTTEST begin lap=10 scen=CANCEL_ACT arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=13:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=14:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTEST row lap=10 scen=CANCEL_ACT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=14.79
+INTERACTTEST keys still held after lap 10: -
+INTERACTTEST begin lap=11 scen=CANCEL_ACT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=15:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- outcome=16:FAILED/UNKNOWN msg="done in 0.1s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=11 scen=CANCEL_ACT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=17.56
+INTERACTTEST keys still held after lap 11: -
+INTERACTTEST begin lap=12 scen=PREEMPT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=12 scen=PREEMPT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=17:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTEST row lap=12 scen=PREEMPT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=10.31
+INTERACTTEST keys still held after lap 12: -
+INTERACTTEST begin lap=13 scen=PREEMPT arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=13 scen=PREEMPT arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=18:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTEST row lap=13 scen=PREEMPT arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=26.52
+INTERACTTEST keys still held after lap 13: -
+INTERACTTEST begin lap=14 scen=REPLACE arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=14 scen=REPLACE arm=B rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=20:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=14 scen=REPLACE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=315.26
+INTERACTTEST keys still held after lap 14: -
+INTERACTTEST begin lap=15 scen=REPLACE arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=15 scen=REPLACE arm=A rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=22:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=15 scen=REPLACE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=55.79
+INTERACTTEST keys still held after lap 15: -
+INTERACTTEST begin lap=16 scen=REPEAT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=23:SUCCEEDED/NONE msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- outcome=24:FAILED/UNKNOWN msg="done in 1.0s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=16 scen=REPEAT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=47.37
+INTERACTTEST keys still held after lap 16: -
+INTERACTTEST begin lap=17 scen=REPEAT arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=25:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=main verdict=DONE step=2 block=crafting_table cls=TS ticks=21 lapTicks=60 uses=1 menu=table active=false keys=- outcome=26:SUCCEEDED/NONE msg="done in 1.1s"
+INTERACTTEST row lap=17 scen=REPEAT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=2 runnerUs=49.22
+INTERACTTEST keys still held after lap 17: -
+INTERACTTEST begin lap=18 scen=OPEN arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=18 scen=OPEN arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=27:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=18 scen=OPEN arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=8.95
+INTERACTTEST keys still held after lap 18: -
+INTERACTTEST begin lap=19 scen=OPEN arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=19 scen=OPEN arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=28:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=19 scen=OPEN arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=6.55
+INTERACTTEST keys still held after lap 19: -
+INTERACTTEST begin lap=20 scen=CAT arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=20 scen=CAT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=29:FAILED/TIMEOUT msg="done in 2.8s"
+INTERACTTEST row lap=20 scen=CAT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=9.26
+INTERACTTEST keys still held after lap 20: -
+INTERACTTEST begin lap=21 scen=CAT arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=21 scen=CAT arm=B rep=1 part=main verdict=FAILED step=1 block=chest cls=TF ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=30:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTEST row lap=21 scen=CAT arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=5 runnerUs=11.06
+INTERACTTEST keys still held after lap 21: -
+INTERACTTEST begin lap=22 scen=VANISH arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=22 scen=VANISH arm=B rep=1 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=34 lapTicks=35 uses=0 menu=none active=false keys=- outcome=31:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTEST row lap=22 scen=VANISH arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=15.70
+INTERACTTEST keys still held after lap 22: -
+INTERACTTEST begin lap=23 scen=VANISH arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=23 scen=VANISH arm=A rep=1 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=86 lapTicks=87 uses=0 menu=none active=false keys=- outcome=32:FAILED/INVALIDATED_GOAL msg="done in 4.3s"
+INTERACTTEST row lap=23 scen=VANISH arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.14
+INTERACTTEST keys still held after lap 23: -
+INTERACTTEST begin lap=24 scen=SEALED arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=24 scen=SEALED arm=A rep=1 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=78 lapTicks=79 uses=0 menu=none active=false keys=- outcome=33:FAILED/INVALIDATED_GOAL msg="done in 3.9s"
+INTERACTTEST row lap=24 scen=SEALED arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=5.78
+INTERACTTEST keys still held after lap 24: -
+INTERACTTEST begin lap=25 scen=SEALED arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=25 scen=SEALED arm=B rep=1 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=30 lapTicks=31 uses=0 menu=none active=false keys=- outcome=34:FAILED/INVALIDATED_GOAL msg="get to block failed: invalidated goal"
+INTERACTTEST row lap=25 scen=SEALED arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=17.25
+INTERACTTEST keys still held after lap 25: -
+INTERACTTEST begin lap=26 scen=CANCEL_MOVE arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=35:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=36:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=26 scen=CANCEL_MOVE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=13.31
+INTERACTTEST keys still held after lap 26: -
+INTERACTTEST begin lap=27 scen=CANCEL_MOVE arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=37:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=38:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=27 scen=CANCEL_MOVE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=14.06
+INTERACTTEST keys still held after lap 27: -
+INTERACTTEST begin lap=28 scen=CANCEL_ACT arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=39:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- outcome=40:FAILED/UNKNOWN msg="done in 0.1s"
+INTERACTTEST row lap=28 scen=CANCEL_ACT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=10.87
+INTERACTTEST keys still held after lap 28: -
+INTERACTTEST begin lap=29 scen=CANCEL_ACT arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=41:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=42:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTEST row lap=29 scen=CANCEL_ACT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=13.80
+INTERACTTEST keys still held after lap 29: -
+INTERACTTEST begin lap=30 scen=PREEMPT arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=30 scen=PREEMPT arm=B rep=1 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=43:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTEST row lap=30 scen=PREEMPT arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=22.51
+INTERACTTEST keys still held after lap 30: -
+INTERACTTEST begin lap=31 scen=PREEMPT arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=31 scen=PREEMPT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=44:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTEST row lap=31 scen=PREEMPT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=8.59
+INTERACTTEST keys still held after lap 31: -
+INTERACTTEST begin lap=32 scen=REPLACE arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=32 scen=REPLACE arm=A rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=46:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=32 scen=REPLACE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=52.23
+INTERACTTEST keys still held after lap 32: -
+INTERACTTEST begin lap=33 scen=REPLACE arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=33 scen=REPLACE arm=B rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=48:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=33 scen=REPLACE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=47.51
+INTERACTTEST keys still held after lap 33: -
+INTERACTTEST begin lap=34 scen=REPEAT arm=B rep=1 clearedChests=0
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=49:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=main verdict=DONE step=2 block=crafting_table cls=TS ticks=21 lapTicks=60 uses=1 menu=table active=false keys=- outcome=50:SUCCEEDED/NONE msg="done in 1.1s"
+INTERACTTEST row lap=34 scen=REPEAT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=2 runnerUs=41.71
+INTERACTTEST keys still held after lap 34: -
+INTERACTTEST begin lap=35 scen=REPEAT arm=A rep=1 clearedChests=0
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=51:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- outcome=52:FAILED/UNKNOWN msg="done in 1.0s"
+INTERACTTEST row lap=35 scen=REPEAT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=43.40
+INTERACTTEST keys still held after lap 35: -
+INTERACTTEST begin lap=36 scen=OPEN arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=36 scen=OPEN arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=53:SUCCEEDED/NONE msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=36 scen=OPEN arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=7.01
+INTERACTTEST keys still held after lap 36: -
+INTERACTTEST begin lap=37 scen=OPEN arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=37 scen=OPEN arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=54:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=37 scen=OPEN arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=7.35
+INTERACTTEST keys still held after lap 37: -
+INTERACTTEST begin lap=38 scen=CAT arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=38 scen=CAT arm=B rep=2 part=main verdict=FAILED step=1 block=chest cls=TF ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=55:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTEST row lap=38 scen=CAT arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=5 runnerUs=11.66
+INTERACTTEST keys still held after lap 38: -
+INTERACTTEST begin lap=39 scen=CAT arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=39 scen=CAT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=56:FAILED/TIMEOUT msg="done in 2.8s"
+INTERACTTEST row lap=39 scen=CAT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=5.53
+INTERACTTEST keys still held after lap 39: -
+INTERACTTEST begin lap=40 scen=VANISH arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=40 scen=VANISH arm=A rep=2 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=84 lapTicks=85 uses=0 menu=none active=false keys=- outcome=57:FAILED/INVALIDATED_GOAL msg="done in 4.2s"
+INTERACTTEST row lap=40 scen=VANISH arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=5.37
+INTERACTTEST keys still held after lap 40: -
+INTERACTTEST begin lap=41 scen=VANISH arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=41 scen=VANISH arm=B rep=2 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=31 lapTicks=32 uses=0 menu=none active=false keys=- outcome=58:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTEST row lap=41 scen=VANISH arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=12.94
+INTERACTTEST keys still held after lap 41: -
+INTERACTTEST begin lap=42 scen=SEALED arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=42 scen=SEALED arm=B rep=2 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=30 lapTicks=31 uses=0 menu=none active=false keys=- outcome=59:FAILED/INVALIDATED_GOAL msg="get to block failed: invalidated goal"
+INTERACTTEST row lap=42 scen=SEALED arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=14.72
+INTERACTTEST keys still held after lap 42: -
+INTERACTTEST begin lap=43 scen=SEALED arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=43 scen=SEALED arm=A rep=2 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=78 lapTicks=79 uses=0 menu=none active=false keys=- outcome=60:FAILED/INVALIDATED_GOAL msg="done in 3.9s"
+INTERACTTEST row lap=43 scen=SEALED arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.14
+INTERACTTEST keys still held after lap 43: -
+INTERACTTEST begin lap=44 scen=CANCEL_MOVE arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=61:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=62:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=44 scen=CANCEL_MOVE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=10.39
+INTERACTTEST keys still held after lap 44: -
+INTERACTTEST begin lap=45 scen=CANCEL_MOVE arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=63:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=64:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=45 scen=CANCEL_MOVE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=13.95
+INTERACTTEST keys still held after lap 45: -
+INTERACTTEST begin lap=46 scen=CANCEL_ACT arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=1 stopTick=37 outcome=65:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=66:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTEST row lap=46 scen=CANCEL_ACT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=14.08
+INTERACTTEST keys still held after lap 46: -
+INTERACTTEST begin lap=47 scen=CANCEL_ACT arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=67:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- outcome=68:FAILED/UNKNOWN msg="done in 0.1s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=47 scen=CANCEL_ACT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=13.89
+INTERACTTEST keys still held after lap 47: -
+INTERACTTEST begin lap=48 scen=PREEMPT arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=48 scen=PREEMPT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=69:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTEST row lap=48 scen=PREEMPT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.53
+INTERACTTEST keys still held after lap 48: -
+INTERACTTEST begin lap=49 scen=PREEMPT arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=49 scen=PREEMPT arm=B rep=2 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=70:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTEST row lap=49 scen=PREEMPT arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=17.22
+INTERACTTEST keys still held after lap 49: -
+INTERACTTEST begin lap=50 scen=REPLACE arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=50 scen=REPLACE arm=B rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=72:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=50 scen=REPLACE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=54.03
+INTERACTTEST keys still held after lap 50: -
+INTERACTTEST begin lap=51 scen=REPLACE arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=51 scen=REPLACE arm=A rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=74:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=51 scen=REPLACE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=45.07
+INTERACTTEST keys still held after lap 51: -
+INTERACTTEST begin lap=52 scen=REPEAT arm=A rep=2 clearedChests=0
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=75:SUCCEEDED/NONE msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- outcome=76:FAILED/UNKNOWN msg="done in 1.0s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=52 scen=REPEAT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=42.47
+INTERACTTEST keys still held after lap 52: -
+INTERACTTEST begin lap=53 scen=REPEAT arm=B rep=2 clearedChests=0
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=77:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=main verdict=DONE step=2 block=crafting_table cls=TS ticks=21 lapTicks=60 uses=1 menu=table active=false keys=- outcome=78:SUCCEEDED/NONE msg="done in 1.1s"
+INTERACTTEST row lap=53 scen=REPEAT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=2 runnerUs=46.16
+INTERACTTEST keys still held after lap 53: -
+INTERACTTEST begin lap=54 scen=OPEN arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=54 scen=OPEN arm=B rep=3 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=79:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=54 scen=OPEN arm=B rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=7.15
+INTERACTTEST keys still held after lap 54: -
+INTERACTTEST begin lap=55 scen=OPEN arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=55 scen=OPEN arm=A rep=3 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=80:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=55 scen=OPEN arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=5.52
+INTERACTTEST keys still held after lap 55: -
+INTERACTTEST begin lap=56 scen=CAT arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=56 scen=CAT arm=A rep=3 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=81:FAILED/TIMEOUT msg="done in 2.8s"
+INTERACTTEST row lap=56 scen=CAT arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=8.29
+INTERACTTEST keys still held after lap 56: -
+INTERACTTEST begin lap=57 scen=CAT arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=57 scen=CAT arm=B rep=3 part=main verdict=FAILED step=1 block=chest cls=TF ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=82:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTEST row lap=57 scen=CAT arm=B rep=3 part=end run=FAILED activeEnd=false keysEnd=- uses=5 runnerUs=7.94
+INTERACTTEST keys still held after lap 57: -
+INTERACTTEST begin lap=58 scen=VANISH arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=58 scen=VANISH arm=B rep=3 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=29 lapTicks=30 uses=0 menu=none active=false keys=- outcome=83:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTEST row lap=58 scen=VANISH arm=B rep=3 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=12.89
+INTERACTTEST keys still held after lap 58: -
+INTERACTTEST begin lap=59 scen=VANISH arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=59 scen=VANISH arm=A rep=3 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=84 lapTicks=85 uses=0 menu=none active=false keys=- outcome=84:FAILED/INVALIDATED_GOAL msg="done in 4.2s"
+INTERACTTEST row lap=59 scen=VANISH arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=6.06
+INTERACTTEST keys still held after lap 59: -
+INTERACTTEST begin lap=60 scen=SEALED arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=60 scen=SEALED arm=A rep=3 part=main verdict=DONE step=1 block=ender_chest cls=FS ticks=78 lapTicks=79 uses=0 menu=none active=false keys=- outcome=85:FAILED/INVALIDATED_GOAL msg="done in 3.9s"
+INTERACTTEST row lap=60 scen=SEALED arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=5.54
+INTERACTTEST keys still held after lap 60: -
+INTERACTTEST begin lap=61 scen=SEALED arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=61 scen=SEALED arm=B rep=3 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=30 lapTicks=31 uses=0 menu=none active=false keys=- outcome=86:FAILED/INVALIDATED_GOAL msg="get to block failed: invalidated goal"
+INTERACTTEST row lap=61 scen=SEALED arm=B rep=3 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=18.12
+INTERACTTEST keys still held after lap 61: -
+INTERACTTEST begin lap=62 scen=CANCEL_MOVE arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=62 scen=CANCEL_MOVE arm=B rep=3 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=87:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=62 scen=CANCEL_MOVE arm=B rep=3 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=88:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=62 scen=CANCEL_MOVE arm=B rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=12.25
+INTERACTTEST keys still held after lap 62: -
+INTERACTTEST begin lap=63 scen=CANCEL_MOVE arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=63 scen=CANCEL_MOVE arm=A rep=3 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=89:CANCELLED/OWNERSHIP_LOST
+INTERACTTEST row lap=63 scen=CANCEL_MOVE arm=A rep=3 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=25 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=90:SUCCEEDED/NONE msg="done in 1.3s"
+INTERACTTEST row lap=63 scen=CANCEL_MOVE arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=15.97
+INTERACTTEST keys still held after lap 63: -
+INTERACTTEST begin lap=64 scen=CANCEL_ACT arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=64 scen=CANCEL_ACT arm=A rep=3 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=91:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=64 scen=CANCEL_ACT arm=A rep=3 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- outcome=92:FAILED/UNKNOWN msg="done in 0.1s"
+INTERACTTEST row lap=64 scen=CANCEL_ACT arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=13.85
+INTERACTTEST keys still held after lap 64: -
+INTERACTTEST begin lap=65 scen=CANCEL_ACT arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=65 scen=CANCEL_ACT arm=B rep=3 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=93:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=65 scen=CANCEL_ACT arm=B rep=3 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=94:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTEST row lap=65 scen=CANCEL_ACT arm=B rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=15.30
+INTERACTTEST keys still held after lap 65: -
+INTERACTTEST begin lap=66 scen=PREEMPT arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=66 scen=PREEMPT arm=B rep=3 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=95:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTEST row lap=66 scen=PREEMPT arm=B rep=3 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=15.15
+INTERACTTEST keys still held after lap 66: -
+INTERACTTEST begin lap=67 scen=PREEMPT arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=67 scen=PREEMPT arm=A rep=3 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none active=false keys=- outcome=96:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTEST row lap=67 scen=PREEMPT arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=7.35
+INTERACTTEST keys still held after lap 67: -
+INTERACTTEST begin lap=68 scen=REPLACE arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=68 scen=REPLACE arm=A rep=3 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=98:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=68 scen=REPLACE arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=58.43
+INTERACTTEST keys still held after lap 68: -
+INTERACTTEST begin lap=69 scen=REPLACE arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=69 scen=REPLACE arm=B rep=3 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=31 lapTicks=46 uses=1 menu=table active=false keys=- outcome=100:SUCCEEDED/NONE msg="done in 1.6s"
+INTERACTTEST row lap=69 scen=REPLACE arm=B rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=43.42
+INTERACTTEST keys still held after lap 69: -
+INTERACTTEST begin lap=70 scen=REPEAT arm=B rep=3 clearedChests=0
+INTERACTTEST row lap=70 scen=REPEAT arm=B rep=3 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=101:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=70 scen=REPEAT arm=B rep=3 part=main verdict=DONE step=2 block=crafting_table cls=TS ticks=21 lapTicks=60 uses=1 menu=table active=false keys=- outcome=102:SUCCEEDED/NONE msg="done in 1.1s"
+INTERACTTEST row lap=70 scen=REPEAT arm=B rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=2 runnerUs=43.62
+INTERACTTEST keys still held after lap 70: -
+INTERACTTEST begin lap=71 scen=REPEAT arm=A rep=3 clearedChests=0
+INTERACTTEST row lap=71 scen=REPEAT arm=A rep=3 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=103:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=71 scen=REPEAT arm=A rep=3 part=main verdict=DONE step=2 block=crafting_table cls=FS ticks=20 lapTicks=59 uses=0 menu=chest active=false keys=- outcome=104:FAILED/UNKNOWN msg="done in 1.0s"
+INTERACTTEST row lap=71 scen=REPEAT arm=A rep=3 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=44.07
+INTERACTTEST keys still held after lap 71: -
+INTERACTTEST finish laps=72

@@ -1,5 +1,17 @@
 # Ostinato 2.0 — status
 
+**Phase 09 gate: PASS. No flag added; no default changed** (DECISIONS D20, 2026-11-09).
+- Slice A: the interaction capability's container observation behind a version adapter. `GetToBlockProcess` and
+  the task runner no longer name a menu class; `ClientContainers` (26.3) is the only class in the slice that does.
+- Phase 08's verified-open rule now lives in the Minecraft-free `OpenVerifier` (unit-tested for the first time); the
+  runner judges GET_TO_BLOCK through `IGetToBlockProcess` and `ProcessOutcome` only.
+- Second version: the unchanged contract and rule compile at Java 8 against the 1.16.5 MCP names with a 1.16 adapter
+  (compile only). `ProcessOutcome` is a record and does not: a back-port blocker.
+- Held out (Tier L, seeds 89011/89012, Phase 08 build vs Phase 09 build, 288 laps): 160/160 rows the same oracle class,
+  every arm-B outcome identical, both flag states; Phase 08's gates all pass on the new build; OPEN, failure and
+  cancel latencies unchanged; runner +2.1 µs per tick (bound 5).
+- `verifiedGetToBlock` stays default false. Phase 10 was **not** started.
+
 **Phase 08 gate: PASS. `verifiedGetToBlock` stays default false** (DECISIONS D19, 2026-11-09).
 - Workflow C, navigate → interact → verify (`goto <container>` and the task runner's GET_TO_BLOCK step).
 - Baseline defect (legacy, live): a refused, unanswered or preempted open, a container left open, or a click that
@@ -11,7 +23,7 @@
 - Held out (Tier L, seeds 88011/88012, 144 laps): flag on, 48/48 possible rows succeed, 0 false successes (legacy 40),
   32/32 impossible rows fail honestly (legacy 0, 8 hangs), no leak, no death, no exception; OPEN unchanged (37
   ticks), runner +2.9 µs per tick. Every pre-registered gate passes on each seed.
-- No default changed. Phase 09 was **not** started.
+- No default changed. Phase 09 came later (D20).
 
 **Phase 07 gate: FAIL. `pathingStateIdCache` stays default false** (DECISIONS D18, 2026-11-09).
 - Long-distance routing. No new hierarchy: planning wait is 0.26% of trip ticks over 116 held-out headless trips, so
@@ -452,9 +464,50 @@ Start HEAD `b9282552b` (clean apart from an untracked `scripts/__pycache__/`).
   SEALED now use an ender chest); a target Baritone cannot break is never known, so the flag-on path also fails
   instead of exploring when nothing was ever known.
 
+## Phase 09 (capability modularity: container observation behind a version adapter, 2026-11-09)
+
+Scope: the smallest production-relevant modularity improvement that reduces version coupling, with behaviour,
+lifecycle semantics and performance preserved. Not in scope: Phase 10, a plugin system, registry, framework,
+protocol or port of other versions, any flag or default change. Phase 04–08 flags stayed at their defaults.
+
+Start HEAD `6b4f3d049` (clean apart from an untracked `scripts/__pycache__/`).
+
+- **Commits** (local, `ostinato2/claude-review`):
+
+  | commit | content |
+  |---|---|
+  | `b4830091f` | audit, architecture map, slice selection, contract (before any code change) |
+  | `41c008f12` | `ContainerView`, `OpenVerifier`, `ClientContainers`; `GetToBlockProcess`, `IGetToBlockProcess`, `BaritoneTaskAdapter` on the contract; tests; 1.16 compile check; parity comparator |
+  | `65846561c` | implementation notes, unit evidence, dev smoke, **pre-registration** |
+  | the commit that last touched this file | held-out raw evidence, results, D20 |
+
+- **Flags:** none added. `verifiedGetToBlock` unchanged (default false).
+- **Tests:** `OpenVerifierTest` (11), `ClientContainersTest` (3), `InteractBoundaryTest` (3), `GetToBlockVerdictTest`
+  (5), new. Full suite at `41c008f12`: 1642 tests, 1 failed (B5 `SecondoTest`, pre-existing), 24 skipped.
+- **Evidence** (BENCHMARKS "Phase 09 results"):
+
+  | tier | result |
+  |---|---|
+  | U | the rule (11 cases incl. stale/wrong container, refused open, reset, adapter failure; 0 bytes/call), the 26.3 mapping (exactly 6 container blocks in the registry), the boundary source scan, the runner verdict (stale id, every state, throwing check, contract defaults) |
+  | U, second version | contract + rule unchanged + 1.16 adapter compile at `--release 8` against the 1.16.5 MCP jar; 26.3 adapter against it fails (control); `ProcessOutcome` fails (record) |
+  | L, held out 89011 + 89012, base vs P09 | C1 PASS (P09 B: 48/48, FS 0, impossible TF 32/32, HANG 0, 80/80 agree); C2 160/160 class parity, 0 allowance used, B outcomes identical; S no leak, no death; L1–L5 within bounds |
+
+- **Classification: PASS.**
+- **Coupling, before → after:** menu API named in 2 files of the slice (7 imports, 4 sites) → 1 file
+  (`ClientContainers`); the runner imported the implementation class and a menu class → neither.
+
 ## Next task
 
-**Owner decisions. Phase 08 is complete (gate PASS). Phase 09 was not started.**
+**Owner decisions. Phase 09 is complete (gate PASS). Phase 10 was not started.**
+
+0. Phase 09 (D20):
+   - Nothing to promote: no flag, no default change. The refactor is live in the build as committed.
+   - A 1.16 back-port of the interaction capability needs `ProcessOutcome` as a Java 8 class (not a record), then
+     `tools/phase09/v1161/ClientContainers.java` as its adapter. Not started.
+   - The other container observers (`BastionProcess` 5 sites, `InventoryBehavior` 1, `FreecamInventoryHud` 2) were
+     not migrated; they can use `ContainerView` if a version port needs it.
+   - `GetToBlockProcess` still names other version-specific APIs (blocks, `BlockPos`, `Pose`); only the container
+     coupling was moved.
 
 0. Phase 08 (D19):
    - Keep `verifiedGetToBlock` off until the owner decides on promotion. A PASS is not a promotion.

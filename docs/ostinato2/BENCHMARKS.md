@@ -3231,3 +3231,54 @@ unchanged against a second version's names; the boundary test keeps it that way.
   and build. A second failure is a blocker and Tier L is not claimed for that pair.
 - A death or held key in the first P09 run stops the confirmatory runs (S FAIL).
 - Diagnosis of any difference is bounded to reading the raw rows; no redesign and rerun.
+
+### Phase 09 results: confirmatory held-out live parity A/B (VERIFIED, Tier L)
+
+Run after the pre-registration commit `65846561c`, exactly as registered: seeds 89011 then 89012, `reps=4`, 72 laps
+per run, in the order base, P09, base, P09. Every run completed on its first attempt (no rerun). Raw:
+`raw/phase09/p09-{base,exp}-{89011,89012}-lines.txt`; the comparator's full output: `raw/phase09/p09-parity.txt`.
+
+**Correctness.**
+- **C1: PASS.** The P09 build passes every Phase 08 gate pooled (G1–G8, P1, P2). Arm B: possible rows 48/48 TS,
+  impossible rows 32/32 TF, FS 0, HANG 0, false failures 0, 80/80 terminal self-reports agree with the oracle, no
+  exception. The baseline build's reference class is PASS with the same counts.
+- **C2: PASS.** 160/160 rows have the same oracle class in both builds (80 per seed), with no missing row; the
+  arm-A FS/HANG allowance was not needed (0 swaps). Every arm-B outcome (state and reason) is identical. The 32 stop
+  rows' outcomes are also identical (reported only).
+- **S: PASS.** In both arms of the P09 build: no key held or process active one tick or 40 ticks after a stop, or at
+  any lap end; no death.
+- Legacy behaviour (arm A, flag off) is preserved exactly, false successes included: FS 40 and HANG 8 in both builds.
+- Exceptions: arm A's legacy stale-rescan NPE in both builds (base 18, P09 10; the count follows rescan timing and was
+  9 per run in Phase 08); none in arm B in either build.
+
+**Performance (P09 minus baseline, pooled).**
+
+| limit | baseline | P09 | Δ | bound | result |
+|---|---|---|---|---|---|
+| L1 OPEN TS median, arm A (ticks) | 38.0 | 37.0 | −1.0 | ±2 | PASS |
+| L1 OPEN TS median, arm B (ticks) | 37.0 | 37.0 | 0.0 | ±2 | PASS |
+| L2 B TF median CAT / PREEMPT / SEALED / VANISH (ticks) | 55 / 20 / 30 / 31 | 55 / 20 / 30 / 30.5 | 0 / 0 / 0 / −0.5 | ≤ +3 | PASS |
+| L3 B CANCEL_ACT rerun TS median (ticks) | 3.0 | 3.0 | 0.0 | ≤ +2 | PASS |
+| L4 B `runnerUs` median (µs) | 16.52 | 18.62 | +2.09 | ≤ +5 | PASS |
+| L5 B CAT use packets | 40 | 40 | 0 | ≤ base | PASS |
+
+- `runnerUs` is, per lap, the task runner's mean wall time per tick (`InteractLiveTest` line 407); the table takes the
+  median over laps. Per seed, arm B: 16.88 → 18.42 and 15.50 → 18.72 µs. Arm A, whose runner path the slice touches
+  only on GET_TO_BLOCK step start: 10.45 → 11.97 and 10.63 → 10.55 µs. Phase 08's two held-out seeds on one build
+  differed by 0.17 µs in B and 3.4 µs in A, so this is at the edge of run-to-run noise. Not attributed. Inside the
+  bound either way.
+- Cancel latency: every stop has no key and no active process one tick later, in both builds (G5, S).
+- Allocation: the rule allocates nothing per call (Tier U); the runner's verdict allocates one lambda per step end
+  (one per GET_TO_BLOCK step, not per tick). Memory: two small objects per bot. Not measured live.
+
+**Modularity evidence (from the commit `41c008f12`; VERIFIED).**
+- The menu API (`net.minecraft.world.inventory`, `containerMenu`, `closeContainer(`) appears in one file of the slice,
+  `ClientContainers`, where it was in two (`GetToBlockProcess`: 6 imports and 3 sites; `BaritoneTaskAdapter`: 1
+  import and 1 site). `InteractBoundaryTest` fails if that regresses.
+- The runner imports no `baritone.process` class; it judges the step through `IGetToBlockProcess` and
+  `ProcessOutcome` only.
+- The rule (`OpenVerifier`) and contract (`ContainerView`) compile unchanged against the 1.16.5 MCP names at Java 8,
+  with a 1.16 adapter (compile only; no 1.16 client was run). Found: `ProcessOutcome` (a record) is not Java 8 source.
+
+**Classification: PASS** (C1, C2 and S pass; L1–L5 pass; the modularity evidence holds). Tiers: U (the unit tests
+and the second-version compile check) and L (this A/B); no Tier S, as there is still no headless container model. No default changed; `verifiedGetToBlock` stays false.

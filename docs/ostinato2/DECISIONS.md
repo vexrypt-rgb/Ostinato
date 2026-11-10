@@ -814,3 +814,64 @@ writer, and no key was left held in any lap.
 - The stale-rescan NPE is fixed only with the flag on.
 - The VANISH and SEALED fixtures needed an ender chest: with chests, Baritone's cache of natural chests outside
   loaded chunks keeps the request satisfiable, so "the only target vanished" could not be staged with a chest.
+
+## D20. Phase 09: the interaction capability's container observation behind a version adapter; gate PASS, no flag
+
+The task: the smallest production-relevant modularity improvement that demonstrably reduces version-specific
+coupling, with behaviour, lifecycle semantics and performance preserved. One slice; no plugin system, registry,
+framework, protocol, package rename or port; no flag for an internal refactor; no default change. Phase 04–08 flags
+stayed at their defaults throughout.
+
+Phase start HEAD: `6b4f3d049` (clean apart from an untracked `scripts/__pycache__/`). End: the commit that last
+touched this file. Local commits only; nothing pushed or merged.
+
+The criteria were committed in BENCHMARKS "Pre-registration: confirmatory live A/B parity of the Phase 09 refactor"
+(`65846561c`), before any held-out run. Evidence: BENCHMARKS "Phase 09" and `docs/ostinato2/raw/phase09/`.
+
+**Commits:**
+
+| commit | content |
+|---|---|
+| `b4830091f` | audit, architecture map, slice selection, contract (before any code change) |
+| `41c008f12` | the slice, its tests, the 1.16 compile check, the parity comparator |
+| `65846561c` | implementation notes, unit evidence, dev smoke, pre-registration |
+| the commit that last touched this file | held-out raw evidence, results, STATUS |
+
+**Chosen slice: A, the verified interaction capability.** The audit found (VERIFIED) that the task runner imported
+the implementation class `GetToBlockProcess` and a Minecraft menu class to judge GET_TO_BLOCK, and that Phase 08's
+verified-open rule was written inline against six 26.3 menu classes, `player.containerMenu` and `closeContainer()`,
+with no Tier U or S test. Those names differ by version (1.16: `PlayerContainer`, `ChestContainer`,
+`WorkbenchContainer`, `openContainer`, `closeScreen()`). Navigation (B) is wide, hot and client-bound with no
+narrow verified defect; world observation (C) already has `BlockStateInterface`; no container adapter existed to
+repair (D).
+
+**Decision:**
+- `ContainerView` (no Minecraft import): `kind()` (NONE, CHEST, CRAFTING, FURNACE, BLAST_FURNACE, OTHER),
+  `menu()` (opaque identity), `close()`.
+- `OpenVerifier` (no Minecraft import): Phase 08's rule, unchanged in meaning: WAIT, OPENED (a new open of the
+  wanted kind after this request saw none open), OPENED_UNVERIFIED (flag off, the legacy "done"); and `reached`.
+- `ClientContainers`: the 26.3 adapter, and the only class in the slice that names the menu API.
+- `IGetToBlockProcess` gains `openMenu()` (default null) and `reached(target, before)` (default false: an
+  implementation that cannot observe the postcondition never claims it). The runner judges the step through it and
+  `ProcessOutcome` only; its messages are unchanged.
+- No flag: behaviour is meant to be identical, and the A/B checks that in both flag states.
+
+**Result (held out, Tier L, seeds 89011/89012, the Phase 08 build against the Phase 09 build, 288 laps):** class
+**PASS**. 160/160 rows have the same oracle class (the arm-A FS/HANG allowance was not used); every arm-B outcome is
+identical; Phase 08's gates all pass on the new build (B 48/48, FS 0, 32/32 honest failures, 80/80 self-reports
+agree); no leak, no death; OPEN, failure and cancel-rerun latencies within ±1 tick; runner +2.1 µs per tick (bound 5,
+near run-to-run noise); CAT clicks 40 = 40. Tier U: 22 new tests; the contract and rule compile unchanged at Java 8
+against the 1.16.5 MCP names with a 1.16 adapter.
+
+**Not changed:** `verifiedGetToBlock` stays default false; no other default; B6 untouched; no other container
+observer migrated.
+
+**Limitations:**
+- The second version is a compile check only: no 1.16 client ran the adapter, and the 1.16 branch has no Phase 08
+  (no outcomes, no verified rule) to plug it into.
+- `ProcessOutcome` is a Java 16 record, so the capability contract as a whole is not yet Java 8 portable.
+- `GetToBlockProcess` still names other version-specific APIs (blocks, positions, pose, the selected block); only the
+  container coupling moved. `BastionProcess`, `InventoryBehavior` and `FreecamInventoryHud` still read menus directly.
+- Live coverage is Phase 08's: one arena, chest, crafting table and ender chest; furnace kinds are unit-tested only.
+- One intended difference: with no player when a verified step starts, the runner's remembered menu is null rather
+  than an earlier step's (not reachable in the harness).
