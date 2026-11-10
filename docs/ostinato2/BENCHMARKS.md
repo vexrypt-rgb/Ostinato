@@ -3024,3 +3024,100 @@ Notes (not gates):
   reports done.
 - Tiers: U (`ProcessOutcomeTest`, 7) and L (this table). There is no headless (S) model of container opening, so
   none is claimed; the system under test is never the oracle (the server's menu is).
+
+## Phase 09: capability modularity, the interaction capability's container observation behind a version adapter (2026-11-09, branch `ostinato2/claude-review`, local only)
+
+The task: the smallest production-relevant modularity improvement that demonstrably reduces version-specific
+coupling, with existing behaviour, lifecycle semantics and performance preserved. One slice; no framework, registry,
+plugin system, protocol or port. Phase start HEAD `6b4f3d049` (tree clean apart from an untracked
+`scripts/__pycache__/`). Every Phase 04–08 flag stays at its default (`verifiedGetToBlock` false).
+
+### Audit (written before any code change)
+
+Labels: VERIFIED (read in code, `javap` on the cached jars, or `git show` of the version branches), REPORTED (earlier
+phase docs, not re-checked), UNKNOWN.
+
+**Supported versions.** This tree builds Minecraft 26.3 only (`gradle.properties`, Java 25, Mojang names, loader
+`fabric`); `versions/` holds only the 26.3 overlay. Other versions are separate branches, not overlays
+(`versions/README.md`): `origin/1.21.11`, `origin/1.21.4` (Mojang names) and `origin/1.16.1` (MCP names over 1.16.5,
+Java 8, its `build.gradle` line 72). None of them has Phase 08. VERIFIED.
+
+**Architecture map: consumer → capability interface → implementation → version-specific Minecraft API.**
+
+| Capability | Consumer | Interface | Implementation | Version-specific API it touches | Existing isolation |
+|---|---|---|---|---|---|
+| Navigation | `#goto`, task runner GOTO | `ICustomGoalProcess`, `Goal`, `IPathingBehavior` | `CustomGoalProcess`, `PathingBehavior`, `PathExecutor`, drivers | `LocalPlayer`, client level, key state | Planner: `BlockStateInterface`/`CalculationContext` (headless `SyntheticWorld` exists, BASELINE). Executor: none, client-bound (D2). VERIFIED/REPORTED |
+| Physics | kinematic, physics and sim drivers, SimEdge | `PlayerSim.World`, `PlayerState`, `PredictionTolerance` | `PlayerSim`, `ClientWorld` | client world reads; 26.3 constants | `PlayerSim.World` is the adapter; `ClientWorld` the live side (D11, D12). REPORTED |
+| Mining | `#mine`, runner MINE | `IMineProcess` (MC types in the signature) | `MineProcess` (722 lines, 8 MC imports) | blocks; the runner counts `ItemStack`s itself | none. VERIFIED |
+| Building | `#build`, runner BUILD | `IBuilderProcess` (4 MC imports) | `BuilderProcess` (2006 lines, 17 MC imports) | many | none. VERIFIED |
+| Input | every controller | `InputOverrideHandler`, `InputArbiter` (off) | — | key mappings | partial; B6 open. REPORTED |
+| **Interaction** | `goto <block>`, runner GET_TO_BLOCK (`BaritoneTaskAdapter`) | `IGetToBlockProcess` + `ProcessOutcome` (Phase 08) | `GetToBlockProcess` (445 lines) | **container menus:** six menu classes, `player.containerMenu`, `closeContainer()` | **none.** VERIFIED |
+
+General adapters that exist: `IPlayerContext` and `IPlayerController` are per-branch copies that wrap *access* but
+return the branch's Minecraft types (`LocalPlayer` on 26.3, `ClientPlayerEntity` on 1.16.1; VERIFIED by `git show`).
+No adapter for open containers exists. VERIFIED.
+
+**Interaction coupling (VERIFIED; the slice's target):**
+1. The consumer reaches into the implementation. `BaritoneTaskAdapter` (the task runner's game side) imports
+   `net.minecraft.world.inventory.AbstractContainerMenu`, holds a menu object across ticks, and calls the static
+   `GetToBlockProcess.reached(...)` on the implementation class, not the `IGetToBlockProcess` contract it already uses
+   for `outcome()`.
+2. Phase 08's verified-open rule (a container counts only if this request saw none open while clicking and the menu
+   is the block's type; a stale or wrong one is closed) is written inline in `GetToBlockProcess.rightClick()` against
+   six menu classes (`AbstractContainerMenu`, `ChestMenu`, `CraftingMenu`, `FurnaceMenu`, `BlastFurnaceMenu`,
+   `InventoryMenu`), `player.containerMenu` and `closeContainer()`, spread over `rightClick`, `opens` and `reached`.
+   So the rule has no Tier U or S test (Phase 08: "there is no headless model of a container opening"); its only
+   evidence is Tier L.
+3. These names genuinely vary by version. The legacy "nothing open" check is `containerMenu instanceof InventoryMenu`
+   on 26.3, 1.21.11 and 1.21.4, and `openContainer instanceof PlayerContainer` on 1.16.1 (`git show` of each branch's
+   `GetToBlockProcess`, line 220). On the cached 1.16.5 MCP jar the Phase 08 menus are `ChestContainer`,
+   `WorkbenchContainer`, `FurnaceContainer`, `BlastFurnaceContainer`, and the close is `closeScreen()` (`javap`).
+   In 26.3 the five menu classes are disjoint (`ChestMenu` extends `AbstractContainerMenu`; `CraftingMenu` and
+   `InventoryMenu` extend `AbstractCraftingMenu`; `FurnaceMenu` and `BlastFurnaceMenu` extend `AbstractFurnaceMenu`),
+   so a kind mapping cannot reorder an `instanceof` outcome.
+
+Other container observations exist (`BastionProcess` 5 sites, `InventoryBehavior` 1, `FreecamInventoryHud` 2,
+harnesses 7). They are not part of this slice and are not migrated.
+
+**Lifecycle (VERIFIED in `BaritoneTaskAdapter.verify`):** only GET_TO_BLOCK (flag on) is judged by a request outcome;
+GOTO re-checks the goal, counted MINE the inventory; BUILD, count-less MINE, FOLLOW, FARM and EXPLORE read inactive as
+done. Known limits, out of scope.
+
+### Slice selection
+
+**Chosen: A, the verified interaction capability's container observation.**
+- A verified coupling (above); a production consumer (`BaritoneTaskAdapter`) and implementation
+  (`GetToBlockProcess`); a crisp postcondition; the Phase 08 live harness and gates re-usable unchanged; and a known
+  second-version shape (the 1.16.5 MCP names) to check the boundary against.
+- Not a hot path: the click rule runs only on arrival ticks of a container goto, the step check once per step end.
+
+Rejected:
+- **B, navigation.** Wide surface (`PathingBehavior`, `PathExecutor`, drivers), B6 input ownership still open, the
+  executor is client-bound (D2), and per-tick hot paths. No verified version-coupling defect that a narrow boundary
+  would fix.
+- **C, a world observation adapter.** The planner's world reads already go through `BlockStateInterface` /
+  `CalculationContext`. A broader world port has no single consumer with a verified defect and would sit on hot paths.
+- **D, repair an existing adapter.** No container adapter exists to repair, and no verified defect was found in
+  `IPlayerContext`/`IPlayerController`.
+
+### Contract (written before implementation)
+
+- `baritone.process.interact.ContainerView` (no Minecraft import, Java 8 syntax): what the player has open.
+  `kind()` is `NONE` (no container: the player's own inventory, or no player), `CHEST`, `CRAFTING`, `FURNACE`,
+  `BLAST_FURNACE` or `OTHER`; `menu()` is an opaque identity (a new open is a new object; compared by identity only;
+  null with no player); `close()` closes it.
+- `baritone.process.interact.OpenVerifier` (no Minecraft import, Java 8 syntax): Phase 08's rule, unchanged in
+  meaning. Per request: `reset()`; `click(view, want, verified)` returns `WAIT` (nothing open; or, verified, a stale
+  or wrong container, which it closes), `OPENED` (a `want` container, opened after this request saw none open while
+  clicking) or `OPENED_UNVERIFIED` (flag off: any other container, the legacy "done"). `reached(view, want, before)`:
+  a `want` container is open and is not `before`.
+- `baritone.process.interact.ClientContainers` (the 26.3 adapter; the only class in the slice that names a menu
+  class): implements `ContainerView` over a player supplier; `openedBy(Block)` maps the six container blocks to their
+  kind. A 1.16 adapter would replace this file only.
+- `IGetToBlockProcess` (the capability contract) gains `openMenu()` (default null) and `reached(target, before)`
+  (default **false**: an implementation that cannot observe the postcondition never reports it).
+- The runner's GET_TO_BLOCK check reads only `IGetToBlockProcess` and `ProcessOutcome`: the request it started, the
+  outcome, then `reached`. Its messages are unchanged.
+- Confidence is unchanged: success still rests on the server-opened menu (the client's open menu changes only when
+  the server's open-screen packet arrives). No client inference is added.
+- No new flag: behaviour, flag off and on, is meant to be identical. The live A/B checks that.
