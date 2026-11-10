@@ -1,0 +1,4 @@
+1642 tests completed, 1 failed, 24 skipped
+BUILD FAILED in 4m 41s
+SecondoTest > plannedApisAreAbsentOnThisBranchAndInvokeIsANoop FAILED
+    java.lang.AssertionError at SecondoTest.java:170

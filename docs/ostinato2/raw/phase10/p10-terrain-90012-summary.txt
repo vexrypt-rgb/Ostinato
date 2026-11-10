@@ -1,0 +1,54 @@
+classes by scenario / part / arm
+  BLAST       main  A  {'TS': 3}
+  BLAST       main  B  {'HANG': 1, 'TS': 2}
+  CANCEL_ACT  main  A  {'HANG': 2}
+  CANCEL_ACT  main  B  {'HANG': 1}
+  CANCEL_ACT  rerun A  {'FS': 1}
+  CANCEL_ACT  rerun B  {'TS': 2}
+  CANCEL_MOVE rerun A  {'TS': 3}
+  CANCEL_MOVE rerun B  {'HANG': 2, 'TS': 1}
+  CAT_ONE     main  A  {'HANG': 2, 'TS': 1}
+  CAT_ONE     main  B  {'HANG': 1, 'TS': 2}
+  CHEST2      main  A  {'FS': 1, 'TS': 2}
+  CHEST2      main  B  {'HANG': 2, 'TS': 1}
+  ENDER       main  A  {'TS': 3}
+  ENDER       main  B  {'HANG': 1, 'TS': 2}
+  FURNACE2    main  A  {'TS': 3}
+  FURNACE2    main  B  {'TS': 3}
+  LAG_LONG    main  A  {'FS': 1, 'HANG': 2}
+  LAG_LONG    main  B  {'HANG': 1, 'TF': 2}
+  LAG_SHORT   main  A  {'HANG': 1, 'TS': 2}
+  LAG_SHORT   main  B  {'HANG': 2, 'TS': 1}
+  MENU_OPEN   main  A  {'FS': 3}
+  MENU_OPEN   main  B  {'TS': 3}
+  PREEMPT     main  A  {'FS': 3}
+  PREEMPT     main  B  {'TF': 3}
+  REPLACE     main  A  {'HANG': 1, 'TS': 2}
+  REPLACE     main  B  {'HANG': 1, 'TS': 2}
+  TABLE       main  A  {'TS': 3}
+  TABLE       main  B  {'TS': 3}
+  VANISH_ONE  main  A  {'HANG': 3}
+  VANISH_ONE  main  B  {'TF': 3}
+
+totals (verdict rows)
+  arm A {'FS': 9, 'HANG': 11, 'TS': 22}
+  arm B {'HANG': 12, 'TF': 8, 'TS': 22}
+
+positive set (all laps): A TS 19/28 HANG 4, B TS 18/29 HANG 8
+positive set (target known at start in both arms): pairs 27 of 30, A TS 19, B TS 16, B HANG 8
+pairs excluded: {'CANCEL_ACT': 3}
+stop rows 9, keys/active left after stop 6, B stop outcome not CANCELLED/UNKNOWN 0, lateOpen {('A', 'false'): 3, ('B', 'false'): 3, ('B', 'true'): 2, ('A', 'true'): 1}
+PREEMPT B CANCELLED/OWNERSHIP_LOST 3/3
+MAGMA {'CLEAR': 6}
+open after verdict (end rows) {('LAG_LONG', 'B'): 2, ('LAG_LONG', 'A'): 1}
+runner us/tick arm A: median 6.77 (n=30, laps 0-1 excluded)
+runner us/tick arm B: median 7.98 (n=29, laps 0-1 excluded)
+verdict rows with keys still forced (non-HANG) 0
+
+GATES
+  T1 B false successes (FS) = 0: PASS (FS 0, FF 0)
+  T2 B TS >= A TS - 2 per seed, >= 12 eligible pairs per seed: FAIL (16 vs 19, 27 pairs)
+  T3 bounded release on stop/preempt: FAIL
+  T4 no B-only HANG: FAIL ([('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '0', 'BLAST', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '0', 'LAG_SHORT', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '0', 'CANCEL_MOVE', 'rerun'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'CHEST2', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'ENDER', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'CAT_ONE', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'LAG_LONG', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'CANCEL_ACT', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '1', 'REPLACE', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '2', 'CHEST2', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '2', 'LAG_SHORT', 'main'), ('docs/ostinato2/raw/phase10/p10-terrain-90012-lines.txt', '2', 'CANCEL_MOVE', 'rerun')])
+  M1 MAGMA all CLEAR: PASS
+  deaths 0
