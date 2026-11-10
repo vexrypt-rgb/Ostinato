@@ -65,5 +65,6 @@ public final class TestHarness {
         baritone.scherzo.ScherzoSparTest.install(b); // Ostinato: Scherzo LIVE/OBSERVE spar A/B harness
         baritone.contract.ToleranceTraceTest.install(b); // Ostinato 2.0 Phase 04 validation: live PredictionTolerance traces
         InteractLiveTest.install(b); // Ostinato 2.0 Phase 08: navigate -> interact -> verify
+        InteractTerrainLiveTest.install(b); // Ostinato 2.0 Phase 10: the same check on natural terrain
     }
 }

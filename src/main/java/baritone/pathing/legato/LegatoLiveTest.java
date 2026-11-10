@@ -99,13 +99,19 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
      * pathingStateIdCache off, B and D with it on. Every other setting stays at its default; nothing else differs.
      */
     private static final boolean STATEIDS = "stateids".equals(System.getProperty("ostinato.legatotest.arms"));
+    /**
+     * Ostinato 2.0 Phase 10: -Dostinato.legatotest.arms=production. The course is {@link SimEdgeCourse}; all four arms
+     * run the production defaults (no experimental switch), so every lap is a production baseline lap and B, C and D
+     * against A are A/A noise controls.
+     */
+    private static final boolean PRODUCTION = "production".equals(System.getProperty("ostinato.legatotest.arms"));
     /** The arms that time every lap tick: no Phase 05 pricing in the lap, and a tick file after it. */
-    private static final boolean TIMED = TOLERANCE || UNIFIED || STATEIDS;
+    private static final boolean TIMED = TOLERANCE || UNIFIED || STATEIDS || PRODUCTION;
     /** The timed arm's name and its switch, for the tick file and the closing log line. */
-    private static final String TIMED_NAME = UNIFIED ? "unified" : STATEIDS ? "stateids" : "tolerance";
+    private static final String TIMED_NAME = UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : "tolerance";
 
     private static boolean timedSwitch() {
-        return UNIFIED ? Baritone.settings().unifiedExecutor.value : STATEIDS ? Baritone.settings().pathingStateIdCache.value
+        return PRODUCTION ? false : UNIFIED ? Baritone.settings().unifiedExecutor.value : STATEIDS ? Baritone.settings().pathingStateIdCache.value
                 : Baritone.settings().predictionTolerance.value;
     }
     /** -Dostinato.legatotest.stack=&lt;travelStack&gt; pins the travel stack for every arm; unset leaves the setting alone. */
@@ -349,7 +355,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                 };
             }
             if (STACK != null) Baritone.settings().travelStack.value = STACK;
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : UNIFIED ? "unified" : STATEIDS ? "stateids" : "legato") + " laps=" + laps.size()
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : "legato") + " laps=" + laps.size()
                     + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin travelStack=" + Baritone.settings().travelStack.value
                     + " tickClock=" + TickClock.ON + " seed=" + System.getProperty("ostinato.seed", "71006"));
             server(mc, () -> {

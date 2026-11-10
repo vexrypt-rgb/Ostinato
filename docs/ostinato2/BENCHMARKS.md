@@ -3282,3 +3282,93 @@ per run, in the order base, P09, base, P09. Every run completed on its first att
 
 **Classification: PASS** (C1, C2 and S pass; L1–L5 pass; the modularity evidence holds). Tiers: U (the unit tests
 and the second-version compile check) and L (this A/B); no Tier S, as there is still no headless container model. No default changed; `verifiedGetToBlock` stays false.
+
+## Phase 10: final validation, feature disposition, production readiness (2026-11-09, branch `ostinato2/claude-review`, local only)
+
+Phase start HEAD `bda049360` (tree clean apart from an untracked `scripts/__pycache__/`). No production default is
+changed in this phase; no experimental flag is enabled.
+
+### Production baseline at phase start (VERIFIED)
+
+- Full unit suite at `bda049360`: 1642 tests, **1 failed** (`SecondoTest.plannedApisAreAbsentOnThisBranchAndInvokeIsANoop`,
+  B5), 24 skipped (`.\gradlew.bat --offline --no-daemon --max-workers=2 cleanTest test -x nativeHost`, 4 min 41 s).
+- Defaults read from `Settings.java` at `bda049360`: every Ostinato 2.0 experiment is off (`verifiedGetToBlock`,
+  `unifiedExecutor`, `pathingStateIdCache`, `simEdgeSearch`, `predictionTolerance`, `inputArbitration`,
+  `latticeExperiment`, `pathingHierarchical`, `pathDecisionMatrix`); `travelStack` `auto`, `kinematicTravel` and
+  `simTravel` true, `swimInWater` true, `exploreForBlocks` true, `rightClickContainerOnArrival` true.
+
+### Dev runs (exploratory, seed 90001; not evidence for any gate)
+
+New harness `InteractTerrainLiveTest` (`-Dostinato.interactterrain=true`): the Phase 08 navigate → interact → verify
+check on the generated terrain around the spawn of a fresh Peaceful world. A box of ±26 blocks (surface −8 .. +14) is
+copied at setup with every container in it removed, and restored before each lap; each lap places two chests, two
+furnaces, a blast furnace, an ender chest and a crafting table on the surface at fixed offsets from the start. Every
+container block entity in the loaded chunks outside the box is removed each lap. Arms: A = `verifiedGetToBlock` off,
+B = on, order alternating by repetition and scenario. Oracle: the server-side player's menu (chests by block entity
+position; furnace, blast furnace, table and ender chest by menu kind and the player within 8 blocks of the fixture;
+the box holds no other instance of those). Scenarios: CHEST2, FURNACE2, BLAST, ENDER, TABLE, MENU_OPEN (a non-target
+chest-type menu open at start; target furnace), VANISH_ONE (the first fixture chest the player comes within 3.5 blocks
+of turns to stone), CAT_ONE (a sitting cat on the nearer chest), LAG_SHORT / LAG_LONG (the server thread sleeps 400 /
+1600 ms when right click is first held), CANCEL_MOVE, CANCEL_ACT, PREEMPT, REPLACE (chest list replaced by a furnace
+list 15 ticks in), MAGMA (no task: the idle player on magma 10 ticks, then moved off; keys read 20 ticks later).
+
+- Dev run 1 (`raw/phase10/p10-terrain-dev1-90001-lines.txt`, 30 laps): harness defects found and fixed before
+  pre-registration: the ender-chest oracle branch (never exercised in Phase 08, where the ender chest was always
+  vanished or sealed) read every ender open as "otherchest"; natural chests 100+ blocks away were targets (now cleared
+  each lap); `opened=` was not reset between laps; HANG rows had no trail. Findings kept: MAGMA STUCK 2/2 (below),
+  LAG_LONG late open after a B TIMEOUT, CAT_ONE no retry on the second chest, REPLACE both arms stalled on one ledge.
+- Dev run 2 (`raw/phase10/p10-terrain-dev2-90001-lines.txt`, 10 laps, after the fixes and the AirProcess change):
+  ender oracle works (B TS); MAGMA CLEAR 2/2. VANISH_ONE: neither arm knew the second chest. Cause, read in code:
+  `GetToBlockProcess.rescan` uses `MineProcess.searchWorld`, whose `prune` keeps only blocks that are
+  `plausibleToBreak`, and `MovementHelper.avoidBreaking` rejects a block with a liquid beside it or a falling block on
+  top. An openable chest beside water is therefore never a target of `goto chest`, in either arm (pre-existing,
+  upstream; not changed). The harness now logs, per lap, what that search returns (`known=`) and, at setup, which
+  fixtures touch a fluid (`wet=`).
+
+### Pre-registration (committed before any held-out run; thresholds are not changed after seeing data)
+
+**Run V: `verifiedGetToBlock` on natural terrain.** Seeds **90011** and **90012**, 3 reps, all 15 scenarios, both
+arms: 90 laps per seed. Build: the commit that adds this section. Command (client stopped before, second monitor,
+muted, no mouse grab):
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.interactterrain=true -Dostinato.interactterrain.exit=true -Dostinato.interactterrain.reps=3 -Dostinato.seed=<90011|90012>'
+.\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient -PclientXmx=1536M *> p10-terrain-<seed>.log
+```
+
+Analysis: `python docs/ostinato2/tools/phase10/terrain_summary.py <lines 90011> <lines 90012>` (gates over both
+seeds together; per-seed output reported too).
+
+- Positive set: main rows of CHEST2, FURNACE2, BLAST, ENDER, TABLE, MENU_OPEN, VANISH_ONE, LAG_SHORT and rerun rows of
+  CANCEL_MOVE, CANCEL_ACT. A pair (seed, rep, scenario) is **eligible** when the lap-start `known=` lists at least one
+  fixture of the target inside the box in both arms (two chests for VANISH_ONE).
+- **T1 (hard): arm B has 0 false successes (FS) over every verdict row of both seeds.**
+- **T2:** on eligible positive pairs, B TS ≥ A TS − 2 per seed (−4 over both), and at least 12 eligible pairs per
+  seed; fewer eligible pairs is a T2 FAIL (insufficient evidence), not a pass.
+- **T3:** every stop row has `keys1=-`, `activeEnd=false`, `keysEnd=-`; every B stop outcome is CANCELLED or UNKNOWN
+  with OWNERSHIP_LOST; every B PREEMPT row ends CANCELLED/OWNERSHIP_LOST.
+- **T4:** no B HANG in a (seed, rep, scenario, part) where A did not hang.
+- **M1 (the B6 fix):** every MAGMA row is CLEAR (6 rows per seed). Before the fix: STUCK 2/2 (dev run 1).
+- Diagnostics, no gate: CAT_ONE (expected B TF, no retry on the other chest), LAG_LONG (expected B TF/TIMEOUT; the
+  late server open is counted), REPLACE, per-scenario medians, `runnerUs` median (laps 0–1 excluded), A's FS count.
+- **Classification of `verifiedGetToBlock`:** PROMOTION CANDIDATE if T1–T4 pass and no Critical safety finding is
+  attributable to the flag; otherwise DEFER. Either way it stays default false; the owner decides.
+- **Stop rules:** each seed runs once. A crash or failed world creation allows one fresh re-run of that seed, reported
+  with the crash. A DIED row is excluded from T2 and reported. No other re-run, no threshold change.
+
+**Run P: production baseline lap course.** `LegatoLiveTest` with the new `-Dostinato.legatotest.arms=production`: the
+`SimEdgeCourse` (slalom, ridges, bumps, steps), all four arms on production defaults (no experiment switched, travel
+stack left at its default), so B, C and D against A are A/A noise controls. Seed **90021**, 6 reps, 96 laps.
+
+```
+$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true -Dostinato.tickClock=true -Dostinato.legatotest=true -Dostinato.legatotest.exit=true -Dostinato.legatotest.arms=production -Dostinato.legatotest.reps=6 -Dostinato.seed=90021'
+```
+
+- Reported (no gate on the production numbers themselves): laps reached per arm, median and mean lap ticks, the
+  harness's paired-leg ratios, deaths, stuck-key lines, faults.
+- **P1 (harness sanity):** every A/A paired-leg median ratio within 0.95–1.05. A miss says the course cannot resolve a
+  5% change on this machine; it is reported, not a production verdict.
+- Stop rules as Run V.
+
+**Headless (Tier U/S):** the full unit suite after this phase's changes (it includes `PathBenchTest`'s golden check),
+0 failures required for "suite green".
