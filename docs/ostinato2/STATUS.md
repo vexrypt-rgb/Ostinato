@@ -1,5 +1,18 @@
 # Ostinato 2.0 — status
 
+**Phase 08 gate: PASS. `verifiedGetToBlock` stays default false** (DECISIONS D19, 2026-11-09).
+- Workflow C, navigate → interact → verify (`goto <container>` and the task runner's GET_TO_BLOCK step).
+- Baseline defect (legacy, live): a refused, unanswered or preempted open, a container left open, or a click that
+  lands after a cancel is reported as done; a target that does not exist is explored for forever; the async rescan
+  outlives its request (NPE).
+- Slice: numbered request outcomes on `GetToBlockProcess` (always recorded, no behaviour change), and, behind the new
+  default-false flag, success only on a server-opened menu of the right type from this request's click, failure with
+  a reason otherwise, and a runner step that checks both.
+- Held out (Tier L, seeds 88011/88012, 144 laps): flag on, 48/48 possible rows succeed, 0 false successes (legacy 40),
+  32/32 impossible rows fail honestly (legacy 0, 8 hangs), no leak, no death, no exception; OPEN unchanged (37
+  ticks), runner +2.9 µs per tick. Every pre-registered gate passes on each seed.
+- No default changed. Phase 09 was **not** started.
+
 **Phase 07 gate: FAIL. `pathingStateIdCache` stays default false** (DECISIONS D18, 2026-11-09).
 - Long-distance routing. No new hierarchy: planning wait is 0.26% of trip ticks over 116 held-out headless trips, so
   a global layer has almost no travel time to save. The existing hierarchy stays off.
@@ -12,7 +25,7 @@
     defect: the two arms switch to different goals. Every correctly paired trip is identical.
   - The 30% target (P1) is missed in any case: the "40%" profile hotspot was safepoint bias, about 6% in truth.
 - The live A/B was not run (the failure rule: stop). Nothing is claimed at Tier L.
-- Phase 08 was **not** started.
+- Phase 08 came later (D19).
 
 **Phase 06A gate: PASS. `unifiedExecutor` stays default false** (DECISIONS D17, 2026-11-09).
 - Phase 06A resolved the two Phase 06 blockers behind the same default-false flag. Phase 06 stays **FAIL** (below).
@@ -401,10 +414,57 @@ Start HEAD `db28a1cc3` (clean).
 - **Harness defect (open):** `LongRouteSimTest.corpus` draws the goal-mode switch goal inside the per-arm loop (lines
   223 and 237). Draw it once per route before reusing the goal mode.
 
+## Phase 08 (navigate → interact → verify, 2026-11-09)
+
+Scope: one workflow made reliable end to end, with outcomes, ownership, cancellation and recovery, judged by a
+server-confirmed postcondition. Not in scope: Phase 09, a new framework/scheduler/event bus/registry, rewrites, a
+default change. Phase 06/07 flags stayed off.
+
+Start HEAD `b9282552b` (clean apart from an untracked `scripts/__pycache__/`).
+
+- **Commits** (local, `ostinato2/claude-review`):
+
+  | commit | content |
+  |---|---|
+  | `248580b91` | `InteractLiveTest` live harness |
+  | `b0a2766b9` | legacy baseline (seed 88001), A/B reader |
+  | `6fb7e6c88` | `ProcessOutcome`, `GetToBlockProcess` outcomes, `verifiedGetToBlock` (default false), adapter check, `ProcessOutcomeTest` |
+  | `a6c4006ee` | harness oracle and fixture fixes, dev raw, audit, baseline, **pre-registration** |
+  | the commit that last touched this file | held-out raw evidence, results, D19 |
+
+- **Flags:** `verifiedGetToBlock`, new, default **false**.
+- **Harness switches** (harness only): `-Dostinato.interacttest`, `.reps`, `.only`, `.exit`, `-Dostinato.seed`.
+- **Tests:** full suite at the slice: 1620 tests, 1 failed (B5 `SecondoTest`, pre-existing), 24 skipped.
+- **Ownership:** the slice adds no key writer; `onLostControl()` still clears keys directly (B6, unchanged). No key
+  held and no process active after any stop or lap, in either arm.
+- **Evidence** (BENCHMARKS "Phase 08 results"):
+
+  | tier | result |
+  |---|---|
+  | U | `ProcessOutcomeTest` 7/7 (lifecycle, sticky terminal state, no inheritance, lost control) |
+  | S | none: there is no headless model of a container opening |
+  | L, baseline 88001 (legacy) | completion 12/18, 12 FS, 6 HANG per arm, 9 stale-rescan NPEs |
+  | L, held out 88011 + 88012 | B: 48/48, FS 0, impossible TF 32/32, HANG 0, leaks 0, 80/80 self-report agrees; A: 32/48, FS 40, HANG 8 |
+
+- **Classification: PASS** (G1–G8, P1, P2 on each seed and pooled).
+- **Dev findings fixed before pre-registration:** the harness oracle missed a close-and-reopen in one tick (now keyed
+  on the menu object); natural chests cached outside loaded chunks kept "vanished" targets satisfiable (VANISH and
+  SEALED now use an ender chest); a target Baritone cannot break is never known, so the flag-on path also fails
+  instead of exploring when nothing was ever known.
+
 ## Next task
 
-**Owner decisions. Phase 07 is complete (gate FAIL). Phase 08 was not started.**
+**Owner decisions. Phase 08 is complete (gate PASS). Phase 09 was not started.**
 
+0. Phase 08 (D19):
+   - Keep `verifiedGetToBlock` off until the owner decides on promotion. A PASS is not a promotion.
+   - Promotion would accept one behaviour change: with the flag on, `goto <block>` with no known instance fails
+     (INVALIDATED_GOAL) instead of exploring; tasks needing exploration use the EXPLORE step.
+   - Before promotion, consider a second arena (natural terrain, several chests) and the furnace types, which are
+     mapped but not exercised live.
+   - The same pattern (request outcome + server-checked postcondition in the runner step) is the candidate for the
+     runner's BUILD step (false success on preemption) and count-less MINE.
+   - The stale-rescan NPE is fixed only with the flag on.
 1. Phase 07 (D18):
    - Keep `pathingStateIdCache` off. It is behaviour-identical and saves about 4% of planner CPU (Tier S); it cannot
      meet a 30% target.

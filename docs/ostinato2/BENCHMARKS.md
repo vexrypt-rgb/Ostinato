@@ -2966,3 +2966,61 @@ It is not changed after the held-out runs.
 - A run that does not complete (gradle error, client crash, harness setup failure) is rerun once with the same seed.
   If it fails again, it is a blocker and Tier L is not claimed.
 - A death or held key in a B lap of the first seed is a G5 FAIL. The second seed is then not run.
+
+### Phase 08 results: confirmatory held-out live A/B of `verifiedGetToBlock` (VERIFIED, Tier L)
+
+Run after the pre-registration commit `a6c4006ee`, exactly as registered: seeds 88011 then 88012, `reps=4`, 72 laps
+each, both runs completed first time (no rerun). Raw: `raw/phase08/p08-ho-88011-lines.txt`,
+`raw/phase08/p08-ho-88012-lines.txt`. Command:
+`python docs/ostinato2/tools/phase08/interact_ab.py --baseline=docs/ostinato2/raw/phase08/p08-base-88001-lines.txt
+docs/ostinato2/raw/phase08/p08-ho-88011-lines.txt docs/ostinato2/raw/phase08/p08-ho-88012-lines.txt`.
+
+Per-row classes (oracle: the server's open menu), pooled over both seeds:
+
+| scenario | A (legacy) | B (`verifiedGetToBlock`) | B's own outcome |
+|---|---|---|---|
+| OPEN | TS 8 | TS 8 | SUCCEEDED |
+| REPLACE | TS 8 | TS 8 | SUCCEEDED |
+| REPEAT (2 steps) | TS 8, **FS 8** | TS 16 | SUCCEEDED |
+| CANCEL_MOVE rerun | TS 8 | TS 8 | SUCCEEDED |
+| CANCEL_ACT rerun | **FS 8** | TS 8 | SUCCEEDED |
+| CAT (open refused) | **FS 8** | TF 8 | FAILED/TIMEOUT |
+| PREEMPT | **FS 8** | TF 8 | CANCELLED/OWNERSHIP_LOST |
+| VANISH | **FS 4, HANG 4** | TF 8 | FAILED/WORLD_CHANGED |
+| SEALED | **FS 4, HANG 4** | TF 8 | FAILED/INVALIDATED_GOAL |
+
+| measure | A | B |
+|---|---|---|
+| completion on possible rows | 32/48 (0.667) | **48/48 (1.000)** |
+| false successes | 40 | **0** |
+| false failures (TF/FF where possible) | 0 | 0 |
+| honest failure on impossible rows | 0/32 | **32/32** |
+| HANG (no verdict in 600 ticks) | 8 | 0 |
+| deaths | 0 | 0 |
+| key held / process active 1 tick after stop, 40 ticks after, at lap end, after lap | 0 | 0 |
+| stop outcomes: CANCEL_MOVE / CANCEL_ACT (`lateOpen=true` 8/8 in each arm) | CANCELLED 8 / UNKNOWN 8 | CANCELLED 8 / UNKNOWN 8 |
+| self-report vs oracle (terminal rows: SUCCEEDED ⟺ TS) | not gated | 80/80 agree |
+| stale-rescan NPE (`BlockOptionalMetaLookup.<init>`) | 16 | 0 |
+| OPEN ticks to verified open, median | 37 | 37 |
+| TF ticks, median: CAT / PREEMPT / VANISH / SEALED | n/a | 55 / 20 / 31 / 30 |
+| CAT use packets (sum) | 40 | 40 |
+| runner µs per tick, median of laps | 14.41 | 17.31 |
+
+Gates (pooled): G1 PASS (B FS 0), G2 PASS (1.000; OPEN/REPLACE/CANCEL_MOVE B 24 = A 24), G3 PASS (0), G4 PASS
+(0 HANG), G5 PASS, G6 PASS (B logged no exception), G7 PASS, G8 PASS, P1 PASS (OPEN +0 ticks, runner +2.9 µs),
+P2 PASS (40 = 40). Each seed alone also passes every gate. **Class: PASS.**
+
+Notes (not gates):
+- Arm A's result on an impossible target depends on the world. On 88011 legacy's explore path could not be computed
+  (`calcFailed`), so it took "No known locations … canceling" and the runner read the inactive process as done
+  (FS); on 88012 and on the 88001 baseline it explored until the timeout (HANG). Arm B ended both ways as an honest
+  failure in about 30 ticks.
+- The CANCEL_ACT click is already sent when the stop lands; the server opens the chest afterwards in 8/8 laps of
+  both arms, and both arms report UNKNOWN, not CANCELLED. Legacy's rerun then counts that stale menu (FS, 0 use
+  packets); B's rerun closes it and opens the chest again with its own click (TS in a median 3 ticks, 1 use packet).
+  A new request is a new click, not an automatic retry: nothing is retried inside a request.
+- The outcome record runs in both arms (it changes no behaviour), which is why A's rows carry outcomes too: A's CAT
+  and impossible-target requests report FAILED internally while the runner, which ignores outcomes with the flag off,
+  reports done.
+- Tiers: U (`ProcessOutcomeTest`, 7) and L (this table). There is no headless (S) model of container opening, so
+  none is claimed; the system under test is never the oracle (the server's menu is).

@@ -751,3 +751,66 @@ before any held-out or live run. Evidence is in BENCHMARKS "Phase 07: long-dista
   flat across cost evaluation.
 - Fix the goal-mode pairing in `LongRouteSimTest.corpus` before the harness is used again.
 - Phase 08 was not started.
+
+## D19. Phase 08: navigate → interact → verify; request outcomes and a server-confirmed open; gate PASS, `verifiedGetToBlock` stays off
+
+The task: make one end-to-end workflow reliable, with explicit outcomes, ownership, cancellation and recovery, and
+success resting only on a server-confirmed postcondition. One vertical slice; no new framework, scheduler, event bus
+or registry; no default change. Phase 06/07 features stayed off throughout.
+
+Phase start HEAD: `b9282552b` (clean apart from an untracked `scripts/__pycache__/`). End: the commit that last
+touched this file. Local commits only; nothing pushed or merged.
+
+The criteria were committed in BENCHMARKS "Pre-registration: confirmatory live A/B of `verifiedGetToBlock`"
+(`a6c4006ee`), before any held-out run. Evidence: BENCHMARKS "Phase 08" and `docs/ostinato2/raw/phase08/`.
+
+**Commits:**
+
+| commit | content |
+|---|---|
+| `248580b91` | `InteractLiveTest` live harness (Tier L), harness only |
+| `b0a2766b9` | legacy baseline (seed 88001) and the A/B reader `tools/phase08/interact_ab.py` |
+| `6fb7e6c88` | the slice: `ProcessOutcome`, `GetToBlockProcess` outcomes, `verifiedGetToBlock` (default false), adapter check, tests |
+| `a6c4006ee` | harness oracle and fixture fixes, dev raw, audit, baseline, pre-registration |
+| the commit that last touched this file | held-out raw evidence, results, STATUS |
+
+**Chosen workflow: C, navigate → interact → verify** (`goto <container>` and the task runner's GET_TO_BLOCK step).
+The audit found false success at both layers there (the process reports "done" for a refused, unanswered or
+unreachable click and for any open menu; the runner treats inactive as done), a crisp server-side postcondition (the
+server opens the menu), and a small surface. Mining (A) is already postcondition-checked when counted; building (B)
+fails by hanging inside a 2006-line process; recovery (D) depends on the disabled executor lease.
+
+**Defect (baseline, legacy, Tier L, seed 88001):** per arm, 12 false successes and 6 hangs in 30 rows; completion
+12/18 on possible rows; 0/12 honest failures on refused or impossible targets (the 6 impossible ones explore forever), a cancelled click that opens the container after the stop and is
+then counted by the next request, and an async rescan that outlives its request (NPE every run).
+
+**Decision:**
+- Every get-to-block request gets a numbered `ProcessOutcome` (ACCEPTED → RUNNING → one sticky terminal state with a
+  reason). Recording it changes no behaviour.
+- Behind `verifiedGetToBlock` (default **false**): success only when the server opened a menu of the block's type
+  after the request's own click (a menu left open is closed first); an unanswered or refused click, no reachable
+  face, or no known target is FAILED with a reason instead of done or explore-forever; the rescan is tied to its
+  request; control lost before the click is CANCELLED, after it UNKNOWN; the runner's GET_TO_BLOCK step checks the
+  request id, the outcome and the open menu.
+- No retry inside a request. A new request (a rerun) is a new click.
+
+**Result (held out, Tier L, 144 laps):** class **PASS**, every gate on both seeds. B: completion 48/48, 0 false
+successes (A 40), 0 false failures, 32/32 impossible rows end FAILED (A 0/32, 8 HANG), no leaks, no deaths, no
+exception (A 16 stale-rescan NPEs), 80/80 self-reports agree with the oracle; OPEN unchanged at 37 ticks, runner
++2.9 µs per tick.
+
+**Not changed:** `verifiedGetToBlock` stays default false. A PASS is evidence for a later promotion decision, not the
+decision. `exploreForBlocks`, `rightClickContainerOnArrival` and every other default are unchanged. B6 is not
+touched: `GetToBlockProcess.onLostControl()` still releases keys through `clearAllKeys()`; the slice adds no key
+writer, and no key was left held in any lap.
+
+**Limitations:**
+- One arena (flat, y 200, Peaceful) and three block types live (chest, crafting table, ender chest). Furnace and blast
+  furnace menus are mapped but not exercised live.
+- Outcomes exist for `GetToBlockProcess` only. Other processes, and the runner's other step types (BUILD on
+  preemption, count-less MINE), still read inactive as done.
+- With the flag on, `goto <block>` with no known instance no longer explores; a task needing exploration must use
+  its EXPLORE step. This is a behaviour change a promotion would have to accept.
+- The stale-rescan NPE is fixed only with the flag on.
+- The VANISH and SEALED fixtures needed an ender chest: with chests, Baritone's cache of natural chests outside
+  loaded chunks keeps the request satisfiable, so "the only target vanished" could not be staged with a chest.
