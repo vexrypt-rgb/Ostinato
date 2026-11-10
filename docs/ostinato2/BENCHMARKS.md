@@ -3121,3 +3121,113 @@ Rejected:
 - Confidence is unchanged: success still rests on the server-opened menu (the client's open menu changes only when
   the server's open-screen packet arrives). No client inference is added.
 - No new flag: behaviour, flag off and on, is meant to be identical. The live A/B checks that.
+
+### Implementation (commit `41c008f12`)
+
+- New, in `src/main/java/baritone/process/interact/`: `ContainerView` (contract), `OpenVerifier` (Phase 08's rule),
+  `ClientContainers` (the 26.3 adapter: the only class in the slice that names a menu class, `containerMenu` or
+  `closeContainer()`).
+- `GetToBlockProcess`: six menu imports, the inline rule, the `sawClosed` field, the static `opens` and the static
+  `reached` removed; `rightClick` calls `OpenVerifier.click`; `isContainer` is `openedBy(block) != NONE`; it
+  implements the two new contract methods.
+- `IGetToBlockProcess`: `openMenu()` (default null), `reached(target, before)` (default false).
+- `BaritoneTaskAdapter`: no Minecraft menu import and no `baritone.process` import; the GET_TO_BLOCK verdict is a
+  static function of the request id, the outcome and a postcondition supplier, with Phase 08's messages.
+- Behaviour-preserving choices: the same branch order (a verified open is checked before the flag), a null client
+  menu still matches nothing (`OTHER`), the same six container blocks, the same `println`.
+- One intended difference: with no player when a verified step starts, the runner's remembered menu is now null
+  (Phase 08 kept whatever an earlier step left there). Not reachable in the harness, which always has a player.
+
+### Tier U and S evidence (VERIFIED, `41c008f12`)
+
+- `OpenVerifierTest` (11), `ClientContainersTest` (3, Minecraft bootstrapped), `InteractBoundaryTest` (3, source
+  scan), `GetToBlockVerdictTest` (5); with `ProcessOutcomeTest` (7) and `TaskRunnerTest` (10): 39/39 pass.
+  - Covered: our open; a stale container left open before the request, closed then reopened; a wrong kind never
+    counts; legacy (flag off) takes any container; a refused open waits and never closes; `reset` per request;
+    an adapter that throws propagates out of the rule (the process's existing tick catch is unchanged); the
+    postcondition with a new, the same, a wrong or no menu; no player; a stale request id; FAILED, CANCELLED, UNKNOWN
+    and RUNNING with their reasons; a throwing postcondition check; an implementation using the contract defaults
+    never passes.
+  - The 26.3 adapter: exactly six container blocks in the whole block registry; each menu class to its kind
+    (`SmokerMenu` and `BeaconMenu` are `OTHER`; null is `OTHER`).
+  - Allocation: `OpenVerifier.click` 11.4 ns/call, 0.000 bytes/call (`ThreadMXBean` allocated bytes, 10^6 calls,
+    after warm-up; Tier U, a microbenchmark only).
+- Full suite at `41c008f12`: 1642 tests, 1 failed (the pre-existing B5 `SecondoTest`), 24 skipped
+  (Phase 08: 1620; the 22 new tests are the difference).
+- Second version, compile only (Tier U): `tools/phase09/compile-1161.sh`, output `raw/phase09/compile-1161.txt`.
+  The unchanged `ContainerView` and `OpenVerifier` plus a 1.16 adapter (`tools/phase09/v1161/ClientContainers.java`,
+  MCP names) compile with `javac --release 8` against the cached 1.16.5 MCP jar; the 26.3 adapter against that jar
+  fails (control). Also found: Phase 08's `ProcessOutcome` is a record and does not compile at Java 8, so a 1.16
+  back-port of the outcome needs a class form (recorded, not done).
+
+### Dev smoke (seed 88001, reps 1; dev data, not evidence)
+
+- P09 build, `raw/phase09/p09-dev-88001-lines.txt`, 18 laps. All Phase 08 gates pass on it. Arm B: possible
+  6/6 TS, impossible 4/4 TF, FS 0, HANG 0, no leak, 10/10 self-reports agree; TF medians CAT 55, PREEMPT 20,
+  SEALED 30, VANISH 31 ticks (Phase 08 held-out: the same); OPEN 37 ticks. Arm A as legacy: FS 4, HANG 2.
+- Exceptions: offline auth and Realms (every run), and one arm-A `BlockOptionalMetaLookup` NPE (the legacy stale
+  rescan Phase 08 recorded; flag off only). Nothing new.
+- Comparator calibration (`tools/phase09/parity.py`, on Phase 08's own held-out runs, so no Phase 09 held-out
+  data): seed 88011 against itself gives 80 rows, 0 differences; seed 88011 against 88012 (different worlds, same
+  build) also gives 0 class or outcome differences, with arm A's VANISH and SEALED going FS on one seed and HANG on
+  the other (hence the C2 allowance below), and every limit L1–L5 within bounds. Two keying bugs were fixed
+  during this calibration (REPEAT's two steps collided; a HANG row has no step).
+
+### Pre-registration: confirmatory live A/B parity of the Phase 09 refactor (committed before any held-out run)
+
+Fixed after the unit evidence and one dev smoke on seed 88001, before any held-out data. Not changed after it.
+
+**Question.** Does moving container observation behind the adapter preserve behaviour, lifecycle semantics and
+performance, in both flag states, on the real consumer (the production `TaskRunner` + `BaritoneTaskAdapter`)?
+
+**Builds.**
+- Baseline: the Phase 08 build, `6b4f3d049` (checked out whole; the harness is identical in both builds).
+- Experimental: the Phase 09 build, `41c008f12`.
+- Within each build the Phase 08 harness runs both of its arms: A (`verifiedGetToBlock` false, production default)
+  and B (true, set only inside the harness lap). No other setting differs.
+
+**Instrument (Tier L).** Phase 08's `InteractLiveTest`, unchanged: the oracle is the integrated server's
+`ServerPlayer.containerMenu`; the nine scenarios, the classes and the 600-tick timeout are as in Phase 08.
+
+**Held-out seeds and order.** Seeds **89011** and **89012** (never run), `reps=4`, 72 laps per run. Order:
+89011 baseline, 89011 P09, 89012 baseline, 89012 P09. Command as Phase 08's (client stopped between runs, second
+monitor, muted, no mouse grab), with `-Dostinato.seed=<seed>`. Extract each with `interact_ab.py --extract` into
+`raw/phase09/p09-{base,exp}-<seed>-lines.txt`. Read with `python docs/ostinato2/tools/phase09/parity.py
+<base-89011>,<exp-89011> <base-89012>,<exp-89012>`, which computes the criteria exactly as written here.
+
+**Correctness criteria (both seeds pooled).**
+- **C1.** The P09 build passes Phase 08's gates G1–G8, P1 and P2, computed by `interact_ab.py` unchanged (its
+  class: FAIL if G1, G4, G5 or G6 fails, PASS if all pass, else PARTIAL). The baseline build's class is printed
+  next to it for reference.
+- **C2, parity.** For every (scenario, arm, rep, part) row, the oracle class is the same in both builds. The one
+  allowance: arm A on VANISH and SEALED may be FS in one build and HANG in the other (legacy never notices that the
+  target cannot open; Phase 08 saw both). In arm B the self-reported outcome (state and reason, not the request
+  number) is the same. No row is missing from either build. Stop rows' outcomes (CANCELLED or UNKNOWN by when the
+  click lands) are reported, not compared; C1's G7 covers their honesty.
+- **S, safety.** In both arms of the P09 build: no key held or process active after a stop or a lap, no death.
+
+**Performance limits (both seeds pooled; P09 minus baseline).**
+- L1: OPEN TS median ticks, |Δ| ≤ 2, in each arm.
+- L2: arm B TF median ticks on CAT, PREEMPT, SEALED and VANISH (failure latency), Δ ≤ +3 each.
+- L3: arm B CANCEL_ACT rerun TS median ticks (recovery after a cancel), Δ ≤ +2.
+- L4: arm B `runnerUs` median (task-runner time per lap, the consumer's dispatch overhead), Δ ≤ +5 µs.
+- L5: arm B CAT use packets (clicks on a refused open) ≤ baseline.
+- Memory: two small objects per bot (the adapter and the rule), no per-tick allocation in the rule (Tier U above).
+  Reported, not gated.
+
+**Modularity evidence (judged from the commit, not the runs).** The menu API is named in one file of the slice
+(`ClientContainers`) where it was in two (`GetToBlockProcess`, `BaritoneTaskAdapter`); the contract and rule compile
+unchanged against a second version's names; the boundary test keeps it that way.
+
+**Classification.**
+- FAIL: C1 hard gates (G1, G4, G5, G6) fail, C2 fails, or S fails. The refactor is then reverted, not tuned.
+- PASS: C1 all pass, C2 and S pass, L1–L5 all pass, and the modularity evidence holds.
+- PARTIAL: correctness holds but a soft gate (G2, G3, G7, G8, P1, P2) or a performance limit fails.
+- NO CHANGE JUSTIFIED: not applicable once the code is committed; reserved for an aborted slice.
+
+**Stop conditions.**
+- No seeds, repetitions or builds are added after results are seen; no run is repeated to change an outcome.
+- A run that does not complete (gradle error, client crash, harness setup failure) is rerun once with the same seed
+  and build. A second failure is a blocker and Tier L is not claimed for that pair.
+- A death or held key in the first P09 run stops the confirmatory runs (S FAIL).
+- Diagnosis of any difference is bounded to reading the raw rows; no redesign and rerun.
