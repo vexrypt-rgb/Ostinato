@@ -7,17 +7,63 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.24.0 adds spectator learning with kit and fight-type detection, the health estimator, new combat tuning
-defaults, the regression suite, the singularity theme and the Rust jump search on 26.3 (`main`, Java 25). The other
-lines are rebuilt from the same branches as v1.23.0 and have no changes.
+v1.27.0 lands Ostinato 2.0 (Phases 00-10: contracts, interaction outcomes, physics on 26.3, every experiment behind a
+default-off flag), the maze/backrooms builder, a faster A* neighbor loop and the magma sneak fix on 26.3 (`main`,
+Java 25). The other lines are rebuilt from the same branches as v1.26.0 and have no changes.
+
+New 26.3 work now happens in the monorepo [vexrypt-rgb/ostinato-tenorclef](https://github.com/vexrypt-rgb/ostinato-tenorclef).
+This repository keeps the release workflow and the older Minecraft lines.
 
 | Minecraft | Branch | Java | This tag |
 | --- | --- | --- | --- |
-| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*-fabric-1.24.0.jar` |
-| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.22.0. `*-fabric-1.21.0.jar` |
-| 1.21.11, Conductor module edition (`ostinato-mc1.21.11-module-unoptimized-*`) | `conductor-module` | 21 | Unchanged since v1.22.0 |
-| 1.21.4 | `1.21.4` | 21 | Unchanged since v1.20.0 |
-| 1.16.1 | `1.16.1` | 8 | Unchanged since v1.20.0 |
+| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*` |
+| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.26.0 |
+| 1.21.4 | `1.21.4` | 21 | Unchanged since v1.26.0 |
+| 1.16.1 | `1.16.1` | 8 | Unchanged since v1.26.0 |
+## New in v1.27.0
+
+Everything in this section is 26.3 only.
+
+### Behaviour changes (on by default)
+
+- **Magma no longer leaves you sneaking.** `AirProcess` released its forced SNEAK only on some paths; after walking off
+  magma an idle player could stay crouched with the keyboard ignored. Fixed (STUCK 2/2 before, clear 12/12 after).
+- **Maze / backrooms builder** (`#maze`): connected backrooms joined by lit 3x3 tunnels, seed-deterministic room
+  variants and five new themes, `mazeDepthY` to pin connected levels at an absolute Y (deepslate), tuff palette for
+  deep tunnels, many dig-stall and ceiling/seal fixes in `BuilderProcess` (false in-reach, boxed-in stands, pillar
+  escalation, never breaking correct schematic blocks).
+- **Pathing**: nodes sit beside fence and gate posts, not inside them, and no diagonals go into closed gates; place
+  goals ignore the player's own body.
+- **Hand look speed**: yaw cap 90 and pitch cap 90 degrees per tick (was 60 / 45).
+- **`#allblocks`**: Ostinato side of TenorClef's survival collection run, plus the tour views.
+- **Faster A***: the neighbor loop skips move families whose flags are off (parkour, slime, jump, climb, chain, TAS).
+  1.15x nodes/s on the 60-query PathBench with identical paths and costs (`docs/performance/HYPEROPT_HANDOFF.md`).
+- **Physics follows 26.3**: PlayerSim, the native sim and the predictors match 26.3 movement.
+
+### New, off by default
+
+- PPE predictive physics service (`IPredictivePhysics`: living, projectile and explosion sims). Prediction only.
+- Grace Note fall/water rescue: `observe` by default; `-Dostinato.graceNote=live` to act.
+- Threat assessment, Bombard (TNT, `-Dostinato.bombard`), Scherzo predictive melee (`-Dostinato.scherzo`, default
+  off; Bombard's spear needs OBSERVE).
+- Cadenza aim/placement planner (`cadenza*`), Presto, Legato, Maestro, `kinematicLine`: frozen, no measured gain.
+- Secondo companion foundation (`secondoEnabled`).
+- Ostinato 2.0 study flags, each with a pre-registered A/B and a decision in `docs/ostinato2/DECISIONS.md`:
+  `inputArbitration`, `predictionTolerance`, `simEdgeSearch`, `unifiedExecutor`, `pathingStateIdCache`,
+  `verifiedGetToBlock`, `latticeExperiment`. None changed a default.
+- Container observation behind a version adapter and request outcomes on `GetToBlockProcess` (recorded always, no
+  behaviour change unless `verifiedGetToBlock`).
+
+### Studies and harnesses (no production change)
+
+- Ostinato 2.0 Phases 00 to 10: `docs/ostinato2/` (STATUS, DECISIONS, BENCHMARKS, FINAL_REPORT, raw evidence).
+- OAP planner budget and CPU-aware scheduling: `docs/performance/` (result: no scheduling change; workers already
+  run below normal priority).
+- Live harnesses: InteractLiveTest, LegatoLiveTest `planload` arm, ScherzoSparTest, lap courses.
+
+### Tests
+
+1,618 headless tests, 0 failed, 26 skipped (`gradlew test -x nativeHost`).
 
 ## New in v1.24.0
 

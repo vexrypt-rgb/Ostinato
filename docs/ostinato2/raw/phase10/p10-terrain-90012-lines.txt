@@ -1,0 +1,252 @@
+INTERACTTERRAIN start laps=90 reps=3 scenarios=15 timeout=600 post=40 seed=90012 flag=present origin=-7, 101, -3 box=53x53x48 removedContainers=0 chests=[BlockPos{x=2, y=97, z=2}, BlockPos{x=-21, y=96, z=8}] furnaces=[BlockPos{x=-17, y=101, z=-18}, BlockPos{x=14, y=95, z=-1}] blast=8, 92, 14 ender=-26, 98, -6 table=11, 96, -15 wet=[] rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true swimInWater=true
+INTERACTTERRAIN begin lap=0 scen=CHEST2 arm=A rep=0 restored=0 farContainers=11 menuAtStart=none known=2,2,97,2,-21,96,8
+INTERACTTERRAIN row lap=0 scen=CHEST2 arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=144 lapTicks=145 uses=0 menu=none opened=- active=false keys=- outcome=1:FAILED/TIMEOUT msg="done in 7.2s"
+INTERACTTERRAIN row lap=0 scen=CHEST2 arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=125.88
+INTERACTTERRAIN begin lap=1 scen=CHEST2 arm=B rep=0 restored=10 farContainers=24 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=1 scen=CHEST2 arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=87 lapTicks=88 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=2:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=1 scen=CHEST2 arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=22.60
+INTERACTTERRAIN begin lap=2 scen=FURNACE2 arm=B rep=0 restored=8 farContainers=25 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=2 scen=FURNACE2 arm=B rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=3:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=2 scen=FURNACE2 arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=18.77
+INTERACTTERRAIN begin lap=3 scen=FURNACE2 arm=A rep=0 restored=8 farContainers=33 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=3 scen=FURNACE2 arm=A rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=4:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=3 scen=FURNACE2 arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=14.36
+INTERACTTERRAIN begin lap=4 scen=BLAST arm=A rep=0 restored=9 farContainers=8 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=4 scen=BLAST arm=A rep=0 part=main verdict=DONE step=1 block=blast_furnace cls=TS ticks=112 lapTicks=113 uses=1 menu=blast opened=- active=false keys=- outcome=5:SUCCEEDED/NONE msg="done in 5.6s"
+INTERACTTERRAIN row lap=4 scen=BLAST arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=blast lagAt=-1 vanished=- runnerUs=67.37
+INTERACTTERRAIN begin lap=5 scen=BLAST arm=B rep=0 restored=8 farContainers=7 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=5 scen=BLAST arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=6:RUNNING/NONE msg="no verdict in 600 ticks; trail 5,94,11 6,92,12 6,92,12 6,92,12 6,92,12 6,92,12; feet BetterBlockPos{x=6,y=92,z=12}; goal GoalComposite[GoalGetToBlock{x=8,y=92,z=14}]"
+INTERACTTERRAIN begin lap=6 scen=ENDER arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=6 scen=ENDER arm=B rep=0 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=83 lapTicks=84 uses=1 menu=ender opened=ender-near active=false keys=- outcome=7:SUCCEEDED/NONE msg="done in 4.2s"
+INTERACTTERRAIN row lap=6 scen=ENDER arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=7.59
+INTERACTTERRAIN begin lap=7 scen=ENDER arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=7 scen=ENDER arm=A rep=0 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=88 lapTicks=89 uses=1 menu=ender opened=ender-near active=false keys=- outcome=8:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=7 scen=ENDER arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=6.11
+INTERACTTERRAIN begin lap=8 scen=TABLE arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=8 scen=TABLE arm=A rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=87 lapTicks=88 uses=1 menu=table opened=- active=false keys=- outcome=9:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=8 scen=TABLE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=41.05
+INTERACTTERRAIN begin lap=9 scen=TABLE arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=9 scen=TABLE arm=B rep=0 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=87 lapTicks=88 uses=1 menu=table opened=- active=false keys=- outcome=10:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=9 scen=TABLE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=37.23
+INTERACTTERRAIN begin lap=10 scen=MENU_OPEN arm=B rep=0 restored=11 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=10 scen=MENU_OPEN arm=B rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=11:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=10 scen=MENU_OPEN arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=8.25
+INTERACTTERRAIN begin lap=11 scen=MENU_OPEN arm=A rep=0 restored=8 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=11 scen=MENU_OPEN arm=A rep=0 part=main verdict=DONE step=1 block=furnace cls=FS ticks=68 lapTicks=69 uses=0 menu=none opened=- active=false keys=- outcome=12:FAILED/UNKNOWN msg="done in 3.4s"
+INTERACTTERRAIN row lap=11 scen=MENU_OPEN arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=7.08
+INTERACTTERRAIN begin lap=12 scen=VANISH_ONE arm=A rep=0 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=12 scen=VANISH_ONE arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=MOVE_FORWARD,JUMP,SPRINT outcome=13:RUNNING/NONE msg="no verdict in 600 ticks; trail -21,96,7 -48,96,3 -73,96,9 -100,96,13 -128,96,16 -156,97,19; feet BetterBlockPos{x=-156,y=97,z=19}; goal GoalRunAwayFrom[BetterBlockPos{x=-7,y=101,z=-3}]"
+INTERACTTERRAIN begin lap=13 scen=VANISH_ONE arm=B rep=0 restored=11 farContainers=18 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=13 scen=VANISH_ONE arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=81 lapTicks=82 uses=0 menu=none opened=- active=false keys=- outcome=14:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTERRAIN row lap=13 scen=VANISH_ONE arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=-21, 96, 8 runnerUs=13.21
+INTERACTTERRAIN begin lap=14 scen=CAT_ONE arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=14 scen=CAT_ONE arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=92 lapTicks=93 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=15:SUCCEEDED/NONE msg="done in 4.6s"
+INTERACTTERRAIN row lap=14 scen=CAT_ONE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=7.32
+INTERACTTERRAIN begin lap=15 scen=CAT_ONE arm=A rep=0 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=15 scen=CAT_ONE arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=16:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=16 scen=LAG_SHORT arm=A rep=0 restored=11 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=16 scen=LAG_SHORT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=96 lapTicks=97 uses=3 menu=chest opened=-21,96,8 active=false keys=- outcome=17:SUCCEEDED/NONE msg="done in 4.8s"
+INTERACTTERRAIN row lap=16 scen=LAG_SHORT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=3 openAfterVerdict=false menuEnd=chest lagAt=88 vanished=- runnerUs=4.59
+INTERACTTERRAIN begin lap=17 scen=LAG_SHORT arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=17 scen=LAG_SHORT arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=18:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=18 scen=LAG_LONG arm=B rep=0 restored=13 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=18 scen=LAG_LONG arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=104 lapTicks=105 uses=5 menu=none opened=- active=false keys=- outcome=19:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTERRAIN row lap=18 scen=LAG_LONG arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=5 openAfterVerdict=true menuEnd=chest lagAt=88 vanished=- runnerUs=8.85
+INTERACTTERRAIN begin lap=19 scen=LAG_LONG arm=A rep=0 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=19 scen=LAG_LONG arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=20:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=20 scen=CANCEL_MOVE arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=20 scen=CANCEL_MOVE arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=21:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=20 scen=CANCEL_MOVE arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=65 lapTicks=121 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=22:SUCCEEDED/NONE msg="done in 3.3s"
+INTERACTTERRAIN row lap=20 scen=CANCEL_MOVE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=11.74
+INTERACTTERRAIN begin lap=21 scen=CANCEL_MOVE arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=21 scen=CANCEL_MOVE arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=23:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=21 scen=CANCEL_MOVE arm=B rep=0 part=rerun verdict=HANG cls=HANG ticks=600 lapTicks=656 uses=0 menu=none opened=- active=true keys=- outcome=24:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=22 scen=CANCEL_ACT arm=B rep=0 restored=12 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=22 scen=CANCEL_ACT arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=87 outcome=25:UNKNOWN/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=22 scen=CANCEL_ACT arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=131 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=26:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTERRAIN row lap=22 scen=CANCEL_ACT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=7.92
+INTERACTTERRAIN begin lap=23 scen=CANCEL_ACT arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=23 scen=CANCEL_ACT arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=27:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=24 scen=PREEMPT arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=24 scen=PREEMPT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=28:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTERRAIN row lap=24 scen=PREEMPT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=MOVE_FORWARD uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=9.47
+INTERACTTERRAIN begin lap=25 scen=PREEMPT arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=25 scen=PREEMPT arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=29:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTERRAIN row lap=25 scen=PREEMPT arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=27.33
+INTERACTTERRAIN begin lap=26 scen=REPLACE arm=B rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=26 scen=REPLACE arm=B rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=209 lapTicks=224 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=31:SUCCEEDED/NONE msg="done in 10.5s"
+INTERACTTERRAIN row lap=26 scen=REPLACE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=5.74
+INTERACTTERRAIN begin lap=27 scen=REPLACE arm=A rep=0 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=27 scen=REPLACE arm=A rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=188 lapTicks=203 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=33:SUCCEEDED/NONE msg="done in 9.4s"
+INTERACTTERRAIN row lap=27 scen=REPLACE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=4.24
+INTERACTTERRAIN begin lap=28 scen=MAGMA arm=A rep=0 restored=11 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=28 scen=MAGMA arm=A rep=0 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=29 scen=MAGMA arm=B rep=0 restored=10 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=29 scen=MAGMA arm=B rep=0 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=30 scen=CHEST2 arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=30 scen=CHEST2 arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=34:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=31 scen=CHEST2 arm=A rep=1 restored=11 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=31 scen=CHEST2 arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=89 lapTicks=90 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=35:SUCCEEDED/NONE msg="done in 4.5s"
+INTERACTTERRAIN row lap=31 scen=CHEST2 arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=4.50
+INTERACTTERRAIN begin lap=32 scen=FURNACE2 arm=A rep=1 restored=10 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=32 scen=FURNACE2 arm=A rep=1 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=36:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=32 scen=FURNACE2 arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=4.74
+INTERACTTERRAIN begin lap=33 scen=FURNACE2 arm=B rep=1 restored=9 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=33 scen=FURNACE2 arm=B rep=1 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=37:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=33 scen=FURNACE2 arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=7.00
+INTERACTTERRAIN begin lap=34 scen=BLAST arm=B rep=1 restored=8 farContainers=0 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=34 scen=BLAST arm=B rep=1 part=main verdict=DONE step=1 block=blast_furnace cls=TS ticks=112 lapTicks=113 uses=1 menu=blast opened=- active=false keys=- outcome=38:SUCCEEDED/NONE msg="done in 5.6s"
+INTERACTTERRAIN row lap=34 scen=BLAST arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=blast lagAt=-1 vanished=- runnerUs=37.23
+INTERACTTERRAIN begin lap=35 scen=BLAST arm=A rep=1 restored=8 farContainers=0 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=35 scen=BLAST arm=A rep=1 part=main verdict=DONE step=1 block=blast_furnace cls=TS ticks=118 lapTicks=119 uses=1 menu=blast opened=- active=false keys=- outcome=39:SUCCEEDED/NONE msg="done in 5.9s"
+INTERACTTERRAIN row lap=35 scen=BLAST arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=blast lagAt=-1 vanished=- runnerUs=27.96
+INTERACTTERRAIN begin lap=36 scen=ENDER arm=A rep=1 restored=12 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=36 scen=ENDER arm=A rep=1 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=82 lapTicks=83 uses=1 menu=ender opened=ender-near active=false keys=- outcome=40:SUCCEEDED/NONE msg="done in 4.1s"
+INTERACTTERRAIN row lap=36 scen=ENDER arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=4.70
+INTERACTTERRAIN begin lap=37 scen=ENDER arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=37 scen=ENDER arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=41:RUNNING/NONE msg="no verdict in 600 ticks; trail -23,98,-7 -23,98,-7 -23,98,-7 -23,98,-7 -23,98,-7 -23,98,-7; feet BetterBlockPos{x=-23,y=98,z=-7}; goal GoalComposite[GoalGetToBlock{x=-26,y=98,z=-6}]"
+INTERACTTERRAIN begin lap=38 scen=TABLE arm=B rep=1 restored=12 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=38 scen=TABLE arm=B rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=88 lapTicks=89 uses=1 menu=table opened=- active=false keys=- outcome=42:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=38 scen=TABLE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=32.87
+INTERACTTERRAIN begin lap=39 scen=TABLE arm=A rep=1 restored=8 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=39 scen=TABLE arm=A rep=1 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=89 lapTicks=90 uses=1 menu=table opened=- active=false keys=- outcome=43:SUCCEEDED/NONE msg="done in 4.5s"
+INTERACTTERRAIN row lap=39 scen=TABLE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=32.57
+INTERACTTERRAIN begin lap=40 scen=MENU_OPEN arm=A rep=1 restored=10 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=40 scen=MENU_OPEN arm=A rep=1 part=main verdict=DONE step=1 block=furnace cls=FS ticks=68 lapTicks=69 uses=0 menu=none opened=- active=false keys=- outcome=44:FAILED/UNKNOWN msg="done in 3.4s"
+INTERACTTERRAIN row lap=40 scen=MENU_OPEN arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=5.53
+INTERACTTERRAIN begin lap=41 scen=MENU_OPEN arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=41 scen=MENU_OPEN arm=B rep=1 part=main verdict=DONE step=1 block=furnace cls=TS ticks=69 lapTicks=70 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=45:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=41 scen=MENU_OPEN arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=8.61
+INTERACTTERRAIN begin lap=42 scen=VANISH_ONE arm=B rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=42 scen=VANISH_ONE arm=B rep=1 part=main verdict=FAILED step=1 block=chest cls=TF ticks=79 lapTicks=80 uses=0 menu=none opened=- active=false keys=- outcome=46:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTERRAIN row lap=42 scen=VANISH_ONE arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=-21, 96, 8 runnerUs=7.80
+INTERACTTERRAIN begin lap=43 scen=VANISH_ONE arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=43 scen=VANISH_ONE arm=A rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=MOVE_FORWARD,JUMP,SPRINT outcome=47:RUNNING/NONE msg="no verdict in 600 ticks; trail -21,96,7 -48,96,3 -73,96,10 -100,96,13 -128,96,16 -156,97,19; feet BetterBlockPos{x=-156,y=97,z=19}; goal GoalRunAwayFrom[BetterBlockPos{x=-7,y=101,z=-3}]"
+INTERACTTERRAIN begin lap=44 scen=CAT_ONE arm=A rep=1 restored=13 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=44 scen=CAT_ONE arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=90 lapTicks=91 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=48:SUCCEEDED/NONE msg="done in 4.5s"
+INTERACTTERRAIN row lap=44 scen=CAT_ONE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=5.82
+INTERACTTERRAIN begin lap=45 scen=CAT_ONE arm=B rep=1 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=45 scen=CAT_ONE arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=49:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=46 scen=LAG_SHORT arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=46 scen=LAG_SHORT arm=B rep=1 part=main verdict=DONE step=1 block=chest cls=TS ticks=98 lapTicks=99 uses=3 menu=chest opened=-21,96,8 active=false keys=- outcome=50:SUCCEEDED/NONE msg="done in 4.9s"
+INTERACTTERRAIN row lap=46 scen=LAG_SHORT arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=3 openAfterVerdict=false menuEnd=chest lagAt=90 vanished=- runnerUs=5.21
+INTERACTTERRAIN begin lap=47 scen=LAG_SHORT arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=47 scen=LAG_SHORT arm=A rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=51:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=48 scen=LAG_LONG arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=48 scen=LAG_LONG arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=105 lapTicks=106 uses=5 menu=none opened=- active=false keys=- outcome=52:FAILED/TIMEOUT msg="done in 5.3s"
+INTERACTTERRAIN row lap=48 scen=LAG_LONG arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 openAfterVerdict=true menuEnd=chest lagAt=87 vanished=- runnerUs=4.40
+INTERACTTERRAIN begin lap=49 scen=LAG_LONG arm=B rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=49 scen=LAG_LONG arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=53:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=50 scen=CANCEL_MOVE arm=B rep=1 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=50 scen=CANCEL_MOVE arm=B rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=54:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=50 scen=CANCEL_MOVE arm=B rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=62 lapTicks=118 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=55:SUCCEEDED/NONE msg="done in 3.1s"
+INTERACTTERRAIN row lap=50 scen=CANCEL_MOVE arm=B rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=12.14
+INTERACTTERRAIN begin lap=51 scen=CANCEL_MOVE arm=A rep=1 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=51 scen=CANCEL_MOVE arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=56:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=51 scen=CANCEL_MOVE arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=69 lapTicks=125 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=57:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=51 scen=CANCEL_MOVE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=8.39
+INTERACTTERRAIN begin lap=52 scen=CANCEL_ACT arm=A rep=1 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=52 scen=CANCEL_ACT arm=A rep=1 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=87 outcome=58:UNKNOWN/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=52 scen=CANCEL_ACT arm=A rep=1 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=30 lapTicks=158 uses=0 menu=chest opened=-21,96,8 active=false keys=- outcome=59:FAILED/UNKNOWN msg="done in 1.5s"
+INTERACTTERRAIN row lap=52 scen=CANCEL_ACT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=6.46
+INTERACTTERRAIN begin lap=53 scen=CANCEL_ACT arm=B rep=1 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=53 scen=CANCEL_ACT arm=B rep=1 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=60:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=54 scen=PREEMPT arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=54 scen=PREEMPT arm=B rep=1 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=61:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTERRAIN row lap=54 scen=PREEMPT arm=B rep=1 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=19.80
+INTERACTTERRAIN begin lap=55 scen=PREEMPT arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=55 scen=PREEMPT arm=A rep=1 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=62:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTERRAIN row lap=55 scen=PREEMPT arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=MOVE_FORWARD,SPRINT uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=7.63
+INTERACTTERRAIN begin lap=56 scen=REPLACE arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=56 scen=REPLACE arm=A rep=1 part=main verdict=DONE step=1 block=furnace cls=TS ticks=212 lapTicks=227 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=64:SUCCEEDED/NONE msg="done in 10.6s"
+INTERACTTERRAIN row lap=56 scen=REPLACE arm=A rep=1 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=4.20
+INTERACTTERRAIN begin lap=57 scen=REPLACE arm=B rep=1 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=57 scen=REPLACE arm=B rep=1 part=main verdict=HANG cls=HANG ticks=601 lapTicks=616 uses=0 menu=none opened=- active=true keys=- outcome=66:RUNNING/NONE msg="no verdict in 600 ticks; trail -8,100,-1 -19,97,3 -18,101,-15 -18,101,-15 -18,101,-15 -18,101,-15 -18,101,-15; feet BetterBlockPos{x=-18,y=101,z=-15}; goal GoalComposite[GoalGetToBlock{x=-17,y=101,z=-18}, GoalGetToBlock{x=14,y=95,z=-1}]"
+INTERACTTERRAIN begin lap=58 scen=MAGMA arm=B rep=1 restored=9 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=58 scen=MAGMA arm=B rep=1 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=59 scen=MAGMA arm=A rep=1 restored=9 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=59 scen=MAGMA arm=A rep=1 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=60 scen=CHEST2 arm=A rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=60 scen=CHEST2 arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=87 lapTicks=88 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=67:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=60 scen=CHEST2 arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=8.06
+INTERACTTERRAIN begin lap=61 scen=CHEST2 arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=61 scen=CHEST2 arm=B rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=68:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=62 scen=FURNACE2 arm=B rep=2 restored=10 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=62 scen=FURNACE2 arm=B rep=2 part=main verdict=DONE step=1 block=furnace cls=TS ticks=69 lapTicks=70 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=69:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=62 scen=FURNACE2 arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=7.98
+INTERACTTERRAIN begin lap=63 scen=FURNACE2 arm=A rep=2 restored=8 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=63 scen=FURNACE2 arm=A rep=2 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=70:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=63 scen=FURNACE2 arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=5.22
+INTERACTTERRAIN begin lap=64 scen=BLAST arm=A rep=2 restored=9 farContainers=0 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=64 scen=BLAST arm=A rep=2 part=main verdict=DONE step=1 block=blast_furnace cls=TS ticks=118 lapTicks=119 uses=1 menu=blast opened=- active=false keys=- outcome=71:SUCCEEDED/NONE msg="done in 5.9s"
+INTERACTTERRAIN row lap=64 scen=BLAST arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=blast lagAt=-1 vanished=- runnerUs=29.18
+INTERACTTERRAIN begin lap=65 scen=BLAST arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=1,8,92,14
+INTERACTTERRAIN row lap=65 scen=BLAST arm=B rep=2 part=main verdict=DONE step=1 block=blast_furnace cls=TS ticks=117 lapTicks=118 uses=1 menu=blast opened=- active=false keys=- outcome=72:SUCCEEDED/NONE msg="done in 5.9s"
+INTERACTTERRAIN row lap=65 scen=BLAST arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=blast lagAt=-1 vanished=- runnerUs=33.02
+INTERACTTERRAIN begin lap=66 scen=ENDER arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=66 scen=ENDER arm=B rep=2 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=82 lapTicks=83 uses=1 menu=ender opened=ender-near active=false keys=- outcome=73:SUCCEEDED/NONE msg="done in 4.1s"
+INTERACTTERRAIN row lap=66 scen=ENDER arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=4.83
+INTERACTTERRAIN begin lap=67 scen=ENDER arm=A rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-26,98,-6
+INTERACTTERRAIN row lap=67 scen=ENDER arm=A rep=2 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=88 lapTicks=89 uses=1 menu=ender opened=ender-near active=false keys=- outcome=74:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=67 scen=ENDER arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=6.41
+INTERACTTERRAIN begin lap=68 scen=TABLE arm=A rep=2 restored=9 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=68 scen=TABLE arm=A rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=87 lapTicks=88 uses=1 menu=table opened=- active=false keys=- outcome=75:SUCCEEDED/NONE msg="done in 4.4s"
+INTERACTTERRAIN row lap=68 scen=TABLE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=34.25
+INTERACTTERRAIN begin lap=69 scen=TABLE arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,11,96,-15
+INTERACTTERRAIN row lap=69 scen=TABLE arm=B rep=2 part=main verdict=DONE step=1 block=crafting_table cls=TS ticks=86 lapTicks=87 uses=1 menu=table opened=- active=false keys=- outcome=76:SUCCEEDED/NONE msg="done in 4.3s"
+INTERACTTERRAIN row lap=69 scen=TABLE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=table lagAt=-1 vanished=- runnerUs=33.51
+INTERACTTERRAIN begin lap=70 scen=MENU_OPEN arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=70 scen=MENU_OPEN arm=B rep=2 part=main verdict=DONE step=1 block=furnace cls=TS ticks=70 lapTicks=71 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=77:SUCCEEDED/NONE msg="done in 3.5s"
+INTERACTTERRAIN row lap=70 scen=MENU_OPEN arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=5.41
+INTERACTTERRAIN begin lap=71 scen=MENU_OPEN arm=A rep=2 restored=8 farContainers=0 menuAtStart=none known=2,-17,101,-18,14,95,-1
+INTERACTTERRAIN row lap=71 scen=MENU_OPEN arm=A rep=2 part=main verdict=DONE step=1 block=furnace cls=FS ticks=68 lapTicks=69 uses=0 menu=none opened=- active=false keys=- outcome=78:FAILED/UNKNOWN msg="done in 3.4s"
+INTERACTTERRAIN row lap=71 scen=MENU_OPEN arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=4.40
+INTERACTTERRAIN begin lap=72 scen=VANISH_ONE arm=A rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=72 scen=VANISH_ONE arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=MOVE_FORWARD,SPRINT outcome=79:RUNNING/NONE msg="no verdict in 600 ticks; trail -21,96,7 -48,96,2 -74,96,10 -101,96,13 -128,96,16 -156,97,19; feet BetterBlockPos{x=-157,y=97,z=19}; goal GoalRunAwayFrom[BetterBlockPos{x=-7,y=101,z=-3}]"
+INTERACTTERRAIN begin lap=73 scen=VANISH_ONE arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=73 scen=VANISH_ONE arm=B rep=2 part=main verdict=FAILED step=1 block=chest cls=TF ticks=77 lapTicks=78 uses=0 menu=none opened=- active=false keys=- outcome=80:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTERRAIN row lap=73 scen=VANISH_ONE arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=-21, 96, 8 runnerUs=7.26
+INTERACTTERRAIN begin lap=74 scen=CAT_ONE arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=74 scen=CAT_ONE arm=B rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=89 lapTicks=90 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=81:SUCCEEDED/NONE msg="done in 4.5s"
+INTERACTTERRAIN row lap=74 scen=CAT_ONE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=4.89
+INTERACTTERRAIN begin lap=75 scen=CAT_ONE arm=A rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=75 scen=CAT_ONE arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=82:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=76 scen=LAG_SHORT arm=A rep=2 restored=11 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=76 scen=LAG_SHORT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=TS ticks=95 lapTicks=96 uses=3 menu=chest opened=-21,96,8 active=false keys=- outcome=83:SUCCEEDED/NONE msg="done in 4.8s"
+INTERACTTERRAIN row lap=76 scen=LAG_SHORT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=3 openAfterVerdict=false menuEnd=chest lagAt=87 vanished=- runnerUs=3.86
+INTERACTTERRAIN begin lap=77 scen=LAG_SHORT arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=77 scen=LAG_SHORT arm=B rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=84:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=78 scen=LAG_LONG arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=78 scen=LAG_LONG arm=B rep=2 part=main verdict=FAILED step=1 block=chest cls=TF ticks=105 lapTicks=106 uses=5 menu=none opened=- active=false keys=- outcome=85:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTERRAIN row lap=78 scen=LAG_LONG arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=5 openAfterVerdict=true menuEnd=chest lagAt=87 vanished=- runnerUs=7.26
+INTERACTTERRAIN begin lap=79 scen=LAG_LONG arm=A rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=79 scen=LAG_LONG arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=86:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=80 scen=CANCEL_MOVE arm=A rep=2 restored=11 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=80 scen=CANCEL_MOVE arm=A rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=87:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=80 scen=CANCEL_MOVE arm=A rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=62 lapTicks=118 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=88:SUCCEEDED/NONE msg="done in 3.1s"
+INTERACTTERRAIN row lap=80 scen=CANCEL_MOVE arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=10.82
+INTERACTTERRAIN begin lap=81 scen=CANCEL_MOVE arm=B rep=2 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=81 scen=CANCEL_MOVE arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=MOVE_FORWARD,SPRINT activeEnd=false keysEnd=- lateOpen=false uses=0 stopTick=15 outcome=89:CANCELLED/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=81 scen=CANCEL_MOVE arm=B rep=2 part=rerun verdict=HANG cls=HANG ticks=600 lapTicks=656 uses=0 menu=none opened=- active=true keys=- outcome=90:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=82 scen=CANCEL_ACT arm=B rep=2 restored=11 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=82 scen=CANCEL_ACT arm=B rep=2 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=88 outcome=91:UNKNOWN/OWNERSHIP_LOST
+INTERACTTERRAIN row lap=82 scen=CANCEL_ACT arm=B rep=2 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=2 lapTicks=131 uses=1 menu=chest opened=-21,96,8 active=false keys=- outcome=92:SUCCEEDED/NONE msg="done in 0.1s"
+INTERACTTERRAIN row lap=82 scen=CANCEL_ACT arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=chest lagAt=-1 vanished=- runnerUs=7.86
+INTERACTTERRAIN begin lap=83 scen=CANCEL_ACT arm=A rep=2 restored=10 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=83 scen=CANCEL_ACT arm=A rep=2 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=- outcome=93:RUNNING/NONE msg="no verdict in 600 ticks; trail -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7 -18,96,7; feet BetterBlockPos{x=-18,y=96,z=7}; goal GoalComposite[GoalGetToBlock{x=-21,y=96,z=8}]"
+INTERACTTERRAIN begin lap=84 scen=PREEMPT arm=A rep=2 restored=12 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=84 scen=PREEMPT arm=A rep=2 part=main verdict=DONE step=1 block=chest cls=FS ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=94:CANCELLED/OWNERSHIP_LOST msg="done in 1.0s"
+INTERACTTERRAIN row lap=84 scen=PREEMPT arm=A rep=2 part=end run=FINISHED activeEnd=false keysEnd=MOVE_FORWARD uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=9.40
+INTERACTTERRAIN begin lap=85 scen=PREEMPT arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=85 scen=PREEMPT arm=B rep=2 part=main verdict=FAILED step=1 block=chest cls=TF ticks=20 lapTicks=21 uses=0 menu=none opened=- active=false keys=- outcome=95:CANCELLED/OWNERSHIP_LOST msg="get to block cancelled: ownership lost"
+INTERACTTERRAIN row lap=85 scen=PREEMPT arm=B rep=2 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=18.87
+INTERACTTERRAIN begin lap=86 scen=REPLACE arm=B rep=2 restored=8 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=86 scen=REPLACE arm=B rep=2 part=main verdict=DONE step=1 block=furnace cls=TS ticks=207 lapTicks=222 uses=1 menu=furnace opened=-17,101,-18 active=false keys=- outcome=97:SUCCEEDED/NONE msg="done in 10.4s"
+INTERACTTERRAIN row lap=86 scen=REPLACE arm=B rep=2 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=4.67
+INTERACTTERRAIN begin lap=87 scen=REPLACE arm=A rep=2 restored=9 farContainers=0 menuAtStart=none known=1,-21,96,8
+INTERACTTERRAIN row lap=87 scen=REPLACE arm=A rep=2 part=main verdict=HANG cls=HANG ticks=601 lapTicks=616 uses=0 menu=none opened=- active=true keys=- outcome=99:RUNNING/NONE msg="no verdict in 600 ticks; trail -8,100,-1 -19,97,2 -18,101,-15 -18,101,-15 -18,101,-15 -18,101,-15 -18,101,-15; feet BetterBlockPos{x=-18,y=101,z=-15}; goal GoalComposite[GoalGetToBlock{x=-17,y=101,z=-18}, GoalGetToBlock{x=14,y=95,z=-1}]"
+INTERACTTERRAIN begin lap=88 scen=MAGMA arm=A rep=2 restored=12 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=88 scen=MAGMA arm=A rep=2 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=89 scen=MAGMA arm=B rep=2 restored=9 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=89 scen=MAGMA arm=B rep=2 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN finish laps=90

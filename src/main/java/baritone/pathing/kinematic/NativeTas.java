@@ -114,11 +114,12 @@ final class NativeTas {
         }
     }
 
-    static final int STATE = 15;
+    static final int STATE = 21;
 
     static double[] state(PlayerSim s) {
         return new double[]{s.x, s.y, s.z, s.vx, s.vy, s.vz, s.onGround ? 1 : 0, s.sprinting ? 1 : 0, s.collidedH ? 1 : 0,
-                s.swimming ? 1 : 0, s.jumpTicks, s.speedScale, s.jumpStrength, s.jumpBoost, s.movementEfficiency};
+                s.swimming ? 1 : 0, s.jumpTicks, s.speedScale, s.jumpStrength, s.jumpBoost, s.movementEfficiency,
+                s.minorCollision ? 1 : 0, s.supported ? 1 : 0, s.onGroundNoBlocks ? 1 : 0, s.supX, s.supY, s.supZ};
     }
 
     static void load(PlayerSim s, double[] v) {
@@ -137,14 +138,20 @@ final class NativeTas {
         s.jumpStrength = v[12];
         s.jumpBoost = v[13];
         s.movementEfficiency = v[14];
+        s.minorCollision = v[15] != 0;
+        s.supported = v[16] != 0;
+        s.onGroundNoBlocks = v[17] != 0;
+        s.supX = (int) v[18];
+        s.supY = (int) v[19];
+        s.supZ = (int) v[20];
     }
 
     /**
      * A box of cells copied out of a {@link PlayerSim.World}: per cell its boxes (through {@link PlayerSim.World#cellBoxes},
-     * the same source {@code collect} reads), a flag byte and friction/speed/jump factors. Cells go x, then y, then z.
+     * the same source {@code collect} reads), a flag byte and friction/speed/jump/bounce factors. Cells go x, then y, then z.
      */
     static final class Snapshot {
-        static final int BOUNCY = 1, WATER = 2, CLIMBABLE = 4, STICKY = 8;
+        static final int BOUNCY = 1, WATER = 2, CLIMBABLE = 4, STICKY = 8, FACTORS = 4;
 
         final int[] region;
         final int[] boxStart;
@@ -172,7 +179,7 @@ final class NativeTas {
             double[] boxes = new double[6 * 256];
             int nb = 0;
             byte[] flags = new byte[n];
-            float[] factors = new float[3 * n];
+            float[] factors = new float[FACTORS * n];
             List<double[]> cell = new ArrayList<>();
             int i = 0;
             for (int x = x0; x < x0 + nx; x++) {
@@ -192,9 +199,10 @@ final class NativeTas {
                         start[i + 1] = nb;
                         flags[i] = (byte) ((w.bouncy(x, y, z) ? BOUNCY : 0) | (w.water(x, y, z) ? WATER : 0)
                                 | (w.climbable(x, y, z) ? CLIMBABLE : 0) | (w.sticky(x, y, z) ? STICKY : 0));
-                        factors[3 * i] = w.slipperiness(x, y, z);
-                        factors[3 * i + 1] = w.speedFactor(x, y, z);
-                        factors[3 * i + 2] = w.jumpFactor(x, y, z);
+                        factors[FACTORS * i] = w.slipperiness(x, y, z);
+                        factors[FACTORS * i + 1] = w.speedFactor(x, y, z);
+                        factors[FACTORS * i + 2] = w.jumpFactor(x, y, z);
+                        factors[FACTORS * i + 3] = w.bounce(x, y, z);
                     }
                 }
             }

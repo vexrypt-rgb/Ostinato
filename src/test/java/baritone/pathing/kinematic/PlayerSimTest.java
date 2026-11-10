@@ -159,12 +159,12 @@ public class PlayerSimTest {
         s.onGround = false;
         s.vx = 0.2;
         s.tick(-90, 0, false, false);
-        assertEquals(0.2 * 0.91, s.vx, 1e-9);
+        assertEquals(0.2 * 0.91f, s.vx, 1e-12); // 26.3: the drag is the float 0.91f
         s.y = 0.4;
         s.vy = 0;
         s.vx = 0.2;
         s.tick(-90, 0, false, false);
-        assertEquals(0.2 * 0.4f * 0.91, s.vx, 1e-9);
+        assertEquals(0.2 * 0.4f * 0.91f, s.vx, 1e-12);
     }
 
     /** Honey halves the jump: 0.21 up, an apex of 0.38 blocks, not enough for a full block. */
@@ -209,10 +209,10 @@ public class PlayerSimTest {
         s.x = 0.5; s.y = 50.5; s.z = 0.5; s.vy = -1.5;
         for (int i = 0; i < 20; i++) s.tick(-90, true, false, false);
         assertEquals(1.0625 - PlayerSim.HALF_WIDTH, s.x, 1e-9);
-        assertEquals((-0.05 - 0.08) * 0.98, s.vy, 1e-9);
+        assertEquals((-0.05 - 0.08) * 0.98f, s.vy, 1e-12); // 26.3: the drag is the float 0.98f
         double before = s.y;
         s.tick(-90, true, false, false);
-        assertEquals(-0.1274, s.y - before, 1e-9);
+        assertEquals((-0.05 - 0.08) * 0.98f, s.y - before, 1e-12);
     }
 
     /** A block away from the honey the same fall is a plain one. */
@@ -221,7 +221,7 @@ public class PlayerSimTest {
         PlayerSim s = new PlayerSim(honeyWall());
         s.x = -0.5; s.y = 50.5; s.z = 0.5; s.vy = -1.5;
         s.tick(-90, 0, false, false);
-        assertEquals((-1.5 - 0.08) * 0.98, s.vy, 1e-9);
+        assertEquals((-1.5 - 0.08) * 0.98f, s.vy, 1e-12);
     }
 
     @Test

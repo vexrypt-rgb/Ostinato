@@ -208,6 +208,18 @@ public final class InputArbiter {
     }
 
     /**
+     * Release every living lease, as on disconnect or world change. Each owner ends {@link End#RELEASED}
+     * and its epoch bumps, so a frame queued before the call is {@link Submit#STALE}.
+     */
+    public void releaseAll() {
+        for (String id : new ArrayList<>(owners.keySet())) {
+            if (owners.get(id).alive) {
+                finish(id, End.RELEASED);
+            }
+        }
+    }
+
+    /**
      * Paint this tick. Starts from every key up, then each living owner. An owner who did not submit
      * since the last seal paints their resources up. A second seal with no new frame clears them.
      */

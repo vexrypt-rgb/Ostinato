@@ -1,0 +1,5 @@
+p07-prof-wa2 exit=0 secs=72
+DONE
+p07-prof2-wa2-off exit=0 secs=73 head=57364373c jvm=DebugNonSafepoints
+p07-prof2-wa2-on exit=0 secs=69 head=57364373c jvm=DebugNonSafepoints
+DONE prof2

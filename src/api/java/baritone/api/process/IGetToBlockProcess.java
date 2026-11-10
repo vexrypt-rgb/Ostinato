@@ -32,4 +32,30 @@ public interface IGetToBlockProcess extends IBaritoneProcess {
     }
 
     boolean blacklistClosest();
+
+    /**
+     * Ostinato 2.0 Phase 08: the outcome of the latest {@link #getToBlock} request. With {@code verifiedGetToBlock}
+     * on, a container counts as reached only once the server opened the matching container for this request.
+     */
+    default ProcessOutcome outcome() {
+        return ProcessOutcome.NONE;
+    }
+
+    /**
+     * Ostinato 2.0 Phase 09: the identity of the menu the player has open now, for {@link #reached}. Compare by
+     * identity only; null with no player, or from an implementation that cannot observe menus.
+     */
+    default Object openMenu() {
+        return null;
+    }
+
+    /**
+     * Ostinato 2.0 Phase 09: what the player sees now, independent of {@link #outcome()}. For a container opened on
+     * arrival, the matching container is open and is not {@code before} (from {@link #openMenu()} when the request
+     * started); otherwise a matching block is next to the player. An implementation that cannot observe this reports
+     * false, never true.
+     */
+    default boolean reached(BlockOptionalMeta target, Object before) {
+        return false;
+    }
 }

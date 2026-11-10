@@ -1,0 +1,2 @@
+tag=pilot-e1 seed=93001 reps=1 mask=0xF stress=2 freeCommitMB=4259 ac=True power=[Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)] start=2026-11-10T00:54:39
+end=2026-11-10T01:01:05 exit=

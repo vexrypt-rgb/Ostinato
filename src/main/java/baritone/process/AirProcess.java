@@ -69,6 +69,8 @@ public final class AirProcess extends BaritoneProcessHelper {
     private BlockPos door;
     private boolean pickUpDoor, wasPlaced;
     private int doorTicks;
+    /** SNEAK is held because {@link #isActive()} saw magma below, not because a process asked for it. */
+    private boolean magmaSneak;
 
     public AirProcess(Baritone baritone) {
         super(baritone);
@@ -81,10 +83,13 @@ public final class AirProcess extends BaritoneProcessHelper {
             return active = false;
         }
         int air = ctx.player().getAirSupply(), max = ctx.player().getMaxAirSupply();
-        if (ctx.world().getBlockState(BlockPos.containing(ctx.player().position()).below()).getBlock() == Blocks.MAGMA_BLOCK
-                || (ctx.player().isInWater() && ctx.world().getBlockState(ctx.playerFeet().below()).getBlock() == Blocks.MAGMA_BLOCK)) {
-            // Whatever process is driving: sneaking is the only thing that stops magma burning us.
-            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
+        boolean onMagma = ctx.world().getBlockState(BlockPos.containing(ctx.player().position()).below()).getBlock() == Blocks.MAGMA_BLOCK
+                || (ctx.player().isInWater() && ctx.world().getBlockState(ctx.playerFeet().below()).getBlock() == Blocks.MAGMA_BLOCK);
+        // Whatever process is driving: sneaking is the only thing that stops magma burning us.
+        Boolean sneak = magmaSneak(onMagma, magmaSneak);
+        if (sneak != null) {
+            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, sneak);
+            magmaSneak = sneak;
         }
         if (breathCooldown > 0) {
             if (air < 30) breathCooldown = 0; // one bubble left: try again before drowning
@@ -420,6 +425,20 @@ public final class AirProcess extends BaritoneProcessHelper {
         ctx.playerController().onPlayerDamageBlock(top, Direction.UP);
         ctx.player().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         return pause;
+    }
+
+    /**
+     * The magma check runs in {@link #isActive()}, every tick, whoever is in control, and nothing else releases what it
+     * presses: an idle player who stepped on magma kept a forced SNEAK, and so {@code PlayerMovementInput} in place of the
+     * keyboard, after walking off it (Ostinato 2.0 Phase 10, B6; live: STUCK in every idle lap). So the check releases its
+     * own press once, on the tick the player is off magma. {@code isActive()} runs before any process's {@code onTick}
+     * and before the path executor, so a writer that wants SNEAK on that tick sets it again after this.
+     *
+     * @return the SNEAK state to force, or null to leave it alone
+     */
+    static Boolean magmaSneak(boolean onMagma, boolean pressedByCheck) {
+        if (onMagma) return Boolean.TRUE;
+        return pressedByCheck ? Boolean.FALSE : null;
     }
 
     @Override

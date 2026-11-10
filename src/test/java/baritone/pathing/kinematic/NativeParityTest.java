@@ -49,10 +49,10 @@ public class NativeParityTest extends TasBruteTest {
         System.out.println("native parity: " + NativeTas.checked.get() + " searches checked against Java");
     }
 
-    /** {@link BoxWorld} plus water and honey, which BoxWorld does not model. */
+    /** {@link BoxWorld} plus water, honey and beds' 0.75 bounce, which BoxWorld does not model. */
     static final class FlagWorld implements PlayerSim.World {
         final BoxWorld boxes = new BoxWorld();
-        final Set<Long> water = new HashSet<>(), sticky = new HashSet<>();
+        final Set<Long> water = new HashSet<>(), sticky = new HashSet<>(), beds = new HashSet<>();
 
         static long k(int x, int y, int z) {
             return ((long) x & 0x3FFFFFF) << 38 | ((long) y & 0xFFF) << 26 | ((long) z & 0x3FFFFFF);
@@ -76,6 +76,11 @@ public class NativeParityTest extends TasBruteTest {
         @Override
         public boolean bouncy(int x, int y, int z) {
             return boxes.bouncy(x, y, z);
+        }
+
+        @Override
+        public float bounce(int x, int y, int z) {
+            return beds.contains(k(x, y, z)) ? 0.75f : boxes.bouncy(x, y, z) ? 1 : 0;
         }
 
         @Override
@@ -118,7 +123,10 @@ public class NativeParityTest extends TasBruteTest {
                 }
                 int y = z <= 0 ? -1 : r.nextInt(3) - 2;
                 switch (r.nextInt(10)) {
-                    case 0 -> w.boxes.put(x, y, z, BoxWorld.BOTTOM_SLAB);
+                    case 0 -> { // a low top that bounces like a bed, without drawing from r: the worlds stay the same
+                        w.boxes.put(x, y, z, BoxWorld.BOTTOM_SLAB);
+                        w.beds.add(FlagWorld.k(x, y, z));
+                    }
                     case 1 -> w.boxes.put(x, y, z, BoxWorld.CANDLE);
                     case 2 -> w.boxes.slime(x, y, z);
                     case 3 -> w.boxes.put(x, y, z, BoxWorld.FULL).slippery(x, y, z, 0.98f);

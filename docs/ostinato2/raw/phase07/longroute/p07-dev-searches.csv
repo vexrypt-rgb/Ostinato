@@ -1,0 +1,845 @@
+set,seed,family,mode,length,n,arm,idx,ahead,primary,failure,ms,nodes,abstract,type,toGoal,timedOut,exhausted,simplified,outcome
+dev,2000,OPEN,known,500,0,PROD,0,false,500,2000,8.818,473,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,known,500,0,HPA,0,false,500,2000,447.023,473,510,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,known,500,1,HPA,0,false,500,2000,99.811,487,363,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,known,500,1,PROD,0,false,500,2000,18.133,487,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,known,1000,0,PROD,0,false,500,2000,25.383,962,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,known,1000,0,HPA,0,false,500,2000,373.817,960,1730,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,known,1000,1,HPA,0,false,500,2000,445.292,965,1890,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,known,1000,1,PROD,0,false,500,2000,17.484,965,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,horizon,2000,0,PROD,0,false,500,2000,8.177,89,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,1,true,4000,5000,8.143,115,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,2,true,4000,5000,8.280,126,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,3,true,4000,5000,8.063,124,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,4,true,4000,5000,7.682,124,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,5,true,4000,5000,6.604,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,6,true,4000,5000,9.435,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,7,true,4000,5000,9.506,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,8,true,4000,5000,9.087,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,9,true,4000,5000,6.388,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,10,true,4000,5000,8.729,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,11,true,4000,5000,8.316,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,12,true,4000,5000,7.103,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,13,true,4000,5000,6.355,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,14,true,4000,5000,10.486,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,15,true,4000,5000,4.839,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,16,true,4000,5000,8.171,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,0,PROD,17,true,4000,5000,3.640,50,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,horizon,2000,0,HPA,0,false,500,2000,5.166,89,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,1,true,4000,5000,7.421,115,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,2,true,4000,5000,8.051,126,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,3,true,4000,5000,7.190,124,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,4,true,4000,5000,6.289,124,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,5,true,4000,5000,6.629,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,6,true,4000,5000,6.979,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,7,true,4000,5000,5.647,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,8,true,4000,5000,6.625,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,9,true,4000,5000,6.334,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,10,true,4000,5000,6.718,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,11,true,4000,5000,4.784,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,12,true,4000,5000,6.159,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,13,true,4000,5000,6.266,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,14,true,4000,5000,5.794,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,15,true,4000,5000,5.127,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,16,true,4000,5000,6.537,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,0,HPA,17,true,4000,5000,1.840,50,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,OPEN,horizon,2000,1,HPA,0,false,500,2000,8.829,163,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,1,true,4000,5000,6.630,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,2,true,4000,5000,6.344,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,3,true,4000,5000,4.449,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,4,true,4000,5000,4.804,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,5,true,4000,5000,4.729,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,6,true,4000,5000,4.812,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,7,true,4000,5000,7.087,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,8,true,4000,5000,6.714,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,9,true,4000,5000,7.031,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,10,true,4000,5000,4.239,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,11,true,4000,5000,6.565,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,12,true,4000,5000,6.894,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,13,true,4000,5000,6.886,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,14,true,4000,5000,6.340,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,15,true,4000,5000,3.485,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,16,true,4000,5000,2.759,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,OPEN,horizon,2000,1,HPA,17,true,4000,5000,1.118,55,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,OPEN,horizon,2000,1,PROD,0,false,500,2000,2.654,163,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,1,true,4000,5000,2.558,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,2,true,4000,5000,3.073,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,3,true,4000,5000,2.336,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,4,true,4000,5000,3.452,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,5,true,4000,5000,2.410,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,6,true,4000,5000,2.621,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,7,true,4000,5000,2.989,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,8,true,4000,5000,3.313,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,9,true,4000,5000,2.580,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,10,true,4000,5000,1.893,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,11,true,4000,5000,2.334,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,12,true,4000,5000,2.831,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,13,true,4000,5000,3.646,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,14,true,4000,5000,2.214,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,15,true,4000,5000,3.408,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,16,true,4000,5000,2.638,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,OPEN,horizon,2000,1,PROD,17,true,4000,5000,1.659,55,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,change,500,0,PROD,0,false,500,2000,12.236,485,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,change,500,0,PROD,1,false,500,2000,17.033,250,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,change,500,0,HPA,0,false,500,2000,202.475,485,364,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,change,500,0,HPA,1,false,500,2000,9.592,250,70,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,change,500,1,HPA,0,false,500,2000,179.686,440,591,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,change,500,1,HPA,1,false,500,2000,17.438,233,88,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,change,500,1,PROD,0,false,500,2000,9.755,439,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,change,500,1,PROD,1,false,500,2000,6.147,232,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,goal,1000,0,PROD,0,false,500,2000,19.596,986,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,goal,1000,0,PROD,1,false,500,2000,3.154,78,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,goal,1000,0,HPA,0,false,500,2000,337.245,986,1474,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,goal,1000,0,HPA,1,false,500,2000,5.441,136,73,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,goal,1000,1,HPA,0,false,500,2000,493.591,945,2012,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,goal,1000,1,HPA,1,false,500,2000,3.646,117,105,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,OPEN,goal,1000,1,PROD,0,false,500,2000,16.317,944,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,OPEN,goal,1000,1,PROD,1,false,500,2000,2.569,124,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,known,500,0,PROD,0,false,500,2000,10.740,670,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,known,500,0,HPA,0,false,500,2000,220.012,685,644,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,known,500,1,HPA,0,false,500,2000,358.118,591,771,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,known,500,1,PROD,0,false,500,2000,7.577,649,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,known,1000,0,PROD,0,false,500,2000,16.918,1253,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,known,1000,0,HPA,0,false,500,2000,629.745,128,2209,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,FOREST,known,1000,0,HPA,1,true,4000,5000,24.066,1138,1565,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,known,1000,1,HPA,0,false,500,2000,344.440,1534,1428,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,known,1000,1,PROD,0,false,500,2000,14.751,1534,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,horizon,2000,0,PROD,0,false,500,2000,2.103,171,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,1,true,4000,5000,2.751,165,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,2,true,4000,5000,2.212,153,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,3,true,4000,5000,1.997,140,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,4,true,4000,5000,3.431,363,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,5,true,4000,5000,4.286,356,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,6,true,4000,5000,7.229,759,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,7,true,4000,5000,1.873,151,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,8,true,4000,5000,2.917,130,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,9,true,4000,5000,3.108,138,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,10,true,4000,5000,2.851,134,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,11,true,4000,5000,3.222,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,12,true,4000,5000,1.775,126,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,13,true,4000,5000,3.351,147,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,14,true,4000,5000,2.958,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,15,true,4000,5000,3.725,158,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,0,PROD,16,true,4000,5000,2.666,165,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,horizon,2000,0,HPA,0,false,500,2000,3.630,171,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,1,true,4000,5000,3.587,165,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,2,true,4000,5000,3.048,153,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,3,true,4000,5000,3.069,140,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,4,true,4000,5000,2.752,363,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,5,true,4000,5000,4.017,356,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,6,true,4000,5000,8.945,759,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,7,true,4000,5000,3.144,151,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,8,true,4000,5000,2.306,130,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,9,true,4000,5000,2.584,138,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,10,true,4000,5000,3.001,134,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,11,true,4000,5000,2.683,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,12,true,4000,5000,2.419,126,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,13,true,4000,5000,3.169,147,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,14,true,4000,5000,3.251,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,15,true,4000,5000,3.367,158,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,0,HPA,16,true,4000,5000,45.466,165,44,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,horizon,2000,1,HPA,0,false,500,2000,4.463,227,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,1,true,4000,5000,2.349,132,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,2,true,4000,5000,3.610,185,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,3,true,4000,5000,2.618,151,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,4,true,4000,5000,3.145,149,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,5,true,4000,5000,3.226,155,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,6,true,4000,5000,2.754,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,7,true,4000,5000,2.466,135,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,8,true,4000,5000,2.946,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,9,true,4000,5000,3.008,140,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,10,true,4000,5000,3.030,157,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,11,true,4000,5000,3.293,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,12,true,4000,5000,4.917,127,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,13,true,4000,5000,2.317,165,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,14,true,4000,5000,3.135,189,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,15,true,4000,5000,3.232,140,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,FOREST,horizon,2000,1,HPA,16,true,4000,5000,50.104,426,43,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,horizon,2000,1,PROD,0,false,500,2000,3.064,227,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,1,true,4000,5000,2.863,132,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,2,true,4000,5000,2.592,185,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,3,true,4000,5000,1.847,151,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,4,true,4000,5000,1.817,149,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,5,true,4000,5000,2.097,155,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,6,true,4000,5000,1.900,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,7,true,4000,5000,1.935,135,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,8,true,4000,5000,2.825,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,9,true,4000,5000,1.970,140,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,10,true,4000,5000,2.217,157,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,11,true,4000,5000,2.235,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,12,true,4000,5000,1.846,127,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,13,true,4000,5000,2.120,165,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,14,true,4000,5000,3.264,189,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,15,true,4000,5000,1.756,140,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,FOREST,horizon,2000,1,PROD,16,true,4000,5000,2.996,426,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,change,500,0,PROD,0,false,500,2000,6.093,545,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,change,500,0,PROD,1,false,500,2000,4.834,279,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,change,500,0,HPA,0,false,500,2000,272.009,563,734,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,change,500,0,HPA,1,false,500,2000,10.836,281,134,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,change,500,1,HPA,0,false,500,2000,282.486,541,802,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,change,500,1,HPA,1,false,500,2000,13.773,232,179,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,FOREST,change,500,1,PROD,0,false,500,2000,6.494,556,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,FOREST,change,500,1,PROD,1,false,500,2000,2.835,256,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,known,500,0,PROD,0,false,500,2000,18.361,2803,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,known,500,0,HPA,0,false,500,2000,208.679,2452,930,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MOUNTAINS,known,500,1,HPA,0,false,500,2000,194.922,819,631,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MOUNTAINS,known,500,1,PROD,0,false,500,2000,12.085,819,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,known,1000,0,PROD,0,false,500,2000,422.281,72019,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,known,1000,0,HPA,0,false,500,2000,501.027,128,2524,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MOUNTAINS,known,1000,0,HPA,1,true,4000,5000,347.410,56654,2402,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MOUNTAINS,known,1000,1,HPA,0,false,500,2000,427.201,12197,2377,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MOUNTAINS,known,1000,1,PROD,0,false,500,2000,122.029,23405,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,0,false,500,2000,3.458,161,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,1,true,4000,5000,2.972,153,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,2,true,4000,5000,2.570,150,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,3,true,4000,5000,1.635,136,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,4,true,4000,5000,2.652,180,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,5,true,4000,5000,2.850,159,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,6,true,4000,5000,2.603,181,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,7,true,4000,5000,3.379,201,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,8,true,4000,5000,3.864,314,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,9,true,4000,5000,2.834,316,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,10,true,4000,5000,1.714,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,11,true,4000,5000,1.943,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,12,true,4000,5000,1.527,136,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,13,true,4000,5000,1.190,168,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,14,true,4000,5000,1.804,181,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,15,true,4000,5000,2.026,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,16,true,4000,5000,1.801,166,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,17,true,4000,5000,1.506,136,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,0,PROD,18,true,4000,5000,7.234,1265,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,0,false,500,2000,2.655,161,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,1,true,4000,5000,1.548,153,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,2,true,4000,5000,1.913,150,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,3,true,4000,5000,1.541,136,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,4,true,4000,5000,1.788,180,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,5,true,4000,5000,1.467,159,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,6,true,4000,5000,1.372,181,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,7,true,4000,5000,2.040,201,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,8,true,4000,5000,1.893,314,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,9,true,4000,5000,2.977,316,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,10,true,4000,5000,1.828,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,11,true,4000,5000,1.495,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,12,true,4000,5000,1.494,136,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,13,true,4000,5000,1.914,168,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,14,true,4000,5000,1.848,181,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,15,true,4000,5000,1.535,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,16,true,4000,5000,1.739,166,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,17,true,4000,5000,1.863,136,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,0,HPA,18,true,4000,5000,25.520,1265,17,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,0,false,500,2000,1.957,175,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,1,true,4000,5000,1.622,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,2,true,4000,5000,1.874,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,3,true,4000,5000,2.272,342,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,4,true,4000,5000,2.783,382,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,5,true,4000,5000,2.165,157,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,6,true,4000,5000,2.099,195,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,7,true,4000,5000,2.843,161,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,8,true,4000,5000,4.287,150,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,9,true,4000,5000,2.423,196,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,10,true,4000,5000,3.660,212,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,11,true,4000,5000,3.352,157,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,12,true,4000,5000,6.989,1007,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,13,true,4000,5000,6.341,951,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,14,true,4000,5000,2.103,143,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,15,true,4000,5000,1.427,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,16,true,4000,5000,1.838,133,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,17,true,4000,5000,2.185,134,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MOUNTAINS,horizon,2000,1,HPA,18,true,4000,5000,0.665,53,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,0,false,500,2000,2.012,175,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,1,true,4000,5000,1.430,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,2,true,4000,5000,2.504,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,3,true,4000,5000,2.629,342,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,4,true,4000,5000,4.092,382,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,5,true,4000,5000,2.882,157,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,6,true,4000,5000,2.408,195,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,7,true,4000,5000,2.302,161,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,8,true,4000,5000,1.547,150,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,9,true,4000,5000,1.683,196,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,10,true,4000,5000,2.226,212,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,11,true,4000,5000,1.594,157,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,12,true,4000,5000,5.890,1007,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,13,true,4000,5000,5.872,951,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,14,true,4000,5000,2.035,143,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,15,true,4000,5000,2.802,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,16,true,4000,5000,3.019,133,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,17,true,4000,5000,2.456,134,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MOUNTAINS,horizon,2000,1,PROD,18,true,4000,5000,0.944,53,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,known,500,0,PROD,0,false,500,2000,502.189,39680,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,CAVES,known,500,0,PROD,1,true,4000,5000,4003.452,714624,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,CAVES,known,500,0,PROD,2,true,4000,5000,698.478,135880,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,known,500,0,HPA,0,false,500,2000,500.715,64,324,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,1,true,4000,5000,4001.765,128,307,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,2,true,4000,5000,4002.939,64,277,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,3,true,4000,5000,4002.682,256,308,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,4,true,4000,5000,4022.405,4032,278,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,5,true,4000,5000,4000.754,64,249,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,6,true,4000,5000,4002.733,192,200,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,0,HPA,7,true,4000,5000,1508.280,255021,138,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,CAVES,known,500,1,HPA,0,false,500,2000,501.299,128,478,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,1,HPA,1,true,4000,5000,4039.010,2496,494,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,known,500,1,HPA,2,true,4000,5000,2406.177,369125,435,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,CAVES,known,500,1,PROD,0,false,500,2000,500.499,76096,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,CAVES,known,500,1,PROD,1,true,4000,5000,4003.392,584384,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,CAVES,known,500,1,PROD,2,true,4000,5000,4002.330,56190,0,FAILURE,false,true,false,false,
+dev,2000,CAVES,known,500,1,PROD,3,true,8000,8000,8003.197,85615,0,FAILURE,false,true,false,false,
+dev,2000,CAVES,known,500,1,PROD,4,false,16000,16000,10238.940,1374523,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,known,1000,0,PROD,0,false,500,2000,70.697,12913,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,known,1000,0,HPA,0,false,500,2000,356.255,8121,1537,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,CAVES,known,1000,1,HPA,0,false,500,2000,381.062,6183,1334,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,CAVES,known,1000,1,PROD,0,false,500,2000,80.559,9813,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,horizon,2000,0,PROD,0,false,500,2000,5.120,279,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,1,true,4000,5000,4.029,202,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,2,true,4000,5000,4.697,241,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,3,true,4000,5000,3.992,163,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,4,true,4000,5000,2.811,164,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,5,true,4000,5000,2.851,207,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,6,true,4000,5000,3.481,170,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,7,true,4000,5000,5.125,265,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,8,true,4000,5000,8.784,672,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,9,true,4000,5000,4.035,161,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,10,true,4000,5000,4.158,168,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,11,true,4000,5000,8.923,969,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,12,true,4000,5000,3.861,198,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,13,true,4000,5000,5.148,403,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,14,true,4000,5000,65.551,9167,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,15,true,4000,5000,23.577,3915,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,0,PROD,16,true,4000,5000,10.767,1667,0,SUCCESS_SEGMENT,false,false,false,false,
+dev,2000,CAVES,horizon,2000,0,PROD,17,true,4000,5000,137.094,12832,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,CAVES,horizon,2000,0,HPA,0,false,500,2000,5.437,279,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,1,true,4000,5000,3.239,202,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,2,true,4000,5000,2.761,241,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,3,true,4000,5000,2.509,163,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,4,true,4000,5000,3.728,164,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,5,true,4000,5000,3.968,207,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,6,true,4000,5000,3.193,170,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,7,true,4000,5000,4.165,265,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,8,true,4000,5000,8.183,672,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,9,true,4000,5000,3.981,161,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,10,true,4000,5000,2.922,168,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,11,true,4000,5000,10.783,969,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,12,true,4000,5000,4.518,198,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,13,true,4000,5000,10.514,403,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,14,true,4000,5000,60.563,9167,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,15,true,4000,5000,24.237,3915,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,0,HPA,16,true,4000,5000,63.575,1667,114,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,CAVES,horizon,2000,0,HPA,17,true,4000,5000,103.211,12832,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,CAVES,horizon,2000,1,HPA,0,false,500,2000,2.400,193,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,1,true,4000,5000,2.743,252,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,2,true,4000,5000,3.046,160,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,3,true,4000,5000,9.181,854,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,4,true,4000,5000,3.278,179,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,5,true,4000,5000,1.885,166,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,6,true,4000,5000,4.983,712,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,7,true,4000,5000,2.309,152,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,8,true,4000,5000,1.667,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,9,true,4000,5000,11.156,1123,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,10,true,4000,5000,3.948,219,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,11,true,4000,5000,2.802,324,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,12,true,4000,5000,5.608,529,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,13,true,4000,5000,21.554,3601,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,14,true,4000,5000,19.738,3695,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,15,true,4000,5000,69.890,9323,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,16,true,4000,5000,32.407,5718,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,17,true,4000,5000,32.972,5738,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,CAVES,horizon,2000,1,HPA,18,true,4000,5000,57.908,6233,64,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,CAVES,horizon,2000,1,PROD,0,false,500,2000,2.125,193,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,1,true,4000,5000,2.208,252,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,2,true,4000,5000,1.804,160,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,3,true,4000,5000,5.330,854,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,4,true,4000,5000,1.860,179,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,5,true,4000,5000,1.753,166,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,6,true,4000,5000,4.328,712,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,7,true,4000,5000,1.451,152,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,8,true,4000,5000,1.347,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,9,true,4000,5000,5.977,1123,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,10,true,4000,5000,1.965,219,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,11,true,4000,5000,4.047,324,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,12,true,4000,5000,5.238,529,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,13,true,4000,5000,19.622,3601,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,14,true,4000,5000,20.637,3695,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,15,true,4000,5000,51.707,9323,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,16,true,4000,5000,32.005,5718,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,17,true,4000,5000,37.295,5738,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,CAVES,horizon,2000,1,PROD,18,true,4000,5000,52.080,7596,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,known,500,0,PROD,0,false,500,2000,30.129,673,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,known,500,0,HPA,0,false,500,2000,702.787,128,767,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,WATER,known,500,0,HPA,1,true,4000,5000,10.752,607,481,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,WATER,known,500,1,HPA,0,false,500,2000,344.326,527,749,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,WATER,known,500,1,PROD,0,false,500,2000,6.586,527,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,known,1000,0,PROD,0,false,500,2000,13.876,1167,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,known,1000,0,HPA,0,false,500,2000,777.438,192,2432,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,WATER,known,1000,0,HPA,1,true,4000,5000,67.369,3129,1770,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,WATER,known,1000,1,HPA,0,false,500,2000,587.523,64,1491,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,WATER,known,1000,1,HPA,1,true,4000,5000,54.428,3434,1456,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,WATER,known,1000,1,PROD,0,false,500,2000,23.382,1238,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,horizon,2000,0,PROD,0,false,500,2000,2.688,154,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,1,true,4000,5000,3.494,144,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,2,true,4000,5000,2.800,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,3,true,4000,5000,2.827,134,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,4,true,4000,5000,2.822,129,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,5,true,4000,5000,1.921,132,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,6,true,4000,5000,2.411,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,7,true,4000,5000,2.037,129,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,8,true,4000,5000,3.028,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,9,true,4000,5000,3.259,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,10,true,4000,5000,3.184,126,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,11,true,4000,5000,2.258,152,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,12,true,4000,5000,2.152,145,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,13,true,4000,5000,2.530,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,14,true,4000,5000,1.796,130,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,15,true,4000,5000,1.638,125,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,0,PROD,16,true,4000,5000,0.822,41,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,WATER,horizon,2000,0,HPA,0,false,500,2000,2.470,154,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,1,true,4000,5000,1.875,144,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,2,true,4000,5000,2.140,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,3,true,4000,5000,2.402,134,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,4,true,4000,5000,2.373,129,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,5,true,4000,5000,2.839,132,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,6,true,4000,5000,2.915,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,7,true,4000,5000,2.902,129,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,8,true,4000,5000,3.541,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,9,true,4000,5000,3.618,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,10,true,4000,5000,2.201,126,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,11,true,4000,5000,2.280,152,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,12,true,4000,5000,2.673,145,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,13,true,4000,5000,2.089,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,14,true,4000,5000,1.917,130,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,15,true,4000,5000,2.714,125,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,0,HPA,16,true,4000,5000,1.147,41,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,WATER,horizon,2000,1,HPA,0,false,500,2000,3.324,170,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,1,true,4000,5000,2.512,131,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,2,true,4000,5000,3.292,143,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,3,true,4000,5000,2.706,127,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,4,true,4000,5000,3.203,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,5,true,4000,5000,2.474,127,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,6,true,4000,5000,3.817,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,7,true,4000,5000,4.396,146,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,8,true,4000,5000,3.216,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,9,true,4000,5000,2.669,128,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,10,true,4000,5000,4.444,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,11,true,4000,5000,3.591,129,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,12,true,4000,5000,4.040,129,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,13,true,4000,5000,3.147,127,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,14,true,4000,5000,3.916,143,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,15,true,4000,5000,3.719,142,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,WATER,horizon,2000,1,HPA,16,true,4000,5000,53.771,96,38,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,WATER,horizon,2000,1,PROD,0,false,500,2000,3.354,170,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,1,true,4000,5000,1.858,131,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,2,true,4000,5000,2.662,143,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,3,true,4000,5000,3.156,127,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,4,true,4000,5000,2.413,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,5,true,4000,5000,2.375,127,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,6,true,4000,5000,2.186,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,7,true,4000,5000,2.940,146,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,8,true,4000,5000,3.358,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,9,true,4000,5000,3.195,128,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,10,true,4000,5000,2.582,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,11,true,4000,5000,2.112,129,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,12,true,4000,5000,2.931,129,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,13,true,4000,5000,2.960,127,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,14,true,4000,5000,2.945,143,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,15,true,4000,5000,3.740,142,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,WATER,horizon,2000,1,PROD,16,true,4000,5000,1.647,96,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,known,500,0,PROD,0,false,500,2000,17.803,2523,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,known,500,0,HPA,0,false,500,2000,460.008,25933,806,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,known,500,1,HPA,0,false,500,2000,332.371,6882,779,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,known,500,1,PROD,0,false,500,2000,107.385,17950,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,known,1000,0,PROD,0,false,500,2000,81.440,9705,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,known,1000,0,HPA,0,false,500,2000,491.116,5842,2538,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,known,1000,1,HPA,0,false,500,2000,500.394,128,2424,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MIXED,known,1000,1,HPA,1,true,4000,5000,397.087,77267,2371,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,known,1000,1,PROD,0,false,500,2000,73.280,13319,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,horizon,2000,0,PROD,0,false,500,2000,2.519,216,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,1,true,4000,5000,1.405,148,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,2,true,4000,5000,2.026,148,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,3,true,4000,5000,1.725,148,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,4,true,4000,5000,5.003,927,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,5,true,4000,5000,5.316,955,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,6,true,4000,5000,4.154,518,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,7,true,4000,5000,1.764,130,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,8,true,4000,5000,1.588,151,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,9,true,4000,5000,1.688,198,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,10,true,4000,5000,7.516,1459,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,11,true,4000,5000,2.323,184,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,12,true,4000,5000,1.651,182,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,13,true,4000,5000,2.139,160,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,14,true,4000,5000,3.034,201,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,15,true,4000,5000,2.901,190,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,16,true,4000,5000,2.720,180,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,0,PROD,17,true,4000,5000,4.172,444,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,horizon,2000,0,HPA,0,false,500,2000,2.342,216,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,1,true,4000,5000,1.859,148,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,2,true,4000,5000,1.531,148,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,3,true,4000,5000,1.421,148,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,4,true,4000,5000,4.715,927,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,5,true,4000,5000,5.450,955,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,6,true,4000,5000,3.192,518,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,7,true,4000,5000,1.541,130,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,8,true,4000,5000,1.502,151,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,9,true,4000,5000,1.444,198,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,10,true,4000,5000,9.676,1459,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,11,true,4000,5000,1.797,184,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,12,true,4000,5000,1.778,182,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,13,true,4000,5000,1.576,160,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,14,true,4000,5000,1.816,201,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,15,true,4000,5000,1.663,190,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,16,true,4000,5000,1.857,180,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,0,HPA,17,true,4000,5000,33.288,444,102,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,horizon,2000,1,HPA,0,false,500,2000,6.764,1086,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,1,true,4000,5000,6.828,1034,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,2,true,4000,5000,2.063,203,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,3,true,4000,5000,2.051,210,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,4,true,4000,5000,2.761,141,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,5,true,4000,5000,2.884,152,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,6,true,4000,5000,2.727,152,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,7,true,4000,5000,1.775,171,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,8,true,4000,5000,1.570,166,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,9,true,4000,5000,1.668,167,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,10,true,4000,5000,2.886,273,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,11,true,4000,5000,3.452,599,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,12,true,4000,5000,4.101,435,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,13,true,4000,5000,2.574,225,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,14,true,4000,5000,2.088,195,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,15,true,4000,5000,1.616,167,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,16,true,4000,5000,2.203,217,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,17,true,4000,5000,1.560,176,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MIXED,horizon,2000,1,HPA,18,true,4000,5000,178.501,19933,51,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,horizon,2000,1,PROD,0,false,500,2000,8.054,1086,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,1,true,4000,5000,6.854,1034,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,2,true,4000,5000,2.608,203,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,3,true,4000,5000,1.886,210,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,4,true,4000,5000,1.338,141,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,5,true,4000,5000,1.768,152,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,6,true,4000,5000,1.573,152,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,7,true,4000,5000,1.524,171,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,8,true,4000,5000,1.573,166,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,9,true,4000,5000,1.933,167,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,10,true,4000,5000,3.132,273,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,11,true,4000,5000,4.409,599,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,12,true,4000,5000,3.448,435,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,13,true,4000,5000,2.426,225,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,14,true,4000,5000,1.859,195,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,15,true,4000,5000,1.861,167,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,16,true,4000,5000,1.985,217,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,17,true,4000,5000,1.892,176,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MIXED,horizon,2000,1,PROD,18,true,4000,5000,133.420,21283,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,change,500,0,PROD,0,false,500,2000,37.521,5868,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,change,500,0,PROD,1,false,500,2000,16.001,2970,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,change,500,0,HPA,0,false,500,2000,224.045,6382,775,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,change,500,0,HPA,1,false,500,2000,85.474,14712,229,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,change,500,1,HPA,0,false,500,2000,215.018,10136,670,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,change,500,1,HPA,1,false,500,2000,73.373,7756,159,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,change,500,1,PROD,0,false,500,2000,45.880,7968,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,change,500,1,PROD,1,false,500,2000,37.040,4471,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,goal,1000,0,PROD,0,false,500,2000,64.015,11414,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,goal,1000,0,PROD,1,false,500,2000,6.100,872,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,goal,1000,0,HPA,0,false,500,2000,500.933,64,2463,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MIXED,goal,1000,0,HPA,1,false,500,2000,12.745,594,281,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,goal,1000,1,HPA,0,false,500,2000,501.320,128,2485,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MIXED,goal,1000,1,HPA,1,false,500,2000,41.236,3371,299,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,MIXED,goal,1000,1,PROD,0,false,500,2000,131.361,15977,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MIXED,goal,1000,1,PROD,1,false,500,2000,4.339,225,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,known,500,0,PROD,0,false,500,2000,501.345,59136,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,MAZE,known,500,0,PROD,1,true,4000,5000,3827.317,572090,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,known,500,0,HPA,0,false,500,2000,501.254,128,405,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,0,HPA,1,true,4000,5000,4001.097,192,303,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,0,HPA,2,true,4000,5000,4001.094,326912,257,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,0,HPA,3,true,4000,5000,1281.252,76165,93,SUCCESS_TO_GOAL,true,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,1,HPA,0,false,500,2000,501.228,64,544,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,1,HPA,1,true,4000,5000,4000.768,128,489,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,1,HPA,2,true,4000,5000,2414.977,91281,354,SUCCESS_TO_GOAL,true,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,500,1,PROD,0,false,500,2000,466.655,91657,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,known,1000,0,PROD,0,false,500,2000,503.772,98048,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,MAZE,known,1000,0,PROD,1,true,4000,5000,1446.116,267602,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,known,1000,0,HPA,0,false,500,2000,500.529,128,1587,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,1000,0,HPA,1,true,4000,5000,3638.042,554907,1477,SUCCESS_TO_GOAL,true,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,1000,1,HPA,0,false,500,2000,501.513,128,1973,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,1000,1,HPA,1,true,4000,5000,1620.962,221440,1364,SUCCESS_TO_GOAL,true,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,known,1000,1,PROD,0,false,500,2000,501.320,96960,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,MAZE,known,1000,1,PROD,1,true,4000,5000,1220.183,205921,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,horizon,2000,0,PROD,0,false,500,2000,61.709,8165,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,1,true,4000,5000,304.904,42223,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,2,true,4000,5000,29.958,4442,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,3,true,4000,5000,244.345,24361,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,4,true,4000,5000,182.298,18365,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,5,true,4000,5000,1277.157,158934,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,6,true,4000,5000,430.248,60879,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,7,true,4000,5000,2.511,263,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,8,true,4000,5000,2659.142,470010,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,9,true,4000,5000,799.124,104378,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,10,true,4000,5000,616.751,95292,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,11,true,4000,5000,153.229,28274,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,12,true,4000,5000,80.097,14855,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,13,true,4000,5000,3045.978,553383,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,14,true,4000,5000,209.725,34802,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,15,true,4000,5000,213.190,29946,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,16,true,4000,5000,554.932,99840,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,17,true,4000,5000,165.878,30219,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,18,true,4000,5000,147.737,27780,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,19,true,4000,5000,20.019,3749,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,20,true,4000,5000,24.956,4742,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,0,PROD,21,true,4000,5000,348.881,57618,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,horizon,2000,0,HPA,0,false,500,2000,43.183,8165,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,1,true,4000,5000,211.952,42223,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,2,true,4000,5000,23.509,4442,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,3,true,4000,5000,147.168,24361,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,4,true,4000,5000,122.818,18365,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,5,true,4000,5000,1442.906,158934,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,6,true,4000,5000,551.313,60879,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,7,true,4000,5000,2.494,263,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,8,true,4000,5000,2775.995,470010,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,9,true,4000,5000,656.903,104378,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,10,true,4000,5000,593.125,95292,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,11,true,4000,5000,144.688,28274,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,12,true,4000,5000,75.051,14855,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,13,true,4000,5000,3289.265,553383,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,14,true,4000,5000,212.122,34802,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,15,true,4000,5000,206.656,29946,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,16,true,4000,5000,561.010,99840,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,17,true,4000,5000,165.628,30219,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,18,true,4000,5000,149.943,27780,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,19,true,4000,5000,27.442,3749,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,20,true,4000,5000,41.956,4742,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,0,HPA,21,true,4000,5000,1002.321,57618,23,SUCCESS_TO_GOAL,true,false,false,false,fallback:corridor search missed the goal
+dev,2000,MAZE,horizon,2000,1,HPA,0,false,500,2000,71.868,10731,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,1,true,4000,5000,1138.685,210600,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,2,true,4000,5000,1030.668,156616,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,3,true,4000,5000,13.082,2530,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,4,true,4000,5000,63.395,12090,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,5,true,4000,5000,435.159,84115,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,6,true,4000,5000,419.960,83444,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,7,true,4000,5000,563.808,111618,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,8,true,4000,5000,407.563,77835,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,9,true,4000,5000,4000.925,636160,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,10,true,4000,5000,406.966,55572,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,11,true,4000,5000,333.271,53860,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,12,true,4000,5000,2.570,295,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,13,true,4000,5000,247.434,48812,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,14,true,4000,5000,58.565,10973,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,15,true,4000,5000,98.198,20018,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,16,true,4000,5000,328.116,58050,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,17,true,4000,5000,267.900,46495,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,18,true,4000,5000,3096.926,560043,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,19,true,4000,5000,793.543,134650,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,20,true,4000,5000,13.984,2561,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,MAZE,horizon,2000,1,HPA,21,true,4000,5000,0.348,16,0,SUCCESS_TO_GOAL,true,false,false,false,fallback:short hop
+dev,2000,MAZE,horizon,2000,1,PROD,0,false,500,2000,57.827,10731,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,1,true,4000,5000,1502.285,210600,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,2,true,4000,5000,1002.006,156616,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,3,true,4000,5000,14.886,2530,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,4,true,4000,5000,66.840,12090,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,5,true,4000,5000,462.661,84115,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,6,true,4000,5000,491.760,83444,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,7,true,4000,5000,767.174,111618,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,8,true,4000,5000,445.392,77835,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,9,true,4000,5000,4002.798,672640,0,SUCCESS_SEGMENT,false,true,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,10,true,4000,5000,523.595,55572,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,11,true,4000,5000,417.317,53860,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,12,true,4000,5000,2.601,295,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,13,true,4000,5000,270.785,48812,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,14,true,4000,5000,60.046,10973,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,15,true,4000,5000,107.220,20018,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,16,true,4000,5000,368.283,58050,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,17,true,4000,5000,284.027,46495,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,18,true,4000,5000,3246.073,560043,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,19,true,4000,5000,793.342,134650,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,20,true,4000,5000,14.028,2561,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,MAZE,horizon,2000,1,PROD,21,true,4000,5000,0.433,16,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,MAZE,cancel,1000,0,PROD,0,false,16000,16000,0.121,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,0,PROD,1,false,16000,16000,0.089,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,0,PROD,2,false,16000,16000,0.032,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,0,HPA,0,false,16000,16000,167.302,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,0,HPA,1,false,16000,16000,215.321,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,0,HPA,2,false,16000,16000,247.193,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,HPA,0,false,16000,16000,244.698,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,HPA,1,false,16000,16000,279.942,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,HPA,2,false,16000,16000,181.482,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,PROD,0,false,16000,16000,0.037,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,PROD,1,false,16000,16000,0.013,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,MAZE,cancel,1000,1,PROD,2,false,16000,16000,0.038,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,known,500,0,PROD,0,false,500,2000,500.388,96320,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,500,0,PROD,1,true,4000,5000,3999.932,634176,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,500,0,PROD,2,true,4000,5000,4011.554,613696,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,500,0,PROD,3,true,4000,5000,3893.158,557873,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,known,500,0,HPA,0,false,500,2000,500.297,128,1316,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,500,0,HPA,1,true,4000,5000,4001.745,64,1296,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,500,0,HPA,2,true,4000,5000,4001.451,192,1113,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,500,0,HPA,3,true,4000,5000,2755.246,396421,988,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,known,500,1,HPA,0,false,500,2000,500.944,128,852,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,500,1,HPA,1,true,4000,5000,2704.185,384374,796,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,known,500,1,PROD,0,false,500,2000,500.049,86784,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,500,1,PROD,1,true,4000,5000,3653.703,526029,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,PROD,0,false,500,2000,500.274,89920,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,PROD,1,true,4000,5000,4000.416,677440,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,PROD,2,true,4000,5000,4006.447,592128,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,PROD,3,true,4000,5000,4022.386,568896,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,PROD,4,true,4000,5000,503.708,84667,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,known,1000,0,HPA,0,false,500,2000,500.669,128,2698,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,1,true,4000,5000,4001.803,64,2658,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,2,true,4000,5000,4001.347,128,2661,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,3,true,4000,5000,4007.714,640,2569,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,4,true,4000,5000,4016.098,2624,2501,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,5,true,4000,5000,4003.843,128,2400,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,6,true,4000,5000,4006.090,576,2400,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,7,true,4000,5000,4005.234,64,2357,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,8,true,4000,5000,4016.687,2432,2299,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,9,true,4000,5000,4004.997,128,2260,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,10,true,4000,5000,4007.102,576,2231,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,11,true,4000,5000,4003.448,128,2199,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,12,true,4000,5000,4015.914,2432,2164,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,13,true,4000,5000,4014.191,64,2074,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,14,true,4000,5000,4006.801,576,2061,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,15,true,4000,5000,4004.094,64,2024,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,16,true,4000,5000,4016.584,2432,1982,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,17,true,4000,5000,4012.953,64,1599,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,18,true,4000,5000,4005.761,576,1548,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,19,true,4000,5000,4007.582,128,1769,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,20,true,4000,5000,4026.360,2432,1803,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,21,true,4000,5000,4003.588,64,1399,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,0,HPA,22,true,4000,5000,3680.962,530865,1328,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,known,1000,1,HPA,0,false,500,2000,501.713,128,1862,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,1,true,4000,5000,4008.152,640,1864,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,2,true,4000,5000,4020.745,2624,1806,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,3,true,4000,5000,4003.207,64,1723,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,4,true,4000,5000,4016.944,576,1672,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,5,true,4000,5000,4003.481,128,1672,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,6,true,4000,5000,4036.619,2432,1610,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,7,true,4000,5000,4003.488,192,1559,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,8,true,4000,5000,4014.736,576,1528,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,9,true,4000,5000,4003.298,64,1495,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,10,true,4000,5000,4030.875,2432,1462,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,11,true,4000,5000,4005.429,64,1400,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,12,true,4000,5000,4014.395,576,1368,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,13,true,4000,5000,4004.349,192,1342,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,14,true,4000,5000,4015.211,2432,1312,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,15,true,4000,5000,4016.549,64,1281,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,16,true,4000,5000,4005.781,576,1249,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,17,true,4000,5000,4004.943,128,1195,SUCCESS_SEGMENT,false,false,false,false,fallback:corridor search missed the goal
+dev,2000,BREAK_PLACE,known,1000,1,HPA,18,true,4000,5000,3985.858,506701,1148,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,known,1000,1,PROD,0,false,500,2000,500.381,60928,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,1,PROD,1,true,4000,5000,4007.407,543168,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,1,PROD,2,true,4000,5000,4002.765,540032,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,1,PROD,3,true,4000,5000,4001.916,503232,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,1,PROD,4,true,4000,5000,4004.516,560768,0,SUCCESS_SEGMENT,false,true,false,false,
+dev,2000,BREAK_PLACE,known,1000,1,PROD,5,true,4000,5000,747.124,104477,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,0,false,500,2000,500.587,93504,0,SUCCESS_SEGMENT,false,true,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,1,true,4000,5000,337.936,57509,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,2,true,4000,5000,401.905,70322,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,3,true,4000,5000,814.858,130754,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,4,true,4000,5000,412.400,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,5,true,4000,5000,791.280,130750,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,6,true,4000,5000,395.619,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,7,true,4000,5000,804.800,128448,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,8,true,4000,5000,405.323,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,9,true,4000,5000,322.188,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,10,true,4000,5000,435.346,70322,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,11,true,4000,5000,886.311,130754,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,12,true,4000,5000,405.850,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,13,true,4000,5000,783.841,130750,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,14,true,4000,5000,419.040,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,15,true,4000,5000,778.122,128448,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,16,true,4000,5000,397.470,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,17,true,4000,5000,321.603,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,18,true,4000,5000,391.307,70322,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,19,true,4000,5000,778.691,130754,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,20,true,4000,5000,402.103,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,21,true,4000,5000,793.812,130750,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,22,true,4000,5000,393.617,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,23,true,4000,5000,746.247,128448,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,24,true,4000,5000,408.187,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,25,true,4000,5000,332.345,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,0,PROD,26,true,4000,5000,332.402,47856,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,0,false,500,2000,500.087,91520,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,1,true,4000,5000,348.544,57509,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,2,true,4000,5000,389.846,70322,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,3,true,4000,5000,1096.063,130754,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,4,true,4000,5000,675.983,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,5,true,4000,5000,853.581,130750,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,6,true,4000,5000,422.439,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,7,true,4000,5000,754.359,128448,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,8,true,4000,5000,401.156,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,9,true,4000,5000,375.792,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,10,true,4000,5000,667.864,70322,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,11,true,4000,5000,917.733,130754,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,12,true,4000,5000,405.925,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,13,true,4000,5000,818.123,130750,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,14,true,4000,5000,573.009,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,15,true,4000,5000,884.956,128448,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,16,true,4000,5000,450.103,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,17,true,4000,5000,331.551,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,18,true,4000,5000,420.645,70322,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,19,true,4000,5000,773.955,130754,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,20,true,4000,5000,403.107,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,21,true,4000,5000,1001.627,130750,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,22,true,4000,5000,416.754,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,23,true,4000,5000,797.314,128448,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,24,true,4000,5000,388.440,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,25,true,4000,5000,345.098,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,0,HPA,26,true,4000,5000,278.177,34954,127,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,0,false,500,2000,499.832,69440,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,1,true,4000,5000,566.550,90932,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,2,true,4000,5000,426.518,69284,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,3,true,4000,5000,994.672,130761,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,4,true,4000,5000,575.819,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,5,true,4000,5000,976.591,130766,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,6,true,4000,5000,401.706,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,7,true,4000,5000,774.705,128461,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,8,true,4000,5000,388.887,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,9,true,4000,5000,320.001,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,10,true,4000,5000,418.549,70322,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,11,true,4000,5000,913.693,130770,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,12,true,4000,5000,544.253,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,13,true,4000,5000,994.411,130766,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,14,true,4000,5000,388.728,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,15,true,4000,5000,716.598,128461,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,16,true,4000,5000,382.792,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,17,true,4000,5000,304.765,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,18,true,4000,5000,378.285,70322,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,19,true,4000,5000,743.385,130770,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,20,true,4000,5000,372.944,70318,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,21,true,4000,5000,729.612,130766,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,22,true,4000,5000,396.592,70330,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,23,true,4000,5000,770.188,128461,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,24,true,4000,5000,392.621,70326,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,25,true,4000,5000,303.698,57465,0,SUCCESS_SEGMENT,false,false,false,true,fallback:goal has no position
+dev,2000,BREAK_PLACE,horizon,2000,1,HPA,26,true,4000,5000,211.147,34927,127,SUCCESS_TO_GOAL,true,false,false,false,corridor
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,0,false,500,2000,501.067,96000,0,SUCCESS_SEGMENT,false,true,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,1,true,4000,5000,603.040,90932,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,2,true,4000,5000,384.937,69284,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,3,true,4000,5000,752.076,130761,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,4,true,4000,5000,404.366,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,5,true,4000,5000,1062.790,130766,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,6,true,4000,5000,430.809,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,7,true,4000,5000,796.411,128461,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,8,true,4000,5000,453.948,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,9,true,4000,5000,352.596,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,10,true,4000,5000,520.886,70322,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,11,true,4000,5000,870.398,130770,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,12,true,4000,5000,439.176,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,13,true,4000,5000,774.913,130766,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,14,true,4000,5000,380.578,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,15,true,4000,5000,734.359,128461,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,16,true,4000,5000,388.349,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,17,true,4000,5000,309.922,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,18,true,4000,5000,374.047,70322,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,19,true,4000,5000,767.575,130770,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,20,true,4000,5000,379.211,70318,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,21,true,4000,5000,739.136,130766,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,22,true,4000,5000,382.721,70330,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,23,true,4000,5000,860.005,128461,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,24,true,4000,5000,417.445,70326,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,25,true,4000,5000,311.535,57465,0,SUCCESS_SEGMENT,false,false,false,true,
+dev,2000,BREAK_PLACE,horizon,2000,1,PROD,26,true,4000,5000,279.535,48709,0,SUCCESS_TO_GOAL,true,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,PROD,0,false,16000,16000,0.009,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,PROD,1,false,16000,16000,0.012,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,PROD,2,false,16000,16000,0.010,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,HPA,0,false,16000,16000,158.899,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,HPA,1,false,16000,16000,225.368,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,0,HPA,2,false,16000,16000,223.782,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,HPA,0,false,16000,16000,113.456,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,HPA,1,false,16000,16000,110.935,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,HPA,2,false,16000,16000,124.764,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,PROD,0,false,16000,16000,0.011,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,PROD,1,false,16000,16000,0.008,-1,-1,CANCEL_LATENCY,false,false,false,false,
+dev,2000,BREAK_PLACE,cancel,1000,1,PROD,2,false,16000,16000,0.046,-1,-1,CANCEL_LATENCY,false,false,false,false,

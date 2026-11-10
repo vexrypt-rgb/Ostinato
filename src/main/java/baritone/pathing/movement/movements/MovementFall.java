@@ -449,7 +449,7 @@ public class MovementFall extends Movement {
         Vec3 aim = m.getBoundingBox().getCenter();
         Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations());
         double reach = MountUtil.reach(ctx.player(), m);
-        double nextY = ctx.player().position().y + (ctx.player().getDeltaMovement().y - 0.08) * 0.98;
+        double nextY = ctx.player().position().y + (ctx.player().getDeltaMovement().y - 0.08) * 0.98f;
         if (reach <= MountUtil.REACH || nextY <= dest.y + 0.5 && reach < MountUtil.SERVER_REACH - 0.5) {
             emptyHand();
             Minecraft.getInstance().gameMode.interact(ctx.player(), m, new net.minecraft.world.phys.EntityHitResult(m, aim), InteractionHand.MAIN_HAND);

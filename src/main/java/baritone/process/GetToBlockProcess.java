@@ -20,6 +20,7 @@ package baritone.process;
 import baritone.Baritone;
 import baritone.api.pathing.goals.*;
 import baritone.api.process.IGetToBlockProcess;
+import baritone.api.process.ProcessOutcome;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
 import baritone.api.utils.BetterBlockPos;
@@ -32,10 +33,12 @@ import baritone.pathing.cadenza.Cadenza;
 import baritone.pathing.cadenza.CadenzaSession;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
+import baritone.process.interact.ClientContainers;
+import baritone.process.interact.ContainerView;
+import baritone.process.interact.OpenVerifier;
 import baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -55,13 +58,41 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
     private final CadenzaSession cadenza = new CadenzaSession();
     private BetterBlockPos debugCell;
 
+    /*
+     * Ostinato 2.0 Phase 08. The outcome is always recorded (observation only); verifiedGetToBlock, read once per
+     * request, decides whether it also changes what happens: only a container the server opened for this request's
+     * own click counts, a container already open is closed so the click can reach the target, and a request with no
+     * known target (none found, vanished, or every one unreachable) fails instead of exploring with no end.
+     */
+    private volatile ProcessOutcome outcome = ProcessOutcome.NONE;
+    private boolean verified;
+    /** The right click was pressed during this request, so the server may still open the container. */
+    private boolean clicked;
+    /*
+     * Phase 09: the open menu is read only through the version's ContainerView adapter, and the Phase 08 rule over it
+     * lives in OpenVerifier, so this class names no menu class.
+     */
+    private final ContainerView containers;
+    private final OpenVerifier open = new OpenVerifier();
+    /** This request had at least one known location. */
+    private boolean hadTarget;
+    /** How rightClick() ended: NONE when the target container opened. */
+    private ProcessOutcome.Reason clickEnd;
+
     public GetToBlockProcess(Baritone baritone) {
         super(baritone);
+        containers = new ClientContainers(ctx::player);
     }
 
     @Override
     public void getToBlock(BlockOptionalMeta block) {
         onLostControl();
+        outcome = outcome.accept();
+        verified = Baritone.settings().verifiedGetToBlock.value;
+        clicked = false;
+        open.reset();
+        hadTarget = false;
+        clickEnd = null;
         gettingTo = block;
         start = ctx.playerFeet();
         blacklist = new ArrayList<>();
@@ -75,11 +106,36 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
     }
 
     @Override
+    public ProcessOutcome outcome() {
+        return outcome;
+    }
+
+    private void end(ProcessOutcome.State state, ProcessOutcome.Reason reason) {
+        outcome = outcome.end(state, reason);
+    }
+
+    @Override
     public synchronized PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (knownLocations == null) {
             rescan(new ArrayList<>(), new GetToBlockCalculationContext(false));
         }
+        outcome = outcome.running();
+        if (!knownLocations.isEmpty()) {
+            hadTarget = true;
+        }
         if (knownLocations.isEmpty()) {
+            if (verified) {
+                // nothing to go to: never known, gone, or every instance proved unreachable. Say so instead of
+                // exploring with no end (exploring is its own command)
+                ProcessOutcome.Reason why = !hadTarget ? ProcessOutcome.Reason.INVALIDATED_GOAL
+                        : blacklist.isEmpty() ? ProcessOutcome.Reason.WORLD_CHANGED : ProcessOutcome.Reason.UNREACHABLE;
+                logDirect("No known location of " + gettingTo + " (" + why + "), canceling GetToBlock");
+                if (isSafeToCancel) {
+                    end(ProcessOutcome.State.FAILED, why);
+                    onLostControl();
+                }
+                return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
+            }
             if (Baritone.settings().exploreForBlocks.value && !calcFailed) {
                 return new PathingCommand(new GoalRunAway(1, start) {
                     @Override
@@ -95,6 +151,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             }
             logDirect("No known locations of " + gettingTo + ", canceling GetToBlock");
             if (isSafeToCancel) {
+                end(ProcessOutcome.State.FAILED, ProcessOutcome.Reason.INVALIDATED_GOAL);
                 onLostControl();
             }
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
@@ -109,6 +166,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             } else {
                 logDirect("Unable to find any path to " + gettingTo + ", canceling GetToBlock");
                 if (isSafeToCancel) {
+                    end(ProcessOutcome.State.FAILED, ProcessOutcome.Reason.UNREACHABLE);
                     onLostControl();
                 }
                 return new PathingCommand(goal, PathingCommandType.CANCEL_AND_SET_GOAL);
@@ -118,16 +176,19 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         if (mineGoalUpdateInterval != 0 && tickCount++ % mineGoalUpdateInterval == 0) { // big brain
             List<BlockPos> current = new ArrayList<>(knownLocations);
             CalculationContext context = new GetToBlockCalculationContext(true);
-            Baritone.getExecutor().execute(() -> rescan(current, context));
+            long request = outcome.request();
+            Baritone.getExecutor().execute(() -> rescanAsync(request, current, context));
         }
         if (goal.isInGoal(ctx.playerFeet()) && goal.isInGoal(baritone.getPathingBehavior().pathStart()) && isSafeToCancel) {
             // we're there
             if (rightClickOnArrival(gettingTo.getBlock())) {
                 if (rightClick()) {
+                    end(clickEnd == ProcessOutcome.Reason.NONE ? ProcessOutcome.State.SUCCEEDED : ProcessOutcome.State.FAILED, clickEnd);
                     onLostControl();
                     return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
             } else {
+                end(ProcessOutcome.State.SUCCEEDED, ProcessOutcome.Reason.NONE);
                 onLostControl();
                 return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
             }
@@ -186,6 +247,11 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
 
     @Override
     public synchronized void onLostControl() {
+        if (gettingTo != null) {
+            // stopped from outside (cancel, another process, a new request) before a result: once the click is out the
+            // server may still open the container, so that is UNKNOWN rather than CANCELLED
+            end(clicked ? ProcessOutcome.State.UNKNOWN : ProcessOutcome.State.CANCELLED, ProcessOutcome.Reason.OWNERSHIP_LOST);
+        }
         gettingTo = null;
         knownLocations = null;
         start = null;
@@ -200,6 +266,14 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             return "Exploring randomly to find " + gettingTo + ", no known locations";
         }
         return "Get To " + gettingTo + ", " + knownLocations.size() + " known locations";
+    }
+
+    /** A rescan started for an earlier request (or one that ended) must not touch the current one. */
+    private synchronized void rescanAsync(long request, List<BlockPos> known, CalculationContext context) {
+        if (verified && (gettingTo == null || outcome.request() != request)) {
+            return;
+        }
+        rescan(known, context);
     }
 
     private synchronized void rescan(List<BlockPos> known, CalculationContext context) {
@@ -260,11 +334,14 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
                 }
                 if (knownLocations.contains(ctx.getSelectedBlock().orElse(null))) {
                     baritone.getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true); // TODO find some way to right click even if we're in an ESC menu
-                    System.out.println(ctx.player().containerMenu);
-                    if (!(ctx.player().containerMenu instanceof InventoryMenu)) {
+                    clicked = true;
+                    System.out.println(containers.menu());
+                    OpenVerifier.Step step = open.click(containers, ClientContainers.openedBy(gettingTo.getBlock()), verified);
+                    if (step != OpenVerifier.Step.WAIT) {
                         if (useCadenza) {
                             cadenza.confirm(); // the container is open
                         }
+                        clickEnd = step == OpenVerifier.Step.OPENED ? ProcessOutcome.Reason.NONE : ProcessOutcome.Reason.UNKNOWN;
                         return true;
                     }
                 }
@@ -273,6 +350,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
                     if (useCadenza) {
                         cadenza.fail();
                     }
+                    clickEnd = ProcessOutcome.Reason.TIMEOUT;
                     return true;
                 }
                 return false; // trying to right click, will do it next tick or so
@@ -288,7 +366,35 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             return false;
         }
         logDirect("Arrived but failed to right click open");
+        clickEnd = ProcessOutcome.Reason.UNREACHABLE;
         return true;
+    }
+
+    @Override
+    public Object openMenu() {
+        return containers.menu();
+    }
+
+    @Override
+    public boolean reached(BlockOptionalMeta target, Object before) {
+        if (ctx.player() == null) {
+            return false;
+        }
+        Block block = target.getBlock();
+        if (Baritone.settings().rightClickContainerOnArrival.value && isContainer(block)) {
+            return OpenVerifier.reached(containers, ClientContainers.openedBy(block), before);
+        }
+        BlockPos feet = ctx.playerFeet();
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-1, -1, -1), feet.offset(1, 2, 1))) {
+            if (target.matches(ctx.world().getBlockState(p))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isContainer(Block block) {
+        return ClientContainers.openedBy(block) != ContainerView.Kind.NONE;
     }
 
     private boolean walkIntoInsteadOfAdjacent(Block block) {
@@ -302,7 +408,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         if (!Baritone.settings().rightClickContainerOnArrival.value) {
             return false;
         }
-        return block == Blocks.CRAFTING_TABLE || block == Blocks.FURNACE || block == Blocks.BLAST_FURNACE || block == Blocks.ENDER_CHEST || block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST;
+        return isContainer(block);
     }
 
     private boolean blockOnTopMustBeRemoved(Block block) {

@@ -1,0 +1,1 @@
+UNIFIED-BATCH phase=phase06a seed=9091 warmupSeed=9191 n=300 families=clean/kick/slip/conflict/cancel/edge trials=1800 runs=3600 wallMs=96729 java=25.0.4.1 os=Windows 11 cpus=8

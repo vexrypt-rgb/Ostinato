@@ -252,6 +252,7 @@ public final class ClutchController {
         sim.collidedH = false;
         sim.jumpTicks = 0;
         ClientWorld.readEffects(ctx, sim);
+        ClientWorld.readSupport(ctx, sim);
     }
 
     /** Whether a sprint jump from here toward {@code travel} lands on the route, with blocks laid in reach counted as there. */
@@ -300,6 +301,23 @@ public final class ClutchController {
                 }
 
                 @Override
+                public float bounce(int x, int y, int z) {
+                    return client.bounce(x, y, z);
+                }
+
+                @Override
+                public boolean cellBoxes(int x, int y, int z, List<double[]> out) {
+                    client.cellBoxes(x, y, z, out);
+                    for (BlockPos c : useOverlay ? needs : List.<BlockPos>of()) {
+                        if (c.getX() == x && c.getY() == y && c.getZ() == z
+                                && Math.hypot(c.getX() + 0.5 - simX, c.getZ() + 0.5 - simZ) <= OVERLAY_RADIUS && wallBacked(c)) {
+                            out.add(new double[]{x, y, z, x + 1, y + 1, z + 1});
+                        }
+                    }
+                    return true;
+                }
+
+                @Override
                 public boolean water(int x, int y, int z) {
                     return client.water(x, y, z);
                 }
@@ -319,6 +337,7 @@ public final class ClutchController {
         sim.collidedH = false;
         sim.jumpTicks = 0;
         ClientWorld.readEffects(ctx, sim);
+        ClientWorld.readSupport(ctx, sim);
         boolean left = false;
         for (int t = 0; t < 40; t++) {
             sim.tick(travel, true, true, t == 0);

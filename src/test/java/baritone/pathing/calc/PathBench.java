@@ -130,15 +130,21 @@ public final class PathBench {
         if (spec == null || spec.isEmpty() || spec.equals("astar")) return ASTAR;
         if (spec.startsWith("wa:")) return weighted(Double.parseDouble(spec.substring(3)));
         if (spec.equals("maestro")) return (s, g, c) -> new MaestroPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, 1); // Ostinato Maestro
+        if (spec.equals("simedge")) return (s, g, c) -> new SimEdgePathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, 1); // Ostinato 2.0 Phase 05
         if (spec.startsWith("hpa")) { // hpa[:factor[:radius]]; a fresh SectionGraph per query = cold cache (worst case)
             String[] p = spec.split(":");
             double factor = p.length > 1 ? Double.parseDouble(p[1]) : 0;
             int radius = p.length > 2 ? Integer.parseInt(p[2]) : 1;
-            // Ostinato: hpa:factor:radius:levels:coarseShift:candidates[:bi] (multi-level, second-candidate, bidirectional)
+            // Ostinato: hpa:factor:radius:levels:coarseShift:candidates[:bi][:fw] (multi-level, second-candidate, bidirectional, production far weight)
             int levels = p.length > 3 ? Integer.parseInt(p[3]) : 1;
             int fshift = p.length > 4 ? Integer.parseInt(p[4]) : 2;
             int cands = p.length > 5 ? Integer.parseInt(p[5]) : 1;
-            boolean bi = p.length > 6 && p[6].equals("bi"); // Ostinato: ...:bi = bidirectional abstract route search
+            boolean bi = false, fw = false; // Ostinato: ...:bi = bidirectional abstract route search
+            for (int i = 6; i < p.length; i++) {
+                bi |= p[i].equals("bi");
+                fw |= p[i].equals("fw"); // Ostinato 2.0 Phase 07: corridor A* at the production far-segment weight, as createPathfinder passes it
+            }
+            boolean bidi = bi, farWeight = fw;
             boolean warm = System.getenv("OSTINATO_BENCH_WARM") != null;
             return (s, g, c) -> {
                 Baritone.settings().pathingHierarchyHeuristicFactor.value = factor;
@@ -146,9 +152,15 @@ public final class PathBench {
                 Baritone.settings().pathingHierarchyLevels.value = levels;
                 Baritone.settings().pathingHierarchyCoarseFactorShift.value = fshift;
                 Baritone.settings().pathingHierarchyCandidates.value = cands;
-                Baritone.settings().pathingHierarchyBidirectional.value = bi;
+                Baritone.settings().pathingHierarchyBidirectional.value = bidi;
                 baritone.pathing.calc.hierarchy.SectionGraph graph = warm ? WARM.computeIfAbsent(c.bsi, k -> new baritone.pathing.calc.hierarchy.SectionGraph()) : new baritone.pathing.calc.hierarchy.SectionGraph();
-                return new HierarchicalPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, graph, 1);
+                double w = 1;
+                if (farWeight) {
+                    var fws = Baritone.settings().pathingFarSegmentWeight;
+                    fws.value = fws.defaultValue; // wa: arms leave this at 1.0
+                    w = baritone.behavior.PathingBehavior.farSegmentWeight(g, s);
+                }
+                return new HierarchicalPathFinder(s, s.x, s.y, s.z, g, new Favoring(null, c), c, graph, w);
             };
         }
         throw new IllegalArgumentException(spec);
@@ -171,8 +183,14 @@ public final class PathBench {
 
     private static final Map<Terrain, SyntheticWorld> WORLDS = new HashMap<>(); // not EnumMap: that would initialise Terrain (and Blocks) before boot()
 
+    /**
+     * Ostinato 2.0 Phase 07: OSTINATO_BENCH_SEED, when set, replaces both the world seed and the query seed, so held-out
+     * worlds and queries can be benchmarked. Unset, the worlds and queries are the fixed ones every earlier run used.
+     */
+    private static final String HELD_OUT_SEED = System.getenv("OSTINATO_BENCH_SEED");
+
     public static synchronized SyntheticWorld world(Terrain t) {
-        return WORLDS.computeIfAbsent(t, k -> k.build(SIZE_X, SIZE_Z, 0x057A7170L));
+        return WORLDS.computeIfAbsent(t, k -> k.build(SIZE_X, SIZE_Z, HELD_OUT_SEED != null ? Long.parseLong(HELD_OUT_SEED) : 0x057A7170L));
     }
 
     public static CalculationContext context(SyntheticWorld w) {
@@ -219,7 +237,7 @@ public final class PathBench {
 
     public static List<Query> queries(Terrain... terrains) {
         List<Query> out = new ArrayList<>();
-        Random r = new Random(1234);
+        Random r = new Random(HELD_OUT_SEED != null ? Long.parseLong(HELD_OUT_SEED) : 1234);
         for (Terrain t : terrains) {
             SyntheticWorld w = world(t);
             for (Length len : Length.values()) {
@@ -252,9 +270,14 @@ public final class PathBench {
         long t0 = System.nanoTime();
         Optional<IPath> p;
         try {
+            // The game calls calculate(), which claims the mining memo before calculate0.
+            // The bench calls calculate0 directly, so without this the profile charges mining
+            // costs the game has already memoized.
+            ctx.claimSearchCaches();
             AbstractNodeCostSearch f = finder.create(q.start, q.goal, ctx);
             p = f.calculate0(TIMEOUT_MS, TIMEOUT_MS);
         } finally {
+            ctx.releaseSearchCaches();
             System.setOut(out);
         }
         long t1 = System.nanoTime();

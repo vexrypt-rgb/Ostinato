@@ -26,6 +26,9 @@ import baritone.api.command.exception.CommandException;
 import baritone.api.command.manager.ICommandManager;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.process.IBaritoneProcess;
+import baritone.api.process.IGetToBlockProcess;
+import baritone.api.process.ProcessOutcome;
+import baritone.api.utils.BlockOptionalMeta;
 import baritone.api.utils.BlockOptionalMetaLookup;
 import baritone.api.utils.SettingsUtil;
 import baritone.command.argument.ArgConsumer;
@@ -36,6 +39,7 @@ import baritone.gui.tasks.TaskStep;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 
 /**
  * Drives the primary Baritone for the task runner: steps run through Baritone's own command implementations
@@ -45,6 +49,14 @@ import java.util.Locale;
 public final class BaritoneTaskAdapter implements TaskAdapter {
 
     private Goal startedGoal;
+    /*
+     * Ostinato 2.0 Phase 08 (verifiedGetToBlock): the get to block request this step started, and the container open
+     * when it started, so the step is judged by its own request and by what the player sees, not by the process
+     * going idle. verifiedRequest < 0 means the old check (idle is done). Phase 09: both are read through the
+     * IGetToBlockProcess contract; the menu is an opaque identity, so this class names no menu class.
+     */
+    private long verifiedRequest = -1;
+    private Object menuAtStart;
 
     private static IBaritone baritone() {
         return BaritoneAPI.getProvider().getPrimaryBaritone();
@@ -71,6 +83,8 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
     @Override
     public String start(TaskStep step) {
         startedGoal = null;
+        verifiedRequest = -1;
+        menuAtStart = null;
         if (step.type() == StepType.SET) {
             Settings settings = BaritoneAPI.getSettings();
             String name = step.get("setting").toLowerCase(Locale.ROOT);
@@ -88,9 +102,21 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
                 return "bad value for " + s.getName() + ": " + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage());
             }
         }
+        boolean verifyGetTo = step.type() == StepType.GET_TO_BLOCK && BaritoneAPI.getSettings().verifiedGetToBlock.value;
+        long before = baritone().getGetToBlockProcess().outcome().request();
+        if (verifyGetTo) {
+            menuAtStart = baritone().getGetToBlockProcess().openMenu();
+        }
         String err = execute(step.command());
         if (err == null && step.type() == StepType.GOTO) {
             startedGoal = baritone().getCustomGoalProcess().getGoal();
+        }
+        if (err == null && verifyGetTo) {
+            long request = baritone().getGetToBlockProcess().outcome().request();
+            if (request == before) {
+                return "get to block did not start";
+            }
+            verifiedRequest = request;
         }
         return err;
     }
@@ -136,8 +162,35 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
                 int have = count(step);
                 return have >= want ? null : "mining stopped at " + have + "/" + want;
             }
+            case GET_TO_BLOCK: {
+                if (verifiedRequest < 0) {
+                    return null;
+                }
+                IGetToBlockProcess g = baritone().getGetToBlockProcess();
+                String block = step.get("block");
+                return getToBlockVerdict(verifiedRequest, g.outcome(), () -> g.reached(new BlockOptionalMeta(block), menuAtStart), block);
+            }
             default:
                 return null;
+        }
+    }
+
+    /**
+     * The verified GET_TO_BLOCK step: null (passed) only if the latest outcome is the request this step started, it
+     * succeeded, and the player now sees the postcondition; otherwise why not. A postcondition check that throws is a
+     * failure, never a pass.
+     */
+    static String getToBlockVerdict(long started, ProcessOutcome o, BooleanSupplier reached, String block) {
+        if (o.request() != started) {
+            return "replaced by another get to block";
+        }
+        if (!o.succeeded()) {
+            return "get to block " + o.state().name().toLowerCase(Locale.ROOT) + ": " + o.reason().name().toLowerCase(Locale.ROOT).replace('_', ' ');
+        }
+        try {
+            return reached.getAsBoolean() ? null : "reported reached, but " + block + " is not open or next to the player";
+        } catch (RuntimeException e) {
+            return "cannot check " + block;
         }
     }
 

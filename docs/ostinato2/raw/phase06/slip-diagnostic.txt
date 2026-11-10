@@ -1,0 +1,58 @@
+Exploratory, after the gate; not gate evidence. Slip family, seed 6061, n=300
+Per trial where only one arm arrived (node budget 1500, as gated):
+trial 19 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8495;gx=3.5;gz=9.5
+  failed arm at the empty plan:     x=0.548 z=0.615 vx=0.0235 vz=0.0568 speed=0.0615 ground=true
+    re-planned with budget:         1500=none 3000=36steps 6000=36steps 12000=36steps
+  other arm (legacy, ARRIVED in 53 ticks, 29 plans) at tick 3: x=0.530 z=0.618 vx=0.0103 vz=0.0595 speed=0.0604 ground=true
+    planned from there with budget: 1500=none 3000=36steps 6000=36steps 12000=36steps
+trial 39 failed=unified end=EMPTY_PLAN tick=7 plans=4 driftReplans=3 divergences=6 corrections=3 accepted=3 escalations=3 | slip=0.9443;gx=-2.5;gz=9.5
+  failed arm at the empty plan:     x=0.229 z=0.963 vx=-0.0581 vz=0.1018 speed=0.1172 ground=true
+    re-planned with budget:         1500=none 3000=34steps 6000=34steps 12000=34steps
+  other arm (legacy, ARRIVED in 48 ticks, 29 plans) at tick 7: x=0.206 z=0.948 vx=-0.0655 vz=0.0969 speed=0.1170 ground=true
+    planned from there with budget: 1500=34steps 3000=34steps 6000=34steps 12000=34steps
+trial 43 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8365;gx=2.5;gz=11.5
+  failed arm at the empty plan:     x=0.550 z=0.620 vx=0.0241 vz=0.0582 speed=0.0630 ground=true
+    re-planned with budget:         1500=none 3000=42steps 6000=42steps 12000=42steps
+  other arm (legacy, ARRIVED in 61 ticks, 21 plans) at tick 3: x=0.532 z=0.624 vx=0.0104 vz=0.0610 speed=0.0618 ground=true
+    planned from there with budget: 1500=none 3000=42steps 6000=42steps 12000=42steps
+trial 60 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8762;gx=1.5;gz=13.5
+  failed arm at the empty plan:     x=0.544 z=0.606 vx=0.0224 vz=0.0542 speed=0.0586 ground=true
+    re-planned with budget:         1500=none 3000=48steps 6000=48steps 12000=48steps
+  other arm (legacy, ARRIVED in 69 ticks, 11 plans) at tick 3: x=0.528 z=0.609 vx=0.0100 vz=0.0566 speed=0.0575 ground=true
+    planned from there with budget: 1500=none 3000=48steps 6000=48steps 12000=48steps
+trial 108 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8407;gx=-2.5;gz=9.5
+  failed arm at the empty plan:     x=0.451 z=0.618 vx=-0.0239 vz=0.0578 speed=0.0625 ground=true
+    re-planned with budget:         1500=none 3000=36steps 6000=36steps 12000=36steps
+  other arm (legacy, ARRIVED in 52 ticks, 32 plans) at tick 3: x=0.469 z=0.622 vx=-0.0104 vz=0.0605 speed=0.0614 ground=true
+    planned from there with budget: 1500=none 3000=36steps 6000=36steps 12000=36steps
+trial 113 failed=legacy end=EMPTY_PLAN tick=11 plans=5 driftReplans=4 | slip=0.9100;gx=-2.5;gz=11.5
+  failed arm at the empty plan:     x=0.335 z=1.713 vx=-0.0393 vz=0.1376 speed=0.1431 ground=true
+    re-planned with budget:         1500=none 3000=38steps 6000=38steps 12000=38steps
+  other arm (unified, ARRIVED in 59 ticks, 23 plans) at tick 11: x=0.335 z=1.713 vx=-0.0393 vz=0.1376 speed=0.1431 ground=true
+    planned from there with budget: 1500=none 3000=38steps 6000=38steps 12000=38steps
+trial 138 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8833;gx=2.5;gz=11.5
+  failed arm at the empty plan:     x=0.543 z=0.603 vx=0.0222 vz=0.0535 speed=0.0579 ground=true
+    re-planned with budget:         1500=none 3000=42steps 6000=42steps 12000=42steps
+  other arm (legacy, ARRIVED in 60 ticks, 23 plans) at tick 3: x=0.528 z=0.606 vx=0.0099 vz=0.0559 speed=0.0568 ground=true
+    planned from there with budget: 1500=40steps 3000=40steps 6000=40steps 12000=40steps
+trial 174 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.9017;gx=1.5;gz=13.5
+  failed arm at the empty plan:     x=0.541 z=0.598 vx=0.0215 vz=0.0518 speed=0.0561 ground=true
+    re-planned with budget:         1500=none 3000=48steps 6000=48steps 12000=48steps
+  other arm (legacy, ARRIVED in 68 ticks, 9 plans) at tick 3: x=0.526 z=0.601 vx=0.0097 vz=0.0541 speed=0.0550 ground=true
+    planned from there with budget: 1500=none 3000=48steps 6000=48steps 12000=48steps
+trial 200 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8731;gx=3.5;gz=9.5
+  failed arm at the empty plan:     x=0.544 z=0.607 vx=0.0226 vz=0.0545 speed=0.0589 ground=true
+    re-planned with budget:         1500=none 3000=36steps 6000=36steps 12000=36steps
+  other arm (legacy, ARRIVED in 53 ticks, 30 plans) at tick 3: x=0.528 z=0.610 vx=0.0100 vz=0.0570 speed=0.0578 ground=true
+    planned from there with budget: 1500=none 3000=36steps 6000=36steps 12000=36steps
+trial 265 failed=unified end=EMPTY_PLAN tick=3 plans=2 driftReplans=1 divergences=2 corrections=1 accepted=1 escalations=1 | slip=0.8364;gx=2.5;gz=11.5
+  failed arm at the empty plan:     x=0.550 z=0.620 vx=0.0241 vz=0.0582 speed=0.0630 ground=true
+    re-planned with budget:         1500=none 3000=42steps 6000=42steps 12000=42steps
+  other arm (legacy, ARRIVED in 61 ticks, 21 plans) at tick 3: x=0.532 z=0.624 vx=0.0104 vz=0.0610 speed=0.0619 ground=true
+    planned from there with budget: 1500=none 3000=42steps 6000=42steps 12000=42steps
+
+Whole slip family, both arms, at each node budget (legacy, unified):
+budget=1500 arrived=247,239 emptyPlan=53,61 other=0,0 onlyLegacyArrived=9 onlyUnifiedArrived=1 planMsTotal=15611,13198
+budget=3000 arrived=293,291 emptyPlan=7,9 other=0,0 onlyLegacyArrived=2 onlyUnifiedArrived=0 planMsTotal=23600,19265
+budget=6000 arrived=300,300 emptyPlan=0,0 other=0,0 onlyLegacyArrived=0 onlyUnifiedArrived=0 planMsTotal=24126,20583
+budget=12000 arrived=300,300 emptyPlan=0,0 other=0,0 onlyLegacyArrived=0 onlyUnifiedArrived=0 planMsTotal=24084,20495

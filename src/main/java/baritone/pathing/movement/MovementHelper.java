@@ -27,6 +27,7 @@ import baritone.api.utils.*;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
 import baritone.pathing.movement.MovementState.MovementTarget;
+import baritone.pathing.precompute.StateIdCache;
 import baritone.pathing.precompute.Ternary;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.ToolSet;
@@ -1081,7 +1082,7 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static boolean isBlockNormalCube(BlockState state) {
         byte[] memo = NormalCubeMemo.MEMO;
-        int id = Block.BLOCK_STATE_REGISTRY.getId(state);
+        int id = Baritone.settings().pathingStateIdCache.value ? StateIdCache.id(state) : Block.BLOCK_STATE_REGISTRY.getId(state); // Ostinato 2.0 Phase 07
         if (id < 0 || id >= memo.length) {
             return isBlockNormalCube0(state);
         }

@@ -54,14 +54,14 @@ public final class SettingCategorizer {
                 "assumeWalkOnWater", "strictLiquidCheck", "allowWaterBucketFall", "maxFallHeightBucket",
                 "allowPlaceInFluidsSource", "allowPlaceInFluidsFlow", "sprintInWater", "swimInWater", "allowMountClutch", "allowSteeredFalls");
         put(m, RENDER, "yLevelBoxSize", "fadePath", "cachedChunksOpacity");
-        put(m, MOVEMENT, "freeLook", "humanInputCaps", "maxYawPerTick", "maxPitchPerTick", "physicalInput", "inputArbitration", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "parkourTurnCap", "analogMovement", "randomLooking", "randomLooking113",
+        put(m, MOVEMENT, "freeLook", "humanInputCaps", "maxYawPerTick", "maxPitchPerTick", "physicalInput", "inputArbitration", "latticeExperiment", "predictionTolerance", "unifiedExecutor", "blockFreeLook", "smoothLook", "smoothLookTicks", "frameLook", "humanLookEverywhere", "parkourTurnCap", "analogMovement", "randomLooking", "randomLooking113",
                 "remainWithExistingLookDirection", "antiCheatCompatibility", "kinematicTravel", "slowKinematic", "headSteering", "pathWander", "physicsTravel",
                 "travelStack", "simTravel",
                 "nativeAcceleration", "pitfallAvoidance", "jumpPenalty", "overshootTraverse", "freecamSpeed", "freecamKey", "enemyMobs",
-                "allowNeos", "kinematicTrace", "presto", "prestoPhysicsCheck", "prestoDebug", "legato", "legatoSmoothing", "legatoSearch", "legatoDebug", "kinematicLine", "cadenza", "cadenzaMaxTargets", "cadenzaShortHorizon", "cadenzaBuilder", "cadenzaTurnAware", "cadenzaBatch", "cadenzaDebug", "maestro", "maestroTurnCost", "maestroMaxStates", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
+                "allowNeos", "kinematicTrace", "presto", "prestoPhysicsCheck", "prestoDebug", "legato", "legatoSmoothing", "legatoSearch", "legatoDebug", "kinematicLine", "cadenza", "cadenzaMaxTargets", "cadenzaShortHorizon", "cadenzaBuilder", "cadenzaTurnAware", "cadenzaBatch", "cadenzaDebug", "maestro", "maestroTurnCost", "maestroMaxStates", "simEdgeSearch", "simEdgeMaxStates", "simEdgeHorizon", "allowLadderClutch", "pickupLadders", "allowGodBridge", "experimentalMovement", "experimentalJumpBias",
                 "experimentalBlockPlacementPenalty", "experimentalMinHealth", "fallDamageCost", "fastMode", "fastModeMinHealth");
         put(m, PATHING, "seedPlanning", "seedPlanningSeed", "blocksToAvoid", "disconnectOnArrival", "axisHeight", "followRadius", "doBedWaypoints",
-                "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival", "blocksToAvoidStandingOn");
+                "doDeathWaypoints", "considerPotionEffects", "enterPortal", "rightClickContainerOnArrival", "verifiedGetToBlock", "blocksToAvoidStandingOn");
         put(m, CHAT, "censorCoordinates", "censorRanCommands", "prefix", "prefixControl", "toastTimer", "logAsToast",
                 "verboseCommandExceptions", "desktopNotifications", "echoCommands", "shortBaritonePrefix", "useMessageTag");
         put(m, ADVANCED, "cutoffAtLoadBoundary", "simplifyUnloadedYCoord", "movementFault", "pvpAutotune", "pvpAutotuneMode",

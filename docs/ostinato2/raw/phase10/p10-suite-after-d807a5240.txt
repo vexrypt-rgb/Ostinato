@@ -1,0 +1,1 @@
+after d807a5240: tests=1645 skipped=24 failures=0 errors=0 (summed over build/test-results/test/TEST-*.xml); PathBenchTest.stockAStarMatchesGoldenCosts ran (6.485 s) and passed; BUILD SUCCESSFUL in 4m 39s

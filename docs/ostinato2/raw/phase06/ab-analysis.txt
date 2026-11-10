@@ -1,0 +1,90 @@
+
+# docs/ostinato2/raw/phase06/ab-81011-lines.txt: 96 laps, stacks ['physics']
+arm flag check (B, D on; A, C off): ok; predictionTolerance off in every lap: True
+
+## L1 reliability
+mode A: 24/24 reached; not reached []; faults []; physPlans 800 driftReplans 20; driver ticks {'-': 52, 'BARITONE': 2858, 'PHYSICS': 4430}
+mode B: 24/24 reached; not reached []; faults []; physPlans 777 driftReplans 9; driver ticks {'-': 28, 'BARITONE': 2851, 'PHYSICS': 4358}
+mode C: 24/24 reached; not reached []; faults []; physPlans 788 driftReplans 19; driver ticks {'-': 24, 'BARITONE': 2848, 'PHYSICS': 4379}
+mode D: 24/24 reached; not reached []; faults []; physPlans 772 driftReplans 6; driver ticks {'-': 28, 'BARITONE': 2919, 'PHYSICS': 4340}
+stuck-key lines 0 []; deaths 0; fault codes only in B/D []
+L1: holds
+
+## L2 ownership safety (unified counters per lap)
+mode B: ACQUIRES=137 COMPLETIONS=54 FAILURES=59 CANCEL_STOPS=1 DIVERGENCE_CHECKS=4270 DIVERGENCES=16 PREDICTION_UNAVAILABLE=146 CORRECTIONS=16 CORRECTIONS_ACCEPTED=7 ESCALATIONS=9
+mode D: ACQUIRES=141 COMPLETIONS=58 FAILURES=59 CANCEL_STOPS=4 DIVERGENCE_CHECKS=4244 DIVERGENCES=15 PREDICTION_UNAVAILABLE=151 CORRECTIONS=15 CORRECTIONS_ACCEPTED=9 ESCALATIONS=6
+owned ticks 8811, intact 8650; executor counters moved with the flag off: 0 []
+run totals: ACQUIRES=278 COMPLETIONS=155 HANDOVERS=43 FAILURES=118 CANCEL_STOPS=5 CANCEL_REFUSALS=54 RELEASED_EARLY=43 INTACT_TICKS=8650 OWNED_TICKS=8811 DIVERGENCE_CHECKS=8514 DIVERGENCES=31 PREDICTION_UNAVAILABLE=297 CORRECTIONS=31 CORRECTIONS_ACCEPTED=16 ESCALATIONS=15 CANCEL_LATENCY_SUM=6 CANCEL_LATENCY_MAX=2
+safety violations 0 []; corrections bounded and escalations == driftReplans in every lap: True
+L2: holds
+
+## L3 paired lap ticks (reached pairs), per leg: median ratio arm/base
+| leg | B/A n | B/A | D/C n | D/C | C/A (A/A' noise) |
+|---|---|---|---|---|---|
+| slalom | 6 | 0.996 | 6 | 1.000 | 0.996 |
+| ridges | 6 | 0.993 | 6 | 1.033 | 0.993 |
+| bumps | 6 | 1.000 | 6 | 0.995 | 1.003 |
+| steps | 6 | 0.975 | 6 | 1.002 | 0.992 |
+B/A: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+D/C: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise ['ridges']; legs >= 1.03 at all ['ridges']
+
+## L4 replans and recovery, paired (on - off) per lap, all pairs
+B/A physPlans: n=24 mean -0.958 95% CI -2.125..+0.208 -> no difference shown
+B/A driftReplans: n=24 mean -0.458 95% CI -0.792..-0.167 -> lower with flag on
+B/A cancels+rewinds: n=24 mean +0.000 95% CI +0.000..+0.000 -> no difference shown
+D/C physPlans: n=24 mean -0.667 95% CI -1.833..+0.583 -> no difference shown
+D/C driftReplans: n=24 mean -0.542 95% CI -0.792..-0.292 -> lower with flag on
+D/C cancels+rewinds: n=24 mean +0.000 95% CI +0.000..+0.000 -> no difference shown
+strictly more reached: B>A False, D>C False
+
+# docs/ostinato2/raw/phase06/ab-81012-lines.txt: 96 laps, stacks ['physics']
+arm flag check (B, D on; A, C off): ok; predictionTolerance off in every lap: True
+
+## L1 reliability
+mode A: 24/24 reached; not reached []; faults []; physPlans 786 driftReplans 19; driver ticks {'-': 50, 'BARITONE': 2894, 'PHYSICS': 4362}
+mode B: 24/24 reached; not reached []; faults []; physPlans 775 driftReplans 8; driver ticks {'-': 35, 'BARITONE': 2893, 'PHYSICS': 4298}
+mode C: 24/24 reached; not reached []; faults []; physPlans 784 driftReplans 20; driver ticks {'-': 29, 'BARITONE': 2869, 'PHYSICS': 4362}
+mode D: 24/24 reached; not reached []; faults []; physPlans 781 driftReplans 9; driver ticks {'-': 26, 'BARITONE': 2849, 'PHYSICS': 4340}
+stuck-key lines 0 []; deaths 0; fault codes only in B/D []
+L1: holds
+
+## L2 ownership safety (unified counters per lap)
+mode B: ACQUIRES=140 COMPLETIONS=57 FAILURES=59 CANCEL_STOPS=3 DIVERGENCE_CHECKS=4204 DIVERGENCES=12 PREDICTION_UNAVAILABLE=150 CORRECTIONS=11 CORRECTIONS_ACCEPTED=4 ESCALATIONS=8
+mode D: ACQUIRES=137 COMPLETIONS=57 FAILURES=56 CANCEL_STOPS=4 DIVERGENCE_CHECKS=4247 DIVERGENCES=14 PREDICTION_UNAVAILABLE=145 CORRECTIONS=14 CORRECTIONS_ACCEPTED=5 ESCALATIONS=9
+owned ticks 8746, intact 8590; executor counters moved with the flag off: 0 []
+run totals: ACQUIRES=277 COMPLETIONS=155 HANDOVERS=41 FAILURES=115 CANCEL_STOPS=7 CANCEL_REFUSALS=55 RELEASED_EARLY=41 INTACT_TICKS=8590 OWNED_TICKS=8746 DIVERGENCE_CHECKS=8451 DIVERGENCES=26 PREDICTION_UNAVAILABLE=295 CORRECTIONS=25 CORRECTIONS_ACCEPTED=9 ESCALATIONS=17 CANCEL_LATENCY_SUM=7 CANCEL_LATENCY_MAX=1
+safety violations 0 []; corrections bounded and escalations == driftReplans in every lap: True
+L2: holds
+
+## L3 paired lap ticks (reached pairs), per leg: median ratio arm/base
+| leg | B/A n | B/A | D/C n | D/C | C/A (A/A' noise) |
+|---|---|---|---|---|---|
+| slalom | 6 | 0.997 | 6 | 0.997 | 0.999 |
+| ridges | 6 | 0.996 | 6 | 1.006 | 0.978 |
+| bumps | 6 | 0.998 | 6 | 1.000 | 1.000 |
+| steps | 6 | 0.980 | 6 | 0.988 | 1.003 |
+B/A: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+D/C: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+
+## L4 replans and recovery, paired (on - off) per lap, all pairs
+B/A physPlans: n=24 mean -0.458 95% CI -1.833..+0.958 -> no difference shown
+B/A driftReplans: n=24 mean -0.458 95% CI -0.792..-0.167 -> lower with flag on
+B/A cancels+rewinds: n=24 mean +0.000 95% CI +0.000..+0.000 -> no difference shown
+D/C physPlans: n=24 mean -0.125 95% CI -1.167..+0.917 -> no difference shown
+D/C driftReplans: n=24 mean -0.458 95% CI -0.750..-0.167 -> lower with flag on
+D/C cancels+rewinds: n=24 mean +0.000 95% CI +0.000..+0.000 -> no difference shown
+strictly more reached: B>A False, D>C False
+
+# L5 overhead: client tick time, paired on - off, same seed, leg and repetition, both runs pooled
+p95: n=96 median diff +0.491 ms, 95% CI +0.061..+1.170 ms; median off 18.96 ms, on 18.81 ms -> inconclusive
+p99: n=96 median diff +0.272 ms, 95% CI -1.677..+1.926 ms; median off 88.80 ms, on 91.95 ms -> inconclusive
+p50: n=96 median diff -0.003 ms, 95% CI -0.035..+0.027 ms; median off 5.57 ms, on 5.61 ms (diagnostic)
+tmax: n=96 median diff +2.718 ms, 95% CI -3.116..+6.054 ms; median off 134.49 ms, on 129.96 ms (diagnostic)
+allocKB: n=96 median diff +1277.500 KB, 95% CI -12972.500..+13728.000 KB; median off 1489241.50 KB, on 1479118.50 KB (diagnostic)
+L5: inconclusive
+
+# Tier L verdict
+L1 reliability in every seed: True; L2 ownership safety in every seed: True
+improvement in both replications and both seeds: time False, physPlans False, driftReplans True, cancels+rewinds False, reached False
+L3 slower in both replications and both seeds: False; more plans in both replications and both seeds: False
+Tier L verdict: IMPROVEMENT; L5 overhead: inconclusive; L6: live cancel latency not measured (cancels come only at lap end)

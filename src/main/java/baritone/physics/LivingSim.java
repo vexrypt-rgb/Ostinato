@@ -32,9 +32,10 @@ final class LivingSim {
         speed = s.speed;
         if (b.player) {
             sprinting = in.sprint && in.forward > 0;
-            // the sprint modifier is MULTIPLY_TOTAL 0.3 on movement speed: toggling it scales the captured value
-            if (sprinting && !wasSprinting) speed *= 1.3f;
-            else if (!sprinting && wasSprinting) speed /= 1.3f;
+            // the sprint modifier is ADD_MULTIPLIED_TOTAL (double) 0.3f on movement speed, worked out in doubles and read
+            // back as a float (Player.getSpeed): toggling it scales the captured value the same way
+            if (sprinting && !wasSprinting) speed = (float) (speed * (1.0 + (double) 0.3f));
+            else if (!sprinting && wasSprinting) speed = (float) (speed / (1.0 + (double) 0.3f));
             sneakKey = in.sneak;
             b.sneaking = in.sneak && !b.flying;
             crouching = b.sneaking && !swimming && !b.fallFlying;

@@ -84,6 +84,7 @@ public class Baritone implements IBaritone {
     private final FreecamBehavior freecamBehavior;
     private final InputOverrideHandler inputOverrideHandler;
     private final InputArbiter inputArbiter = new InputArbiter(); // Ostinato: leases; idle unless inputArbitration
+    private final baritone.pathing.unified.UnifiedExecutor unifiedExecutor; // Ostinato 2.0 Phase 06: idle unless unifiedExecutor
     private final baritone.gracenote.GraceNote graceNote; // Ostinato: Grace Note emergency survival
 
     private final FollowProcess followProcess;
@@ -139,6 +140,8 @@ public class Baritone implements IBaritone {
             this.pathingBehavior      = this.registerBehavior(PathingBehavior::new);
             this.inventoryBehavior    = this.registerBehavior(InventoryBehavior::new);
             this.inputOverrideHandler = this.registerBehavior(InputOverrideHandler::new);
+            this.unifiedExecutor = new baritone.pathing.unified.UnifiedExecutor(inputArbiter, inputOverrideHandler);
+            this.inputOverrideHandler.setUnifiedExecutor(unifiedExecutor);
             this.registerBehavior(WaypointBehavior::new);
             this.swarmBehavior        = this.registerBehavior(SwarmBehavior::new);
             this.freecamBehavior      = this.registerBehavior(FreecamBehavior::new);
@@ -249,6 +252,11 @@ public class Baritone implements IBaritone {
     /** Ostinato: per-bot input leases. The fall controller reads this only when inputArbitration is on. */
     public InputArbiter getInputArbiter() {
         return this.inputArbiter;
+    }
+
+    /** Ostinato 2.0 Phase 06: the physics driver's input ownership. Used only while unifiedExecutor is on. */
+    public baritone.pathing.unified.UnifiedExecutor getUnifiedExecutor() {
+        return this.unifiedExecutor;
     }
 
     @Override

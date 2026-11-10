@@ -1,0 +1,27 @@
+32 laps
+
+leg      planner  n  planWait(med)  firstPlanMs(med,min-max)  planUs/lap(med)  firstTimedOut  firstToGoal
+bumps    astar    4     2.0               3 (3-6)              3 ms        0/4          4/4
+bumps    simedge  4     2.0              27 (20-28)             27 ms        0/4          4/4
+ridges   astar    4     2.0              20 (9-32)             20 ms        0/4          4/4
+ridges   simedge  4    17.5             807 (503-866)            859 ms        1/4          3/4
+slalom   astar    4     2.0              12 (8-1067)             12 ms        1/4          3/4
+slalom   simedge  4    18.5             853 (509-2008)           1049 ms        2/4          2/4
+steps    astar    4     2.0               8 (7-9)              8 ms        0/4          4/4
+steps    simedge  4    16.0             722 (505-908)            722 ms        1/4          3/4
+
+per SimEdge search (all searches, first plan marked *): share of wall time
+  first: wall 10132 ms, sim 5919 ms (58%), legacy apply 1916 ms (19%), other 2297 ms (23%); nodes/cell 12.5, sims/node 7.2, exact-duplicate sims 1.8%, apply/distinct 12.4x
+  later: wall 2506 ms, sim 1265 ms (50%), legacy apply 536 ms (21%), other 706 ms (28%); nodes/cell 15.9, sims/node 7.6, exact-duplicate sims 2.3%, apply/distinct 15.9x
+  AStarPathFinder: searches 17, alloc MB/search median 4, ms median 9, map median 1139
+  SimEdgePathFinder: searches 20, alloc MB/search median 175, ms median 662, map median 8782
+
+first-plan primary budget (ms) by position in the leg block (laps on one leg run back to back):
+  astar   pos 0: primaryMs [500] planWait median 2.0
+  astar   pos 1: primaryMs [2000] planWait median 2.0
+  astar   pos 2: primaryMs [4000] planWait median 2.0
+  astar   pos 3: primaryMs [8000] planWait median 2.0
+  simedge pos 0: primaryMs [500] planWait median 12.0
+  simedge pos 1: primaryMs [2000] planWait median 16.5
+  simedge pos 2: primaryMs [4000] planWait median 18.0
+  simedge pos 3: primaryMs [8000] planWait median 17.0

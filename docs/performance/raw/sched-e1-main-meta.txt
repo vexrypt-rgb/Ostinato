@@ -1,0 +1,2 @@
+tag=e1-main seed=93011 reps=6 mask=0xF stress=2 freeCommitMB=5313 ac=True power=[Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)] start=2026-11-10T03:59:43
+end=2026-11-10T04:29:21 exit=

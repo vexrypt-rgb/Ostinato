@@ -1,0 +1,8 @@
+Tier-S cross-model: PlayerSim (1.16 model) vs PPE (26.3 living model), held input, identical terrain
+mode,horizon,maxOpenError,endOpenError,maxStepDelta
+walk,20,5.970e-07,5.707e-07,2.770e-07
+sprint,20,4.900e-07,2.650e-07,3.106e-07
+sprint-jump,20,3.522e-06,2.510e-06,4.997e-06
+fall,30,5.545e-06,0.000e+00,6.576e-06
+water-walk,20,8.849e-08,8.849e-08,1.119e-07
+ladder-jump,20,3.748e-06,3.687e-06,7.117e-06

@@ -1,0 +1,64 @@
+
+# docs/ostinato2/raw/phase04/ab-81011-lines.txt: 96 laps, stacks ['physics']
+arm flag check (B, D on; A, C off): ok
+
+## Reliability
+mode A: 24/24 reached; not reached []; faults []; physPlans 758 driftReplans 12; driver ticks {'-': 47, 'BARITONE': 2895, 'PHYSICS': 4298}
+mode B: 24/24 reached; not reached []; faults []; physPlans 1113 driftReplans 418; driver ticks {'-': 32, 'BARITONE': 2908, 'PHYSICS': 4262}
+mode C: 24/24 reached; not reached []; faults []; physPlans 787 driftReplans 16; driver ticks {'-': 26, 'BARITONE': 2947, 'PHYSICS': 4262}
+mode D: 24/24 reached; not reached []; faults []; physPlans 1108 driftReplans 415; driver ticks {'-': 32, 'BARITONE': 2898, 'PHYSICS': 4265}
+stuck-key lines 0; deaths 0; fault codes only in B/D []
+reliability: holds
+
+## Paired lap ticks (reached pairs), per leg: median ratio arm/base
+| leg | B/A n | B/A | D/C n | D/C | C/A (A/A' noise) |
+|---|---|---|---|---|---|
+| slalom | 6 | 0.997 | 6 | 0.999 | 0.999 |
+| ridges | 6 | 1.005 | 6 | 0.998 | 0.996 |
+| bumps | 6 | 1.003 | 6 | 1.000 | 0.998 |
+| steps | 6 | 0.988 | 6 | 0.988 | 1.010 |
+B/A: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+D/C: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+
+## Recovery: per-lap cancels + rewinds, paired (on - off), all pairs
+B/A: n=24 mean +0.000 95% CI +0.000..+0.000 -> no improvement
+D/C: n=24 mean +0.000 95% CI +0.000..+0.000 -> no improvement
+strictly more reached: B>A False, D>C False
+
+# docs/ostinato2/raw/phase04/ab-81012-lines.txt: 96 laps, stacks ['physics']
+arm flag check (B, D on; A, C off): ok
+
+## Reliability
+mode A: 24/24 reached; not reached []; faults []; physPlans 792 driftReplans 17; driver ticks {'-': 64, 'BARITONE': 2952, 'PHYSICS': 4292}
+mode B: 24/24 reached; not reached []; faults []; physPlans 1104 driftReplans 412; driver ticks {'-': 29, 'BARITONE': 2864, 'PHYSICS': 4293}
+mode C: 24/24 reached; not reached []; faults []; physPlans 774 driftReplans 15; driver ticks {'-': 31, 'BARITONE': 2951, 'PHYSICS': 4238}
+mode D: 24/24 reached; not reached []; faults []; physPlans 1108 driftReplans 405; driver ticks {'-': 32, 'BARITONE': 2868, 'PHYSICS': 4285}
+stuck-key lines 0; deaths 0; fault codes only in B/D []
+reliability: holds
+
+## Paired lap ticks (reached pairs), per leg: median ratio arm/base
+| leg | B/A n | B/A | D/C n | D/C | C/A (A/A' noise) |
+|---|---|---|---|---|---|
+| slalom | 6 | 0.994 | 6 | 0.996 | 0.999 |
+| ridges | 6 | 0.991 | 6 | 1.015 | 0.991 |
+| bumps | 6 | 1.000 | 6 | 1.000 | 1.000 |
+| steps | 6 | 0.962 | 6 | 0.975 | 0.977 |
+B/A: legs <= 0.97 beyond noise ['steps']; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+D/C: legs <= 0.97 beyond noise []; legs >= 1.03 beyond noise []; legs >= 1.03 at all []
+
+## Recovery: per-lap cancels + rewinds, paired (on - off), all pairs
+B/A: n=24 mean +0.000 95% CI +0.000..+0.000 -> no improvement
+D/C: n=24 mean +0.000 95% CI +0.000..+0.000 -> no improvement
+strictly more reached: B>A False, D>C False
+
+# Overhead (B2): client tick time, paired on - off, same seed, leg and repetition, both runs pooled
+tick p95: n=96 median diff +0.591 ms, 95% CI -0.014..+1.224 ms; median off 17.50 ms, on 18.80 ms -> inconclusive
+tick p99: n=96 median diff -2.979 ms, 95% CI -4.511..-1.300 ms; median off 87.18 ms, on 92.37 ms -> acceptable
+tick p50: n=96 median diff +0.085 ms, 95% CI +0.064..+0.150 ms; median off 5.20 ms, on 5.31 ms (diagnostic)
+tick tmax: n=96 median diff -1.882 ms, 95% CI -5.822..-0.418 ms; median off 124.72 ms, on 118.81 ms (diagnostic)
+overhead verdict: inconclusive
+
+# A/B verdict (B3)
+reliability holds in every seed: True
+improvement in both replications and both seeds: completion time False, recovery False, reliability False
+A/B verdict: no improvement; overhead: inconclusive

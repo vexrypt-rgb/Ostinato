@@ -221,7 +221,7 @@ final class CombatShield {
                 drop += u;
                 u = u * 0.99 - 0.03;
                 tp = tp.add(v);
-                v = new Vec3(v.x, (v.y - 0.08) * 0.98, v.z);
+                v = new Vec3(v.x, (v.y - 0.08) * 0.98f, v.z);
                 if (tp.y - 0.9 < me.getY() + 3) break; // it will be down before the pearl is there
                 Vec3 n = tp.subtract(eye).subtract(0, drop, 0).scale(1 / sum);
                 if (n.length() <= 1.6) need = n; // the first tick the pearl can be where they will be

@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 //      means a 200 block fall does nothing. this is the one that makes a clutch work at terminal velocity
 final class LadderClutch {
 
-    // straight out of 1.21.4 LivingEntity.travelInAir: y += vy, then vy = (vy - 0.08) * 0.98f
+    // 26.3 LivingEntity.travelInAir (unchanged since 1.21.4): y += vy, then vy = (vy - 0.08) * 0.98f
     static final double GRAVITY = 0.08, DRAG = 0.9800000190734863;
     // what the first airborne tick starts with. on the ground vy gets zeroed by the floor and then the same formula runs
     static final double WALK_OFF_VY = (0 - GRAVITY) * DRAG;

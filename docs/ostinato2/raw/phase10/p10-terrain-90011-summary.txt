@@ -1,0 +1,52 @@
+classes by scenario / part / arm
+  BLAST       main  A  {'TS': 3}
+  BLAST       main  B  {'TS': 3}
+  CANCEL_ACT  rerun A  {'FS': 3}
+  CANCEL_ACT  rerun B  {'TS': 3}
+  CANCEL_MOVE rerun A  {'TS': 3}
+  CANCEL_MOVE rerun B  {'TS': 3}
+  CAT_ONE     main  A  {'FS': 3}
+  CAT_ONE     main  B  {'TF': 3}
+  CHEST2      main  A  {'TS': 3}
+  CHEST2      main  B  {'TS': 3}
+  ENDER       main  A  {'TS': 3}
+  ENDER       main  B  {'TS': 3}
+  FURNACE2    main  A  {'TS': 3}
+  FURNACE2    main  B  {'TS': 3}
+  LAG_LONG    main  A  {'FS': 3}
+  LAG_LONG    main  B  {'TF': 2, 'TS': 1}
+  LAG_SHORT   main  A  {'TS': 3}
+  LAG_SHORT   main  B  {'TS': 3}
+  MENU_OPEN   main  A  {'FS': 3}
+  MENU_OPEN   main  B  {'TS': 3}
+  PREEMPT     main  A  {'FS': 3}
+  PREEMPT     main  B  {'TF': 3}
+  REPLACE     main  A  {'TS': 3}
+  REPLACE     main  B  {'TS': 3}
+  TABLE       main  A  {'TS': 3}
+  TABLE       main  B  {'TS': 3}
+  VANISH_ONE  main  A  {'HANG': 2, 'TS': 1}
+  VANISH_ONE  main  B  {'HANG': 2, 'TS': 1}
+
+totals (verdict rows)
+  arm A {'FS': 15, 'HANG': 2, 'TS': 25}
+  arm B {'HANG': 2, 'TF': 8, 'TS': 32}
+
+positive set (all laps): A TS 22/30 HANG 2, B TS 28/30 HANG 2
+positive set (target known at start in both arms): pairs 30 of 30, A TS 22, B TS 28, B HANG 2
+pairs excluded: {}
+stop rows 12, keys/active left after stop 0, B stop outcome not CANCELLED/UNKNOWN 0, lateOpen {('A', 'false'): 3, ('B', 'false'): 3, ('B', 'true'): 3, ('A', 'true'): 3}
+PREEMPT B CANCELLED/OWNERSHIP_LOST 3/3
+MAGMA {'CLEAR': 6}
+open after verdict (end rows) {('LAG_LONG', 'B'): 2, ('LAG_LONG', 'A'): 3}
+runner us/tick arm A: median 8.34 (n=39, laps 0-1 excluded)
+runner us/tick arm B: median 9.88 (n=39, laps 0-1 excluded)
+verdict rows with keys still forced (non-HANG) 0
+
+GATES
+  T1 B false successes (FS) = 0: PASS (FS 0, FF 0)
+  T2 B TS >= A TS - 2 per seed, >= 12 eligible pairs per seed: PASS (28 vs 22, 30 pairs)
+  T3 bounded release on stop/preempt: PASS
+  T4 no B-only HANG: PASS ([])
+  M1 MAGMA all CLEAR: PASS
+  deaths 0

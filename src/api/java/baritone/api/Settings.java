@@ -653,6 +653,13 @@ public final class Settings {
     public final Setting<Boolean> pathingHierarchical = new Setting<>(false);
 
     /**
+     * Ostinato 2.0 Phase 07: look block-state ids up through a small direct-mapped cache (StateIdCache) instead of the
+     * block-state registry's identity hash map, in the planner's per-state property tables. Same ids, so the same
+     * costs; only faster. Off until proven.
+     */
+    public final Setting<Boolean> pathingStateIdCache = new Setting<>(false);
+
+    /**
      * Ostinato: let the trained path decision matrix pick the backend (A*, weighted A*, hierarchical) per segment from its
      * terrain and distance category. Off until proven; with no matrix file or a thin row the settings above decide.
      */
@@ -780,6 +787,15 @@ public final class Settings {
      * right click and open it once you arrive.
      */
     public final Setting<Boolean> rightClickContainerOnArrival = new Setting<>(true);
+
+    /**
+     * Ostinato 2.0 Phase 08: a goto to a container counts as done only once the server opened the matching container
+     * for this request. A timed-out, unreachable or refused right click ends the request as failed (with a reason)
+     * instead of looking like an arrival; a container left open from before is closed first; and with no known
+     * target (none found, vanished, or every one unreachable) it fails instead of exploring. The task builder checks
+     * the result. Off, the old behaviour. Default off until a live run shows it is no worse.
+     */
+    public final Setting<Boolean> verifiedGetToBlock = new Setting<>(false);
 
     /**
      * When running a goto towards a nether portal block, walk all the way into the portal
@@ -954,6 +970,28 @@ public final class Settings {
      * to the input arbiter. Off, it writes keys directly, as before.
      */
     public final Setting<Boolean> inputArbitration = new Setting<>(false);
+
+    /**
+     * Ostinato: when on, the kinodynamic lattice experiment is allowed to run.
+     * Path execution, A*, and the kinematic controllers do not read this.
+     * The lattice benchmark calls the prototype directly, so the default stays off.
+     */
+    public final Setting<Boolean> latticeExperiment = new Setting<>(false);
+
+    /**
+     * Ostinato: when on, SimTrace and PhysicsTravel judge a predicted tick against the per-mode bounds in
+     * PredictionTolerance.MEASURED instead of their fixed constants (0.05 Euclidean, 0.1 summed axes).
+     * Off keeps the old checks. Several bounds are Tier-S only, so the default stays off.
+     */
+    public final Setting<Boolean> predictionTolerance = new Setting<>(false);
+
+    /**
+     * Ostinato 2.0 Phase 06: when on, the physics driver runs under one movement lease. While it presses keys it is
+     * the only writer of the movement, jump and sneak keys; other writers are refused and counted, releases still
+     * pass. It checks the predicted tick, tries one re-anchor on drift before replanning, and records how each
+     * stretch ended. Off, the physics driver runs as before. Default off until a live run shows it is no worse.
+     */
+    public final Setting<Boolean> unifiedExecutor = new Setting<>(false);
 
     /**
      * Ostinato: relative heuristic nudge so equal-f nodes nearer the goal expand first (0 = stock tie order)
@@ -2386,6 +2424,26 @@ public final class Settings {
      * partial path, as a timed-out search does. 0 means no cap.
      */
     public final Setting<Integer> maestroMaxStates = new Setting<>(1_500_000);
+
+    /**
+     * Ostinato 2.0 Phase 05: plan with simulated movement edges. Walking, turning and one-block jumps are priced by
+     * stepping the player physics model from the state the previous step ends in (keeping momentum), instead of by
+     * fixed costs; other moves keep their usual costs. Falls back to the usual A* when it finds nothing. Off: the
+     * usual planner, unchanged.
+     */
+    public final Setting<Boolean> simEdgeSearch = new Setting<>(false);
+
+    /**
+     * With simEdgeSearch on: the most search states (cell and motion) one search may create before it stops with its
+     * best partial path, as a timed-out search does. 0 means no cap.
+     */
+    public final Setting<Integer> simEdgeMaxStates = new Setting<>(1_500_000);
+
+    /**
+     * With simEdgeSearch on: steps are simulated only within this many blocks of where the search starts; further out
+     * they keep their usual costs. 0 simulates everywhere (slow on long or rough routes).
+     */
+    public final Setting<Integer> simEdgeHorizon = new Setting<>(32);
 
     /**
      * Receives movement failures as (code, evidence), e.g. so a bot can record them in its fault log.

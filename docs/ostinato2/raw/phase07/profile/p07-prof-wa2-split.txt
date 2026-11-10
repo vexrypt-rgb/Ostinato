@@ -1,0 +1,36 @@
+samples on a planner stack: 8630
+bucket,self%,inclusive%
+jdk/collections,41.6,100.0
+movement cost,23.1,76.5
+node map / open set,12.9,12.9
+search loop,10.2,100.0
+block properties,9.9,50.8
+world access,1.3,1.3
+other,1.0,100.0
+
+top self frames
+ 39.8% it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap.getInt
+ 10.2% baritone.pathing.calc.AStarPathFinder.calculate0
+  9.8% baritone.pathing.calc.openset.BinaryHeapOpenSet.siftUp
+  5.5% baritone.pathing.movement.MovementHelper.avoidAdjacentBreaking
+  3.1% baritone.pathing.movement.movements.MovementSwim.cost
+  2.0% baritone.pathing.movement.movements.MovementJump.cost
+  1.7% baritone.pathing.calc.AbstractNodeCostSearch.getNodeAtPosition
+  1.3% baritone.pathing.movement.CalculationContext.get
+  1.2% baritone.pathing.movement.movements.MovementDiagonal.cost
+  1.1% baritone.pathing.movement.movements.MovementJump.options
+  1.1% baritone.pathing.movement.movements.MovementAscend.cost
+  1.1% baritone.pathing.movement.Moves.apply
+  1.0% baritone.pathing.calc.openset.BinaryHeapOpenSet.removeLowest
+  1.0% baritone.pathing.calc.bench.SyntheticWorld.isKnown
+  1.0% baritone.pathing.movement.MovementHelper.getMiningDurationTicks0
+  0.9% baritone.pathing.movement.movements.MovementTraverse.cost
+  0.9% baritone.pathing.movement.MovementHelper.getMiningDurationTicks
+  0.8% java.util.IdentityHashMap.get
+  0.7% baritone.pathing.movement.movements.MovementSwim.dugShaft
+  0.7% baritone.pathing.movement.movements.MovementClimbJump.options
+  0.6% baritone.pathing.movement.movements.MovementParkour.factorCellY
+  0.6% baritone.pathing.movement.movements.MovementSwim.wet
+  0.6% net.minecraft.world.level.material.FluidState.isEmpty
+  0.5% java.lang.Double.isFinite
+  0.5% net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase.isPathfindable

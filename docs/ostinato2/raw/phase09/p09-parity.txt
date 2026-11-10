@@ -1,0 +1,119 @@
+##### seed 89011: base docs/ostinato2/raw/phase09/p09-base-89011-lines.txt vs p09 docs/ostinato2/raw/phase09/p09-exp-89011-lines.txt
+  parity: {'rows': 80, 'stops': 16}
+##### seed 89012: base docs/ostinato2/raw/phase09/p09-base-89012-lines.txt vs p09 docs/ostinato2/raw/phase09/p09-exp-89012-lines.txt
+  parity: {'rows': 80, 'stops': 16}
+##### C1: Phase 08 gates on the P09 build (pooled)
+=== p09 pooled ===
+  seed=89011 flag=present laps=72 reps=4
+  seed=89012 flag=present laps=72 reps=4
+  arm A:
+    CANCEL_ACT/rerun   FS=8
+    CANCEL_MOVE/rerun  TS=8
+    CAT                FS=8
+    OPEN               TS=8
+    PREEMPT            FS=8
+    REPEAT             FS=8 TS=8
+    REPLACE            TS=8
+    SEALED             FS=4 HANG=4
+    VANISH             FS=4 HANG=4
+    completion 32/48 = 0.667; FS=40 false-fail=0 FF=0 HANG=8 died=0; impossible TF 0/32
+    leaks: stop1=0 stopEnd=0 end=0 heldAfterLap=0; stops=16 badStopOutcome=0 lateOpen=8 lateOpenNotUnknown=0
+    TS ticks median: CANCEL_MOVE=25.5 OPEN=37.0 REPEAT=38.0 REPLACE=32.0
+    TF ticks median: 
+    uses: CANCEL_ACT=0 CANCEL_MOVE=8 CAT=40 OPEN=8 PREEMPT=0 REPEAT=8 REPLACE=8 SEALED=0 VANISH=0
+    runnerUs median 10.88 (n=64); outcome vs oracle: {'terminal': 72, 'skipped': 8}
+    exceptions: java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44) x10
+  arm B:
+    CANCEL_ACT/rerun   TS=8
+    CANCEL_MOVE/rerun  TS=8
+    CAT                TF=8
+    OPEN               TS=8
+    PREEMPT            TF=8
+    REPEAT             TS=16
+    REPLACE            TS=8
+    SEALED             TF=8
+    VANISH             TF=8
+    completion 48/48 = 1.000; FS=0 false-fail=0 FF=0 HANG=0 died=0; impossible TF 32/32
+    leaks: stop1=0 stopEnd=0 end=0 heldAfterLap=0; stops=16 badStopOutcome=0 lateOpen=8 lateOpenNotUnknown=0
+    TS ticks median: CANCEL_ACT=3.0 CANCEL_MOVE=25.0 OPEN=37.0 REPEAT=29.5 REPLACE=31.5
+    TF ticks median: CAT=55.0 PREEMPT=20.0 SEALED=30.0 VANISH=30.5
+    uses: CANCEL_ACT=8 CANCEL_MOVE=8 CAT=40 OPEN=8 PREEMPT=0 REPEAT=16 REPLACE=8 SEALED=0 VANISH=0
+    runnerUs median 18.62 (n=72); outcome vs oracle: {'terminal': 80}
+    exceptions: none
+=== gates (pooled) ===
+  PASS  G1 no false success (B FS=0)
+  PASS  G2 completion (B >= 0.95, no loss where legacy is right)
+  PASS  G3 false failures (B <= 1)
+  PASS  G4 liveness (B HANG=0)
+  PASS  G5 safety (B no leak, no death)
+  PASS  G6 no new exception in B
+  PASS  G7 cancel outcome honest
+  PASS  G8 outcome agrees with oracle
+  PASS  P1 OPEN ticks (B-A median <= 5) and runner (B <= A+25us)
+  PASS  P2 no extra clicks on a refused open (CAT uses B <= A)
+  class: PASS
+##### C1 reference: Phase 08 gates on the baseline build (pooled)
+=== base pooled ===
+  seed=89011 flag=present laps=72 reps=4
+  seed=89012 flag=present laps=72 reps=4
+  arm A:
+    CANCEL_ACT/rerun   FS=8
+    CANCEL_MOVE/rerun  TS=8
+    CAT                FS=8
+    OPEN               TS=8
+    PREEMPT            FS=8
+    REPEAT             FS=8 TS=8
+    REPLACE            TS=8
+    SEALED             FS=4 HANG=4
+    VANISH             FS=4 HANG=4
+    completion 32/48 = 0.667; FS=40 false-fail=0 FF=0 HANG=8 died=0; impossible TF 0/32
+    leaks: stop1=0 stopEnd=0 end=0 heldAfterLap=0; stops=16 badStopOutcome=0 lateOpen=8 lateOpenNotUnknown=0
+    TS ticks median: CANCEL_MOVE=25.0 OPEN=38.0 REPEAT=37.0 REPLACE=31.0
+    TF ticks median: 
+    uses: CANCEL_ACT=0 CANCEL_MOVE=8 CAT=40 OPEN=8 PREEMPT=0 REPEAT=8 REPLACE=8 SEALED=0 VANISH=0
+    runnerUs median 10.57 (n=64); outcome vs oracle: {'terminal': 72, 'skipped': 8}
+    exceptions: java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44) x18
+  arm B:
+    CANCEL_ACT/rerun   TS=8
+    CANCEL_MOVE/rerun  TS=8
+    CAT                TF=8
+    OPEN               TS=8
+    PREEMPT            TF=8
+    REPEAT             TS=16
+    REPLACE            TS=8
+    SEALED             TF=8
+    VANISH             TF=8
+    completion 48/48 = 1.000; FS=0 false-fail=0 FF=0 HANG=0 died=0; impossible TF 32/32
+    leaks: stop1=0 stopEnd=0 end=0 heldAfterLap=0; stops=16 badStopOutcome=0 lateOpen=7 lateOpenNotUnknown=0
+    TS ticks median: CANCEL_ACT=3.0 CANCEL_MOVE=25.0 OPEN=37.0 REPEAT=29.5 REPLACE=31.0
+    TF ticks median: CAT=55.0 PREEMPT=20.0 SEALED=30.0 VANISH=31.0
+    uses: CANCEL_ACT=8 CANCEL_MOVE=8 CAT=40 OPEN=8 PREEMPT=0 REPEAT=16 REPLACE=8 SEALED=0 VANISH=0
+    runnerUs median 16.52 (n=72); outcome vs oracle: {'terminal': 80}
+    exceptions: none
+=== gates (pooled) ===
+  PASS  G1 no false success (B FS=0)
+  PASS  G2 completion (B >= 0.95, no loss where legacy is right)
+  PASS  G3 false failures (B <= 1)
+  PASS  G4 liveness (B HANG=0)
+  PASS  G5 safety (B no leak, no death)
+  PASS  G6 no new exception in B
+  PASS  G7 cancel outcome honest
+  PASS  G8 outcome agrees with oracle
+  PASS  P1 OPEN ticks (B-A median <= 5) and runner (B <= A+25us)
+  PASS  P2 no extra clicks on a refused open (CAT uses B <= A)
+  class: PASS
+##### C2: parity (pooled)
+  {'rows': 160, 'stops': 32}
+  PASS  C2 per-row class parity, B outcome parity, no missing rows
+  PASS  S safety in both arms of the P09 build (no leak, no death)
+##### performance limits (pooled)
+  PASS  L1 OPEN TS median |delta| <= 2 ticks (arm A: -1.0)
+  PASS  L1 OPEN TS median |delta| <= 2 ticks (arm B: +0.0)
+  PASS  L2 B CAT TF median delta <= +3 ticks (+0.0)
+  PASS  L2 B PREEMPT TF median delta <= +3 ticks (+0.0)
+  PASS  L2 B SEALED TF median delta <= +3 ticks (+0.0)
+  PASS  L2 B VANISH TF median delta <= +3 ticks (-0.5)
+  PASS  L3 B CANCEL_ACT rerun TS median delta <= +2 ticks (+0.0)
+  PASS  L4 B runnerUs median <= base + 5 us (16.52 -> 18.62, +2.09)
+  PASS  L5 B CAT use packets <= base (40 -> 40)
+##### Phase 09 class (correctness and performance; modularity evidence is judged separately): PASS

@@ -1,0 +1,28 @@
+INTERACTTERRAIN start laps=10 reps=1 scenarios=5 timeout=600 post=40 seed=90001 flag=present origin=10, 95, 4 box=53x53x79 removedContainers=0 chests=[BlockPos{x=19, y=70, z=9}, BlockPos{x=-4, y=66, z=15}] furnaces=[BlockPos{x=0, y=106, z=-11}, BlockPos{x=31, y=67, z=6}] blast=25, 65, 21 ender=-9, 77, 1 table=28, 72, -8 rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true swimInWater=true
+INTERACTTERRAIN begin lap=0 scen=ENDER arm=A rep=0 restored=1 farContainers=18 menuAtStart=none
+INTERACTTERRAIN row lap=0 scen=ENDER arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=MOVE_FORWARD outcome=1:RUNNING/NONE msg="no verdict in 600 ticks; trail 10,95,4 10,100,2 5,106,-11 2,114,-18 -4,120,-33 -17,120,-58; feet BetterBlockPos{x=-17,y=120,z=-58}; goal GoalRunAwayFrom[BetterBlockPos{x=10,y=95,z=4}]"
+INTERACTTERRAIN begin lap=1 scen=ENDER arm=B rep=0 restored=11 farContainers=93 menuAtStart=none
+INTERACTTERRAIN row lap=1 scen=ENDER arm=B rep=0 part=main verdict=DONE step=1 block=ender_chest cls=TS ticks=149 lapTicks=150 uses=1 menu=ender opened=ender-near active=false keys=- outcome=2:SUCCEEDED/NONE msg="done in 7.5s"
+INTERACTTERRAIN row lap=1 scen=ENDER arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=ender lagAt=-1 vanished=- runnerUs=17.07
+INTERACTTERRAIN begin lap=2 scen=VANISH_ONE arm=B rep=0 restored=8 farContainers=7 menuAtStart=none
+INTERACTTERRAIN row lap=2 scen=VANISH_ONE arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=123 lapTicks=124 uses=0 menu=none opened=- active=false keys=- outcome=3:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTERRAIN row lap=2 scen=VANISH_ONE arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=19, 70, 9 runnerUs=19.59
+INTERACTTERRAIN begin lap=3 scen=VANISH_ONE arm=A rep=0 restored=10 farContainers=7 menuAtStart=none
+INTERACTTERRAIN row lap=3 scen=VANISH_ONE arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none opened=- active=true keys=MOVE_FORWARD outcome=4:RUNNING/NONE msg="no verdict in 600 ticks; trail 14,77,8 34,68,-1 60,70,-6 80,71,-18 103,72,-28 122,78,-44; feet BetterBlockPos{x=122,y=78,z=-44}; goal GoalRunAwayFrom[BetterBlockPos{x=10,y=95,z=4}]"
+INTERACTTERRAIN begin lap=4 scen=CAT_ONE arm=A rep=0 restored=11 farContainers=14 menuAtStart=none
+INTERACTTERRAIN row lap=4 scen=CAT_ONE arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=146 lapTicks=147 uses=5 menu=none opened=- active=false keys=- outcome=5:FAILED/TIMEOUT msg="done in 7.3s"
+INTERACTTERRAIN row lap=4 scen=CAT_ONE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=6.16
+INTERACTTERRAIN begin lap=5 scen=CAT_ONE arm=B rep=0 restored=7 farContainers=0 menuAtStart=none
+INTERACTTERRAIN row lap=5 scen=CAT_ONE arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=165 lapTicks=166 uses=4 menu=none opened=- active=false keys=- outcome=6:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTERRAIN row lap=5 scen=CAT_ONE arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=4 openAfterVerdict=false menuEnd=none lagAt=-1 vanished=- runnerUs=7.18
+INTERACTTERRAIN begin lap=6 scen=REPLACE arm=B rep=0 restored=8 farContainers=0 menuAtStart=none
+INTERACTTERRAIN row lap=6 scen=REPLACE arm=B rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=292 lapTicks=307 uses=1 menu=furnace opened=0,106,-11 active=false keys=- outcome=8:SUCCEEDED/NONE msg="done in 14.6s"
+INTERACTTERRAIN row lap=6 scen=REPLACE arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=6.49
+INTERACTTERRAIN begin lap=7 scen=REPLACE arm=A rep=0 restored=8 farContainers=0 menuAtStart=none
+INTERACTTERRAIN row lap=7 scen=REPLACE arm=A rep=0 part=main verdict=DONE step=1 block=furnace cls=TS ticks=296 lapTicks=311 uses=1 menu=furnace opened=0,106,-11 active=false keys=- outcome=10:SUCCEEDED/NONE msg="done in 14.8s"
+INTERACTTERRAIN row lap=7 scen=REPLACE arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 openAfterVerdict=false menuEnd=furnace lagAt=-1 vanished=- runnerUs=5.63
+INTERACTTERRAIN begin lap=8 scen=MAGMA arm=A rep=0 restored=13 farContainers=0 menuAtStart=none
+INTERACTTERRAIN row lap=8 scen=MAGMA arm=A rep=0 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN begin lap=9 scen=MAGMA arm=B rep=0 restored=8 farContainers=0 menuAtStart=none
+INTERACTTERRAIN row lap=9 scen=MAGMA arm=B rep=0 part=idle onMagma sneak=true keys=SNEAK input=PlayerMovementInput offMagma sneak=false keys=- input=KeyboardInput shift=false onMagmaNow=false active=- cls=CLEAR
+INTERACTTERRAIN finish laps=10

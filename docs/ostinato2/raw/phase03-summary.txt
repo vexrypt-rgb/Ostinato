@@ -1,0 +1,97 @@
+decision: REVISE
+reason: beam 12/12, weighted 12/12, physics 12/12, chosen beam, dev unique 0; shared median ticks beam 18.0 vs physics 17.5 (ratio 1.029, bound 1.15); baseline expansions are UNKNOWN, so the 3x expansion clause cannot pass; held-out beam 16/16, physics 14/16
+held-out ran: true
+semantics: PlayerSim-1.16-land-tick
+equivalence: same PlayerSim world, settled body, goal, radius 0.5, node budget 1500. Lattice also stops at 400 travel ticks. Yaw is an instantaneous PlayerSim input.
+beam width: 24 weight: 1.5
+trials: 3
+max divergence: 0.000000
+reproducible: true
+baseline expansions: UNKNOWN (PhysicsPathfinder does not expose the counter)
+memory: thread allocated bytes, or -1 when ThreadMXBean allocation is unavailable
+dev beam 12/12 weighted 12/12 physics 12/12
+dev flat-4 beam success=true ticks=14 searchTicks=14 expansions=13 medianLatencyMs=0.705 medianAlloc=89688 divergence=0.000000
+dev flat-4 weighted success=true ticks=14 searchTicks=14 expansions=6 medianLatencyMs=0.305 medianAlloc=31776 divergence=0.000000
+dev flat-4 physics success=true ticks=14 searchTicks=14 expansions=-1 medianLatencyMs=5.248 medianAlloc=2237864 divergence=na
+dev flat-5 beam success=true ticks=17 searchTicks=17 expansions=77 medianLatencyMs=1.257 medianAlloc=434944 divergence=0.000000
+dev flat-5 weighted success=true ticks=18 searchTicks=18 expansions=8 medianLatencyMs=0.228 medianAlloc=40280 divergence=0.000000
+dev flat-5 physics success=true ticks=18 searchTicks=18 expansions=-1 medianLatencyMs=3.820 medianAlloc=3376728 divergence=na
+dev turn-90 beam success=true ticks=18 searchTicks=18 expansions=193 medianLatencyMs=3.118 medianAlloc=1327912 divergence=0.000000
+dev turn-90 weighted success=true ticks=18 searchTicks=18 expansions=54 medianLatencyMs=0.854 medianAlloc=394088 divergence=0.000000
+dev turn-90 physics success=true ticks=14 searchTicks=14 expansions=-1 medianLatencyMs=3.751 medianAlloc=2431192 divergence=na
+dev turn-180 beam success=true ticks=22 searchTicks=22 expansions=304 medianLatencyMs=2.753 medianAlloc=2214952 divergence=0.000000
+dev turn-180 weighted success=true ticks=22 searchTicks=22 expansions=186 medianLatencyMs=2.215 medianAlloc=1427616 divergence=0.000000
+dev turn-180 physics success=true ticks=14 searchTicks=14 expansions=-1 medianLatencyMs=2.735 medianAlloc=2342440 divergence=na
+dev ascend beam success=true ticks=16 searchTicks=16 expansions=117 medianLatencyMs=1.843 medianAlloc=1023408 divergence=0.000000
+dev ascend weighted success=true ticks=24 searchTicks=24 expansions=13 medianLatencyMs=0.171 medianAlloc=84248 divergence=0.000000
+dev ascend physics success=true ticks=16 searchTicks=16 expansions=-1 medianLatencyMs=9.608 medianAlloc=6806168 divergence=na
+dev ascend-short beam success=true ticks=13 searchTicks=13 expansions=13 medianLatencyMs=0.137 medianAlloc=88680 divergence=0.000000
+dev ascend-short weighted success=true ticks=21 searchTicks=21 expansions=10 medianLatencyMs=0.096 medianAlloc=62920 divergence=0.000000
+dev ascend-short physics success=true ticks=13 searchTicks=13 expansions=-1 medianLatencyMs=6.276 medianAlloc=5289040 divergence=na
+dev gap-1 beam success=true ticks=17 searchTicks=17 expansions=100 medianLatencyMs=1.159 medianAlloc=580920 divergence=0.000000
+dev gap-1 weighted success=true ticks=18 searchTicks=18 expansions=8 medianLatencyMs=0.091 medianAlloc=41000 divergence=0.000000
+dev gap-1 physics success=true ticks=18 searchTicks=18 expansions=-1 medianLatencyMs=3.293 medianAlloc=3331968 divergence=na
+dev gap-2 beam success=true ticks=20 searchTicks=20 expansions=91 medianLatencyMs=0.439 medianAlloc=674472 divergence=0.000000
+dev gap-2 weighted success=true ticks=22 searchTicks=22 expansions=47 medianLatencyMs=0.207 medianAlloc=223536 divergence=0.000000
+dev gap-2 physics success=true ticks=20 searchTicks=20 expansions=-1 medianLatencyMs=41.310 medianAlloc=73427544 divergence=na
+dev corner beam success=true ticks=18 searchTicks=18 expansions=104 medianLatencyMs=0.336 medianAlloc=700640 divergence=0.000000
+dev corner weighted success=true ticks=19 searchTicks=19 expansions=46 medianLatencyMs=0.221 medianAlloc=276552 divergence=0.000000
+dev corner physics success=true ticks=17 searchTicks=17 expansions=-1 medianLatencyMs=6.439 medianAlloc=19888376 divergence=na
+dev diagonal beam success=true ticks=21 searchTicks=21 expansions=111 medianLatencyMs=0.464 medianAlloc=811768 divergence=0.000000
+dev diagonal weighted success=true ticks=22 searchTicks=22 expansions=42 medianLatencyMs=0.143 medianAlloc=239384 divergence=0.000000
+dev diagonal physics success=true ticks=20 searchTicks=20 expansions=-1 medianLatencyMs=1.971 medianAlloc=6839960 divergence=na
+dev walk-8 beam success=true ticks=26 searchTicks=26 expansions=57 medianLatencyMs=0.242 medianAlloc=370448 divergence=0.000000
+dev walk-8 weighted success=true ticks=28 searchTicks=28 expansions=13 medianLatencyMs=0.067 medianAlloc=62504 divergence=0.000000
+dev walk-8 physics success=true ticks=28 searchTicks=28 expansions=-1 medianLatencyMs=3.269 medianAlloc=9470776 divergence=na
+dev ascend-x beam success=true ticks=20 searchTicks=20 expansions=255 medianLatencyMs=1.209 medianAlloc=1882096 divergence=0.000000
+dev ascend-x weighted success=true ticks=28 searchTicks=28 expansions=61 medianLatencyMs=0.258 medianAlloc=445688 divergence=0.000000
+dev ascend-x physics success=true ticks=18 searchTicks=18 expansions=-1 medianLatencyMs=10.244 medianAlloc=27320128 divergence=na
+held beam 16/16 weighted 16/16 physics 14/16
+held flat-3 beam success=true ticks=12 searchTicks=12 expansions=13 medianLatencyMs=0.073 medianAlloc=87848 divergence=0.000000
+held flat-3 weighted success=true ticks=12 searchTicks=12 expansions=5 medianLatencyMs=0.026 medianAlloc=26248 divergence=0.000000
+held flat-3 physics success=true ticks=11 searchTicks=11 expansions=-1 medianLatencyMs=0.858 medianAlloc=2686304 divergence=na
+held flat-6 beam success=true ticks=20 searchTicks=20 expansions=67 medianLatencyMs=0.216 medianAlloc=397232 divergence=0.000000
+held flat-6 weighted success=true ticks=21 searchTicks=21 expansions=10 medianLatencyMs=0.049 medianAlloc=47392 divergence=0.000000
+held flat-6 physics success=true ticks=21 searchTicks=21 expansions=-1 medianLatencyMs=1.709 medianAlloc=5087392 divergence=na
+held flat-7 beam success=true ticks=23 searchTicks=23 expansions=58 medianLatencyMs=0.184 medianAlloc=364456 divergence=0.000000
+held flat-7 weighted success=true ticks=25 searchTicks=25 expansions=12 medianLatencyMs=0.058 medianAlloc=55584 divergence=0.000000
+held flat-7 physics success=true ticks=25 searchTicks=25 expansions=-1 medianLatencyMs=2.356 medianAlloc=7384048 divergence=na
+held flat-9 beam success=true ticks=28 searchTicks=28 expansions=58 medianLatencyMs=0.193 medianAlloc=335560 divergence=0.000000
+held flat-9 weighted success=true ticks=32 searchTicks=32 expansions=15 medianLatencyMs=0.070 medianAlloc=67032 divergence=0.000000
+held flat-9 physics success=true ticks=32 searchTicks=32 expansions=-1 medianLatencyMs=3.995 medianAlloc=12333904 divergence=na
+held diagonal-3 beam success=true ticks=18 searchTicks=18 expansions=87 medianLatencyMs=0.215 medianAlloc=579728 divergence=0.000000
+held diagonal-3 weighted success=true ticks=17 searchTicks=17 expansions=34 medianLatencyMs=0.106 medianAlloc=175144 divergence=0.000000
+held diagonal-3 physics success=true ticks=15 searchTicks=15 expansions=-1 medianLatencyMs=1.292 medianAlloc=4475272 divergence=na
+held diagonal-6 beam success=true ticks=30 searchTicks=30 expansions=164 medianLatencyMs=0.902 medianAlloc=977336 divergence=0.000000
+held diagonal-6 weighted success=true ticks=32 searchTicks=32 expansions=53 medianLatencyMs=0.200 medianAlloc=277248 divergence=0.000000
+held diagonal-6 physics success=true ticks=30 searchTicks=30 expansions=-1 medianLatencyMs=4.939 medianAlloc=15495384 divergence=na
+held turn-neg-x beam success=true ticks=21 searchTicks=21 expansions=239 medianLatencyMs=0.886 medianAlloc=1520304 divergence=0.000000
+held turn-neg-x weighted success=true ticks=22 searchTicks=22 expansions=68 medianLatencyMs=0.239 medianAlloc=427664 divergence=0.000000
+held turn-neg-x physics success=true ticks=18 searchTicks=18 expansions=-1 medianLatencyMs=2.247 medianAlloc=6383872 divergence=na
+held gap-1-long beam success=true ticks=23 searchTicks=23 expansions=61 medianLatencyMs=0.256 medianAlloc=347736 divergence=0.000000
+held gap-1-long weighted success=true ticks=25 searchTicks=25 expansions=12 medianLatencyMs=0.069 medianAlloc=54000 divergence=0.000000
+held gap-1-long physics success=true ticks=25 searchTicks=25 expansions=-1 medianLatencyMs=3.800 medianAlloc=6810936 divergence=na
+held gap-2-far beam success=true ticks=26 searchTicks=26 expansions=75 medianLatencyMs=0.271 medianAlloc=408704 divergence=0.000000
+held gap-2-far weighted success=true ticks=30 searchTicks=30 expansions=13 medianLatencyMs=0.059 medianAlloc=53120 divergence=0.000000
+held gap-2-far physics success=false ticks=-1 searchTicks=-1 expansions=-1 medianLatencyMs=53.633 medianAlloc=112751864 divergence=na
+held ascend-far beam success=true ticks=25 searchTicks=25 expansions=144 medianLatencyMs=0.398 medianAlloc=853456 divergence=0.000000
+held ascend-far weighted success=true ticks=36 searchTicks=36 expansions=19 medianLatencyMs=0.072 medianAlloc=97968 divergence=0.000000
+held ascend-far physics success=true ticks=27 searchTicks=27 expansions=-1 medianLatencyMs=9.829 medianAlloc=32182640 divergence=na
+held corner-long beam success=true ticks=30 searchTicks=30 expansions=509 medianLatencyMs=1.486 medianAlloc=3096080 divergence=0.000000
+held corner-long weighted success=true ticks=30 searchTicks=30 expansions=132 medianLatencyMs=0.392 medianAlloc=751072 divergence=0.000000
+held corner-long physics success=false ticks=-1 searchTicks=-1 expansions=-1 medianLatencyMs=36.101 medianAlloc=105458424 divergence=na
+held wide-sprint beam success=true ticks=31 searchTicks=31 expansions=118 medianLatencyMs=0.542 medianAlloc=618352 divergence=0.000000
+held wide-sprint weighted success=true ticks=36 searchTicks=36 expansions=17 medianLatencyMs=0.098 medianAlloc=75096 divergence=0.000000
+held wide-sprint physics success=true ticks=36 searchTicks=36 expansions=-1 medianLatencyMs=7.968 medianAlloc=15884736 divergence=na
+held short-step beam success=true ticks=9 searchTicks=9 expansions=13 medianLatencyMs=0.054 medianAlloc=79248 divergence=0.000000
+held short-step weighted success=true ticks=9 searchTicks=9 expansions=5 medianLatencyMs=0.023 medianAlloc=23000 divergence=0.000000
+held short-step physics success=true ticks=9 searchTicks=9 expansions=-1 medianLatencyMs=7.929 medianAlloc=27613128 divergence=na
+held diag-short beam success=true ticks=14 searchTicks=14 expansions=91 medianLatencyMs=0.217 medianAlloc=625240 divergence=0.000000
+held diag-short weighted success=true ticks=14 searchTicks=14 expansions=26 medianLatencyMs=0.070 medianAlloc=135192 divergence=0.000000
+held diag-short physics success=true ticks=10 searchTicks=10 expansions=-1 medianLatencyMs=0.522 medianAlloc=1818224 divergence=na
+held yaw-90-to-z beam success=true ticks=18 searchTicks=18 expansions=192 medianLatencyMs=0.549 medianAlloc=1218320 divergence=0.000000
+held yaw-90-to-z weighted success=true ticks=18 searchTicks=18 expansions=66 medianLatencyMs=0.235 medianAlloc=445304 divergence=0.000000
+held yaw-90-to-z physics success=true ticks=14 searchTicks=14 expansions=-1 medianLatencyMs=0.673 medianAlloc=2237032 divergence=na
+held gap-1-tight beam success=true ticks=17 searchTicks=17 expansions=100 medianLatencyMs=0.207 medianAlloc=526808 divergence=0.000000
+held gap-1-tight weighted success=true ticks=18 searchTicks=18 expansions=8 medianLatencyMs=0.033 medianAlloc=38048 divergence=0.000000
+held gap-1-tight physics success=true ticks=18 searchTicks=18 expansions=-1 medianLatencyMs=1.033 medianAlloc=3095776 divergence=na

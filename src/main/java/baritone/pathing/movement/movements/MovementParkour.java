@@ -598,9 +598,9 @@ public class MovementParkour extends Movement {
             double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
             double vy = ctx.player().getDeltaMovement().y, y = ctx.player().position().y, land = pos;
             for (int t = 0; t < 40 && (vy > 0 || y > dest.y); t++) {
-                vy = (vy - 0.08) * 0.98;
+                vy = (vy - 0.08) * 0.98f;
                 y += vy;
-                v *= 0.91;
+                v *= 0.91f;
                 land += v;
             }
             if (pos < centre && land > centre) {
@@ -718,6 +718,7 @@ public class MovementParkour extends Movement {
         sim.collidedH = false;
         sim.jumpTicks = 0;
         ClientWorld.readEffects(ctx, sim);
+        ClientWorld.readSupport(ctx, sim);
         return simJump(sim, yaw, delay, dest.y, this::landsOn);
     }
 

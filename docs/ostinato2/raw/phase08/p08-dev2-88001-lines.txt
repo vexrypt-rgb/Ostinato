@@ -1,0 +1,27 @@
+EXCEPTION com.mojang.authlib.exceptions.InvalidCredentialsException at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:70)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+INTERACTTEST start laps=6 reps=1 scenarios=3 timeout=600 post=40 seed=88001 flag=present rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true
+INTERACTTEST begin lap=0 scen=VANISH arm=A rep=0 clearedChests=5
+INTERACTTEST row lap=0 scen=VANISH arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD outcome=1:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalRunAwayFrom[BetterBlockPos{x=2,y=200,z=10}]; feet BetterBlockPos{x=57,y=59,z=-5}"
+INTERACTTEST keys still held after lap 0: -
+INTERACTTEST begin lap=1 scen=VANISH arm=B rep=0 clearedChests=57
+INTERACTTEST row lap=1 scen=VANISH arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=- outcome=2:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalComposite[GoalGetToBlock{x=12,y=200,z=10}, GoalGetToBlock{x=227,y=-24,z=225}, GoalBlock{x=246,y=-30,z=215}]; feet BetterBlockPos{x=13,y=65,z=10}"
+INTERACTTEST keys still held after lap 1: -
+INTERACTTEST begin lap=2 scen=SEALED arm=B rep=0 clearedChests=16
+INTERACTTEST row lap=2 scen=SEALED arm=B rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD outcome=3:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalRunAwayFrom[BetterBlockPos{x=2,y=200,z=10}]; feet BetterBlockPos{x=87,y=62,z=5}"
+INTERACTTEST keys still held after lap 2: -
+INTERACTTEST begin lap=3 scen=SEALED arm=A rep=0 clearedChests=2
+INTERACTTEST row lap=3 scen=SEALED arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD outcome=4:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalRunAwayFrom[BetterBlockPos{x=2,y=200,z=10}]; feet BetterBlockPos{x=40,y=62,z=-1}"
+INTERACTTEST keys still held after lap 3: -
+INTERACTTEST begin lap=4 scen=CANCEL_ACT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=4 scen=CANCEL_ACT arm=A rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=5:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=4 scen=CANCEL_ACT arm=A rep=0 part=rerun verdict=DONE step=1 block=chest cls=FS ticks=2 lapTicks=80 uses=0 menu=chest active=false keys=- outcome=6:FAILED/UNKNOWN msg="done in 0.1s"
+INTERACTTEST row lap=4 scen=CANCEL_ACT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=0 runnerUs=24.07
+INTERACTTEST keys still held after lap 4: -
+INTERACTTEST begin lap=5 scen=CANCEL_ACT arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=5 scen=CANCEL_ACT arm=B rep=0 part=stop verdict=STOPPED cls=STOP active1=false keys1=- activeEnd=false keysEnd=- lateOpen=true uses=1 stopTick=37 outcome=7:UNKNOWN/OWNERSHIP_LOST
+INTERACTTEST row lap=5 scen=CANCEL_ACT arm=B rep=0 part=rerun verdict=DONE step=1 block=chest cls=TS ticks=3 lapTicks=81 uses=1 menu=chest active=false keys=- outcome=8:SUCCEEDED/NONE msg="done in 0.2s"
+INTERACTTEST row lap=5 scen=CANCEL_ACT arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=19.82
+INTERACTTEST keys still held after lap 5: -
+INTERACTTEST finish laps=6

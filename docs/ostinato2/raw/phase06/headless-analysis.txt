@@ -1,0 +1,80 @@
+# Phase 06 headless batch: 1800 paired trials, families ['clean', 'kick', 'slip', 'conflict', 'cancel', 'edge']
+unified ran first in 900 trials, second in 900
+
+## H1 clean: the flag changes nothing where nothing pushes the player
+clean trials 300; legacy ends {'ARRIVED': 252, 'EMPTY_PLAN': 48}; mismatches 0 []
+H1: holds
+
+## H2 reliability: arrivals per family, unified against legacy
+| family | n | legacy arrived | unified arrived | legacy ends | unified ends | allowed loss | holds |
+|---|---|---|---|---|---|---|---|
+| clean | 300 | 252 | 252 | {'ARRIVED': 252, 'EMPTY_PLAN': 48} | {'ARRIVED': 252, 'EMPTY_PLAN': 48} | 3 | yes |
+| kick | 300 | 300 | 300 | {'ARRIVED': 300} | {'ARRIVED': 300} | 3 | yes |
+| slip | 300 | 247 | 239 | {'ARRIVED': 247, 'EMPTY_PLAN': 53} | {'ARRIVED': 239, 'EMPTY_PLAN': 61} | 3 | NO |
+| conflict | 300 | 300 | 300 | {'ARRIVED': 300} | {'ARRIVED': 300} | 3 | yes |
+| cancel | 300 | 300 | 300 (incl. stops) | {'ARRIVED': 300} | {'CANCEL_STOP': 255, 'ARRIVED': 45} | 3 | yes |
+| edge | 300 | 238 | 238 | {'ARRIVED': 238, 'EMPTY_PLAN': 62} | {'ARRIVED': 238, 'EMPTY_PLAN': 62} | 3 | yes |
+H2: FAILS
+
+## H3 safety, every unified trial
+RELEASED_EARLY: 0 []
+OVERWRITTEN: 0 []
+STALE_REJECTS: 0 []
+conflictLanded: 0 []
+keysDown: 0 []
+leased: 0 []
+state: 0 []
+cancelAir: 0 []
+unified TIMEOUT ends (keys and lease not judged): 0
+diagnostic: CONFLICTS refused 2422, ERASED 1570; legacy conflictLanded 2506
+H3: holds
+
+## H4 the correction is bounded and counted
+| family | divergences | corrections | accepted | escalations | unified driftReplans | legacy driftReplans |
+|---|---|---|---|---|---|---|
+| clean | 0 | 0 | 0 | 0 | 0 | 0 |
+| kick | 281 | 281 | 30 | 251 | 251 | 281 |
+| slip | 1905 | 1207 | 725 | 1180 | 1180 | 1931 |
+| conflict | 0 | 0 | 0 | 0 | 0 | 2501 |
+| cancel | 0 | 0 | 0 | 0 | 0 | 0 |
+| edge | 300 | 300 | 21 | 279 | 279 | 300 |
+violations 0 []
+H4: holds
+
+## H5 disturbed families: plans and ticks, paired unified - legacy
+| family | n | plans mean diff | 95% CI | fewer replans | arrived pairs | ticks mean ratio | 95% CI | median | faster/equal/slower | regression |
+|---|---|---|---|---|---|---|---|---|---|---|
+| kick | 300 | -0.100 | -0.133..-0.067 | yes | 300 | 1.0002 | 1.0000..1.0005 | 1.0000 | 0/298/2 | no |
+| slip | 300 | -2.517 | -3.107..-1.967 | yes | 238 | 0.9999 | 0.9988..1.0011 | 1.0000 | 14/212/12 | no |
+| conflict | 300 | -8.337 | -8.933..-7.773 | yes | 300 | 0.8530 | 0.8416..0.8637 | 0.8788 | 297/3/0 | no |
+| edge | 300 | -0.070 | -0.100..-0.043 | yes | 238 | 1.0011 | 1.0005..1.0018 | 1.0000 | 0/227/11 | no |
+fewer replans (CI upper < 0): ['kick', 'slip', 'conflict', 'edge']; faster (Tier S, CI upper < 0.97): ['conflict']
+H5: no regression
+
+## H6 cancel latency (ticks from the first request to the stop; legacy waits for the run to end)
+trials with a request 258; unified ends {'CANCEL_STOP': 255, 'ARRIVED': 3}; unified latency median 1.0 max 12; legacy median 35.0 (legacy never stopped while driving in 0)
+unified without a stop or arrival after the request 0 []; unified slower than legacy 0 []
+legacy latency >= 5: 229 trials, unified strictly lower in 229 (100.0%)
+H6: holds
+
+## H7 overhead: per-run driver tick time, paired unified - legacy, all families pooled (plan ticks included)
+tickP95Ns: n=1800 median diff +0.60 us, 95% CI +0.50..+0.70 us; median legacy 182.30 us, unified 27.10 us -> acceptable
+tickP99Ns: n=1800 median diff -64.90 us, 95% CI -107.40..-9.20 us; median legacy 15425.40 us, unified 14050.35 us -> acceptable
+tickP50Ns: n=1800 median diff +0.00 us, 95% CI +0.00..+0.00 us; median legacy 0.30 us, unified 0.30 us (diagnostic)
+tickMaxNs: n=1800 median diff -64.90 us, 95% CI -107.40..-9.20 us; median legacy 15425.40 us, unified 14050.35 us (diagnostic)
+
+diagnostic, per family (medians): tick p50 us legacy/unified, plan ms per run, cpu ms per run, alloc KB per run
+| family | p50 legacy | p50 unified | plan ms legacy | plan ms unified | cpu ms legacy | cpu ms unified | alloc KB legacy | alloc KB unified |
+|---|---|---|---|---|---|---|---|---|
+| clean | 0.30 | 0.40 | 17.692 | 17.811 | 15.625 | 15.625 | 45356.5 | 45357.7 |
+| kick | 0.30 | 0.30 | 10.625 | 10.438 | 15.625 | 15.625 | 32293.7 | 31211.2 |
+| slip | 0.30 | 0.40 | 33.843 | 32.289 | 31.250 | 31.250 | 96090.2 | 90568.6 |
+| conflict | 0.40 | 0.30 | 19.684 | 2.707 | 15.625 | 0.000 | 58605.7 | 7789.6 |
+| cancel | 0.20 | 0.30 | 25.053 | 25.012 | 31.250 | 31.250 | 61584.6 | 61553.6 |
+| edge | 0.30 | 0.30 | 29.408 | 29.248 | 31.250 | 31.250 | 81579.6 | 79160.0 |
+clean only (same work both arms), tick p50 diff median +0.100 us, 95% CI +0.100..+0.100 us
+H7: acceptable
+
+# Tier S summary
+H1 True; H2 False; H3 True; H4 True; H5 no regression True; H6 True; H7 acceptable
+Tier S: FAIL; fewer replans in ['kick', 'slip', 'conflict', 'edge']; faster in ['conflict'] (Tier S only)

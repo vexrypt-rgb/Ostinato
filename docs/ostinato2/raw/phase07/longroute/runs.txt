@@ -1,0 +1,3 @@
+pilot set=dev seeds=2000 trips=1 families=OPEN,MAZE,BREAK_PLACE exit=0 head=db28a1cc3+uncommitted harness (identical to 9591d363a)
+p07-dev set=dev seeds=2000 trips=2 exit=0 secs=479 head=9591d363a
+p07-ho set=heldout seeds=3001,3002 trips=2 arms=PROD,IDS exit=0 secs=818 head=92961cddf

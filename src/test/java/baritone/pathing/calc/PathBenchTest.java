@@ -228,6 +228,7 @@ public class PathBenchTest {
         if (System.getenv("OSTINATO_BENCH_TICK") != null) baritone.Baritone.settings().tickAccurateCosts.value = true; // Ostinato: tick-accurate A/B
         if (System.getenv("OSTINATO_BENCH_MOMENTUM") != null) baritone.Baritone.settings().momentumJumpCosts.value = true; // Ostinato: momentumJumpCosts A/B
         if (System.getenv("OSTINATO_BENCH_PI") != null) baritone.Baritone.settings().piCheapPathing.value = true; // Ostinato: pi-cheap A/B
+        if (System.getenv("OSTINATO_BENCH_STATEIDS") != null) baritone.Baritone.settings().pathingStateIdCache.value = true; // Ostinato 2.0 Phase 07: state-id cache A/B
         List<PathBench.Result> rs = PathBench.bench(qs, PathBench.finder(spec), reps);
         if (rec != null) {
             rec.stop();

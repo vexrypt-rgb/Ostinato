@@ -47,6 +47,7 @@ import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.movements.*;
+import baritone.pathing.unified.UnifiedExecutor;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.FastMode;
 import baritone.utils.FastTravel;
@@ -229,6 +230,11 @@ public class PathExecutor implements IPathExecutor, Helper {
             cancel();
             return false;
         }
+        // Ostinato 2.0 Phase 06: null while unifiedExecutor is off. A pass closes the gate until physics opens it again.
+        UnifiedExecutor ux = Baritone.settings().unifiedExecutor.value ? behavior.baritone.getUnifiedExecutor() : null;
+        if (ux != null) {
+            ux.beginPass();
+        }
         int driven = -1;
         lastDriver = Driver.BARITONE;
         // Ostinato: kinematic family, then physics, then the cached jump/no-jump probe. Baritone movement is the backup below.
@@ -277,6 +283,9 @@ public class PathExecutor implements IPathExecutor, Helper {
                 lastDriver = Driver.SIM;
             }
         }
+        if (ux != null && lastDriver != Driver.PHYSICS) {
+            ux.yield(pathPosition); // Ostinato 2.0 Phase 06: another driver has this tick, or Baritone's movement below will
+        }
         if (driven >= 0) {
             if (driven != pathPosition) {
                 for (int k = pathPosition; k < driven && k < path.movements().size(); k++) {
@@ -295,6 +304,9 @@ public class PathExecutor implements IPathExecutor, Helper {
                 legatoFailed(movement);
                 drivenOnCurrent = 0;
                 driverRest = DRIVER_REST;
+                if (ux != null && lastDriver == Driver.PHYSICS) {
+                    ux.fail(UnifiedExecutor.Cause.M01); // Ostinato 2.0 Phase 06
+                }
                 lastDriver = Driver.BARITONE;
                 clearKeys();
                 driven = -1;
@@ -306,8 +318,10 @@ public class PathExecutor implements IPathExecutor, Helper {
             // A pause or a cancel is only taken when this says it is safe. "Never while a controller drives" meant a
             // process that asked to stop was run on down the path until the driver happened to hand back: bastion run
             // 123 asked to stop and tower, and was carried nine blocks first. On its feet the kinematic driver is no
-            // worse a place to stop than a Traverse
-            return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ctx.player().onGround();
+            // worse a place to stop than a Traverse. Ostinato 2.0 Phase 06: nor is physics on the tick it stopped, keys up and
+            // on its feet, for a cancel it had refused twice.
+            return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ctx.player().onGround()
+                    || lastDriver == Driver.PHYSICS && ux != null && ux.stoppedForCancel();
         }
         BetterBlockPos whereAmI = ctx.playerFeet();
         if (!movement.getValidPositions().contains(whereAmI)) {
@@ -1039,8 +1053,20 @@ public class PathExecutor implements IPathExecutor, Helper {
     private void cancel() {
         clearKeys();
         behavior.baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+        if (Baritone.settings().unifiedExecutor.value) {
+            behavior.baritone.getUnifiedExecutor().fail(UnifiedExecutor.Cause.EXECUTOR_CANCEL); // Ostinato 2.0 Phase 06
+        }
+        releaseInputLeases();
         pathPosition = path.length() + 3;
         failed = true;
+    }
+
+    /** Ostinato: give back any input lease this executor's controllers hold. No-op with inputArbitration and unifiedExecutor off. */
+    public void releaseInputLeases() {
+        fall.release(behavior.baritone);
+        if (Baritone.settings().unifiedExecutor.value) {
+            behavior.baritone.getUnifiedExecutor().cancelConfirmed(UnifiedExecutor.Cause.SEGMENT_CANCEL); // Ostinato 2.0 Phase 06
+        }
     }
 
     @Override

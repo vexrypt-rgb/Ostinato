@@ -1,0 +1,188 @@
+### sample 1 lap=lap 3 rep=0 leg=slalom mode=D (last finished lap)
+pid=6100 at 2026-11-10T04:02:37 affinity=0xF class=Normal
+Render thread                      java=5/os0  base=8  cur=9  cpu=    65.7s state=Wait
+C2 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    69.2s state=Wait
+C1 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    10.4s state=Wait
+Server thread                      java=5/os0  base=8  cur=9  cpu=    17.8s state=Wait
+Ostinato worker 1                  java=4/os-1 base=7  cur=8  cpu=    21.8s state=Running
+      at baritone.pathing.movement.MovementHelper.isBottomSlab(MovementHelper.java:836)
+      at baritone.cache.ChunkPacker.getPathingBlockType(ChunkPacker.java:142)
+      at baritone.cache.ChunkPacker.pack(ChunkPacker.java:77)
+      at baritone.cache.CachedWorld$PackerThread.run(CachedWorld.java:317)
+      at java.util.concurrent.ThreadPoolExecutor.runWorker(java.base@25.0.4.1/ThreadPoolExecutor.java:1090)
+Ostinato worker 2                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at java.lang.Thread.sleepNanos0(java.base@25.0.4.1/Native Method)
+      at java.lang.Thread.sleepNanos(java.base@25.0.4.1/Thread.java:509)
+      at java.lang.Thread.sleep(java.base@25.0.4.1/Thread.java:540)
+      at baritone.cache.CachedWorld.lambda$new$0(CachedWorld.java:101)
+      at baritone.cache.CachedWorld$$Lambda/0x000000001379f628.run(Unknown Source)
+Ostinato worker 3                  java=4/os-1 base=7  cur=7  cpu=     4.2s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 4                  java=4/os-1 base=7  cur=8  cpu=     9.3s state=Running
+      at baritone.pathing.movement.movements.MovementJump.cost(MovementJump.java:1050)
+      at baritone.pathing.movement.Moves$71.apply(Moves.java:922)
+      at baritone.pathing.calc.AStarPathFinder.calculate0(AStarPathFinder.java:254)
+      at baritone.pathing.calc.AbstractNodeCostSearch.calculate(AbstractNodeCostSearch.java:218)
+      at baritone.harness.PlanLoad.lambda$tick$0(PlanLoad.java:73)
+Ostinato worker 5                  java=4/os-1 base=7  cur=8  cpu=     3.9s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 6                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+GC Thread#3                        java=-/os2  base=10 cur=11 cpu=     1.8s state=Wait
+GC Thread#2                        java=-/os2  base=10 cur=11 cpu=     1.8s state=Wait
+GC Thread#1                        java=-/os2  base=10 cur=11 cpu=     1.8s state=Wait
+G1 Conc#0                          java=-/os2  base=10 cur=11 cpu=    25.9s state=Wait
+G1 Service                         java=-/os2  base=10 cur=10 cpu=     0.0s state=Wait
+G1 Refine#0                        java=-/os2  base=10 cur=10 cpu=     2.0s state=Wait
+GC Thread#0                        java=-/os2  base=10 cur=11 cpu=     1.9s state=Wait
+G1 Main Marker                     java=-/os2  base=10 cur=11 cpu=     0.0s state=Wait
+### sample 2 lap=lap 12 rep=0 leg=steps mode=D (last finished lap)
+pid=6100 at 2026-11-10T04:05:08 affinity=0xF class=Normal
+Render thread                      java=5/os0  base=8  cur=8  cpu=   137.5s state=Ready
+C2 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    82.0s state=Wait
+C1 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    10.8s state=Wait
+Server thread                      java=5/os0  base=8  cur=8  cpu=    42.8s state=Running
+Ostinato worker 1                  java=4/os-1 base=7  cur=8  cpu=    65.0s state=Ready
+      at net.minecraft.util.ZeroBitStorage.get(ZeroBitStorage.java:37)
+      at net.minecraft.world.level.chunk.PalettedContainer.get(PalettedContainer.java:147)
+      at net.minecraft.world.level.chunk.PalettedContainer.get(PalettedContainer.java:141)
+      at baritone.cache.ChunkPacker.pack(ChunkPacker.java:76)
+      at baritone.cache.CachedWorld$PackerThread.run(CachedWorld.java:317)
+Ostinato worker 2                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at java.lang.Thread.sleepNanos0(java.base@25.0.4.1/Native Method)
+      at java.lang.Thread.sleepNanos(java.base@25.0.4.1/Thread.java:509)
+      at java.lang.Thread.sleep(java.base@25.0.4.1/Thread.java:540)
+      at baritone.cache.CachedWorld.lambda$new$0(CachedWorld.java:101)
+      at baritone.cache.CachedWorld$$Lambda/0x000000001379f628.run(Unknown Source)
+Ostinato worker 3                  java=4/os-1 base=7  cur=7  cpu=    13.2s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 4                  java=4/os-1 base=7  cur=8  cpu=    30.6s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 5                  java=4/os-1 base=7  cur=7  cpu=    12.9s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 6                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+GC Thread#3                        java=-/os2  base=10 cur=11 cpu=     2.8s state=Wait
+GC Thread#2                        java=-/os2  base=10 cur=11 cpu=     2.8s state=Wait
+GC Thread#1                        java=-/os2  base=10 cur=11 cpu=     2.8s state=Wait
+G1 Conc#0                          java=-/os2  base=10 cur=10 cpu=    46.5s state=Wait
+G1 Service                         java=-/os2  base=10 cur=10 cpu=     0.0s state=Wait
+G1 Refine#0                        java=-/os2  base=10 cur=10 cpu=     2.2s state=Wait
+GC Thread#0                        java=-/os2  base=10 cur=11 cpu=     2.8s state=Wait
+G1 Main Marker                     java=-/os2  base=10 cur=11 cpu=     0.0s state=Wait
+### sample 3 lap=lap 20 rep=1 leg=ridges mode=C (last finished lap)
+pid=6100 at 2026-11-10T04:07:39 affinity=0xF class=Normal
+Render thread                      java=5/os0  base=8  cur=8  cpu=   213.3s state=Ready
+C2 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    88.2s state=Wait
+C1 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    11.1s state=Wait
+Server thread                      java=5/os0  base=8  cur=9  cpu=    69.1s state=Wait
+Ostinato worker 1                  java=4/os-1 base=7  cur=8  cpu=   117.7s state=Running
+      at net.minecraft.world.level.material.FluidState.isEmpty(FluidState.java:49)
+      at baritone.pathing.movement.MovementHelper.avoidWalkingInto(MovementHelper.java:409)
+      at baritone.cache.ChunkPacker.getPathingBlockType(ChunkPacker.java:142)
+      at baritone.cache.ChunkPacker.pack(ChunkPacker.java:77)
+      at baritone.cache.CachedWorld$PackerThread.run(CachedWorld.java:317)
+Ostinato worker 2                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at java.lang.Thread.sleepNanos0(java.base@25.0.4.1/Native Method)
+      at java.lang.Thread.sleepNanos(java.base@25.0.4.1/Thread.java:509)
+      at java.lang.Thread.sleep(java.base@25.0.4.1/Thread.java:540)
+      at baritone.cache.CachedWorld.lambda$new$0(CachedWorld.java:101)
+      at baritone.cache.CachedWorld$$Lambda/0x000000001379f628.run(Unknown Source)
+Ostinato worker 4                  java=4/os-1 base=7  cur=8  cpu=    48.9s state=Running
+      at net.minecraft.world.level.chunk.PalettedContainer.get(PalettedContainer.java:147)
+      at net.minecraft.world.level.chunk.PalettedContainer.get(PalettedContainer.java:141)
+      at net.minecraft.world.level.chunk.LevelChunkSection.getBlockState(LevelChunkSection.java:45)
+      at baritone.utils.BlockStateInterface.getFromChunk(BlockStateInterface.java:278)
+      at baritone.utils.BlockStateInterface.get0(BlockStateInterface.java:174)
+Ostinato worker 5                  java=4/os-1 base=7  cur=8  cpu=    17.7s state=Running
+      at baritone.pathing.movement.MovementHelper.canWalkOnBlockState(MovementHelper.java:450)
+      at baritone.pathing.movement.MovementHelper.isBottomSlab(MovementHelper.java:836)
+      at baritone.pathing.movement.movements.MovementPillar.cost(MovementPillar.java:66)
+      at baritone.pathing.movement.Moves$2.cost(Moves.java:53)
+      at baritone.pathing.movement.Moves.apply(Moves.java:1303)
+Ostinato worker 7                  java=4/os-1 base=7  cur=7  cpu=     4.6s state=Ready
+      at baritone.pathing.movement.CalculationContext.get(CalculationContext.java:459)
+      at baritone.pathing.movement.movements.MovementSwim.cost(MovementSwim.java:191)
+      at baritone.pathing.movement.Moves$8.cost(Moves.java:125)
+      at baritone.pathing.movement.Moves.apply(Moves.java:1303)
+      at baritone.pathing.calc.AStarPathFinder.calculate0(AStarPathFinder.java:254)
+Ostinato worker 8                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:452)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+GC Thread#3                        java=-/os2  base=10 cur=11 cpu=     3.7s state=Wait
+GC Thread#2                        java=-/os2  base=10 cur=11 cpu=     3.7s state=Wait
+GC Thread#1                        java=-/os2  base=10 cur=11 cpu=     3.7s state=Wait
+G1 Conc#0                          java=-/os2  base=10 cur=11 cpu=    68.7s state=Wait
+G1 Service                         java=-/os2  base=10 cur=10 cpu=     0.0s state=Wait
+G1 Refine#0                        java=-/os2  base=10 cur=10 cpu=     2.5s state=Wait
+GC Thread#0                        java=-/os2  base=10 cur=11 cpu=     3.8s state=Wait
+G1 Main Marker                     java=-/os2  base=10 cur=11 cpu=     0.1s state=Wait
+### sample 4 lap=lap 29 rep=1 leg=steps mode=B (last finished lap)
+pid=6100 at 2026-11-10T04:10:10 affinity=0xF class=Normal
+Render thread                      java=5/os0  base=8  cur=8  cpu=   294.3s state=Running
+C2 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    89.8s state=Wait
+C1 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    11.3s state=Wait
+Server thread                      java=5/os0  base=8  cur=9  cpu=    94.7s state=Running
+Ostinato worker 1                  java=4/os-1 base=7  cur=8  cpu=   174.0s state=Running
+      at baritone.cache.CachedChunk.calculateHeightMap(CachedChunk.java:211)
+      at baritone.cache.CachedChunk.<init>(CachedChunk.java:149)
+      at baritone.cache.ChunkPacker.pack(ChunkPacker.java:112)
+      at baritone.cache.CachedWorld$PackerThread.run(CachedWorld.java:317)
+      at java.util.concurrent.ThreadPoolExecutor.runWorker(java.base@25.0.4.1/ThreadPoolExecutor.java:1090)
+Ostinato worker 2                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at java.lang.Thread.sleepNanos0(java.base@25.0.4.1/Native Method)
+      at java.lang.Thread.sleepNanos(java.base@25.0.4.1/Thread.java:509)
+      at java.lang.Thread.sleep(java.base@25.0.4.1/Thread.java:540)
+      at baritone.cache.CachedWorld.lambda$new$0(CachedWorld.java:101)
+      at baritone.cache.CachedWorld$$Lambda/0x000000001379f628.run(Unknown Source)
+Ostinato worker 4                  java=4/os-1 base=7  cur=8  cpu=    58.8s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.park(java.base@25.0.4.1/LockSupport.java:369)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:458)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+Ostinato worker 5                  java=4/os-1 base=7  cur=8  cpu=    36.4s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.park(java.base@25.0.4.1/LockSupport.java:369)
+      at java.util.concurrent.LinkedTransferQueue$DualNode.await(java.base@25.0.4.1/LinkedTransferQueue.java:458)
+      at java.util.concurrent.SynchronousQueue$Transferer.xferLifo(java.base@25.0.4.1/SynchronousQueue.java:194)
+      at java.util.concurrent.SynchronousQueue.xfer(java.base@25.0.4.1/SynchronousQueue.java:235)
+GC Thread#3                        java=-/os2  base=10 cur=11 cpu=     4.6s state=Wait
+GC Thread#2                        java=-/os2  base=10 cur=11 cpu=     4.6s state=Wait
+GC Thread#1                        java=-/os2  base=10 cur=11 cpu=     4.6s state=Wait
+G1 Conc#0                          java=-/os2  base=10 cur=11 cpu=    84.3s state=Wait
+G1 Service                         java=-/os2  base=10 cur=10 cpu=     0.0s state=Wait
+G1 Refine#0                        java=-/os2  base=10 cur=10 cpu=     2.8s state=Wait
+GC Thread#0                        java=-/os2  base=10 cur=11 cpu=     4.6s state=Wait
+G1 Main Marker                     java=-/os2  base=10 cur=11 cpu=     0.1s state=Wait

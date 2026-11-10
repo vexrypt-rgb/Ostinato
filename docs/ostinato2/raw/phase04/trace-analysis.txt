@@ -1,0 +1,49 @@
+dev docs/ostinato2/raw/phase04/trace-81001.csv.gz: seeds ['81001'], 14285 rows
+held-out docs/ostinato2/raw/phase04/trace-81002.csv.gz: seeds ['81002'], 14505 rows
+
+## Bounds (B1): dev p99 as the bound, held-out share over it
+| mode | dev n | dev p50 | dev p95 | dev p99 (bound) | dev max | held-out n | held-out p99 | held-out over bound | status |
+|---|---|---|---|---|---|---|---|---|---|
+| WALK | 2069 | 0.000846 | 0.001954 | 0.003547 | 0.005995 | 2076 | 0.003233 | 17/2076 = 0.82% | validated |
+| SPRINT | 2000 | 0.001234 | 0.002235 | 0.004708 | 0.005901 | 2017 | 0.005054 | 31/2017 = 1.54% | validated |
+| SPRINT_JUMP | 2110 | 0.000237 | 0.000415 | 0.000452 | 0.017837 | 2078 | 0.000454 | 21/2078 = 1.01% | validated |
+| FALL | 2000 | 0.000000 | 0.000000 | 0.000001 | 0.000000 | 2000 | 0.000000 | 0/2000 = 0.00% | validated |
+| FLUID | 2072 | 0.000143 | 0.000319 | 0.000346 | 0.040430 | 2020 | 0.000346 | 17/2020 = 0.84% | validated |
+| CLIMB | 2000 | 0.000000 | 0.000308 | 0.001103 | 0.001663 | 2062 | 0.001135 | 22/2062 = 1.07% | validated |
+
+## Excluded rows (per session, per mode)
+| mode | dev packet | dev settle | dev keys | dev rest | held-out packet | held-out settle | held-out keys | held-out rest |
+|---|---|---|---|---|---|---|---|---|
+| WALK | 44 | 56 | 0 | 1410 | 64 | 60 | 0 | 1551 |
+| SPRINT | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| SPRINT_JUMP | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| FALL | 73 | 385 | 0 | 0 | 62 | 408 | 0 | 0 |
+| FLUID | 0 | 45 | 0 | 21 | 0 | 45 | 0 | 60 |
+| CLIMB | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
+
+## Diagnostics (not gated): p99 of usable rows
+| mode | dev primary | dev land tick() | dev with yaw used | held-out primary | held-out land tick() | held-out with yaw used |
+|---|---|---|---|---|---|---|
+| WALK | 0.003547 | 0.003547 | 0.000000 | 0.003233 | 0.003233 | 0.000000 |
+| SPRINT | 0.004708 | 0.004708 | 0.000000 | 0.005054 | 0.005054 | 0.000000 |
+| SPRINT_JUMP | 0.000452 | 0.000452 | 0.000000 | 0.000454 | 0.000454 | 0.000000 |
+| FALL | 0.000000 | 0.000000 | 0.000000 | 0.000000 | 0.000000 | 0.000000 |
+| FLUID | 0.000346 | 0.385000 | 0.000000 | 0.000346 | 0.385000 | 0.000000 |
+| CLIMB | 0.001103 | 0.001103 | 0.000000 | 0.001135 | 0.001135 | 0.000000 |
+
+## Usable rows by mode and script segment (dev / held-out)
+| mode | CLIMB | FALL | FLUID | MIXED | SPRINT | SPRINT_JUMP | WALK |
+|---|---|---|---|---|---|---|---|
+| WALK | 218/174 | 31/19 | 0/0 | 1453/1575 | 0/0 | 0/0 | 367/308 |
+| SPRINT | 1/0 | 0/0 | 0/0 | 1209/1258 | 750/708 | 40/51 | 0/0 |
+| SPRINT_JUMP | 32/0 | 0/0 | 165/217 | 1552/1355 | 12/0 | 349/506 | 0/0 |
+| FALL | 78/0 | 1488/1638 | 66/71 | 368/291 | 0/0 | 0/0 | 0/0 |
+| FLUID | 0/0 | 0/0 | 2072/2020 | 0/0 | 0/0 | 0/0 | 0/0 |
+| CLIMB | 2000/2062 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 |
+
+## B1 verdict
+validated 6/6: ['WALK', 'SPRINT', 'SPRINT_JUMP', 'FALL', 'FLUID', 'CLIMB']
+not validated: []
+insufficient data: []
+unacceptable error (FAIL): []
+new MEASURED values for validated modes (dev p99, resolution floor 1e-6): WALK=0.003547, SPRINT=0.004708, SPRINT_JUMP=0.000452, FALL=0.000001, FLUID=0.000346, CLIMB=0.001103

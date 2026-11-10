@@ -128,7 +128,7 @@ public final class InputDecoder {
         start.speedScale = o.speedScale;
         start.jumpStrength = o.jumpStrength;
         start.jumpBoost = o.jumpBoost;
-        double scale = 0.98 * (o.usingFlag ? 0.2 : 1) * (o.sneakFlag ? 0.3 : 1);
+        double scale = 0.98f * (o.usingFlag ? 0.2f : 1) * (o.sneakFlag ? 0.3f : 1); // modifyInput's float scales, in its order
         // How many server ticks the interval spans is itself a guess (arrival times jitter, and metadata changes send an
         // update a tick early): try the guess and its neighbours, each weighed by how well its length fits the timing.
         int guess = o.ticks;
@@ -313,14 +313,16 @@ public final class InputDecoder {
         return an;
     }
 
-    /** The impulse of keys f, s at the sneak/use scale: a client normalises diagonals before its 0.98, a bot after. */
-    private static double[] impulse(int f, int s, double scale, boolean clientNorm) {
-        double fz = f, sx = s;
-        if (f != 0 && s != 0 && clientNorm) {
-            fz *= Math.sqrt(0.5);
-            sx *= Math.sqrt(0.5);
+    /**
+     * The impulse of keys f, s at the sneak/use scale. A 26.3 client runs them through its input pipeline (normalised,
+     * 0.98, the slow-downs, then squared back out: a plain diagonal is full length); a bot scales the raw keys.
+     */
+    private static double[] impulse(int f, int s, double scale, boolean clientNorm, Obs o) {
+        if (clientNorm) {
+            float[] k = PlayerSim.keyInput(f, s, o.usingFlag, o.sneakFlag);
+            return new double[]{k[0], k[1]};
         }
-        return new double[]{sx * scale, fz * scale}; // a bot's longer-than-one diagonal is normalised in tickImpulse
+        return new double[]{s * scale, f * scale}; // a bot's longer-than-one diagonal is normalised in tickImpulse
     }
 
     private Eval evaluateKeys(PlayerSim start, Obs o, double scale) {
@@ -330,7 +332,7 @@ public final class InputDecoder {
         int n = o.ticks;
         int kbHyps = o.kb == null ? 1 : n + 1;
         double keep = -2 * Math.log(1 - KEY_HAZARD), change = -2 * Math.log(KEY_HAZARD / 8);
-        double[] prev = impulse(lastKeyF, lastKeyS, scale, lastClientNorm);
+        double[] prev = impulse(lastKeyF, lastKeyS, scale, lastClientNorm, o);
         boolean prevDiag = lastKeyF != 0 && lastKeyS != 0;
         Fit best = null;
         double[] costs = new double[512];
@@ -365,7 +367,7 @@ public final class InputDecoder {
                                 boolean diag = f != 0 && sk != 0;
                                 for (int v = 0; v < (diag ? 2 : 1); v++) {
                                     boolean cn = diag ? v == 0 : lastClientNorm;
-                                    double[] k = impulse(f, sk, scale, cn);
+                                    double[] k = impulse(f, sk, scale, cn, o);
                                     Fit fit = keyFit(start, o, sprint, j, kbAt, c, prev, k, f, sk, cn);
                                     fit.prior = base + change + (n - 1) * keep + (diag ? 1.39 : 0);
                                     if (m < costs.length) {
@@ -491,9 +493,10 @@ public final class InputDecoder {
             // the last move's displacement is the velocity it moved with; vanilla then applies friction and gravity
             // to make the next tick's (LivingEntity.travel): carrying the raw displacement over would add a whole
             // tick of gravity's worth of error to every move after a restart until the player lands
-            double fr = o.onGround ? 0.6 * 0.91 : 0.91;
+            // (26.3's float drags; on the ground the speed is the one a standing player keeps, pressed into the floor)
+            double fr = o.onGround ? 0.6f * 0.91f : 0.91f;
             state.vx = (o.x - state.x) / o.ticks * fr;
-            state.vy = o.onGround ? 0 : ((o.y - state.y) / o.ticks - 0.08) * 0.98;
+            state.vy = o.onGround ? -0.08 * 0.98f : ((o.y - state.y) / o.ticks - 0.08) * 0.98f;
             state.vz = (o.z - state.z) / o.ticks * fr;
         } else {
             state.vx = state.vy = state.vz = 0;

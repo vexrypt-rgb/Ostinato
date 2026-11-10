@@ -1,0 +1,61 @@
+stock A* on the lattice worlds; planner tier; estTicks is A* cost, NOT_EQUIVALENT to simulated ticks
+stock dev stock-default success 12/12 wilson95 [0.758, 1.000] latencyMs n=240 p50 0.234 p95 0.639 p99 1.030
+stock dev stock-parkour success 12/12 wilson95 [0.758, 1.000] latencyMs n=240 p50 0.809 p95 1.896 p99 2.958
+stock held stock-default success 16/16 wilson95 [0.806, 1.000] latencyMs n=320 p50 0.131 p95 0.344 p99 0.561
+stock held stock-parkour success 16/16 wilson95 [0.806, 1.000] latencyMs n=320 p50 0.737 p95 1.468 p99 1.720
+dev flat-4 stock-default success=true estTicks=14.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/0/1
+dev flat-4 stock-parkour success=true estTicks=14.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/0/1
+dev flat-5 stock-default success=true estTicks=17.8 expansions=6 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev flat-5 stock-parkour success=true estTicks=17.8 expansions=6 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev turn-90 stock-default success=true estTicks=14.3 expansions=5 moves=1/0/0;1/0/0;1/0/0;1/0/0
+dev turn-90 stock-parkour success=true estTicks=14.3 expansions=5 moves=1/0/0;1/0/0;1/0/0;1/0/0
+dev turn-180 stock-default success=true estTicks=14.3 expansions=5 moves=0/0/-1;0/0/-1;0/0/-1;0/0/-1
+dev turn-180 stock-parkour success=true estTicks=14.3 expansions=5 moves=0/0/-1;0/0/-1;0/0/-1;0/0/-1
+dev ascend stock-default success=true estTicks=20.9 expansions=6 moves=0/0/1;0/0/1;0/0/1;0/1/1;0/0/1
+dev ascend stock-parkour success=true estTicks=20.9 expansions=6 moves=0/0/1;0/0/1;0/0/1;0/1/1;0/0/1
+dev ascend-short stock-default success=true estTicks=17.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/1/1
+dev ascend-short stock-parkour success=true estTicks=17.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/1/1
+dev gap-1 stock-default success=true estTicks=38.9 expansions=15 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev gap-1 stock-parkour success=true estTicks=22.0 expansions=9 moves=0/0/1;0/0/1;0/0/2;0/0/1
+dev gap-2 stock-default success=true estTicks=74.3 expansions=24 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev gap-2 stock-parkour success=true estTicks=26.6 expansions=5 moves=0/0/1;0/0/1;0/0/3;0/0/1
+dev corner stock-default success=true estTicks=19.3 expansions=6 moves=0/0/1;0/0/1;1/0/1;1/0/0;1/0/0
+dev corner stock-parkour success=true estTicks=19.3 expansions=6 moves=0/0/1;0/0/1;1/0/1;1/0/0;1/0/0
+dev diagonal stock-default success=true estTicks=20.2 expansions=5 moves=1/0/1;1/0/1;1/0/1;1/0/1
+dev diagonal stock-parkour success=true estTicks=20.2 expansions=5 moves=1/0/1;1/0/1;1/0/1;1/0/1
+dev walk-8 stock-default success=true estTicks=28.5 expansions=9 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev walk-8 stock-parkour success=true estTicks=28.5 expansions=9 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+dev ascend-x stock-default success=true estTicks=20.9 expansions=6 moves=1/0/0;1/0/0;1/0/0;1/1/0;1/0/0
+dev ascend-x stock-parkour success=true estTicks=20.9 expansions=6 moves=1/0/0;1/0/0;1/0/0;1/1/0;1/0/0
+held flat-3 stock-default success=true estTicks=10.7 expansions=4 moves=0/0/1;0/0/1;0/0/1
+held flat-3 stock-parkour success=true estTicks=10.7 expansions=4 moves=0/0/1;0/0/1;0/0/1
+held flat-6 stock-default success=true estTicks=21.4 expansions=7 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held flat-6 stock-parkour success=true estTicks=21.4 expansions=7 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held flat-7 stock-default success=true estTicks=24.9 expansions=8 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held flat-7 stock-parkour success=true estTicks=24.9 expansions=8 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held flat-9 stock-default success=true estTicks=32.1 expansions=10 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held flat-9 stock-parkour success=true estTicks=32.1 expansions=10 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held diagonal-3 stock-default success=true estTicks=15.1 expansions=4 moves=1/0/1;1/0/1;1/0/1
+held diagonal-3 stock-parkour success=true estTicks=15.1 expansions=4 moves=1/0/1;1/0/1;1/0/1
+held diagonal-6 stock-default success=true estTicks=30.2 expansions=7 moves=1/0/1;1/0/1;1/0/1;1/0/1;1/0/1;1/0/1
+held diagonal-6 stock-parkour success=true estTicks=30.2 expansions=7 moves=1/0/1;1/0/1;1/0/1;1/0/1;1/0/1;1/0/1
+held turn-neg-x stock-default success=true estTicks=17.8 expansions=6 moves=-1/0/0;-1/0/0;-1/0/0;-1/0/0;-1/0/0
+held turn-neg-x stock-parkour success=true estTicks=17.8 expansions=6 moves=-1/0/0;-1/0/0;-1/0/0;-1/0/0;-1/0/0
+held gap-1-long stock-default success=true estTicks=46.0 expansions=9 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held gap-1-long stock-parkour success=true estTicks=29.1 expansions=7 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/2;0/0/1
+held gap-2-far stock-default success=true estTicks=81.4 expansions=29 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held gap-2-far stock-parkour success=true estTicks=33.7 expansions=7 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/3;0/0/1
+held ascend-far stock-default success=true estTicks=31.6 expansions=9 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/1/1;0/0/1;0/0/1
+held ascend-far stock-parkour success=true estTicks=31.6 expansions=9 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/1/1;0/0/1;0/0/1
+held corner-long stock-default success=true estTicks=33.6 expansions=10 moves=0/0/1;0/0/1;0/0/1;0/0/1;1/0/1;1/0/0;1/0/0;1/0/0;1/0/0
+held corner-long stock-parkour success=true estTicks=33.6 expansions=10 moves=0/0/1;0/0/1;0/0/1;0/0/1;1/0/1;1/0/0;1/0/0;1/0/0;1/0/0
+held wide-sprint stock-default success=true estTicks=35.6 expansions=11 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held wide-sprint stock-parkour success=true estTicks=35.6 expansions=11 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held short-step stock-default success=true estTicks=10.2 expansions=3 moves=0/0/1;0/1/1
+held short-step stock-parkour success=true estTicks=10.2 expansions=3 moves=0/0/1;0/1/1
+held diag-short stock-default success=true estTicks=10.1 expansions=3 moves=1/0/1;1/0/1
+held diag-short stock-parkour success=true estTicks=10.1 expansions=3 moves=1/0/1;1/0/1
+held yaw-90-to-z stock-default success=true estTicks=14.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/0/1
+held yaw-90-to-z stock-parkour success=true estTicks=14.3 expansions=5 moves=0/0/1;0/0/1;0/0/1;0/0/1
+held gap-1-tight stock-default success=true estTicks=38.9 expansions=7 moves=0/0/1;0/0/1;0/0/1;0/0/1;0/0/1
+held gap-1-tight stock-parkour success=true estTicks=22.0 expansions=5 moves=0/0/1;0/0/1;0/0/2;0/0/1

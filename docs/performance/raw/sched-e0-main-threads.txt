@@ -1,0 +1,37 @@
+### sample 1 after lap 20 rep=1 leg=ridges mode=C
+pid=25224 at 2026-11-10T04:38:06 affinity=0xFF class=Normal
+Render thread                      java=10/os2 base=10 cur=11 cpu=   172.4s state=Wait
+C2 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    70.5s state=Wait
+C1 CompilerThread0                 java=9/os2  base=10 cur=11 cpu=    11.8s state=Wait
+Server thread                      java=8/os1  base=9  cur=9  cpu=    40.1s state=Wait
+Ostinato worker 1                  java=4/os-1 base=7  cur=8  cpu=   113.8s state=Running
+      at net.minecraft.util.ZeroBitStorage.get(ZeroBitStorage.java:37)
+      at net.minecraft.world.level.chunk.PalettedContainer.get(PalettedContainer.java:147)
+Ostinato worker 2                  java=4/os-1 base=7  cur=8  cpu=     0.1s state=Wait
+      at java.lang.Thread.sleepNanos0(java.base@25.0.4.1/Native Method)
+      at java.lang.Thread.sleepNanos(java.base@25.0.4.1/Thread.java:509)
+Ostinato worker 4                  java=4/os-1 base=7  cur=8  cpu=   146.5s state=Running
+      at java.lang.StrictMath.hypot(java.base@25.0.4.1/StrictMath.java:2202)
+      at java.lang.Math.hypot(java.base@25.0.4.1/Math.java:2775)
+Ostinato worker 5                  java=4/os-1 base=7  cur=7  cpu=    73.7s state=Running
+      at baritone.pathing.movement.CalculationContext.get(CalculationContext.java:459)
+      at baritone.pathing.movement.movements.MovementDescend.cost(MovementDescend.java:97)
+Ostinato worker 7                  java=4/os-1 base=7  cur=8  cpu=    17.3s state=Running
+      at baritone.pathing.movement.Moves$9.cost(Moves.java:137)
+      at baritone.pathing.movement.Moves.apply(Moves.java:1303)
+Ostinato worker 8                  java=4/os-1 base=7  cur=8  cpu=     0.0s state=Wait
+      at jdk.internal.misc.Unsafe.park(java.base@25.0.4.1/Native Method)
+      at java.util.concurrent.locks.LockSupport.parkNanos(java.base@25.0.4.1/LockSupport.java:408)
+G1 Conc#1                          java=-/os2  base=10 cur=11 cpu=    22.3s state=Wait
+GC Thread#6                        java=-/os2  base=10 cur=11 cpu=     2.0s state=Wait
+GC Thread#7                        java=-/os2  base=10 cur=11 cpu=     1.9s state=Wait
+GC Thread#5                        java=-/os2  base=10 cur=11 cpu=     1.9s state=Wait
+GC Thread#4                        java=-/os2  base=10 cur=11 cpu=     2.0s state=Wait
+GC Thread#2                        java=-/os2  base=10 cur=11 cpu=     1.9s state=Wait
+GC Thread#3                        java=-/os2  base=10 cur=11 cpu=     2.1s state=Wait
+GC Thread#1                        java=-/os2  base=10 cur=11 cpu=     2.1s state=Wait
+G1 Service                         java=-/os2  base=10 cur=10 cpu=     0.0s state=Wait
+G1 Refine#0                        java=-/os2  base=10 cur=10 cpu=     1.2s state=Wait
+G1 Conc#0                          java=-/os2  base=10 cur=11 cpu=    22.6s state=Wait
+G1 Main Marker                     java=-/os2  base=10 cur=11 cpu=     0.1s state=Wait
+GC Thread#0                        java=-/os2  base=10 cur=11 cpu=     1.9s state=Wait

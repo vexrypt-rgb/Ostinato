@@ -14,7 +14,11 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -226,6 +230,151 @@ public class InputArbiterTest {
         int legacyReturn = fall.indexOf("return r;");
         int tryStart = fall.indexOf("try {");
         assertTrue(legacyReturn > flag && legacyReturn < tryStart);
+    }
+
+    /** Review fix: an owner asked to cancel that never acks is still the owner, however long it takes. */
+    @Test
+    public void cancelWithoutAckIsNeverTreatedAsStopped() {
+        InputArbiter arb = new InputArbiter();
+        InputArbiter.Lease owner = arb.claim("fall", 10, false, InputArbiter.Resource.MOVE, InputArbiter.Resource.JUMP);
+        long epoch = owner.epoch();
+        arb.requestCancel("fall");
+        for (int tick = 0; tick < 1200; tick++) {
+            if (tick < 600) {
+                assertEquals(InputArbiter.Submit.OK, arb.submit("fall", epoch, down(Input.MOVE_FORWARD, Input.JUMP)));
+                assertDown(arb.seal(), Input.MOVE_FORWARD, Input.JUMP);
+            } else {
+                assertDown(arb.seal());
+            }
+            assertTrue(owner.alive());
+            assertTrue(owner.holds(InputArbiter.Resource.MOVE));
+            assertNull(owner.end());
+            assertEquals(epoch, owner.epoch());
+        }
+        InputArbiter.Lease lower = arb.claim("walker", 1, false, InputArbiter.Resource.MOVE);
+        assertFalse(lower.alive());
+        assertTrue(owner.holds(InputArbiter.Resource.MOVE));
+        arb.confirmRelease("fall");
+        assertEquals(InputArbiter.End.RELEASED, owner.end());
+        assertTrue(arb.claim("walker", 1, false, InputArbiter.Resource.MOVE).alive());
+    }
+
+    /** Review fix: random claim, submit, cancel, release, fail and releaseAll. No resource ever has two living holders. */
+    @Test
+    public void neverTwoOwnersOfOneResourceInAnyTick() {
+        String[] ids = {"a", "b", "c", "d", "e"};
+        InputArbiter.Resource[] all = InputArbiter.Resource.values();
+        Input[] keys = Input.values();
+        for (long seed = 1; seed <= 200; seed++) {
+            Random rnd = new Random(seed);
+            InputArbiter arb = new InputArbiter();
+            Map<String, InputArbiter.Lease> leases = new HashMap<>();
+            for (int step = 0; step < 400; step++) {
+                String id = ids[rnd.nextInt(ids.length)];
+                int op = rnd.nextInt(10);
+                if (op < 4) {
+                    List<InputArbiter.Resource> want = new ArrayList<>();
+                    for (InputArbiter.Resource r : all) {
+                        if (rnd.nextBoolean()) {
+                            want.add(r);
+                        }
+                    }
+                    leases.put(id, arb.claim(id, rnd.nextInt(3), rnd.nextInt(8) == 0, want.toArray(new InputArbiter.Resource[0])));
+                } else if (op < 7) {
+                    InputArbiter.Lease lease = leases.get(id);
+                    if (lease != null) {
+                        arb.submit(id, lease.epoch(), down(keys[rnd.nextInt(keys.length)], Input.MOVE_FORWARD, Input.JUMP));
+                    }
+                } else if (op == 7) {
+                    arb.requestCancel(id);
+                } else if (op == 8) {
+                    if (rnd.nextBoolean()) {
+                        arb.confirmRelease(id);
+                    } else {
+                        arb.fail(id);
+                    }
+                } else if (rnd.nextInt(20) == 0) {
+                    arb.releaseAll();
+                }
+                Map<InputArbiter.Resource, String> holder = new EnumMap<>(InputArbiter.Resource.class);
+                for (InputArbiter.Lease lease : leases.values()) {
+                    for (InputArbiter.Resource r : all) {
+                        if (!lease.holds(r)) {
+                            continue;
+                        }
+                        assertTrue("dead lease keeps " + r + " seed " + seed, lease.alive());
+                        assertNull("two owners of " + r + " seed " + seed + " step " + step, holder.put(r, lease.id()));
+                    }
+                }
+                Map<Input, Boolean> frame = arb.seal();
+                for (Input key : keys) {
+                    if (!Boolean.TRUE.equals(frame.get(key))) {
+                        continue;
+                    }
+                    boolean owned = false;
+                    for (InputArbiter.Resource r : holder.keySet()) {
+                        owned |= keysOf(r).contains(key);
+                    }
+                    assertTrue("unowned key down " + key + " seed " + seed + " step " + step, owned);
+                }
+            }
+        }
+    }
+
+    /** Review fix: disconnect or world change ends every lease and stales queued frames. */
+    @Test
+    public void releaseAllEndsEveryLeaseAndStalesQueuedFrames() {
+        InputArbiter arb = new InputArbiter();
+        InputArbiter.Lease fall = arb.claim("fall", 10, false, InputArbiter.Resource.MOVE, InputArbiter.Resource.SNEAK);
+        InputArbiter.Lease hop = arb.claim("hop", 1, false, InputArbiter.Resource.JUMP);
+        long fallEpoch = fall.epoch();
+        assertEquals(InputArbiter.Submit.OK, arb.submit("fall", fallEpoch, down(Input.MOVE_FORWARD)));
+        assertEquals(InputArbiter.Submit.OK, arb.submit("hop", hop.epoch(), down(Input.JUMP)));
+        assertDown(arb.seal(), Input.MOVE_FORWARD, Input.JUMP);
+        assertEquals(InputArbiter.Submit.OK, arb.submit("fall", fallEpoch, down(Input.MOVE_FORWARD)));
+
+        arb.releaseAll();
+        assertFalse(fall.alive());
+        assertFalse(hop.alive());
+        assertEquals(InputArbiter.End.RELEASED, fall.end());
+        assertEquals(InputArbiter.End.RELEASED, hop.end());
+        assertDown(arb.applied());
+        assertDown(arb.seal());
+        assertEquals(InputArbiter.Submit.STALE, arb.submit("fall", fallEpoch, down(Input.MOVE_FORWARD)));
+        arb.releaseAll();
+        assertTrue(arb.claim("fall", 10, false, InputArbiter.Resource.MOVE).alive());
+    }
+
+    /** Review fix: executor cancel, segment cancel and world change give leases back. Source scan, like the flag test. */
+    @Test
+    public void executorCancelSegmentCancelAndWorldChangeReleaseLeases() throws Exception {
+        String executor = read("src/main/java/baritone/pathing/path/PathExecutor.java").replace("\r\n", "\n");
+        int cancel = executor.indexOf("private void cancel() {");
+        assertTrue(cancel >= 0);
+        int release = executor.indexOf("releaseInputLeases();", cancel);
+        assertTrue(release > cancel && release < executor.indexOf("\n    }", cancel));
+        assertTrue(executor.contains("fall.release(behavior.baritone);"));
+        String behavior = read("src/main/java/baritone/behavior/PathingBehavior.java").replace("\r\n", "\n");
+        int segment = behavior.indexOf("public void secretInternalSegmentCancel()");
+        int segRelease = behavior.indexOf("current.releaseInputLeases();", segment);
+        assertTrue(segment >= 0 && segRelease > segment && segRelease < behavior.indexOf("current = null;", segment));
+        int world = behavior.indexOf("public void onWorldEvent(WorldEvent event)");
+        int worldRelease = behavior.indexOf("getInputArbiter().releaseAll()", world);
+        assertTrue(world >= 0 && worldRelease > world && worldRelease < behavior.indexOf("\n    }", world));
+    }
+
+    /** The key groups {@link InputArbiter.Resource} documents. */
+    private static Set<Input> keysOf(InputArbiter.Resource r) {
+        switch (r) {
+            case MOVE:
+                return EnumSet.of(Input.MOVE_FORWARD, Input.MOVE_BACK, Input.MOVE_LEFT, Input.MOVE_RIGHT, Input.SPRINT);
+            case JUMP:
+                return EnumSet.of(Input.JUMP);
+            case SNEAK:
+                return EnumSet.of(Input.SNEAK);
+            default:
+                return EnumSet.of(Input.CLICK_LEFT, Input.CLICK_RIGHT);
+        }
     }
 
     private static Map<Input, Boolean> down(Input... keys) {

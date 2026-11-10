@@ -88,6 +88,9 @@ public final class PathNode {
 
     public double terminalCharge;
 
+    /** Ostinato 2.0 Phase 05: the sim-edge search's representative body for this state; null in every other search. */
+    SimEdge.Body body;
+
     public PathNode(int x, int y, int z, Goal goal) {
         this.previous = null;
         this.cost = ActionCosts.COST_INF;

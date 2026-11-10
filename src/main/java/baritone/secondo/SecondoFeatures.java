@@ -16,7 +16,8 @@ import java.util.Map;
  * Detection is classpath plus the feature's own flag. {@link #invoke} is always false in v1:
  * a missing type, a flag that is off, and a flag that is on all take the same path (no call).
  * <p>
- * Planned types, as landed on the PPE branch and not on this main:
+ * Planned types, first landed on the PPE branch; since the combine/main-maze-ppe merges all six are on this main too,
+ * but {@link #invoke} still calls none of them:
  * <ul>
  * <li>{@code baritone.api.physics.IPredictivePhysics} — PPE. Consulted only if Grace Note, Presto, or Bombard is ready.</li>
  * <li>{@code baritone.api.gracenote.IGraceNote} — water clutch. Property {@code ostinato.graceNote}, default observe.</li>
