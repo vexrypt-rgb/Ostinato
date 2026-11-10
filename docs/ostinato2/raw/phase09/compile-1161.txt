@@ -1,0 +1,10 @@
+jar: /c/Users/redfa/.gradle/caches/fabric-loom/1.16.5-mapped-null.unspecified-1.0-v2/minecraft-1.16.5-mapped-null.unspecified-1.0-v2.jar
+contract sha1: 8166dfbf7962d27d64e7e6688a82328d80cfa39f 35275e868e78251b63041d28cd918ea2b20abede 
+1.16 adapter + unchanged contract, --release 8: COMPILED
+./baritone/process/interact/ClientContainers.class
+./baritone/process/interact/ContainerView$Kind.class
+./baritone/process/interact/ContainerView.class
+./baritone/process/interact/OpenVerifier$Step.class
+./baritone/process/interact/OpenVerifier.class
+26.3 adapter against the 1.16 jar (control): FAILED (expected)
+ProcessOutcome (record), --release 8: FAILED (expected: records need Java 16)
