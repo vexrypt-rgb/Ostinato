@@ -95,6 +95,18 @@ public final class InteractLiveTest implements AbstractGameEventListener {
             return this == REPLACE || this == REPEAT;
         }
 
+        /**
+         * The world generates chests, and Baritone remembers them past the loaded chunks, so "the only one vanished"
+         * or "the only one is sealed" needs a target the overworld never generates: an ender chest.
+         */
+        boolean ender() {
+            return this == VANISH || this == SEALED;
+        }
+
+        String target() {
+            return ender() ? "ender_chest" : "chest";
+        }
+
         void build(ServerLevel level) {
             BlockState stone = Blocks.STONE.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
             for (int x = -3; x <= SIZE + 3; x++) {
@@ -110,7 +122,8 @@ public final class InteractLiveTest implements AbstractGameEventListener {
                 BlockState bedrock = Blocks.BEDROCK.defaultBlockState();
                 for (int x = 11; x <= 13; x++) for (int y = F - 1; y <= F + 1; y++) for (int z = 9; z <= 11; z++) level.setBlock(new BlockPos(x, y, z), bedrock, 2);
             }
-            level.setBlock(CHEST, Blocks.CHEST.defaultBlockState(), 2);
+            cleared = clearOtherChests(level);
+            level.setBlock(CHEST, (ender() ? Blocks.ENDER_CHEST : Blocks.CHEST).defaultBlockState(), 2);
             if (table()) level.setBlock(TABLE, Blocks.CRAFTING_TABLE.defaultBlockState(), 2);
             if (this == CAT) {
                 Cat cat = EntityTypes.CAT.create(level, EntitySpawnReason.COMMAND);
@@ -121,6 +134,28 @@ public final class InteractLiveTest implements AbstractGameEventListener {
                 level.addFreshEntity(cat);
             }
         }
+    }
+
+    /** Chests (and trapped chests) in loaded chunks other than the fixture's, removed at lap setup. */
+    private static volatile int cleared;
+
+    private static int clearOtherChests(ServerLevel level) {
+        int n = 0;
+        for (int cx = -32; cx <= 32; cx++) {
+            for (int cz = -32; cz <= 32; cz++) {
+                net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) continue;
+                for (BlockPos pos : new ArrayList<>(chunk.getBlockEntities().keySet())) {
+                    BlockState st = level.getBlockState(pos);
+                    if ((st.is(Blocks.CHEST) || st.is(Blocks.TRAPPED_CHEST) || st.is(Blocks.ENDER_CHEST)) && !pos.equals(CHEST)) {
+                        level.removeBlockEntity(pos);
+                        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                        n++;
+                    }
+                }
+            }
+        }
+        return n;
     }
 
     private record Lap(int rep, Scenario scenario, int arm) {}
@@ -140,6 +175,7 @@ public final class InteractLiveTest implements AbstractGameEventListener {
     private TaskRunner.StepStatus lastStatus;
     /** Server-side menu kind seen last tick, and the lap tick a target menu last appeared. */
     private String lastMenu = "none";
+    private AbstractContainerMenu lastMenuRef;
     private long chestOpenedAt = -1, tableOpenedAt = -1;
     private String post;
 
@@ -303,11 +339,13 @@ public final class InteractLiveTest implements AbstractGameEventListener {
             verdictAt = stopAt = -1;
             chestOpenedAt = tableOpenedAt = -1;
             lastMenu = "none";
+            lastMenuRef = player(mc).containerMenu;
             runnerNs = runnerTicks = 0;
             phase = 0;
             post = null;
             usePackets = 0;
-            startRun(s == Scenario.REPEAT ? list("chest", "crafting_table") : list("chest"));
+            log("begin lap=" + index + " scen=" + s + " arm=" + armName(l) + " rep=" + l.rep() + " clearedChests=" + cleared);
+            startRun(s == Scenario.REPEAT ? list("chest", "crafting_table") : list(s.target()));
             step = 1;
             return;
         }
@@ -347,7 +385,7 @@ public final class InteractLiveTest implements AbstractGameEventListener {
                 boolean late = chestOpenedAt > stopAt;
                 log("row lap=" + index + " scen=" + s + " arm=" + armName(l) + " rep=" + l.rep() + " part=stop verdict=" + runner.state()
                         + " cls=STOP " + post + " activeEnd=" + baritone.getGetToBlockProcess().isActive() + " keysEnd=" + heldKeys()
-                        + " lateOpen=" + late + " uses=" + usePackets + " stopTick=" + stopAt);
+                        + " lateOpen=" + late + " uses=" + usePackets + " stopTick=" + stopAt + " outcome=" + outcome());
                 // a new request after the cancel must not inherit anything: run the same list again
                 usePackets = 0;
                 startRun(list("chest"));
@@ -371,7 +409,8 @@ public final class InteractLiveTest implements AbstractGameEventListener {
             return;
         }
         if (verdictAt < 0 && lapTicks - runStart > TIMEOUT) {
-            row(l, "HANG", "no verdict in " + TIMEOUT + " ticks", "HANG");
+            row(l, "HANG", "no verdict in " + TIMEOUT + " ticks; goal " + baritone.getPathingBehavior().getGoal()
+                    + "; feet " + baritone.getPlayerContext().playerFeet(), "HANG");
             endLap(mc);
         }
     }
@@ -399,7 +438,7 @@ public final class InteractLiveTest implements AbstractGameEventListener {
     private void verdict(Lap l, int i) {
         TaskRunner.StepStatus st = runner.status(i);
         String block = runner.list().get(i).get("block");
-        long opened = block.equals("chest") ? chestOpenedAt : tableOpenedAt;
+        long opened = block.equals("crafting_table") ? tableOpenedAt : chestOpenedAt;
         boolean ok = opened >= stepStart && opened >= 0;
         String cls = st == TaskRunner.StepStatus.DONE ? (ok ? "TS" : "FS") : st == TaskRunner.StepStatus.FAILED ? (ok ? "FF" : "TF") : "?";
         row(l, st + " step=" + (i + 1) + " block=" + block, runner.message(i), cls);
@@ -409,7 +448,13 @@ public final class InteractLiveTest implements AbstractGameEventListener {
         log("row lap=" + index + " scen=" + l.scenario() + " arm=" + armName(l) + " rep=" + l.rep() + " part=" + (step == 3 ? "rerun" : "main")
                 + " verdict=" + verdict + " cls=" + cls + " ticks=" + (lapTicks - stepStart) + " lapTicks=" + lapTicks
                 + " uses=" + (usePackets - usesAtStep) + " menu=" + lastMenu + " active=" + baritone.getGetToBlockProcess().isActive()
-                + " keys=" + heldKeys() + " msg=\"" + (msg == null ? "" : msg.replace('"', '\'')) + "\"");
+                + " keys=" + heldKeys() + " outcome=" + outcome() + " msg=\"" + (msg == null ? "" : msg.replace('"', '\'')) + "\"");
+    }
+
+    /** What the process says became of its latest request (the system under test's own view, not the oracle). */
+    private String outcome() {
+        baritone.api.process.ProcessOutcome o = baritone.getGetToBlockProcess().outcome();
+        return o.request() + ":" + o.state() + "/" + o.reason();
     }
 
     private String armName(Lap l) {
@@ -423,16 +468,20 @@ public final class InteractLiveTest implements AbstractGameEventListener {
         String kind = "none";
         if (m instanceof ChestMenu cm) {
             Container c = cm.getContainer();
-            kind = c instanceof BlockEntity be && be.getBlockPos().equals(CHEST) ? "chest" : "otherchest";
+            boolean ours = c instanceof BlockEntity be && be.getBlockPos().equals(CHEST)
+                    || c == p.getEnderChestInventory() && p.level().getBlockEntity(CHEST) instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity e
+                    && p.getEnderChestInventory().isActiveChest(e);
+            kind = ours ? "chest" : "otherchest";
         } else if (m instanceof CraftingMenu && p.blockPosition().distSqr(TABLE) < 64) {
             kind = "table";
         } else if (m != p.inventoryMenu) {
             kind = m.getClass().getSimpleName();
         }
-        if (!kind.equals(lastMenu)) {
+        if (m != lastMenuRef) {
             if (kind.equals("chest")) chestOpenedAt = lapTicks;
             if (kind.equals("table")) tableOpenedAt = lapTicks;
         }
+        lastMenuRef = m;
         lastMenu = kind;
     }
 

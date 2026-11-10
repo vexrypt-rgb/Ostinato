@@ -2762,3 +2762,207 @@ under 0.5 s per trip and the CI spans 1.
   guards still open. That is recorded as context for the owner, not as the class.
 - `pathingStateIdCache` stays default **false**. The existing A* planner, the executor, the hierarchy (default
   false) and every default setting are unchanged.
+
+
+## Phase 08: capability integration, navigate → interact → verify (2026-11-09, branch `ostinato2/claude-review`, local only)
+
+The task: make one end-to-end workflow run reliably, with explicit outcomes, ownership, cancellation and recovery, and
+with success resting only on a server-confirmed postcondition. Phase start HEAD `b9282552b` (tree clean apart from an
+untracked `scripts/__pycache__/`). Phase 06/07 features stay off (`unifiedExecutor`, `pathingStateIdCache`, ...). No
+default changes.
+
+### Audit: capability map (read from `b9282552b`; live where marked)
+
+Labels: VERIFIED (read in code, or measured live where marked), REPORTED (stated in docs, not re-checked), UNKNOWN,
+FAILED (the capability does not do what its caller assumes).
+
+| Capability | Entry point | Resource ownership | Completion evidence | Cancellation | Recovery |
+|---|---|---|---|---|---|
+| Navigation | `CustomGoalProcess.setGoalAndPath` → `PathingControlManager` → `PathingBehavior` | movement keys via the physics driver / input arbiter; processes call `clearAllKeys()` directly (B6, open). VERIFIED | **FAILED** at the process: `state = NONE` alike on arrival, `calcFailed` and `onLostControl`; `isActive()` is the only signal. The task runner's GOTO step re-checks `goal.isInGoal(feet)`. VERIFIED | `cancelEverything()` → every process's `onLostControl`. VERIFIED | replan; blacklist; Cadenza give-up. VERIFIED |
+| Mining | `MineProcess.mine` | `CLICK_LEFT` + look via helpers. VERIFIED | inventory count, checked by the runner's MINE step when a count is given; a count-less mine is "done" when inactive. VERIFIED | `onLostControl` → `mine(0, null)`. VERIFIED | blacklist of failed spots. VERIFIED |
+| Placement | `BuilderProcess.build` | `CLICK_RIGHT`/`CLICK_LEFT` + look. VERIFIED | "Done building" → inactive; "Unable to do it. Pausing" stays **active** (a hang, not a false success). The runner's BUILD step returns success on inactive, so a **preempted** build is a false success. VERIFIED | `onLostControl`. VERIFIED | pause, then resume by command. VERIFIED |
+| Interaction | `GetToBlockProcess.getToBlock` (`goto <block>`), right click on arrival for six container blocks | `CLICK_RIGHT` + look; `onLostControl` → `clearAllKeys()` (B6). VERIFIED | **FAILED**: `rightClick()` returns "done" for *any* non-inventory menu (no type check, a menu left open counts), for a 20-tick timeout, and for "no reachable face"; all three end exactly like success, and the runner's GET_TO_BLOCK verify returns success. Live baseline below: VERIFIED false successes. | `onLostControl`; a click already sent can still open the container afterwards (live: `lateOpen=true`). VERIFIED | blacklist closest on calc failure; with `exploreForBlocks` (default on) an empty target list **explores forever** (live: HANG). VERIFIED |
+
+Other findings (VERIFIED by reading):
+- No process exposes an outcome; callers see only `isActive()`. The task builder (`TaskRunner` + `BaritoneTaskAdapter`)
+  is the one higher-level consumer, and it treats inactive as success for every step type except GOTO and counted MINE.
+- `TunnelProcess` is a safe boundary: it never trusts builder inactivity (re-checks `stillSolid()`, at most 3 tries,
+  stall watchdog).
+- `GetToBlockProcess.rescan` runs on `Baritone.getExecutor()` every 5 ticks and is not tied to the request that
+  scheduled it: after the request ends it throws an NPE (live: logged in every baseline run), and it can write
+  `knownLocations` into a newer request.
+
+### Workflow selection: C, navigate → interact → verify
+
+- **C (chosen).** Confirmed false success at two layers (process and runner); small surface (one 315-line process,
+  one adapter method); a server-confirmed postcondition exists (the server opens a container menu for the player and
+  the client sees it only after the OpenScreen packet); the ownership surface is one key and the look target; an
+  existing live fixture pattern (`CadenzaLiveTest`) to build on.
+- A (mine) was rejected: counted mining is already postcondition-verified; the remaining gap (count-less mine) has no
+  crisp postcondition.
+- B (place/build) was rejected: `BuilderProcess` is 2006 lines; its false success needs a preemption; its failure mode
+  is a hang that would need builder changes.
+- D (recover → resume) was rejected: it depends on the disabled `unifiedExecutor` lease path.
+
+### Operation semantics (the slice)
+
+- One request = one `getToBlock` call; it gets a new request number. States: ACCEPTED on the call (REQUESTED is not
+  separately observable here), RUNNING on the first tick, then exactly one terminal state, which sticks.
+- **SUCCEEDED** only when the server opened a container of the matching type (`ChestMenu` for chest / trapped chest /
+  ender chest, `CraftingMenu`, `FurnaceMenu`, `BlastFurnaceMenu`) *after this request saw no container open while
+  clicking*; for non-container blocks, arrival at the goal.
+- **FAILED** with a reason: `TIMEOUT` (click not answered in 20 ticks), `UNREACHABLE` (no reachable face, every
+  instance blacklisted, or no path), `WORLD_CHANGED` (every known instance vanished), `INVALIDATED_GOAL` (no instance was
+  ever known). With the flag on, GET_TO_BLOCK never falls back to exploring: exploring is its own command (and its
+  own task step), and an open-ended explore cannot have a bounded outcome.
+- **CANCELLED** / `OWNERSHIP_LOST` when control is lost before any click; **UNKNOWN** / `OWNERSHIP_LOST` when control
+  is lost after the click was sent, because the server may still open the container.
+- The task runner's GET_TO_BLOCK step (flag on) passes only if the outcome belongs to the request the step started,
+  is SUCCEEDED, and the player's container menu now is of the matching type and is not the one open at step start.
+
+### Slice (behind `verifiedGetToBlock`, default false)
+
+- `ProcessOutcome` (api, new record): request number, state, reason. The first terminal state sticks; a new request
+  gets a new number and starts clean. `IGetToBlockProcess.outcome()` exposes it (default `NONE`).
+- `GetToBlockProcess`: every request records its outcome, flag on or off. Only the flag changes behaviour:
+  - the right click counts only if the menu that opened matches the block's type, and no container was open when the
+    click began (one left open is closed first);
+  - a 20-tick unanswered click is FAILED/TIMEOUT, no reachable face FAILED/UNREACHABLE (legacy: both "done");
+  - with no known target it ends FAILED (INVALIDATED_GOAL, WORLD_CHANGED or UNREACHABLE) instead of exploring;
+  - the async rescan is tied to the request that scheduled it and dropped after it (legacy: NPE, or a stale list
+    written into a newer request);
+  - control lost before the click is CANCELLED/OWNERSHIP_LOST, after it UNKNOWN/OWNERSHIP_LOST.
+- `BaritoneTaskAdapter` GET_TO_BLOCK step (flag on): passes only if the step started a new request, that request
+  SUCCEEDED, and the player's menu now is of the matching type and is not the one open at step start.
+- Ownership: the process still releases keys with `clearAllKeys()` in `onLostControl()` (B6, unchanged; the slice adds
+  no key writer). Live, no key is held one tick after any stop in either arm.
+
+### Baseline (legacy, Tier L, seed 88001, reps 3, 54 laps; `raw/phase08/p08-base-88001-lines.txt`)
+
+Run before any product change (both arms legacy; the flag did not exist yet). Per arm (A and B identical):
+
+| scenario | result | what happened |
+|---|---|---|
+| OPEN | TS 3 | median 37 ticks, 1 use packet |
+| REPLACE | TS 3 | |
+| CANCEL_MOVE rerun | TS 3 | |
+| REPEAT step 1 / step 2 | TS 3 / **FS 3** | the chest menu still open counts as the crafting table |
+| CAT | **FS 3** | the server refuses the open; the 20-tick timeout is reported as done (5 use packets) |
+| PREEMPT | **FS 3** | the goal process takes control; the runner reads inactive as done |
+| CANCEL_ACT rerun | **FS 3** | the rerun inherits the chest that opened late after the stop (`lateOpen=true` 3/3), 0 use packets |
+| VANISH | **HANG 3** | explores forever (`GoalRunAwayFrom`) |
+| SEALED | **HANG 3** | explores forever |
+
+- Completion on possible rows 12/18 per arm; 12 false successes; 0/12 honest failures on impossible rows; 6 HANG.
+- No key held or process active after any stop or lap end.
+- 9 `NullPointerException at BlockOptionalMetaLookup.<init>` from the stale async rescan (logged without lap
+  attribution in this run).
+- Defect: false success at both layers (process and runner) on every failure mode the fixture has, and no bounded end
+  when the target does not exist.
+
+### Dev runs (seed 88001 only; dev data, not evidence)
+
+- `p08-dev1-88001-lines.txt` (partial, flag on in B): CAT, PREEMPT and REPEAT fixed in B; VANISH and SEALED still
+  HANG. Found a **harness oracle defect**: an open was detected on a change of menu kind, so a close and reopen in
+  one server tick (the stale-menu close) was missed and the CANCEL_ACT rerun read FS in B. Fixed: a new open is a new
+  server menu object.
+- `p08-dev2-88001-lines.txt` (VANISH, SEALED, CANCEL_ACT, reps 1): CANCEL_ACT B rerun TS with the fixed oracle (A
+  still FS). Found two **fixture isolation defects**:
+  - VANISH B pursued natural chests Baritone had cached far away (e.g. (227,-24,225)), outside loaded chunks, so
+    "the target vanished" was false. Removing chests in loaded chunks (5–57 per lap) cannot fix the cache.
+  - SEALED: Baritone drops a target with bedrock above and below (`MineProcess.plausibleToBreak`), so it is never
+    known, and B fell back to exploring.
+  - Fixes (before pre-registration): VANISH and SEALED use an ender chest, which the overworld never generates; and
+    with the flag on, GET_TO_BLOCK fails with INVALIDATED_GOAL instead of exploring when no target was ever known.
+- `p08-dev3-88001-lines.txt` (VANISH, SEALED, CAT, OPEN, reps 1): B gives VANISH TF (FAILED/WORLD_CHANGED, 31
+  ticks), SEALED TF (FAILED/INVALIDATED_GOAL, 30 ticks), CAT TF (FAILED/TIMEOUT, 5 uses as A), OPEN TS (38 ticks
+  against A's 37). A unchanged (HANG, HANG, FS, TS). Both stale-rescan NPEs fall in A laps.
+
+### Pre-registration: confirmatory live A/B of `verifiedGetToBlock` (committed before any held-out run)
+
+Everything below was fixed after the legacy baseline and three dev runs on seed 88001 (dev data only), and before
+any held-out data.
+It is not changed after the held-out runs.
+
+**Arms.**
+- A: production defaults (`verifiedGetToBlock` false).
+- B: identical, except `verifiedGetToBlock` true.
+- Each (rep, scenario) runs both arms back to back, and the order alternates with `(rep + scenario) % 2`. The harness sets the flag at lap start and clears it
+  between laps. `cadenza`, `exploreForBlocks`, `rightClickContainerOnArrival` and every other setting stay at their
+  defaults (the start line records them).
+
+**Instrument (Tier L).**
+- `InteractLiveTest`: a fresh world per run, Peaceful, server-built arena at y 200, a chest at (12,200,10), a
+  crafting table at (12,200,15), start (2,200,10).
+- At each lap's setup every other chest, trapped chest and ender chest in loaded chunks is removed (the count is
+  logged on the `begin` line).
+- VANISH and SEALED use an **ender chest** at the chest's position: the overworld never generates one, so the
+  fixture's block is the only instance Baritone can know of (it remembers natural chests far outside loaded chunks).
+- It drives the production `TaskRunner` + `BaritoneTaskAdapter` with GET_TO_BLOCK steps.
+- **The oracle is the integrated server's `ServerPlayer.containerMenu`:** a `ChestMenu` whose container is the
+  block entity at the chest's position (or the player's ender chest inventory whose active chest is the ender chest
+  at that position), or a `CraftingMenu` with the player within 8 blocks of the table. It is read every tick; a new
+  open is a new server menu object of the target kind, and the harness records the tick it appeared.
+- The process's own outcome is logged next to the oracle, and is never used to classify.
+- Scenarios:
+  - **OPEN:** the open succeeds.
+  - **CAT:** a sitting cat on the chest; the server refuses the open.
+  - **VANISH:** the ender chest becomes stone when the player is within 3.5 blocks.
+  - **SEALED:** the ender chest is enclosed in bedrock (Baritone drops a target it cannot break, so the request
+    has no known target at all).
+  - **CANCEL_MOVE:** `runner.stop()` at tick 15; checks after 1 and 40 ticks, then a rerun.
+  - **CANCEL_ACT:** stop on the tick the right click is pressed, then a rerun.
+  - **PREEMPT:** a `customGoalProcess` goal at tick 20.
+  - **REPLACE:** a new run (crafting table) at tick 15.
+  - **REPEAT:** chest then crafting table in one list.
+- Classes: TS, FS, TF, FF, HANG (no verdict in 600 ticks), DIED.
+
+**Held-out seeds and counts.**
+- Seeds **88011** and **88012** (never run), with `reps=4`. That is 72 laps per seed: 4 per scenario and arm.
+- Command, per seed (PowerShell, client stopped, second monitor, muted, no mouse grab):
+  `$env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.testHarness=true
+  -Dostinato.interacttest=true -Dostinato.interacttest.exit=true -Dostinato.interacttest.reps=4
+  -Dostinato.seed=<seed>'; .\gradlew.bat --offline --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536M" :fabric:runClient
+  -PclientXmx=1536M`.
+- Extract: `python docs/ostinato2/tools/phase08/interact_ab.py --extract <client log>
+  docs/ostinato2/raw/phase08/p08-ho-<seed>-lines.txt`.
+- Read: `python docs/ostinato2/tools/phase08/interact_ab.py
+  --baseline=docs/ostinato2/raw/phase08/p08-base-88001-lines.txt docs/ostinato2/raw/phase08/p08-ho-88011-lines.txt
+  docs/ostinato2/raw/phase08/p08-ho-88012-lines.txt`.
+
+**Gates.** Both seeds are pooled, in arm B unless stated. The script computes them exactly as written here.
+- **G1, no false success.** B FS = 0.
+- **G2, completion.**
+  - Rows where the open is possible: OPEN, REPLACE, both REPEAT steps, and the CANCEL_MOVE and CANCEL_ACT reruns.
+  - B TS / possible ≥ 0.95.
+  - B TS ≥ A TS on OPEN, REPLACE and the CANCEL_MOVE rerun, where legacy is right.
+- **G3, false failures.** B TF + FF on possible rows ≤ 1.
+- **G4, liveness.** B HANG = 0.
+- **G5, safety.**
+  - No key held or process active one tick after a stop (`keys1`, `active1`), or 40 ticks later.
+  - No key held or process active at lap end.
+  - No "keys still held" line after a B lap, and no death.
+- **G6, no new exception.** Every exception (type plus first frame) logged during a B lap also appears in an A lap or
+  in the baseline run.
+- **G7, honest cancel.**
+  - Every B stop row's outcome is CANCELLED or UNKNOWN.
+  - Every CANCEL_ACT stop with `lateOpen=true` reports UNKNOWN.
+- **G8, self-report agrees with the oracle.** In B rows whose outcome is terminal, SUCCEEDED ⟺ TS.
+- **P1, cost.**
+  - OPEN true-success ticks: median B − median A ≤ 5.
+  - Median per-lap runner µs/tick: B ≤ A + 25.
+- **P2, no extra actions on a refused open.** CAT use-packets: sum B ≤ sum A.
+
+**Classification.**
+- **FAIL:** any of G1, G4, G5 or G6 fails.
+- **PASS:** every gate (G1–G8, P1, P2) holds.
+- **PARTIAL:** otherwise, i.e. G1, G4, G5 and G6 hold but another gate misses.
+- **NO CHANGE JUSTIFIED** would have applied if the baseline had shown no defect. It did not.
+- A PASS is not a promotion. **No default changes in this phase**: `verifiedGetToBlock` stays false whatever the
+  class.
+
+**Stop conditions.**
+- No seeds or repetitions are added after results are seen, and no run is repeated to change an outcome.
+- A run that does not complete (gradle error, client crash, harness setup failure) is rerun once with the same seed.
+  If it fails again, it is a blocker and Tier L is not claimed.
+- A death or held key in a B lap of the first seed is a G5 FAIL. The second seed is then not run.

@@ -1,0 +1,37 @@
+EXCEPTION com.mojang.authlib.exceptions.InvalidCredentialsException at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:70)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+EXCEPTION com.mojang.realmsclient.exception.RealmsServiceException at knot//com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:625)
+INTERACTTEST start laps=8 reps=1 scenarios=4 timeout=600 post=40 seed=88001 flag=present rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true
+INTERACTTEST begin lap=0 scen=VANISH arm=A rep=0 clearedChests=7
+INTERACTTEST row lap=0 scen=VANISH arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD outcome=1:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalRunAwayFrom[BetterBlockPos{x=2,y=200,z=10}]; feet BetterBlockPos{x=54,y=61,z=6}"
+INTERACTTEST keys still held after lap 0: -
+INTERACTTEST begin lap=1 scen=VANISH arm=B rep=0 clearedChests=49
+INTERACTTEST row lap=1 scen=VANISH arm=B rep=0 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=31 lapTicks=32 uses=0 menu=none active=false keys=- outcome=2:FAILED/WORLD_CHANGED msg="get to block failed: world changed"
+INTERACTTEST row lap=1 scen=VANISH arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=41.79
+INTERACTTEST keys still held after lap 1: -
+INTERACTTEST begin lap=2 scen=SEALED arm=B rep=0 clearedChests=21
+INTERACTTEST row lap=2 scen=SEALED arm=B rep=0 part=main verdict=FAILED step=1 block=ender_chest cls=TF ticks=30 lapTicks=31 uses=0 menu=none active=false keys=- outcome=3:FAILED/INVALIDATED_GOAL msg="get to block failed: invalidated goal"
+INTERACTTEST row lap=2 scen=SEALED arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=0 runnerUs=29.88
+INTERACTTEST keys still held after lap 2: -
+INTERACTTEST begin lap=3 scen=SEALED arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=3 scen=SEALED arm=A rep=0 part=main verdict=HANG cls=HANG ticks=600 lapTicks=601 uses=0 menu=none active=true keys=MOVE_FORWARD outcome=4:RUNNING/NONE msg="no verdict in 600 ticks; goal GoalRunAwayFrom[BetterBlockPos{x=2,y=200,z=10}]; feet BetterBlockPos{x=78,y=62,z=5}"
+INTERACTTEST keys still held after lap 3: -
+INTERACTTEST begin lap=4 scen=CAT arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=4 scen=CAT arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=FS ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=5:FAILED/TIMEOUT msg="done in 2.8s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=4 scen=CAT arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=5 runnerUs=16.33
+INTERACTTEST keys still held after lap 4: -
+INTERACTTEST begin lap=5 scen=CAT arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=5 scen=CAT arm=B rep=0 part=main verdict=FAILED step=1 block=chest cls=TF ticks=55 lapTicks=56 uses=5 menu=none active=false keys=- outcome=6:FAILED/TIMEOUT msg="get to block failed: timeout"
+INTERACTTEST row lap=5 scen=CAT arm=B rep=0 part=end run=FAILED activeEnd=false keysEnd=- uses=5 runnerUs=13.91
+INTERACTTEST keys still held after lap 5: -
+INTERACTTEST begin lap=6 scen=OPEN arm=B rep=0 clearedChests=0
+INTERACTTEST row lap=6 scen=OPEN arm=B rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=38 lapTicks=39 uses=1 menu=chest active=false keys=- outcome=7:SUCCEEDED/NONE msg="done in 1.9s"
+INTERACTTEST row lap=6 scen=OPEN arm=B rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=11.24
+INTERACTTEST keys still held after lap 6: -
+INTERACTTEST begin lap=7 scen=OPEN arm=A rep=0 clearedChests=0
+INTERACTTEST row lap=7 scen=OPEN arm=A rep=0 part=main verdict=DONE step=1 block=chest cls=TS ticks=37 lapTicks=38 uses=1 menu=chest active=false keys=- outcome=8:SUCCEEDED/NONE msg="done in 1.9s"
+EXCEPTION java.lang.NullPointerException at knot//baritone.api.utils.BlockOptionalMetaLookup.<init>(BlockOptionalMetaLookup.java:44)
+INTERACTTEST row lap=7 scen=OPEN arm=A rep=0 part=end run=FINISHED activeEnd=false keysEnd=- uses=1 runnerUs=11.94
+INTERACTTEST keys still held after lap 7: -
+INTERACTTEST finish laps=8
