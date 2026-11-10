@@ -12,6 +12,7 @@ import baritone.api.event.events.type.EventState;
 import baritone.api.event.listener.AbstractGameEventListener;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.utils.input.Input;
+import baritone.harness.PlanLoad;
 import baritone.pathing.RouteReuse;
 import baritone.pathing.calc.MaestroPathFinder;
 import baritone.pathing.calc.SimEdge;
@@ -105,10 +106,17 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
      * against A are A/A noise controls.
      */
     private static final boolean PRODUCTION = "production".equals(System.getProperty("ostinato.legatotest.arms"));
+    /**
+     * OAP scheduling study: -Dostinato.legatotest.arms=planload. The production course and defaults of arms=production,
+     * plus a controlled planner load ({@link PlanLoad}) while the lap runs: A none, B one search, C none, D three. A
+     * against C is the A/A noise control. Each lap also records thread CPU, GC, frame intervals and server tick times.
+     */
+    private static final boolean PLANLOAD = "planload".equals(System.getProperty("ostinato.legatotest.arms"));
+    private static final int[] LOADS = {0, 1, 0, 3};
     /** The arms that time every lap tick: no Phase 05 pricing in the lap, and a tick file after it. */
-    private static final boolean TIMED = TOLERANCE || UNIFIED || STATEIDS || PRODUCTION;
+    private static final boolean TIMED = TOLERANCE || UNIFIED || STATEIDS || PRODUCTION || PLANLOAD;
     /** The timed arm's name and its switch, for the tick file and the closing log line. */
-    private static final String TIMED_NAME = UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : "tolerance";
+    private static final String TIMED_NAME = UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : PLANLOAD ? "planload" : "tolerance";
 
     private static boolean timedSwitch() {
         return PRODUCTION ? false : UNIFIED ? Baritone.settings().unifiedExecutor.value : STATEIDS ? Baritone.settings().pathingStateIdCache.value
@@ -157,12 +165,23 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
     /** Phase 04 validation: client tick time of every lap tick (TickClock, ns) and who drove it; physics counters at the lap's start. */
     private final long[] tickNs = new long[TIMEOUT + 64];
     private final String[] tickDriver = new String[TIMEOUT + 64];
+    /** arms=planload, per recorded tick: 1 = the load built a search in that tick, 2 = a GC pause ended since the last record. */
+    private final byte[] tickFlag = new byte[TIMEOUT + 64];
+    private boolean builtPrev;
+    private long gcPrev;
     private int tickN;
     private String prevDriver = "start";
     private long physNs0, physPlans0, drift0;
     /** Phase 06: the unified executor's counters at the lap's start. */
     private long[] ux0;
     private BufferedWriter ticksOut;
+    /** OAP scheduling study (arms=planload): the planner load, this lap's frame intervals and server tick times. */
+    private PlanLoad planLoad;
+    private final long[] frameNs = new long[8192], srvNs = new long[4096];
+    private int frameN, srvN, srvLast, firstPath, loadLeft;
+    private long lastFrame, lapNs0, load0, loadDone0, loadWall0, loadBuild0;
+    private long[] cpu0;
+    private final Map<String, BufferedWriter> sampleOut = new HashMap<>();
     /**
      * Ostinato 2.0 Phase 05B: -Dostinato.legatotest.trace=true writes every lap tick (the state before the tick, the yaw
      * its move used, the keys the input reported, who drove, the path and its position) to simedge-trace.csv and every
@@ -355,9 +374,18 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                 };
             }
             if (STACK != null) Baritone.settings().travelStack.value = STACK;
-            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : "legato") + " laps=" + laps.size()
+            log("start kinematicTravel=" + Baritone.settings().kinematicTravel.value + " presto=false arms=" + (KLINE ? "kline" : MAESTRO ? "maestro" : SIMEDGE5B ? "simedge5b" : SIMEDGE ? "simedge" : TOLERANCE ? "tolerance" : UNIFIED ? "unified" : STATEIDS ? "stateids" : PRODUCTION ? "production" : PLANLOAD ? "planload" : "legato") + " laps=" + laps.size()
                     + " reps=" + REPS + " legs=" + LEGS.size() + " order=latin travelStack=" + Baritone.settings().travelStack.value
                     + " tickClock=" + TickClock.ON + " seed=" + System.getProperty("ostinato.seed", "71006"));
+            if (PLANLOAD) {
+                // the pilot's far searches stopped at the loaded edge (50 border hits) in ~30 ms each: unbounded here, in every
+                // arm, so a load search runs to its plan-ahead budget or until it has expanded every loaded node
+                Baritone.settings().pathingMaxChunkBorderFetch.value = Integer.MAX_VALUE;
+                log("planload env " + PlanLoad.environment() + " borderFetch=" + Baritone.settings().pathingMaxChunkBorderFetch.value + " maxFps=" + mc.options.framerateLimit().get() + " vsync=" + mc.options.enableVsync().get()
+                        + " renderDistance=" + mc.options.renderDistance().get() + " simulationDistance=" + mc.options.simulationDistance().get()
+                        + " inactivityFpsLimit=" + mc.options.inactivityFpsLimit().get() + " primaryMs=" + Baritone.settings().planAheadPrimaryTimeoutMS.value
+                        + " failureMs=" + Baritone.settings().planAheadFailureTimeoutMS.value);
+            }
             server(mc, () -> {
                 // peaceful: the first run lost its last 28 laps to a creeper on the platform
                 mc.getSingleplayerServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
@@ -505,6 +533,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
             drift0 = PhysicsTravel.driftReplans.get();
             ux0 = baritone.getUnifiedExecutor().snapshot();
             lapStart = ticks;
+            if (PLANLOAD) startLoad(mc, l);
             baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(l.leg().gx(), LegatoCourse.F + 1, l.leg().gz()));
             step = 1;
             return;
@@ -522,9 +551,15 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
         driverTicks.merge(drv, 1, Integer::sum);
         if (tickN < tickNs.length) { // the tick before this one, and who drove it (the executor ran in that tick's PRE)
             tickNs[tickN] = TickClock.last;
+            if (PLANLOAD) {
+                long gc = PlanLoad.gcPauses();
+                tickFlag[tickN] = (byte) ((builtPrev ? 1 : 0) | (gc != gcPrev ? 2 : 0));
+                gcPrev = gc;
+            }
             tickDriver[tickN++] = prevDriver;
         }
         prevDriver = drv;
+        if (PLANLOAD) loadTick(mc, l, ex != null);
         if (!drv.equals(lastDriver)) {
             if (!lastDriver.isEmpty()) driverChanges++;
             lastDriver = drv;
@@ -595,6 +630,7 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     Baritone.settings().travelStack.value, (PlanStats.astarNs.get() - planNs0) / 1000);
             if (UNIFIED) row += " unified=" + Baritone.settings().unifiedExecutor.value + " ux=" + uxDelta();
             if (STATEIDS) row += " stateIds=" + Baritone.settings().pathingStateIdCache.value;
+            if (PLANLOAD) row += endLoad(l);
             if (TIMED) writeTicks(l);
             rows.add(row);
             log(row);
@@ -663,20 +699,116 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                 boolean fresh = !Files.exists(file);
                 ticksOut = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                 if (fresh) {
-                    ticksOut.write("seed,lap,rep,leg,mode," + TIMED_NAME + ",i,ns,driver");
+                    ticksOut.write("seed,lap,rep,leg,mode," + TIMED_NAME + ",i,ns,driver" + (PLANLOAD ? ",flags" : ""));
                     ticksOut.newLine();
                 }
             }
             String head = System.getProperty("ostinato.seed", "71006") + "," + index + "," + l.rep() + "," + l.leg().name() + "," + MODES[l.mode()]
-                    + "," + timedSwitch() + ",";
+                    + "," + (PLANLOAD ? String.valueOf(LOADS[l.mode()]) : String.valueOf(timedSwitch())) + ",";
             for (int i = 0; i < tickN; i++) {
-                ticksOut.write(head + i + "," + tickNs[i] + "," + tickDriver[i]);
+                ticksOut.write(head + i + "," + tickNs[i] + "," + tickDriver[i] + (PLANLOAD ? "," + tickFlag[i] : ""));
                 ticksOut.newLine();
             }
             ticksOut.flush();
         } catch (IOException e) {
             log("tick file failed: " + e);
         }
+    }
+
+    /** arms=planload, lap start: clears what the last lap left, aims the load once, snapshots the counters, starts the load. */
+    private void startLoad(Minecraft mc, Lap l) {
+        if (planLoad == null) planLoad = new PlanLoad(baritone);
+        loadLeft = planLoad.running();
+        if (loadLeft > 0) planLoad.stop(); // a search of the last lap is still running: the row says so
+        if (!planLoad.aimed()) {
+            // natural terrain west of the course, heading 4000 blocks further west: every search is a far plan-ahead
+            int x = -40, z = 40, y = mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            planLoad.aim(new BlockPos(x, y, z), new baritone.api.pathing.goals.GoalXZ(x - 4000, z));
+            log("planload aim " + x + "," + y + "," + z + " below=" + mc.level.getBlockState(new BlockPos(x, y - 1, z)).getBlock() + " goal=" + (x - 4000) + "," + z);
+        }
+        load0 = planLoad.started.get();
+        loadDone0 = planLoad.finished.get();
+        loadWall0 = planLoad.wallNs.get();
+        loadBuild0 = planLoad.buildNs.get();
+        frameN = srvN = 0;
+        lastFrame = 0;
+        srvLast = mc.getSingleplayerServer().getTickCount() - 1;
+        firstPath = -1;
+        cpu0 = PlanLoad.cpu();
+        gcPrev = PlanLoad.gcPauses();
+        lapNs0 = System.nanoTime();
+        if (LOADS[l.mode()] > 0) planLoad.tick(LOADS[l.mode()]);
+        builtPrev = LOADS[l.mode()] > 0;
+    }
+
+    /** arms=planload, every lap tick: tops the load up, notes the first path, samples the server ticks that finished. */
+    private void loadTick(Minecraft mc, Lap l, boolean pathing) {
+        long s0 = planLoad.started.get();
+        if (LOADS[l.mode()] > 0) planLoad.tick(LOADS[l.mode()]);
+        builtPrev = planLoad.started.get() != s0;
+        if (firstPath < 0 && pathing) firstPath = (int) (ticks - lapStart);
+        var server = mc.getSingleplayerServer();
+        int tc = server.getTickCount();
+        long[] times = server.getTickTimesNanos();
+        for (int t = Math.max(srvLast + 1, tc - times.length + 1); t < tc && srvN < srvNs.length; t++) srvNs[srvN++] = times[t % times.length];
+        srvLast = Math.max(srvLast, tc - 1);
+    }
+
+    /** arms=planload, lap end: stops the load and returns the row's resource fields; writes the frame and server samples. */
+    private String endLoad(Lap l) {
+        long[] c = PlanLoad.cpu();
+        long wall = System.nanoTime() - lapNs0;
+        int running = planLoad.running();
+        planLoad.stop();
+        long[] f = java.util.Arrays.copyOf(frameNs, frameN), s = java.util.Arrays.copyOf(srvNs, srvN);
+        java.util.Arrays.sort(f);
+        java.util.Arrays.sort(s);
+        writeSamples("frames", l, frameNs, frameN);
+        writeSamples("server", l, srvNs, srvN);
+        return String.format(Locale.ROOT, " load=%d loadStarted=%d loadDone=%d loadWallMs=%d loadBuildUs=%d loadLeft=%d loadRunningEnd=%d wallMs=%d workerCpuMs=%d renderCpuMs=%d"
+                        + " serverCpuMs=%d procCpuMs=%d gcN=%d gcMs=%d gcConcMs=%d frames=%d frameP50Us=%d frameP95Us=%d frameP99Us=%d frameMaxUs=%d"
+                        + " srvN=%d srvP50Us=%d srvP95Us=%d srvMaxUs=%d srvAvgUs=%d firstPath=%d",
+                LOADS[l.mode()], planLoad.started.get() - load0, planLoad.finished.get() - loadDone0, (planLoad.wallNs.get() - loadWall0) / 1_000_000, (planLoad.buildNs.get() - loadBuild0) / 1000,
+                loadLeft, running, wall / 1_000_000, (c[0] - cpu0[0]) / 1_000_000, (c[1] - cpu0[1]) / 1_000_000,
+                (c[2] - cpu0[2]) / 1_000_000, (c[3] - cpu0[3]) / 1_000_000, c[4] - cpu0[4], c[5] - cpu0[5], c[6] - cpu0[6],
+                frameN, rank(f, 0.5) / 1000, rank(f, 0.95) / 1000, rank(f, 0.99) / 1000, rank(f, 1.0) / 1000,
+                srvN, rank(s, 0.5) / 1000, rank(s, 0.95) / 1000, rank(s, 1.0) / 1000,
+                Minecraft.getInstance().getSingleplayerServer().getAverageTickTimeNanos() / 1000, firstPath);
+    }
+
+    /** arms=planload: one lap's samples (frame intervals or server tick times, ns) to planload-&lt;kind&gt;.csv. */
+    private void writeSamples(String kind, Lap l, long[] ns, int n) {
+        try {
+            BufferedWriter w = sampleOut.get(kind);
+            if (w == null) {
+                var file = Minecraft.getInstance().gameDirectory.toPath().resolve("planload-" + kind + ".csv");
+                boolean fresh = !Files.exists(file);
+                w = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                if (fresh) {
+                    w.write("seed,lap,rep,leg,mode,load,i,ns");
+                    w.newLine();
+                }
+                sampleOut.put(kind, w);
+            }
+            String head = System.getProperty("ostinato.seed", "71006") + "," + index + "," + l.rep() + "," + l.leg().name() + "," + MODES[l.mode()]
+                    + "," + LOADS[l.mode()] + ",";
+            for (int i = 0; i < n; i++) {
+                w.write(head + i + "," + ns[i]);
+                w.newLine();
+            }
+            w.flush();
+        } catch (IOException e) {
+            log(kind + " file failed: " + e);
+        }
+    }
+
+    @Override
+    public void onRenderPass(baritone.api.event.events.RenderEvent event) {
+        // arms=planload: the interval between world frames, while a lap runs
+        if (!PLANLOAD || state != 4 || step != 1) return;
+        long now = System.nanoTime();
+        if (lastFrame != 0 && frameN < frameNs.length) frameNs[frameN++] = now - lastFrame;
+        lastFrame = now;
     }
 
     private long[] counters() {
@@ -768,6 +900,9 @@ public final class LegatoLiveTest implements AbstractGameEventListener {
                     + " capped=" + MaestroPathFinder.capped.get() + " exceptions=" + MaestroPathFinder.exceptions.get());
         }
         log("keys stuck after " + stuckKeyLaps + " laps");
+        if (PLANLOAD && planLoad != null) {
+            log("planload totals started=" + planLoad.started.get() + " finished=" + planLoad.finished.get() + " " + PlanLoad.environment());
+        }
         mode(0);
         Baritone.settings().legatoSmoothing.value = true; // back to the default
         state = 5;

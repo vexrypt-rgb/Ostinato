@@ -1,0 +1,15 @@
+oap-dev: planner CPU seconds by search kind
+   arm               all       failedTrips         escalated aheadPrimaryBound        aheadOther             first
+  base             140.1               0.0              15.5              55.5              61.7               7.4
+ a2000             111.1               0.0              13.5              45.8              44.2               7.5
+ a1000              93.3               0.0              13.6              31.8              40.4               7.5
+  a500              76.8               0.0              13.6              33.8              21.7               7.6
+ a8000             139.8               0.0               8.7              47.6              75.8               7.7
+
+oap-ho: planner CPU seconds by search kind
+   arm               all       failedTrips         escalated aheadPrimaryBound        aheadOther             first
+  base             444.6             119.2              87.5             128.0              93.0              17.0
+ a2000             415.5             119.4             107.1              92.8              79.2              17.1
+ a1000             378.2             110.0             113.8              73.4              64.0              17.0
+  a500             341.2             105.6             113.2              69.0              36.5              16.8
+ a8000             492.8             135.7              53.7             173.6             113.3              16.6

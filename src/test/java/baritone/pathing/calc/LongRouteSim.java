@@ -99,7 +99,7 @@ public final class LongRouteSim {
     /** One planner call as findPathInNewThread makes it. */
     public record Search(int trip, int idx, boolean ahead, BetterBlockPos start, long primary, long failure, boolean mayEscalate,
                          double ms, long alloc, int nodes, int abstractNodes, PathCalculationResult.Type type, IPath path,
-                         boolean toGoal, boolean timedOut, boolean exhausted, boolean simplified, String outcome) {
+                         boolean toGoal, boolean timedOut, boolean exhausted, boolean simplified, String outcome, double cpuMs) {
     }
 
     /** Hooks for the world-change and goal-change families. */
@@ -153,6 +153,11 @@ public final class LongRouteSim {
 
         public long alloc() {
             return searches.stream().mapToLong(Search::alloc).sum();
+        }
+
+        /** OAP: planner thread CPU time over the trip's searches. */
+        public double cpuMs() {
+            return searches.stream().mapToDouble(Search::cpuMs).sum();
         }
 
         public double total() {
@@ -258,16 +263,18 @@ public final class LongRouteSim {
         com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
         long a0 = mx.getThreadAllocatedBytes(tid);
+        long c0 = mx.getCurrentThreadCpuTime();
         long t0 = System.nanoTime();
         PathCalculationResult r = f.calculate(primary, failure);
         double ms = (System.nanoTime() - t0) / 1e6;
+        double cpuMs = (mx.getCurrentThreadCpuTime() - c0) / 1e6;
         long alloc = mx.getThreadAllocatedBytes(tid) - a0;
         IPath p = r.getPath().orElse(null);
         String outcome = f instanceof HierarchicalPathFinder h ? h.outcome : "";
         int abstractNodes = f instanceof HierarchicalPathFinder h ? h.abstractExpanded : 0;
         int nodes = p != null ? p.getNumNodesConsidered() : f.mapSize();
         Search out = new Search(tripId, t.searches.size(), ahead, start, primary, failure, mayEscalate, ms, alloc, nodes, abstractNodes,
-                r.getType(), p, p != null && goal.isInGoal(p.getDest()), f.timedOut(), f.exhausted(), !Objects.equals(f.getGoal(), goal), outcome);
+                r.getType(), p, p != null && goal.isInGoal(p.getDest()), f.timedOut(), f.exhausted(), !Objects.equals(f.getGoal(), goal), outcome, cpuMs);
         t.searches.add(out);
         return out;
     }

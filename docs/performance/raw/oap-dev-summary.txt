@@ -1,0 +1,59 @@
+oap-dev: 58 routes, arms ['base', 'a2000', 'a1000', 'a500', 'a8000']
+    arm trips   ok    cpu s   wall s  allocGB searches timedOut ahead tOut escal  total ticks    wait
+   base    58   58    140.1    141.2     2.64      389       26         15     1       297214   674.4
+  a2000    58   58    111.1    111.8     2.47      396       36         24     0       297395   376.8
+  a1000    58   58     93.3     94.2     2.44      403       44         33     0       297479   291.7
+   a500    58   58     76.8     77.3     2.32      415       81         69     0       298558   266.4
+  a8000    58   58    139.8    141.0     2.52      382       18          6     1       297344   759.7
+
+== a2000 vs base: 58 pairs, failures 0 vs 0, lost 0, gained 0
+   cpu   ratio 0.793  CI [0.695, 0.907]   (base 140.1 s -> 111.1 s)
+   total ratio 1.0006 CI [0.9985, 1.0036]  over 58 pairs both reached
+     BREAK_PLACE  n= 6 cpu  0.764 (  76.4 s base)  total 0.9971  fails 0/0
+     CAVES        n= 6 cpu  0.734 (  29.9 s base)  total 0.9979  fails 0/0
+     FOREST       n= 8 cpu  1.714 (   0.1 s base)  total 1.0000  fails 0/0
+     MAZE         n= 6 cpu  0.903 (  32.0 s base)  total 1.0082  fails 0/0
+     MIXED        n=10 cpu  0.980 (   0.8 s base)  total 1.0043  fails 0/0
+     MOUNTAINS    n= 6 cpu  1.057 (   0.5 s base)  total 1.0000  fails 0/0
+     OPEN         n=10 cpu  1.067 (   0.2 s base)  total 0.9987  fails 0/0
+     WATER        n= 6 cpu  0.727 (   0.2 s base)  total 1.0000  fails 0/0
+   ECO gates: G1 PASS  G2 FAIL  G3 PASS   MAX gate: FAIL
+
+== a1000 vs base: 58 pairs, failures 0 vs 0, lost 0, gained 0
+   cpu   ratio 0.666  CI [0.556, 0.800]   (base 140.1 s -> 93.3 s)
+   total ratio 1.0009 CI [0.9986, 1.0041]  over 58 pairs both reached
+     BREAK_PLACE  n= 6 cpu  0.666 (  76.4 s base)  total 0.9965  fails 0/0
+     CAVES        n= 6 cpu  0.635 (  29.9 s base)  total 0.9978  fails 0/0
+     FOREST       n= 8 cpu  1.571 (   0.1 s base)  total 1.0000  fails 0/0
+     MAZE         n= 6 cpu  0.676 (  32.0 s base)  total 1.0088  fails 0/0
+     MIXED        n=10 cpu  0.902 (   0.8 s base)  total 1.0060  fails 0/0
+     MOUNTAINS    n= 6 cpu  1.086 (   0.5 s base)  total 1.0000  fails 0/0
+     OPEN         n=10 cpu  0.933 (   0.2 s base)  total 0.9995  fails 0/0
+     WATER        n= 6 cpu  0.909 (   0.2 s base)  total 1.0000  fails 0/0
+   ECO gates: G1 PASS  G2 PASS  G3 PASS   MAX gate: FAIL
+
+== a500 vs base: 58 pairs, failures 0 vs 0, lost 0, gained 0
+   cpu   ratio 0.548  CI [0.440, 0.672]   (base 140.1 s -> 76.8 s)
+   total ratio 1.0045 CI [0.9995, 1.0119]  over 58 pairs both reached
+     BREAK_PLACE  n= 6 cpu  0.542 (  76.4 s base)  total 0.9968  fails 0/0
+     CAVES        n= 6 cpu  0.574 (  29.9 s base)  total 0.9971  fails 0/0
+     FOREST       n= 8 cpu  1.286 (   0.1 s base)  total 1.0000  fails 0/0
+     MAZE         n= 6 cpu  0.504 (  32.0 s base)  total 1.0419  fails 0/0
+     MIXED        n=10 cpu  0.961 (   0.8 s base)  total 1.0047  fails 0/0
+     MOUNTAINS    n= 6 cpu  1.486 (   0.5 s base)  total 1.0001  fails 0/0
+     OPEN         n=10 cpu  0.933 (   0.2 s base)  total 0.9995  fails 0/0
+     WATER        n= 6 cpu  0.818 (   0.2 s base)  total 1.0000  fails 0/0
+   ECO gates: G1 PASS  G2 PASS  G3 PASS   MAX gate: FAIL
+
+== a8000 vs base: 58 pairs, failures 0 vs 0, lost 0, gained 0
+   cpu   ratio 0.998  CI [0.887, 1.087]   (base 140.1 s -> 139.8 s)
+   total ratio 1.0004 CI [0.9995, 1.0015]  over 58 pairs both reached
+     BREAK_PLACE  n= 6 cpu  0.960 (  76.4 s base)  total 1.0011  fails 0/0
+     CAVES        n= 6 cpu  1.098 (  29.9 s base)  total 1.0004  fails 0/0
+     FOREST       n= 8 cpu  1.429 (   0.1 s base)  total 1.0000  fails 0/0
+     MAZE         n= 6 cpu  0.989 (  32.0 s base)  total 1.0000  fails 0/0
+     MIXED        n=10 cpu  0.902 (   0.8 s base)  total 1.0007  fails 0/0
+     MOUNTAINS    n= 6 cpu  1.686 (   0.5 s base)  total 1.0002  fails 0/0
+     OPEN         n=10 cpu  0.533 (   0.2 s base)  total 1.0007  fails 0/0
+     WATER        n= 6 cpu  0.818 (   0.2 s base)  total 1.0000  fails 0/0
+   ECO gates: G1 PASS  G2 FAIL  G3 PASS   MAX gate: FAIL

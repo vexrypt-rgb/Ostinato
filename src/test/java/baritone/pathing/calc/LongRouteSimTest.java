@@ -179,15 +179,27 @@ public class LongRouteSimTest {
         String modes = System.getenv().getOrDefault("OSTINATO_LONGROUTE_MODES", "known,horizon,change,goal,cancel");
         List<LongRouteSim.Arm> arms = Arrays.stream(System.getenv().getOrDefault("OSTINATO_LONGROUTE_ARMS", "PROD,HPA").split(","))
                 .map(LongRouteSim.Arm::valueOf).toList();
+        // OAP: named planning-budget arms, "name=primary/failure/aheadPrimary/aheadFailure/failureMax;...". Each runs every
+        // arm on the same routes, interleaved; the CSV arm reads ARM@name. Empty: the settings' defaults, arm names as before.
+        Map<String, long[]> budgets = new LinkedHashMap<>();
+        for (String b : System.getenv().getOrDefault("OSTINATO_LONGROUTE_BUDGETS", "").split(";")) {
+            if (b.isBlank()) continue;
+            String[] kv = b.split("=");
+            budgets.put(kv[0].trim(), Arrays.stream(kv[1].split("/")).mapToLong(Long::parseLong).toArray());
+        }
+        if (budgets.isEmpty()) budgets.put("", null);
+        List<Object[]> runs = new ArrayList<>(); // {arm, budget name, budget}
+        for (LongRouteSim.Arm arm : arms) for (Map.Entry<String, long[]> e : budgets.entrySet()) runs.add(new Object[]{arm, e.getKey(), e.getValue()});
         Path dir = Path.of(System.getProperty("user.dir"), "build", "pathbench", "longroute");
         Files.createDirectories(dir);
         Path tripsCsv = dir.resolve(label + "-trips.csv"), searchCsv = dir.resolve(label + "-searches.csv"), progress = dir.resolve(label + "-progress.txt");
         Files.writeString(tripsCsv, "set,seed,family,mode,length,n,arm,ok,reason,travel,wait,total,searches,segments,firstMs,planMs,maxMs,nodes,allocMB,"
-                + "escalations,aheadFails,sealed,stops,barrierHit,goalSwitches,replanMs,corridor,partial,fallback,simplified,endDist,straight\n");
-        Files.writeString(searchCsv, "set,seed,family,mode,length,n,arm,idx,ahead,primary,failure,ms,nodes,abstract,type,toGoal,timedOut,exhausted,simplified,outcome\n");
+                + "escalations,aheadFails,sealed,stops,barrierHit,goalSwitches,replanMs,corridor,partial,fallback,simplified,endDist,straight,cpuMs\n");
+        Files.writeString(searchCsv, "set,seed,family,mode,length,n,arm,idx,ahead,primary,failure,ms,nodes,abstract,type,toGoal,timedOut,exhausted,simplified,outcome,cpuMs,allocMB\n");
         Files.writeString(progress, "");
         String hw = String.format(Locale.ROOT, "cpus=%d heapMaxMB=%d java=%s", Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().maxMemory() >> 20, System.getProperty("java.version"));
-        append(progress, label + " set=" + set + " seeds=" + Arrays.toString(seeds) + " trips=" + trips + " modes=" + modes + " arms=" + arms + " " + hw + "\n");
+        append(progress, label + " set=" + set + " seeds=" + Arrays.toString(seeds) + " trips=" + trips + " modes=" + modes + " arms=" + arms
+                + " budgets=" + System.getenv().getOrDefault("OSTINATO_LONGROUTE_BUDGETS", "") + " " + hw + "\n");
 
         PrintStream out = System.out;
         System.setOut(new PrintStream(PrintStream.nullOutputStream()));
@@ -195,7 +207,10 @@ public class LongRouteSimTest {
             // warm-up (JIT): one mixed-terrain trip per arm on a world no measured trip uses, discarded
             SyntheticWorld warm = LongTerrain.MIXED.build(SIZE_X, SIZE_Z, 99);
             LongRouteSim.Route wr = LongRouteSim.routes(warm, LongTerrain.MIXED, 600, 1, new Random(99)).get(0);
-            for (LongRouteSim.Arm arm : arms) new LongRouteSim(warm, arm, 0).run(-1, wr.start(), goal(wr.goal()), LongRouteSim.NO_EVENTS);
+            for (Object[] run : runs) {
+                applyBudget((long[]) run[2]);
+                new LongRouteSim(warm, (LongRouteSim.Arm) run[0], 0).run(-1, wr.start(), goal(wr.goal()), LongRouteSim.NO_EVENTS);
+            }
             warm = null;
 
             for (long seed : seeds) {
@@ -218,10 +233,14 @@ public class LongRouteSimTest {
                         String mode = (String) p[0];
                         LongRouteSim.Route r = (LongRouteSim.Route) p[1];
                         if (!Arrays.asList(modes.split(",")).contains(mode)) continue;
-                        List<LongRouteSim.Arm> order = new ArrayList<>(arms);
+                        List<Object[]> order = new ArrayList<>(runs);
                         if ((k++ & 1) == 1) Collections.reverse(order); // alternate which arm goes first
-                        for (LongRouteSim.Arm arm : order) {
-                            String key = String.join(",", set, Long.toString(seed), fam.name(), mode, Integer.toString(r.length()), Integer.toString(r.n()), arm.name());
+                        for (Object[] run : order) {
+                            LongRouteSim.Arm arm = (LongRouteSim.Arm) run[0];
+                            String bname = (String) run[1];
+                            applyBudget((long[]) run[2]);
+                            String key = String.join(",", set, Long.toString(seed), fam.name(), mode, Integer.toString(r.length()), Integer.toString(r.n()),
+                                    bname.isEmpty() ? arm.name() : arm.name() + "@" + bname);
                             if (mode.equals("cancel")) {
                                 LongRouteSim sim = new LongRouteSim(w, arm, 0);
                                 for (int rep = 0; rep < 3; rep++) {
@@ -244,7 +263,7 @@ public class LongRouteSimTest {
                                 sb.append(key).append(',').append(s.idx()).append(',').append(s.ahead()).append(',').append(s.primary()).append(',').append(s.failure()).append(',')
                                         .append(fmt(s.ms())).append(',').append(s.nodes()).append(',').append(s.abstractNodes()).append(',').append(s.type()).append(',')
                                         .append(s.toGoal()).append(',').append(s.timedOut()).append(',').append(s.exhausted()).append(',').append(s.simplified()).append(',')
-                                        .append(s.outcome()).append('\n');
+                                        .append(s.outcome()).append(',').append(fmt(s.cpuMs())).append(',').append(fmt(s.alloc() / 1e6)).append('\n');
                             }
                             append(searchCsv, sb.toString());
                             double first = t.searches.isEmpty() ? Double.NaN : t.searches.get(0).ms();
@@ -258,7 +277,8 @@ public class LongRouteSimTest {
                                     Integer.toString(t.searches.size()), Integer.toString(t.segments), fmt(first), fmt(t.planMs()), fmt(max), Long.toString(t.nodes()),
                                     fmt(t.alloc() / 1e6), Integer.toString(t.escalations), Integer.toString(t.aheadFails), Integer.toString(t.sealed), Integer.toString(t.stops),
                                     Boolean.toString(t.barrierHit), Integer.toString(t.goalSwitches), fmt(t.replanMs), Long.toString(corridor), Long.toString(partial),
-                                    Long.toString(fallback), Long.toString(simplified), fmt(endDist), fmt(Math.hypot(r.goal().x - r.start().x, r.goal().z - r.start().z)));
+                                    Long.toString(fallback), Long.toString(simplified), fmt(endDist), fmt(Math.hypot(r.goal().x - r.start().x, r.goal().z - r.start().z)),
+                                    fmt(t.cpuMs()));
                             append(tripsCsv, row + "\n");
                             append(progress, row + "\n");
                         }
@@ -267,8 +287,19 @@ public class LongRouteSimTest {
             }
             append(progress, "DONE\n");
         } finally {
+            applyBudget(null);
             System.setOut(out);
         }
+    }
+
+    /** OAP: {primary, failure, aheadPrimary, aheadFailure, failureMax}, or null for the settings' defaults. */
+    private static void applyBudget(long[] b) {
+        Settings s = Baritone.settings();
+        s.primaryTimeoutMS.value = b == null ? s.primaryTimeoutMS.defaultValue : b[0];
+        s.failureTimeoutMS.value = b == null ? s.failureTimeoutMS.defaultValue : b[1];
+        s.planAheadPrimaryTimeoutMS.value = b == null ? s.planAheadPrimaryTimeoutMS.defaultValue : b[2];
+        s.planAheadFailureTimeoutMS.value = b == null ? s.planAheadFailureTimeoutMS.defaultValue : b[3];
+        s.failureTimeoutMaxMS.value = b == null ? s.failureTimeoutMaxMS.defaultValue : b[4];
     }
 
     private static String fmt(double d) {
