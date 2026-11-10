@@ -164,10 +164,16 @@ public class SecondoTest {
         assertBad(List.of("assist", "maybe"));
     }
 
+    /**
+     * Ostinato 2.0 Phase 10: this test was written (2f4176049) when none of the planned types was on the branch; the
+     * combine/main-maze-ppe merges brought all six in, so the old "absent" line failed (STATUS B5). It now asserts the
+     * merged tree. Everything else is unchanged: with the types hidden the probe still reads ABSENT, and invoke is still a
+     * no-op whatever the state, so nothing in Secondo calls the planned APIs yet.
+     */
     @Test
-    public void plannedApisAreAbsentOnThisBranchAndInvokeIsANoop() {
+    public void plannedApisArePresentAfterTheMergeAndInvokeIsStillANoop() {
         for (Id id : Id.values()) {
-            assertFalse(id.typeName, SecondoFeatures.classPresent(id.typeName));
+            assertTrue(id.typeName, SecondoFeatures.classPresent(id.typeName));
             assertEquals(id.name(), State.ABSENT, SecondoFeatures.probe(id, lookup(false, false, null)));
             assertFalse(SecondoFeatures.invoke(id, State.ABSENT));
             assertFalse(SecondoFeatures.invoke(id, State.OFF));
