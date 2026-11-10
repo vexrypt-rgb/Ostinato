@@ -116,7 +116,13 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
         /** The chest list is replaced by a furnace list 15 ticks in. */
         REPLACE,
         /** No task: the idle player stands on magma 10 ticks, then is moved off it; keys checked 20 ticks later. */
-        MAGMA;
+        MAGMA,
+        /**
+         * Phase 10 diagnostic, only with {@code only=SURFACE}: no task; the idle player at the bottom of a 3x3 pool,
+         * 7 deep, with little air. Keys are read 40 ticks after the air bar is full, and again 20 ticks after the
+         * player is moved onto dry ground (B6: the surfacing JUMP).
+         */
+        SURFACE;
 
         String target() {
             switch (this) {
@@ -141,6 +147,9 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
 
     // arena (server thread writes once at setup)
     private BlockPos origin;
+    /** SURFACE: AirProcess seen in control, JUMP seen forced, the lap tick the air bar was full. */
+    private boolean surfaceActive, surfaceJump;
+    private long fullAt;
     private int minY;
     private BlockState[] snapshot;
     private volatile int restored, removedContainers, far;
@@ -172,7 +181,11 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
 
     private static Scenario[] scenarios() {
         String only = System.getProperty("ostinato.interactterrain.only");
-        if (only == null || only.isBlank()) return Scenario.values();
+        if (only == null || only.isBlank()) {
+            List<Scenario> all = new ArrayList<>(List.of(Scenario.values()));
+            all.remove(Scenario.SURFACE); // a diagnostic, not part of the pre-registered runs
+            return all.toArray(new Scenario[0]);
+        }
         List<Scenario> s = new ArrayList<>();
         for (String n : only.split(",")) s.add(Scenario.valueOf(n.trim().toUpperCase(Locale.ROOT)));
         return s.toArray(new Scenario[0]);
@@ -383,6 +396,16 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
             level.addFreshEntity(cat);
         }
         if (s == Scenario.MAGMA) level.setBlock(origin.below(), Blocks.MAGMA_BLOCK.defaultBlockState(), 2);
+        if (s == Scenario.SURFACE) {
+            // a 3x3 pool, 7 deep, open to the sky, walled and floored with stone, the surface one below the start
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) for (int dy = -8; dy <= -1; dy++) {
+                boolean inside = Math.abs(dx) <= 1 && Math.abs(dz) <= 1 && dy >= -7;
+                level.setBlock(origin.offset(dx, dy, dz), (inside ? Blocks.WATER : Blocks.STONE).defaultBlockState(), 2);
+            }
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = 0; dy <= 2; dy++) {
+                level.setBlock(origin.offset(dx, dy, dz), Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
     }
 
     private static void put(ServerLevel level, BlockPos p, Block b) {
@@ -481,9 +504,15 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
             usePackets = 0;
             vanished = null;
             log("begin lap=" + index + " scen=" + s + " arm=" + armName(l) + " rep=" + l.rep() + " restored=" + restored + " farContainers=" + far + " menuAtStart=" + lastMenu
-                    + " known=" + (s == Scenario.MAGMA ? "-" : known(s.target())));
+                    + " known=" + (s == Scenario.MAGMA || s == Scenario.SURFACE ? "-" : known(s.target())));
             if (s == Scenario.MAGMA) {
                 step = 5;
+                return;
+            }
+            if (s == Scenario.SURFACE) {
+                step = 6;
+                surfaceActive = surfaceJump = false;
+                fullAt = -1;
                 return;
             }
             startRun(list(s.target()));
@@ -499,6 +528,10 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
         }
         if (step == 5) {
             magma(mc, l);
+            return;
+        }
+        if (step == 6) {
+            surface(mc, l);
             return;
         }
         if (step == 1) {
@@ -607,6 +640,63 @@ public final class InteractTerrainLiveTest implements AbstractGameEventListener 
             wait = 20;
             ready = true;
         }
+    }
+
+    /**
+     * SURFACE: no task. Tick 2 the player is put at the bottom of the pool with 90 air (AirProcess starts below 100);
+     * 40 ticks after the bar is full the keys and the movement input are read, then the player is moved onto dry
+     * ground and they are read again 20 ticks later. STUCK if a movement key is still forced or Baritone's movement
+     * input is still installed with no process surfacing; NOACTIVE if AirProcess never started within 600 ticks.
+     */
+    private void surface(Minecraft mc, Lap l) {
+        if (lapTicks == 2) {
+            server(mc, () -> {
+                ServerPlayer p = player(mc);
+                p.teleportTo(origin.getX() + 0.5, origin.getY() - 7, origin.getZ() + 0.5);
+                p.setDeltaMovement(0, 0, 0);
+                p.setAirSupply(90);
+            });
+            return;
+        }
+        if (lapTicks < 5) return;
+        if (activeProcesses().startsWith("Surfacing")) surfaceActive = true;
+        if (baritone.getInputOverrideHandler().isInputForcedDown(Input.JUMP)) surfaceJump = true;
+        if (fullAt < 0 && surfaceActive && mc.player.getAirSupply() >= mc.player.getMaxAirSupply()) fullAt = lapTicks;
+        if (fullAt < 0 && lapTicks > TIMEOUT) {
+            surfaceRow(l, mc, "inWater", "NOACTIVE");
+            return;
+        }
+        if (fullAt > 0 && lapTicks == fullAt + 40) {
+            post = "airFull+40 inWater=" + mc.player.isInWater() + " keys=" + heldKeys() + " input=" + mc.player.input.getClass().getSimpleName()
+                    + " control=" + activeProcesses() + " pathing=" + baritone.getPathingBehavior().isPathing();
+            server(mc, () -> {
+                ServerPlayer p = player(mc);
+                BlockPos off = new BlockPos(origin.getX() + 4, 0, origin.getZ());
+                int y = mc.getSingleplayerServer().overworld().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, off.getX(), off.getZ());
+                p.teleportTo(off.getX() + 0.5, y, off.getZ() + 0.5);
+                p.setDeltaMovement(0, 0, 0);
+            });
+        }
+        if (fullAt > 0 && lapTicks == fullAt + 60) {
+            boolean forced = false;
+            for (Input in : new Input[]{Input.MOVE_FORWARD, Input.MOVE_BACK, Input.MOVE_LEFT, Input.MOVE_RIGHT, Input.SNEAK, Input.JUMP}) {
+                forced |= baritone.getInputOverrideHandler().isInputForcedDown(in);
+            }
+            boolean baritoneInput = mc.player.input.getClass().getSimpleName().equals("PlayerMovementInput");
+            surfaceRow(l, mc, "onLand", forced || baritoneInput ? "STUCK" : "CLEAR");
+        }
+    }
+
+    private void surfaceRow(Lap l, Minecraft mc, String where, String cls) {
+        log("row lap=" + index + " scen=SURFACE arm=" + armName(l) + " rep=" + l.rep() + " part=idle surfacing=" + surfaceActive
+                + " jumpSeen=" + surfaceJump + " fullAt=" + fullAt + " " + (post == null ? "-" : post) + " " + where + " keys=" + heldKeys()
+                + " input=" + mc.player.input.getClass().getSimpleName() + " control=" + activeProcesses()
+                + " air=" + mc.player.getAirSupply() + " cls=" + cls);
+        baritone.getInputOverrideHandler().clearAllKeys(); // as MAGMA: nothing in Baritone would, so the lap end does
+        index++;
+        state = 3;
+        wait = 20;
+        ready = true;
     }
 
     /** What Baritone's own block search returns for the target at lap start (the request does the same search). */

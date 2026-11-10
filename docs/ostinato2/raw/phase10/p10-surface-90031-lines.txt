@@ -1,0 +1,14 @@
+INTERACTTERRAIN start laps=6 reps=3 scenarios=1 timeout=600 post=40 seed=90031 flag=present origin=10, 75, 86 box=53x53x102 removedContainers=0 chests=[BlockPos{x=19, y=71, z=91}, BlockPos{x=-4, y=70, z=97}] furnaces=[BlockPos{x=0, y=66, z=71}, BlockPos{x=31, y=71, z=88}] blast=25, 68, 103 ender=-9, 74, 83 table=28, 69, 74 wet=[] rightClickContainerOnArrival=true cadenza=false exploreForBlocks=true swimInWater=true
+INTERACTTERRAIN begin lap=0 scen=SURFACE arm=A rep=0 restored=1 farContainers=16 menuAtStart=none known=-
+INTERACTTERRAIN row lap=0 scen=SURFACE arm=A rep=0 part=idle surfacing=true jumpSeen=true fullAt=169 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN begin lap=1 scen=SURFACE arm=B rep=0 restored=279 farContainers=46 menuAtStart=none known=-
+INTERACTTERRAIN row lap=1 scen=SURFACE arm=B rep=0 part=idle surfacing=true jumpSeen=true fullAt=168 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN begin lap=2 scen=SURFACE arm=B rep=1 restored=276 farContainers=19 menuAtStart=none known=-
+INTERACTTERRAIN row lap=2 scen=SURFACE arm=B rep=1 part=idle surfacing=true jumpSeen=true fullAt=145 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN begin lap=3 scen=SURFACE arm=A rep=1 restored=275 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=3 scen=SURFACE arm=A rep=1 part=idle surfacing=true jumpSeen=true fullAt=120 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN begin lap=4 scen=SURFACE arm=A rep=2 restored=275 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=4 scen=SURFACE arm=A rep=2 part=idle surfacing=true jumpSeen=true fullAt=120 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN begin lap=5 scen=SURFACE arm=B rep=2 restored=275 farContainers=0 menuAtStart=none known=-
+INTERACTTERRAIN row lap=5 scen=SURFACE arm=B rep=2 part=idle surfacing=true jumpSeen=true fullAt=120 airFull+40 inWater=true keys=- input=KeyboardInput control=- pathing=false onLand keys=- input=KeyboardInput control=- air=300 cls=CLEAR
+INTERACTTERRAIN finish laps=6

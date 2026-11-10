@@ -1,5 +1,20 @@
 # Ostinato 2.0 — status
 
+**Phase 10: PARTIAL. Release readiness CONDITIONAL. No default changed, nothing promoted** (DECISIONS D21,
+FINAL_REPORT.md, 2026-11-09).
+- Production defaults validated on 26.3 Fabric: lap course 96/96 reached, A/A ratios 0.996–1.004 (Run P); suite
+  1645 / 0 failed / 24 skipped (was 1 failed).
+- B6, Critical, fixed: `AirProcess` left SNEAK forced on an idle player after magma (keyboard ignored). STUCK 2/2
+  before, CLEAR 12/12 held out. The suspected surfacing JUMP leak did not reproduce (CLEAR 6/6); not changed.
+- B5 closed: `SecondoTest` was stale (written before the merges that added the six types), not a regression.
+- `verifiedGetToBlock` on natural terrain (Run V, 180 laps): **DEFER** by the pre-registered rule. 0 false successes
+  with it on (24 off), but T2/T3/T4 fail on seed 90012, through a navigation stall and a stop-release lag seen in
+  both arms. Stays default false.
+- Disposition: RETAIN interaction contract, magma fix, physics-263, `PredictionTolerance` contract, harnesses;
+  DEFER `verifiedGetToBlock`, `unifiedExecutor`, `inputArbitration`, `pathingStateIdCache`, `pathingHierarchical`,
+  `pathDecisionMatrix`; RETIRE (recommend, code kept) `predictionTolerance`, `simEdgeSearch`, `latticeExperiment`.
+- No further phase was started.
+
 **Phase 09 gate: PASS. No flag added; no default changed** (DECISIONS D20, 2026-11-09).
 - Slice A: the interaction capability's container observation behind a version adapter. `GetToBlockProcess` and
   the task runner no longer name a menu class; `ClientContainers` (26.3) is the only class in the slice that does.
@@ -10,7 +25,7 @@
 - Held out (Tier L, seeds 89011/89012, Phase 08 build vs Phase 09 build, 288 laps): 160/160 rows the same oracle class,
   every arm-B outcome identical, both flag states; Phase 08's gates all pass on the new build; OPEN, failure and
   cancel latencies unchanged; runner +2.1 µs per tick (bound 5).
-- `verifiedGetToBlock` stays default false. Phase 10 was **not** started.
+- `verifiedGetToBlock` stays default false. Phase 10 came later (D21).
 
 **Phase 08 gate: PASS. `verifiedGetToBlock` stays default false** (DECISIONS D19, 2026-11-09).
 - Workflow C, navigate → interact → verify (`goto <container>` and the task runner's GET_TO_BLOCK step).
@@ -496,9 +511,30 @@ Start HEAD `6b4f3d049` (clean apart from an untracked `scripts/__pycache__/`).
 - **Coupling, before → after:** menu API named in 2 files of the slice (7 imports, 4 sites) → 1 file
   (`ClientContainers`); the runner imported the implementation class and a menu class → neither.
 
+## Phase 10 (final validation, feature disposition, production readiness, 2026-11-09)
+
+- Commits (local only): `4c14331e4` (B6 magma release, B5 test), `d807a5240` (terrain harness, production lap arms,
+  pre-registration), `8ed8d7e7b` (Run V raw), and the commit that last touched this file (SURFACE diagnostic, Run P
+  and SURFACE raw, docs).
+- Held out: Run V (seeds 90011/90012, 180 laps), Run P (seed 90021, 96 laps); diagnostic SURFACE (seed 90031, 6
+  laps). Each held-out seed ran once; no threshold changed. Raw: `docs/ostinato2/raw/phase10/`.
+- B6 audit table: DECISIONS D21. Open: `AirProcess` door air pocket (Important, rare); Deferred writers need
+  migrating before `unifiedExecutor` or `inputArbitration` can be promoted.
+- Asked by the owner: the bot sprints without sprint-jumping because `sprintJump` is default false since
+  `46dce71f7` (travel bench faster off); it is not food conservation. Not changed.
+
 ## Next task
 
-**Owner decisions. Phase 09 is complete (gate PASS). Phase 10 was not started.**
+**Owner decisions. Phase 10 is complete (PARTIAL); no further phase was started.**
+
+0. Phase 10 (D21, FINAL_REPORT.md):
+   - Review and, if accepted, push and merge `ostinato2/claude-review` (nothing was pushed). The magma release is the
+     only production behaviour change.
+   - Archive or keep the RETIRE items (`predictionTolerance`, `simEdgeSearch`, `latticeExperiment`).
+   - Before re-assessing `verifiedGetToBlock`: a navigation-stall bound, a retry on another instance after a refusal,
+     LAG_LONG reported as UNKNOWN, and a fresh pre-registered terrain run.
+
+Earlier items (unchanged):
 
 0. Phase 09 (D20):
    - Nothing to promote: no flag, no default change. The refactor is live in the build as committed.

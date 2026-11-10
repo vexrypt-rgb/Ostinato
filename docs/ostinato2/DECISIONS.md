@@ -875,3 +875,72 @@ observer migrated.
 - Live coverage is Phase 08's: one arena, chest, crafting table and ender chest; furnace kinds are unit-tested only.
 - One intended difference: with no player when a verified step starts, the runner's remembered menu is null rather
   than an earlier step's (not reachable in the harness).
+
+## D21. Phase 10: final validation and feature disposition; `verifiedGetToBlock` DEFER, B6 magma SNEAK fixed, no default changed
+
+The task: validate the production build, decide the disposition of every Ostinato 2.0 experiment, audit the input
+ownership paths production can reach (B6), diagnose `SecondoTest` (B5), and hand off. No push, merge, default
+change, promotion, new planner, executor or framework, and no new phase.
+
+Phase start HEAD: `bda049360` (clean apart from an untracked `scripts/__pycache__/`). End: the commit that last
+touched this file. Local commits only; nothing pushed or merged. The criteria were committed in BENCHMARKS
+"Phase 10 → Pre-registration" (`d807a5240`) before any held-out run. Evidence: BENCHMARKS "Phase 10" and
+`docs/ostinato2/raw/phase10/`. The full report is `docs/ostinato2/FINAL_REPORT.md`.
+
+**Commits:**
+
+| commit | content |
+|---|---|
+| `4c14331e4` | B6: `AirProcess` releases the magma SNEAK it pressed (+3 unit tests); B5: `SecondoTest` updated to the merged tree |
+| `d807a5240` | `InteractTerrainLiveTest` (natural terrain), Legato `arms=production`, dev runs, pre-registration |
+| `8ed8d7e7b` | Run V raw rows and summaries; suite summaries |
+| the commit that last touched this file | SURFACE diagnostic scenario (harness only), Run P and SURFACE raw, results, STATUS, FINAL_REPORT |
+
+**B5 (`SecondoTest`): stale test, not a regression (VERIFIED).** The test was written at `2f4176049`, before the
+`combine/main-maze-ppe` merges (`ab615b7f3` and following) brought all six planned Secondo types onto this tree.
+The test now asserts that they are present and that `SecondoFeatures.invoke` still calls none of them (the no-op
+and ABSENT-probe assertions are kept). Suite: 1642 / 1 failed / 24 skipped at the start, 1645 / 0 / 24 after.
+
+**B6 (production-reachable key writers), classified:**
+
+| finding | class | status |
+|---|---|---|
+| `AirProcess.isActive()` pressed SNEAK on magma for any player, idle included, and never released it: SNEAK stays forced, `PlayerMovementInput` stays installed, the keyboard is ignored | Critical | **fixed** (`4c14331e4`): it releases only its own press once off magma. Live: STUCK 2/2 before, CLEAR 2/2 dev and 12/12 held out (M1) |
+| `AirProcess` surfacing an idle player: JUMP held at the surface under REQUEST_PAUSE; when air is full `isActive()` goes false and `cancelSegmentIfSafe()` clears keys only when a path is current | Deferred (was Important) | not reproduced: SURFACE diagnostic CLEAR 6/6 (the path stays current through the pause, so the cancel releases JUMP); no change |
+| `AirProcess` door air pocket (MOVE_FORWARD, SNEAK, JUMP, CLICK_RIGHT) and `onLostControl()` releasing nothing | Important | open; same release pattern as the surfacing row, rare (needs a held wooden door, no air in reach) |
+| `clearAllKeys()` in `onLostControl()` of `GetToBlockProcess`, `PveProcess`, `PvpProcess`, `BastionProcess`, `PortalBuildProcess` | Deferred | over-release, not a leak; matters only to the executor lease (`unifiedExecutor` off) |
+| `BackfillProcess.isActive()` clears every key every tick | Deferred | `backfill` off by default (upstream) |
+| `ElytraBehavior` JUMP in lava | Deferred | elytra only (upstream) |
+| `ServerSpectate` | Deferred | feature mode, off unless started |
+| `PathingBehavior`, `ExecutionControlCommands` clears | Not a defect | owner-side releases |
+| kinematic controllers' writes | Not a defect | owned by the path executor while it runs; architectural debt (no arbiter) |
+
+**`verifiedGetToBlock` on natural terrain (Run V, seeds 90011/90012, 180 laps): DEFER** by the pre-registered rule.
+T1 (no false success with the flag on) passes on both seeds: B 0, A 24. M1 passes 12/12. T2, T3 and T4 fail on
+seed 90012. Read after the classification, the failures are not the flag's: the same navigation stall (standing
+still, no key, RUNNING, three blocks from the chest) in both arms (A 11 hangs, B 12), and a one-tick key release
+lag after a mid-move stop in both arms (3 A, 3 B, released by lap end). The flag does not bound a navigation
+stall, and that is a limitation for promotion in its own right. It stays default false.
+
+**Run P (production lap course, seed 90021, 96 laps):** 96/96 reached, lap medians 296–298 ticks in all four production arms, 0 faults, 0 stuck-key laps; P1 PASS (A/A median ratios 0.996–1.004). This is the production travel baseline at the end of 2.0.
+
+**Disposition** (owner decides; nothing was enabled, removed or deleted):
+
+| system | flag (default) | disposition | basis |
+|---|---|---|---|
+| Phase 08/09 interaction contract: `ProcessOutcome`, `OpenVerifier`, `ContainerView`, `ClientContainers` | none (always on; records only with the flag off) | RETAIN | D19/D20 PASS; Run V: no leak, no exception, 0 FS with the flag on |
+| `verifiedGetToBlock` | false | DEFER | Run V T2–T4 fail on 90012; T1 0 FS both seeds; no navigation-stall bound, no retry on another instance, LAG_LONG TIMEOUT is really UNKNOWN |
+| `AirProcess` magma release (B6) | none | RETAIN | Critical, fixed, M1 12/12 |
+| physics-263 (`PlayerSim`, native mirror, predictors) | none | RETAIN | D12, bitwise native parity, Tier L bounds |
+| `PredictionTolerance` contract | none | RETAIN | D11/D14 |
+| `predictionTolerance` | false | RETIRE (recommend; keep code) | D14: no improvement, overhead inconclusive |
+| `unifiedExecutor` | false | DEFER | D16 FAIL, D17 PASS without promotion evidence; needs the B6 Deferred rows migrated |
+| `inputArbitration` | false | DEFER | B6: direct writers (280 raw matches, 34 files) bypass it |
+| `pathingStateIdCache` | false | DEFER | D18 FAIL (G3 harness pairing, 4% not 30%) |
+| `simEdgeSearch` | false | RETIRE (recommend archiving; keep code) | D13/D15 no improvement |
+| `latticeExperiment` | false | RETIRE | no consumer in `src/main/java`; D9 PROVISIONAL |
+| `pathingHierarchical`, `pathDecisionMatrix` | false | DEFER | pre-2.0, off, not assessed in 2.0 |
+| harnesses (`InteractTerrainLiveTest`, `InteractLiveTest`, `LegatoLiveTest`, `ToleranceTraceTest`, `LongRouteSim`, …) | opt-in system properties | RETAIN | evidence infrastructure, off unless a property is set |
+
+**Not changed:** every default; no experiment enabled; no code removed. `sprintJump` (default false since
+`46dce71f7`, travel bench faster without it) was asked about by the owner and left as it is.

@@ -3372,3 +3372,81 @@ $env:JAVA_TOOL_OPTIONS='-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40
 
 **Headless (Tier U/S):** the full unit suite after this phase's changes (it includes `PathBenchTest`'s golden check),
 0 failures required for "suite green".
+
+### Run V results (held out, Tier L; build `d807a5240`; raw `raw/phase10/p10-terrain-9001{1,2}-lines.txt`, summaries `p10-terrain-*-summary.txt`)
+
+Each seed ran once, with no crash and no re-run. Seed 90011 spawned on low ground (origin y 64, start 21:51, 16 min); seed
+90012 in hills (origin y 101, 24 min). 0 deaths. `wet=[]` on both seeds. Every lap-start `known=` listed the
+target in the box apart from 3 CANCEL_ACT pairs on 90012 (excluded from T2 as pre-registered).
+
+| gate | 90011 | 90012 | both |
+|---|---|---|---|
+| T1 B false successes = 0 | **PASS** (0; A 15) | **PASS** (0; A 9) | **PASS** (0; A 24) |
+| T2 B TS ≥ A TS − 2 per seed, ≥ 12 eligible pairs | **PASS** (28 vs 22, 30 pairs) | **FAIL** (16 vs 19, 27 pairs) | 44 vs 41 (57 pairs) |
+| T3 bounded release on stop and preempt | **PASS** | **FAIL** (6 stop rows `keys1=MOVE_FORWARD,SPRINT`) | FAIL |
+| T4 no B-only HANG | **PASS** | **FAIL** (12 B-only hangs) | FAIL |
+| M1 MAGMA all CLEAR | **PASS** (6/6) | **PASS** (6/6) | **PASS** (12/12) |
+
+**Pre-registered classification of `verifiedGetToBlock`: DEFER** (T2, T3 and T4 fail on seed 90012). It stays default false.
+
+Diagnosis of the failures (read from the raw rows, after the classification; it changes no gate):
+- **T4 and T2 (90012), a navigation stall in both arms.** 16 of the seed's 23 HANG rows (A 11, B 12) stand still
+  with no key held and the outcome RUNNING at the same block, -18,96,7, three blocks from the chest at -21,96,8 (goal
+  `GoalGetToBlock{-21,96,8}`): A in CAT_ONE ×3, LAG_SHORT, LAG_LONG ×2, CANCEL_ACT ×2; B in CHEST2 ×2, CAT_ONE,
+  LAG_SHORT ×2, LAG_LONG, CANCEL_MOVE ×2, CANCEL_ACT. Three more stand still in the same way next to the
+  ender chest (B), the blast furnace (B) and the REPLACE furnace (A and B, at -18,101,-15). Whether a lap goes to
+  that chest depends on the arm's (unchanged) nearest-target choice and where the last lap ended, so the B-only
+  rows are pairs where A happened to choose the other chest, or stalled in another part. Both arms stall on the same
+  three blocks. Cause UNKNOWN: no path message was logged and the world was not kept. The server logged "standing on
+  air - force-sending blocks below" 64 times on 90012 and 48 on 90011. The flag does not bound a navigation stall
+  (Phase 08 limitation, confirmed).
+- **T3 (90012), a one-tick release lag in both arms.** All 6 CANCEL_MOVE stop rows (3 A, 3 B) still had
+  `MOVE_FORWARD,SPRINT` one tick after the stop, and none at the end (`keysEnd=-`, `activeEnd=false`). That is
+  `cancelSegmentIfSafe()` waiting for a safe point mid-movement on sloped ground; it is arm-independent and not
+  a leak. On 90011 (flat) every stop row was clean. Every B stop outcome was CANCELLED or UNKNOWN with
+  OWNERSHIP_LOST, and every B PREEMPT ended CANCELLED/OWNERSHIP_LOST (6/6).
+- **VANISH_ONE.** 90011: both arms 1 TS, 2 HANG. With the fixture gone, both walk toward natural chests remembered
+  from Baritone's cache far outside the box (371,-18,226; 407,-48,65). 90012: B 3/3 FAILED/WORLD_CHANGED; A 3/3 HANG
+  running away (`GoalRunAwayFrom`, explore).
+- **B's honest failures (16):** CAT_ONE 3 FAILED/TIMEOUT (no retry on the other chest), LAG_LONG 4 FAILED/TIMEOUT
+  (the server then opened the chest after the verdict in all 4, as A's 4 did: a TIMEOUT here is really UNKNOWN),
+  PREEMPT 6 CANCELLED/OWNERSHIP_LOST, VANISH_ONE 3 FAILED/WORLD_CHANGED.
+- **A's false successes (24):** MENU_OPEN 6, PREEMPT 6, LAG_LONG 4, CAT_ONE 3, CANCEL_ACT rerun 4 (each counted the
+  chest that the cancelled click opened), CHEST2 1.
+- Cost: runner median 7.85 µs per tick in A, 8.73 in B (both seeds, laps 0–1 excluded).
+- No verdict row kept a key forced apart from HANG rows (where the request was still running).
+
+### Run P results (held out, Tier L; build `d807a5240`; raw `raw/phase10/p10-legato-90021-lines.txt`)
+
+One run, no crash, 29 min. `SimEdgeCourse`, seed 90021, 6 reps, four arms all on production defaults
+(`travelStack=auto`, kinematic on).
+
+| arm | laps | reached | median ticks | mean ticks | tick p50 (µs, median of laps) | tick p95 (µs) | faults | cancels |
+|---|---|---|---|---|---|---|---|---|
+| A | 24 | 24 | 298 | 302.3 | 5527 | 7641 | 0 | 0 |
+| B | 24 | 24 | 298 | 300.9 | 5491 | 7651 | 0 | 0 |
+| C | 24 | 24 | 296 | 300.3 | 5517 | 7706 | 0 | 0 |
+| D | 24 | 24 | 296 | 300.4 | 5462 | 7632 | 0 | 0 |
+
+Per leg (arm A median): slalom 340, ridges 271, bumps 298, steps 293 ticks. `physPlans=70`, `driftReplans=43`,
+no SimEdge or Legato search (both off), **keys stuck after 0 laps**, no "keys held" line, no death, no course rebuild.
+
+**P1 (harness sanity): PASS.** All 16 A/A paired-leg median ratios lie in 0.996–1.004 (B, C, D against A per leg:
+1.003, 1.000, 1.003; 0.996, 1.004, 0.996; 1.000 ×3; 1.000, 0.997, 1.000; D against C: 1.000, 1.000, 1.000, 1.003).
+Single pairs spread 0.89–1.06, so one lap is noisy, but the per-leg medians of six can resolve a 5% change on this machine.
+
+### SURFACE diagnostic (after Runs V and P; not pre-registered, no gate; raw `raw/phase10/p10-surface-90031-lines.txt`)
+
+Question: does `AirProcess` leave JUMP forced on an idle player after surfacing? Read in code, it holds JUMP at the
+surface under REQUEST_PAUSE, and `secretInternalSegmentCancel()` clears keys only while a path is current.
+New non-default scenario `SURFACE` (`-Dostinato.interactterrain.only=SURFACE`, excluded from the default list so
+Run V's scenario set is unchanged): the idle player at the bottom of a 3x3 pool 7 deep, open to the sky, 90 air; keys
+read 40 ticks after the air bar is full, and again 20 ticks after a move onto dry ground. Seed 90031, 6 laps, the
+build of this section (harness change only).
+
+Result: **CLEAR 6/6.** In every lap AirProcess took control and JUMP was forced while surfacing
+(`surfacing=true jumpSeen=true`); the bar was full at lap tick 120–169, and 40 ticks later no key was
+forced and `KeyboardInput` was back, in the water and on land. The surfacing path stays current through the pause,
+so the release on `isActive()` → false goes through `secretInternalSegmentCancel()`. **No change was made**: the
+defect was not demonstrated. The finding moves to Deferred (no reproduction; a pocket with no path current is the
+only remaining way, not staged).
