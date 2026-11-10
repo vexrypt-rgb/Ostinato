@@ -270,9 +270,14 @@ public final class PathBench {
         long t0 = System.nanoTime();
         Optional<IPath> p;
         try {
+            // The game calls calculate(), which claims the mining memo before calculate0.
+            // The bench calls calculate0 directly, so without this the profile charges mining
+            // costs the game has already memoized.
+            ctx.claimSearchCaches();
             AbstractNodeCostSearch f = finder.create(q.start, q.goal, ctx);
             p = f.calculate0(TIMEOUT_MS, TIMEOUT_MS);
         } finally {
+            ctx.releaseSearchCaches();
             System.setOut(out);
         }
         long t1 = System.nanoTime();

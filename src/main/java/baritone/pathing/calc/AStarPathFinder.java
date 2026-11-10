@@ -155,6 +155,27 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         LegatoFeasibility.Result lineCheck = theta ? new LegatoFeasibility.Result() : null;
         // Ostinato Cadenza: a goal whose cells cost differently once reached (null: every goal cell ends the search)
         TerminalCostGoal terminalGoal = goal instanceof TerminalCostGoal tg ? tg : null;
+        // Ostinato: hyperopt E7. The neighbor loop skips move families that cannot write a finite cost under this
+        // context (parkour, slime, jump, climb, chain, TAS with their flags off). Same order; moveScale and flatWalk
+        // stay indexed by ordinal over the full Moves.all(), so only the loop array is filtered.
+        Moves[] liveMoves = allMoves;
+        {
+            int live = 0;
+            for (Moves m : allMoves) {
+                if (m.counts(calcContext)) {
+                    live++;
+                }
+            }
+            if (live != allMoves.length) {
+                liveMoves = new Moves[live];
+                int k = 0;
+                for (Moves m : allMoves) {
+                    if (m.counts(calcContext)) {
+                        liveMoves[k++] = m;
+                    }
+                }
+            }
+        }
         while (!openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // only call this once every 64 nodes (about half a millisecond)
                 long now = System.currentTimeMillis(); // since nanoTime is slow on windows (takes many microseconds)
@@ -226,7 +247,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 openSet.insert(currentNode);
                 continue;
             }
-            for (Moves moves : allMoves) {
+            for (Moves moves : liveMoves) { // Ostinato: hyperopt E7
                 int newX = currentNode.x + moves.xOffset;
                 int newZ = currentNode.z + moves.zOffset;
                 if ((newX >> 4 != currentNode.x >> 4 || newZ >> 4 != currentNode.z >> 4) && !calcContext.isLoaded(newX, newZ)) {

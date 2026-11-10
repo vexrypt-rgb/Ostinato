@@ -1311,4 +1311,19 @@ public enum Moves {
     public String family() {
         return family;
     }
+
+    /**
+     * Ostinato: hyperopt E7. False when this move cannot write a finite cost under {@code c}'s flags, so the search skips it.
+     * Swims, steps, diagonals, lines, and bubble columns stay.
+     */
+    public boolean counts(CalculationContext c) {
+        return switch (family) {
+            case "PARKOUR", "SLIME" -> c.allowParkour;
+            case "JUMP" -> c.allowParkour && c.canSprint;
+            case "CLIMB" -> c.allowParkour && c.allowClimbJumps;
+            case "CHAIN" -> c.allowParkour && c.allowMomentumJumps && c.canSprint;
+            case "TAS" -> c.allowTasJumps;
+            default -> true;
+        };
+    }
 }
