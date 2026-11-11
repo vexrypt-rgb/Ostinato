@@ -88,6 +88,10 @@ public class ExecutionControlCommands {
                     throw new CommandInvalidStateException("Already paused");
                 }
                 paused[0] = true;
+                // Ostinato: owner pause outranks swarm commands. No effect when the protocol is off.
+                if (baritone instanceof baritone.Baritone) {
+                    ((baritone.Baritone) baritone).getSwarmBehavior().noteOwnerPause(true);
+                }
                 logDirect("Paused");
             }
 
@@ -122,6 +126,10 @@ public class ExecutionControlCommands {
                     throw new CommandInvalidStateException("Not paused");
                 }
                 paused[0] = false;
+                // Ostinato: resume clears the owner-pause latch. No effect when the protocol is off.
+                if (baritone instanceof baritone.Baritone) {
+                    ((baritone.Baritone) baritone).getSwarmBehavior().noteOwnerPause(false);
+                }
                 logDirect("Resumed");
             }
 
@@ -178,6 +186,10 @@ public class ExecutionControlCommands {
                 args.requireMax(0);
                 if (paused[0]) {
                     paused[0] = false;
+                    // Ostinato: #cancel / #stop ends the owner pause. It does not by itself mark a swarm command canceled.
+                    if (baritone instanceof baritone.Baritone) {
+                        ((baritone.Baritone) baritone).getSwarmBehavior().noteOwnerPause(false);
+                    }
                 }
                 baritone.getPathingBehavior().cancelEverything();
                 logDirect("ok canceled");

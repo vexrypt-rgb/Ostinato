@@ -34,6 +34,7 @@ import baritone.behavior.Behavior;
 import baritone.command.argument.ArgConsumer;
 import baritone.command.argument.CommandArguments;
 import baritone.command.manager.CommandManager;
+import baritone.swarm.center.UnifiedChat; // Ostinato: local # chat enters the unified registry. Permission is not read.
 import com.mojang.blaze3d.Blaze3D;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
@@ -118,9 +119,9 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
             if (setting != null) {
                 logRanCommand(command, rest);
                 if (setting.getValueClass() == Boolean.class) {
-                    this.manager.execute(String.format("set toggle %s", setting.getName()));
+                    localHash(String.format("set toggle %s", setting.getName()));
                 } else {
-                    this.manager.execute(String.format("set %s", setting.getName()));
+                    localHash(String.format("set %s", setting.getName()));
                 }
                 return true;
             }
@@ -132,7 +133,7 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
                 if (setting.getName().equalsIgnoreCase(pair.first())) {
                     logRanCommand(command, rest);
                     try {
-                        this.manager.execute(String.format("set %s %s", setting.getName(), argc.getString()));
+                        localHash(String.format("set %s %s", setting.getName(), argc.getString()));
                     } catch (CommandNotEnoughArgumentsException ignored) {} // The operation is safe
                     return true;
                 }
@@ -144,7 +145,12 @@ public class ExampleBaritoneControl extends Behavior implements Helper {
             logRanCommand(command, rest);
         }
 
-        return this.manager.execute(pair);
+        return UnifiedChat.localHash(msg, () -> this.manager.execute(pair));
+    }
+
+    // Ostinato: local # chat. The registry does not read permission for this caller.
+    private boolean localHash(String line) {
+        return UnifiedChat.localHash(line, () -> this.manager.execute(line));
     }
 
     @Override

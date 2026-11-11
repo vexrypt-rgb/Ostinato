@@ -17,7 +17,7 @@ only on some release lines are marked.
 | [Screen, freecam and task lists](gui-freecam-tasks.md) | The Ostinato screen, `#freecam`, `#tasks` |
 | [Settings](settings.md) | How `#set` works and the Ostinato-specific settings |
 
-Existing documents: [Features](../../FEATURES.md) · [Usage (upstream Baritone)](../../USAGE.md) ·
+Existing documents: [Features](../../FEATURES.md) · [Hidden mode](../hidden-mode.md) · [Headless mode](../headless-mode.md) · [Usage (upstream Baritone)](../../USAGE.md) ·
 [Setup](../../SETUP.md) · [Region builds](../REGION_BUILD.md) · [Movement engine](../MOVEMENT_ENGINE.md) ·
 [Porting](../PORTING.md) · [TenorClef pairing](../TENORCLEF.md).
 

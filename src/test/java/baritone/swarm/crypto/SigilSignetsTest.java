@@ -11,6 +11,29 @@ import static org.junit.Assert.fail;
 
 public class SigilSignetsTest {
 
+    @Test public void pythonWriterFixtureSignsRfc8032() throws Exception { // Ostinato:
+        String json; // Ostinato:
+        try (java.io.InputStream in = getClass().getResourceAsStream("ed25519-signet-test-only.json")) { // Ostinato:
+            json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8); // Ostinato:
+        } // Ostinato:
+        SigilSignets.Record record = SigilSignets.parse(json); // Ostinato:
+        byte[] signature = record.key.sign(new byte[0]); // Ostinato:
+        assertEquals("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" // Ostinato:
+                + "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b", // Ostinato:
+                java.util.HexFormat.of().formatHex(signature)); // Ostinato:
+        assertTrue(SigilEd25519.fromPublic(record.key.publicKey()).verify(new byte[0], signature)); // Ostinato:
+    } // Ostinato:
+
+    @Test public void explicitP256SignetIsRejectedEvenWith32ByteMaterial() throws Exception { // Ostinato:
+        try { // Ostinato:
+            SigilSignets.parse("{\"kind\":\"signet\",\"name\":\"Bob\",\"algorithm\":\"P-256\",\"public\":\"" // Ostinato:
+                    + SigilB64.encode(new byte[32]) + "\"}"); // Ostinato:
+            fail("P-256 must not be interpreted as Ed25519"); // Ostinato:
+        } catch (SigilException expected) { // Ostinato:
+            assertTrue(expected.getMessage().contains("Ed25519")); // Ostinato:
+        } // Ostinato:
+    } // Ostinato:
+
     @Test
     public void publicOnly() throws Exception {
         SigilEd25519 k = SigilEd25519.testSignet("botA-DO-NOT-USE");

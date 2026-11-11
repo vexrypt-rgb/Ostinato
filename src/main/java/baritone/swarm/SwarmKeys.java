@@ -81,7 +81,23 @@ public final class SwarmKeys {
         if (home == null || !Files.isDirectory(home)) {
             return new LinkedHashMap<String, SigilEd25519>();
         }
-        return new LinkedHashMap<String, SigilEd25519>(SigilSignets.loadMap(home));
+        // Ostinato: spawned members share public pins, but load their seed from a private external file.
+        Map<String, SigilEd25519> keys = new LinkedHashMap<String, SigilEd25519>(SigilSignets.loadMap(home));
+        String local = System.getProperty("ostinato.swarm.spawnSignet", "");
+        if (!local.isBlank()) {
+            try {
+                SigilSignets.Record record = SigilSignets.parse(Files.readString(Paths.get(local)));
+                SigilEd25519 pinned = keys.get(record.name);
+                if (pinned == null || !record.key.canSign()
+                        || !java.util.Arrays.equals(pinned.publicKey(), record.key.publicKey())) {
+                    throw new SigilException("Spawn signet does not match its shared public pin");
+                }
+                keys.put(record.name, record.key);
+            } catch (java.io.IOException e) {
+                throw new SigilException("Cannot read private spawn signet", e);
+            }
+        }
+        return keys;
     }
 
     /**

@@ -56,6 +56,23 @@ public final class SigilEd25519 {
         return new SigilEd25519(seed.clone(), derivePublic(seed));
     }
 
+    // Ostinato: production keys use fresh entropy, never the deterministic test helper.
+    public static SigilEd25519 generate() throws SigilException {
+        byte[] seed = new byte[KEY_LEN];
+        new SecureRandom().nextBytes(seed);
+        try {
+            return fromSeed(seed);
+        } finally {
+            Arrays.fill(seed, (byte) 0);
+        }
+    }
+
+    // Ostinato: package-private export exclusively for the local signet writer.
+    byte[] seedForRecord() {
+        if (seed == null) throw new IllegalStateException("No private signet seed");
+        return seed.clone();
+    }
+
     public static SigilEd25519 fromPublic(byte[] pub) throws SigilException {
         if (pub == null || pub.length != KEY_LEN) {
             throw new SigilException("Ed25519 public key must be 32 bytes.");

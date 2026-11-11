@@ -1,5 +1,8 @@
 package baritone.launch.mixins;
 
+import baritone.api.hidden.HiddenWindowPolicy;
+import baritone.api.hidden.RenderSwap;
+import baritone.api.run.RunMode;
 import net.minecraft.client.MouseHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -8,9 +11,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Ostinato test-harness only, inert unless -Dostinato.windowPos or -Dostinato.noMouseGrab=true is set: grabbing or
- * releasing the mouse only flips the game's own flag and never touches the OS cursor mode or position, so a
- * background test client cannot teleport the user's real cursor. Bot rotations don't use the OS mouse.
+ * Ostinato: grabbing or releasing the mouse only flips the game's own flag and never touches the OS cursor, when
+ * hidden mode is on, a render-swap is presenting, {@code -Dostinato.windowPos} is set, or
+ * {@code -Dostinato.noMouseGrab=true}. A normal client with none of those leaves the OS cursor alone as before.
+ * Bot rotations don't use the OS mouse.
  */
 @Mixin(MouseHandler.class)
 public abstract class MixinNoMouseGrab {
@@ -18,7 +22,12 @@ public abstract class MixinNoMouseGrab {
     @Shadow private boolean mouseGrabbed;
 
     private static boolean ostinato$off() {
-        return System.getProperty("ostinato.windowPos") != null || Boolean.getBoolean("ostinato.noMouseGrab");
+        // Ostinato: hidden cannot teleport the user's cursor. Normal without the old flags is unchanged.
+        return HiddenWindowPolicy.suppressMouseGrab(
+                RunMode.current(),
+                RenderSwap.isPresenting(),
+                System.getProperty("ostinato.windowPos") != null,
+                Boolean.getBoolean("ostinato.noMouseGrab"));
     }
 
     @Inject(method = "grabMouse", at = @At("HEAD"), cancellable = true)

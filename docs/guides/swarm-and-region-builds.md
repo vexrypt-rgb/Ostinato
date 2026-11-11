@@ -7,7 +7,7 @@ separate network: it rides this same link as message type `TCS`, through `SwarmC
 in TenorClef's menu.
 
 ## Setup
-1. Set `swarmEnabled true` (default off).
+1. Set `swarmEnabled true` (default off). Phase 1 commands also need `swarmCommandProtocol true` (default off). See [Phase 1](../swarm/PHASE1.md).
 2. Make a roster file (`swarmRosterFile`, default `swarm.txt`, relative to the `baritone` folder). One line per group; it holds names only:
    ```
    group builders circle=my-circle members=Alice,Bob,Carol lead=Alice
@@ -24,6 +24,9 @@ in TenorClef's menu.
 | `#swarm reload` | reload roster and keyring |
 | `#swarm build <group> <file> [x y z]` | as the group's lead, split a schematic over the group |
 | `#swarm stop` | stop the job you lead, and your own region |
+| `#swarm send <bot> <command...>` | when `swarmCommandProtocol` is on, seal one registry command and wait for its ack (not a transport receipt) |
+| `#swarm outcome <id>` | ack and execution/observation for that command id |
+| `#swarm cancel <id>` | ask the bot that was sent `<id>` to stop that command. Canceled only after the bot confirms |
 
 ## Region builds
 The file must be a plain name in every member's `schematics` folder. Each member (roster order) gets region `i`

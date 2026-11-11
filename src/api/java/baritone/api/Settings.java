@@ -1620,6 +1620,15 @@ public final class Settings {
     public final Setting<Boolean> legitMineIncludeDiagonals = new Setting<>(false);
 
     /**
+     * Ostinato: how ore and block targeting treats blocks the bot has not seen. {@code auto} (the default) is on
+     * only while connected to a remote multiplayer server, and off in singleplayer and on LAN. {@code on} forces the
+     * seen-only filter. {@code off} leaves pathing, mining, and targeting as they were before this setting.
+     * Set with {@code #set legitMode on}, {@code #set legitMode off}, or {@code #set legitMode auto}.
+     * This is separate from {@link #legitMine}.
+     */
+    public final Setting<baritone.api.legit.LegitMode.Value> legitMode = new Setting<>(baritone.api.legit.LegitMode.Value.AUTO);
+
+    /**
      * When mining block of a certain type, try to mine two at once instead of one.
      * If the block above is also a goal block, set GoalBlock instead of GoalTwoBlocks
      * If the block below is also a goal block, set GoalBlock to the position one down instead of GoalTwoBlocks
@@ -2089,7 +2098,7 @@ public final class Settings {
      * Swarm messaging: max frames one message may be split into; larger messages are refused
      * on send and on receive.
      */
-    public final Setting<Integer> swarmMaxChunks = new Setting<>(8);
+    public final Setting<Integer> swarmMaxChunks = new Setting<>(32); // Ostinato: room for signed cancel envelopes.
 
     /**
      * Swarm messaging: how long a partially received message waits for its missing frames
@@ -2123,10 +2132,20 @@ public final class Settings {
     public final Setting<Integer> swarmMaxPeers = new Setting<>(64);
 
     /**
-     * Swarm messaging: spool directory for the same-machine test/sim transport. Empty means
-     * {@code baritone/swarm-spool} in the game directory. Only sealed lines are written there.
+     * Swarm messaging: shared spool directory for same-machine routing. Empty means
+     * {@code baritone/swarm-spool} in the game directory, which is not shared across
+     * bot instances. {@code #swarm spawn} writes a shared absolute path into parent
+     * and child settings. Only sealed lines are written there.
      */
     public final Setting<String> swarmLocalSpoolDir = new Setting<>("");
+
+    /**
+     * Swarm messaging: prefer the local spool for signed commands, acks and outcomes
+     * to bots on this PC that have advertised a fresh liveness marker. Whispers are
+     * used for members that are not local, and if the local channel is down or this
+     * flag is off.
+     */
+    public final Setting<Boolean> swarmLocalRouting = new Setting<>(true);
 
     /**
      * Swarm: turn on the in-game chat transport and the {@code #swarm} control commands. Needs a
@@ -2134,6 +2153,12 @@ public final class Settings {
      * sent is a sealed sigil token; there is no plaintext mode.
      */
     public final Setting<Boolean> swarmEnabled = new Setting<>(false);
+
+    /**
+     * Swarm: Phase 1 command protocol (command ids, signed acks, dedup, safe cancel).
+     * Off, {@code #swarm} ping, status, reload, build and stop behave as before.
+     */
+    public final Setting<Boolean> swarmCommandProtocol = new Setting<>(false);
 
     /**
      * Swarm: only accept messages signed by a pinned member signet (S2S), and sign what we send. Needs
@@ -2188,6 +2213,18 @@ public final class Settings {
      * clamp, for servers with a different (or no) spam limit. You can be kicked for spam.
      */
     public final Setting<Boolean> swarmAllowUnsafeRate = new Setting<>(false);
+
+    /**
+     * Ostinato: swarm run mode. {@code normal} (the default) leaves the window, rendering, and pathing as they were
+     * before this setting. {@code hidden} hides the window and reduces rendering, and keeps the GL context.
+     * {@code headless} is accepted and stored; true headless (no GL context) is not implemented in this stage, so
+     * the window and the renderer stay on the normal policy until that stage.
+     * <p>
+     * Set with {@code #set runMode normal}, {@code #set runMode hidden}, or {@code #set runMode headless}.
+     * {@code -Dostinato.runMode=} is read when the window is created, before settings load, and a known token wins
+     * for that initial mode. After load, {@code #set} changes the mode. Any other token is rejected.
+     */
+    public final Setting<baritone.api.run.RunMode.Value> runMode = new Setting<>(baritone.api.run.RunMode.Value.NORMAL);
 
     /**
      * Swarm: outgoing lines waiting for the rate limiter. When full, the newest lower-priority line

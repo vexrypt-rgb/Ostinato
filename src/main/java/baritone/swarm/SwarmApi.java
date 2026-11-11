@@ -88,6 +88,41 @@ public final class SwarmApi implements ISwarm {
         return true;
     }
 
+    @Override
+    public String submitCommand(String target, String commandLine) {
+        return behavior.submitCommand(target, commandLine);
+    }
+
+    @Override
+    public String commandOutcome(String commandId) {
+        return behavior.commandOutcome(commandId);
+    }
+
+    @Override
+    public String cancelCommand(String commandId) {
+        return behavior.cancelCommand(commandId);
+    }
+
+    @Override
+    public void setExternalCommandHook(baritone.api.swarm.protocol.ExternalCommandHook hook) {
+        behavior.setExternalCommandHook(hook);
+    }
+
+    @Override
+    public void noteImmediateSafety(boolean on) {
+        behavior.noteImmediateSafety(on);
+    }
+
+    @Override
+    public void noteOwnerEmergency(boolean on) {
+        behavior.noteOwnerEmergency(on);
+    }
+
+    @Override
+    public void noteLocalSurvival(boolean on) {
+        behavior.noteLocalSurvival(on);
+    }
+
     static SwarmPriority map(baritone.api.swarm.SwarmPriority p) {
         if (p == null) return SwarmPriority.NORMAL;
         switch (p) {

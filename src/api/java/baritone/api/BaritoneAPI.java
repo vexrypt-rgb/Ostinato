@@ -17,6 +17,7 @@
 
 package baritone.api;
 
+import baritone.api.run.RunMode;
 import baritone.api.utils.SettingsUtil;
 
 /**
@@ -32,6 +33,8 @@ public final class BaritoneAPI {
     static {
         settings = new Settings();
         SettingsUtil.readAndApply(settings, SettingsUtil.SETTINGS_DEFAULT_NAME);
+        // Ostinato: -Dostinato.runMode wins the initial mode. #set runMode applies after this.
+        RunMode.installStartup(settings);
     }
 
     // Ostinato: the provider (which creates the primary Baritone from Minecraft.getInstance()) now lives in a lazy holder

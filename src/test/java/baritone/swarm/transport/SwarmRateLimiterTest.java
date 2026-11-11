@@ -133,6 +133,23 @@ public class SwarmRateLimiterTest {
         assertEquals(Arrays.asList("high1", "norm1", "low1"), order);
     }
 
+    // Ostinato: duplicate acceptance must neither consume capacity nor count as a drop.
+    @Test
+    public void duplicateAtCapacityAndLateCancel() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 1, false, 32, 0);
+        for (int i = 0; i < 32; i++) {
+            assertTrue(l.offer(SwarmPriority.LOW, "retry" + i));
+        }
+        assertTrue(l.offer(SwarmPriority.LOW, "retry0"));
+        assertEquals(32, l.queued());
+        assertEquals(0, l.dropped());
+        assertEquals("retry0", l.poll(0));
+        assertTrue(l.offer(SwarmPriority.HIGH, "cancel"));
+        assertEquals("cancel", l.poll(2000));
+        assertEquals("retry1", l.poll(4000));
+        assertEquals(30, l.queued());
+    }
+
     /**
      * Replays vanilla 1.16.1 ServerGamePacketListenerImpl: +20 per chat packet, kick when the
      * counter is above 200, -1 per server tick. The client sends everything the limiter allows.
@@ -142,10 +159,11 @@ public class SwarmRateLimiterTest {
     private static int vanillaPeak(SwarmRateLimiter l, long msPerServerTick, long seconds) {
         int counter = 0;
         int peak = 0;
+        int sequence = 0; // Ostinato: distinct traffic keeps the spam simulation saturated.
         long nextTick = msPerServerTick;
         for (long t = 0; t <= seconds * 1000; t += 10) {
             while (l.queued() < 32) {
-                l.offer(SwarmPriority.NORMAL, "x");
+                l.offer(SwarmPriority.NORMAL, "x" + sequence++);
             }
             for (String s; (s = l.poll(t)) != null; ) {
                 counter += 20;
