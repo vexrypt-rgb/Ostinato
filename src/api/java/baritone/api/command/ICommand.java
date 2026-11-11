@@ -64,4 +64,36 @@ public interface ICommand extends Helper {
     default boolean hiddenFromHelp() {
         return false;
     }
+
+    /**
+     * Ostinato: who may run this command through the swarm command protocol.
+     * Default {@link CommandPermission#OWNER}. Local {@code #} chat does not read this.
+     */
+    default CommandPermission getPermission() {
+        return CommandPermission.OWNER;
+    }
+
+    /**
+     * Ostinato: default target bot for this command, or null for the local bot.
+     * A swarm envelope can name a different target. Local {@code #} chat does not read this.
+     */
+    default String getTargetBot() {
+        return null;
+    }
+
+    /**
+     * Ostinato: declared arguments for forms and the unified registry.
+     * Empty means the command still parses inside {@link #execute} and the registry does not add constraints.
+     * Local {@code #} chat does not reject a line because this schema is missing a field.
+     */
+    default List<ArgDecl> argumentSchema() {
+        return List.of();
+    }
+
+    /**
+     * Ostinato: buttons and forms generated for this command. Empty means the command center draws no control for it.
+     */
+    default List<FormDecl> forms() {
+        return List.of();
+    }
 }

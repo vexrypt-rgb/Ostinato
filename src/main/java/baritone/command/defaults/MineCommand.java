@@ -19,7 +19,11 @@ package baritone.command.defaults;
 
 import baritone.api.BaritoneAPI;
 import baritone.api.IBaritone;
+import baritone.api.command.ArgDecl;
 import baritone.api.command.Command;
+import baritone.api.command.CommandPermission;
+import baritone.api.command.FormDecl;
+import baritone.api.command.FormPlacement;
 import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.datatypes.ForBlockOptionalMeta;
 import baritone.api.command.exception.CommandException;
@@ -34,6 +38,32 @@ public class MineCommand extends Command {
 
     public MineCommand(IBaritone baritone) {
         super(baritone, "mine");
+    }
+
+    // Ostinato: roster members may send this when swarmCommandProtocol is on. Local # chat is unchanged.
+    @Override
+    public CommandPermission getPermission() {
+        return CommandPermission.SWARM;
+    }
+
+    // Ostinato: the command-center Mine field is this schema, not a separate command.
+    public static List<ArgDecl> declaredSchema() {
+        return List.of(ArgDecl.rest("blocks", true));
+    }
+
+    public static List<FormDecl> windowForms() {
+        return List.of(FormDecl.of("mine", "Mine", "mine", FormPlacement.TILE,
+                ArgDecl.integer("count", false), ArgDecl.token("block", true)));
+    }
+
+    @Override
+    public List<ArgDecl> argumentSchema() {
+        return declaredSchema();
+    }
+
+    @Override
+    public List<FormDecl> forms() {
+        return windowForms();
     }
 
     @Override

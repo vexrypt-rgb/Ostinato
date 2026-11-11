@@ -19,6 +19,7 @@ package baritone.command.defaults;
 
 import baritone.api.IBaritone;
 import baritone.api.command.Command;
+import baritone.api.command.CommandPermission;
 import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.exception.CommandException;
 import baritone.api.pathing.goals.GoalBlock;
@@ -31,6 +32,12 @@ public class ComeCommand extends Command {
 
     public ComeCommand(IBaritone baritone) {
         super(baritone, "come");
+    }
+
+    // Ostinato: roster members may send this when swarmCommandProtocol is on. Local # chat is unchanged.
+    @Override
+    public CommandPermission getPermission() {
+        return CommandPermission.SWARM;
     }
 
     @Override

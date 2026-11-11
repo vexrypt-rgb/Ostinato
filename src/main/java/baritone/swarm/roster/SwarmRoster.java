@@ -100,6 +100,32 @@ public final class SwarmRoster {
     public Collection<Group> groups() { return groups.values(); }
     public Group group(String id) { return groups.get(id); }
 
+    // Ostinato: canonical serialization preserves group order and all routing/hierarchy fields.
+    public String toText() {
+        StringBuilder out = new StringBuilder();
+        for (Group g : groups.values()) {
+            out.append("group ").append(g.id()).append(" circle=").append(g.circle())
+                    .append(" members=").append(String.join(",", g.members()));
+            if (g.lead() != null) out.append(" lead=").append(g.lead());
+            if (g.parent() != null) out.append(" parent=").append(g.parent());
+            if (g.channel() != null) out.append(" transport=").append(g.channel().name().toLowerCase(Locale.ROOT));
+            out.append('\n');
+        }
+        return out.toString();
+    }
+
+    // Ostinato: immutable update, with the same validation as a hand-written roster.
+    public SwarmRoster withMember(String group, String member) throws SwarmRosterException {
+        Group old = groups.get(group);
+        if (old == null) throw new IllegalArgumentException("Unknown swarm group " + group);
+        if (old.members().stream().anyMatch(m -> m.equalsIgnoreCase(member))) return this;
+        List<String> members = new ArrayList<>(old.members());
+        members.add(member);
+        Map<String, Group> copy = new LinkedHashMap<>(groups);
+        copy.put(group, new Group(old.id(), old.circle(), members, old.lead(), old.parent(), old.channel()));
+        return parse(new SwarmRoster(copy).toText());
+    }
+
     public boolean isMember(String group, String member) {
         Group g = groups.get(group);
         return g != null && g.has(member);

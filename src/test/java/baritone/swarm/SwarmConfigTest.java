@@ -54,7 +54,7 @@ public class SwarmConfigTest {
         SwarmConfig.Builder junk = SwarmConfig.builder();
         junk.wireVersion = "plaintext";
         assertEquals(SigilWire.S2, junk.build().wire()); // no plaintext mode: unknown values fall back to S2
-        assertEquals(8, c.maxChunks());
+        assertEquals(32, c.maxChunks()); // signed command/cancel envelopes need more than eight frames.
         assertEquals(30000L, c.reassemblyTimeoutMs());
         assertEquals(64, c.maxPendingMessages());
         assertEquals(256, c.replayWindow());

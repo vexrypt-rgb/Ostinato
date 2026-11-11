@@ -103,6 +103,21 @@ public final class SwarmEndpoint implements Closeable {
     }
 
     public String selfId() { return self; }
+
+    /** Ostinato: hex key id of the local signet, or {@code unsigned} when this member is not signing. */
+    public String localSignetKeyId() {
+        SigilEd25519 s = this.localSignet;
+        if (s == null || s.keyid() == null) {
+            return "unsigned";
+        }
+        byte[] id = s.keyid();
+        StringBuilder b = new StringBuilder(id.length * 2);
+        for (byte v : id) {
+            b.append(Character.forDigit((v >> 4) & 0xF, 16));
+            b.append(Character.forDigit(v & 0xF, 16));
+        }
+        return b.toString();
+    }
     public long epoch() { return chunker.epoch(); }
     public SwarmConfig config() { return cfg; }
 

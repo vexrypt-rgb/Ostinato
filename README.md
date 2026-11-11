@@ -24,7 +24,7 @@ Java 25). Use the `api` jar only as a compile dependency for other mods.
 
 Presto, Legato, Maestro, Cadenza, Secondo and the Ostinato 2.0 study flags (`unifiedExecutor`, `inputArbitration`,
 `simEdgeSearch`, `pathingStateIdCache`, `pathingHierarchical`, `verifiedGetToBlock`, `predictionTolerance`,
-`latticeExperiment`) all default to `false`. Grace Note runs in `observe` mode unless the game starts with
+`latticeExperiment`, `swarmCommandProtocol`) all default to `false`. Grace Note runs in `observe` mode unless the game starts with
 `-Dostinato.graceNote=live`; Bombard and Scherzo need `-Dostinato.bombard` / `-Dostinato.scherzo`. Each has a
 pre-registered evaluation and a decision in [docs/ostinato2/DECISIONS.md](docs/ostinato2/DECISIONS.md).
 ## Compatibility

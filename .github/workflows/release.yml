@@ -147,5 +147,7 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Ostinato ${{ github.event.inputs.tag || github.ref_name }}
           body_path: RELEASE_NOTES.md
+          # Ostinato: a tag with a hyphen (v1.28.0-beta.1) publishes as a prerelease, not the latest release.
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
           files: jars/*.jar
           fail_on_unmatched_files: true

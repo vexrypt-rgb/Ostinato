@@ -3,6 +3,7 @@
 ## Mining
 - `#mine diamond_ore` mines every reachable block of that kind it can find; give several blocks to mine all.
 - `legitMine` settings limit mining to what is plausible (see `#set l legitMine`).
+- `legitMode` is `auto`, `on`, or `off` (default `auto`). `auto` applies the seen-only ore filter only on a remote multiplayer server, and leaves singleplayer and LAN unchanged. `#set legitMode on` forces it. See [Legit mode](../legit-mode.md).
 - `#tunnel` digs straight ahead (1x2); `#tunnel <height> <width> <depth>` sets the size.
 - `#find <block>` searches the cache only, so only previously seen blocks are found.
 - `#blacklist` drops the block you were heading to if it is unreachable.

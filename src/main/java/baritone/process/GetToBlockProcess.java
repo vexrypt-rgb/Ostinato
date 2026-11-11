@@ -33,7 +33,11 @@ import baritone.pathing.cadenza.Cadenza;
 import baritone.pathing.cadenza.CadenzaSession;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.MovementHelper;
+import baritone.legit.LegitScan;
+import baritone.legit.LegitTargets;
+import baritone.legit.McSeenView;
 import baritone.process.interact.ClientContainers;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import baritone.process.interact.ContainerView;
 import baritone.process.interact.OpenVerifier;
 import baritone.utils.BaritoneProcessHelper;
@@ -41,7 +45,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
@@ -78,6 +84,8 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
     private boolean hadTarget;
     /** How rightClick() ended: NONE when the target container opened. */
     private ProcessOutcome.Reason clickEnd;
+    /** Ostinato: positions that passed the seen-only filter during this request. Not written to disk. */
+    private final LongOpenHashSet legitSeen = new LongOpenHashSet();
 
     public GetToBlockProcess(Baritone baritone) {
         super(baritone);
@@ -96,6 +104,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         gettingTo = block;
         start = ctx.playerFeet();
         blacklist = new ArrayList<>();
+        legitSeen.clear();
         arrivalTickCount = 0;
         rescan(new ArrayList<>(), new GetToBlockCalculationContext(false));
     }
@@ -156,6 +165,13 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             }
             return new PathingCommand(null, PathingCommandType.CANCEL_AND_SET_GOAL);
         }
+        if (LegitTargets.active()) {
+            // Ostinato: drop any target the seen-only filter has not admitted before a goal is built.
+            knownLocations = filterLegit(new ArrayList<>(knownLocations), new GetToBlockCalculationContext(false));
+            if (knownLocations.isEmpty()) {
+                return onTick(calcFailed, isSafeToCancel);
+            }
+        }
         Goal goal = Baritone.settings().cadenza.value && rightClickOnArrival(gettingTo.getBlock()) ? cadenzaGoal()
                 : new GoalComposite(knownLocations.stream().map(this::createGoal).toArray(Goal[]::new));
         if (calcFailed) {
@@ -175,9 +191,14 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         int mineGoalUpdateInterval = Baritone.settings().mineGoalUpdateInterval.value;
         if (mineGoalUpdateInterval != 0 && tickCount++ % mineGoalUpdateInterval == 0) { // big brain
             List<BlockPos> current = new ArrayList<>(knownLocations);
-            CalculationContext context = new GetToBlockCalculationContext(true);
-            long request = outcome.request();
-            Baritone.getExecutor().execute(() -> rescanAsync(request, current, context));
+            if (LegitTargets.active()) {
+                // Ostinato: seen-only rescan stays on this thread. The admitted set is not safe to share with the executor.
+                rescan(current, new GetToBlockCalculationContext(false));
+            } else {
+                CalculationContext context = new GetToBlockCalculationContext(true);
+                long request = outcome.request();
+                Baritone.getExecutor().execute(() -> rescanAsync(request, current, context));
+            }
         }
         if (goal.isInGoal(ctx.playerFeet()) && goal.isInGoal(baritone.getPathingBehavior().pathStart()) && isSafeToCancel) {
             // we're there
@@ -254,6 +275,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
         }
         gettingTo = null;
         knownLocations = null;
+        legitSeen.clear();
         start = null;
         blacklist = null;
         cadenza.reset();
@@ -277,9 +299,31 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
     }
 
     private synchronized void rescan(List<BlockPos> known, CalculationContext context) {
+        if (LegitTargets.active()) {
+            // Ostinato: do not take a get-to-block target the seen-only filter rejected, and do not read the ore cache.
+            BlockOptionalMetaLookup lookup = new BlockOptionalMetaLookup(gettingTo);
+            List<BlockPos> raw = LegitScan.nearby(context, lookup, LegitScan.RADIUS);
+            if (known != null) {
+                raw.addAll(known);
+            }
+            List<BlockPos> positions = filterLegit(raw, context);
+            positions.removeIf(blacklist::contains);
+            knownLocations = positions;
+            return;
+        }
         List<BlockPos> positions = MineProcess.searchWorld(context, new BlockOptionalMetaLookup(gettingTo), 64, known, blacklist, Collections.emptyList());
         positions.removeIf(blacklist::contains);
         knownLocations = positions;
+    }
+
+    /** Ostinato: same admission rule as MineProcess. A block that fails the filter is not a target. */
+    private List<BlockPos> filterLegit(List<BlockPos> locs, CalculationContext context) {
+        Entity player = ctx.player();
+        if (player == null || context == null) {
+            return LegitTargets.select(locs, legitSeen, null, 0, 0, 0, true);
+        }
+        Vec3 eye = player.getEyePosition(1.0F);
+        return LegitTargets.select(locs, legitSeen, new McSeenView(context.world, context.bsi), eye.x, eye.y, eye.z, true);
     }
 
     private Goal createGoal(BlockPos pos) {

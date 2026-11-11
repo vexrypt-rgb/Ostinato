@@ -80,6 +80,10 @@ public final class SwarmRateLimiter {
      * @return whether the line was queued
      */
     public synchronized boolean offer(SwarmPriority p, String line) {
+        // Ostinato: an identical pending line is already accepted, even when the queue is full.
+        if (queues[p.ordinal()].contains(line)) {
+            return true;
+        }
         if (queued() >= queueMax) {
             boolean made = false;
             for (int i = queues.length - 1; i > p.ordinal(); i--) {

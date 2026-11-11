@@ -6,6 +6,9 @@ package baritone.command.defaults;
 
 import baritone.Baritone;
 import baritone.agent.AgentChat;
+import baritone.swarm.center.RegistryCall;
+import baritone.swarm.center.RegistryResult;
+import baritone.swarm.center.UnifiedChat;
 import baritone.agent.AgentConfig;
 import baritone.agent.AgentMemory;
 import baritone.agent.AgentPolicy;
@@ -16,6 +19,7 @@ import baritone.api.Settings;
 import baritone.api.agent.AgentReply;
 import baritone.api.agent.AgentRequest;
 import baritone.api.command.Command;
+import baritone.api.command.CommandPermission;
 import baritone.api.command.argument.IArgConsumer;
 import baritone.api.command.exception.CommandException;
 import net.minecraft.client.Minecraft;
@@ -32,6 +36,12 @@ public class AgentCommand extends Command {
 
     public AgentCommand(IBaritone baritone) {
         super(baritone, "agent");
+    }
+
+    // Ostinato: AI tool calls use AgentPolicy. Local # chat is unchanged when swarmCommandProtocol is off.
+    @Override
+    public CommandPermission getPermission() {
+        return CommandPermission.AI;
     }
 
     @Override
@@ -166,7 +176,15 @@ public class AgentCommand extends Command {
                 continue;
             }
             try {
-                if (!baritone.getCommandManager().execute(line)) {
+                // Ostinato: AI tool calls go through the unified registry. Owner-only commands are refused here.
+                String actor = ctx.player() == null ? "" : ctx.player().getName().getString();
+                RegistryCall call = RegistryCall.ai(actor,
+                        Baritone.settings().agentOwner.value, Baritone.settings().agentOwnerOnly.value,
+                        Baritone.settings().agentTools.value, false, line);
+                RegistryResult result = UnifiedChat.ai(call, () -> baritone.getCommandManager().execute(line));
+                if (!result.admitted()) {
+                    logDirect("agent: refused " + shown);
+                } else if (!result.executed()) {
                     logDirect("agent: no such command " + shown);
                 }
             } catch (Throwable ignored) {

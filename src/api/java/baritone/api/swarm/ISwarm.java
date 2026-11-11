@@ -52,6 +52,40 @@ public interface ISwarm {
      */
     boolean registerHandler(String type, SwarmHandler handler);
 
+    /**
+     * Ostinato: send {@code commandLine} to {@code target} on the Phase 1 command protocol.
+     * Returns a status line. When {@code swarmCommandProtocol} is off, this does not send.
+     */
+    default String submitCommand(String target, String commandLine) {
+        return "swarm: swarmCommandProtocol is false";
+    }
+
+    /** Ostinato: one line for a command id, from this bot's ledger. */
+    default String commandOutcome(String commandId) {
+        return "swarm: swarmCommandProtocol is false";
+    }
+
+    /** Ostinato: cancel a command this bot sent. The cancel names that command id. */
+    default String cancelCommand(String commandId) {
+        return "swarm: swarmCommandProtocol is false";
+    }
+
+    /** Ostinato: TenorClef {@code @} commands. Null clears the hook. Ignored when the protocol is off. */
+    default void setExternalCommandHook(baritone.api.swarm.protocol.ExternalCommandHook hook) {
+    }
+
+    /** Ostinato: safety hierarchy level 1. Swarm commands do not override it. */
+    default void noteImmediateSafety(boolean on) {
+    }
+
+    /** Ostinato: safety hierarchy level 2, owner pause. Swarm commands do not override it. */
+    default void noteOwnerEmergency(boolean on) {
+    }
+
+    /** Ostinato: safety hierarchy level 3, local survival. Swarm commands do not override it. */
+    default void noteLocalSurvival(boolean on) {
+    }
+
     @FunctionalInterface
     interface SwarmHandler {
         void onMessage(String from, String group, String body);

@@ -116,7 +116,8 @@ public final class ChatSwarmTransport implements SwarmTransport {
         }
     }
 
-    private Set<String> recipients(String group, String recipient) {
+    // Ostinato: local routing splits a broadcast into same-PC vs whisper recipients.
+    Set<String> recipients(String group, String recipient) {
         Set<String> out = new LinkedHashSet<>();
         if (!BROADCAST.equals(recipient)) {
             out.add(recipient);

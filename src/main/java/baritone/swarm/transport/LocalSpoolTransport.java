@@ -50,6 +50,40 @@ public final class LocalSpoolTransport implements SwarmTransport {
     private final String self;
     private final Path inbox;
     private final AtomicLong counter = new AtomicLong();
+    /** Ostinato: null on the production path, which writes each sealed line once. */
+    private volatile Fault fault;
+    private final List<Path> delayedDirs = new ArrayList<>();
+    private final List<String> delayedLines = new ArrayList<>();
+
+    /** Ostinato: how a test treats one sealed line. Production never sets this. */
+    public interface Fault {
+        enum Action { DELIVER, DROP, DUPLICATE, DELAY }
+
+        Action apply(String recipient, String sealedLine);
+    }
+
+    /** Ostinato: test fault injection. {@code null} restores normal delivery. */
+    public void setFault(Fault fault) {
+        this.fault = fault;
+    }
+
+    /** Ostinato: write frames a fault asked to delay. Returns how many were written. */
+    public int releaseDelayed() throws IOException {
+        int n;
+        List<Path> dirs;
+        List<String> lines;
+        synchronized (delayedLines) {
+            n = delayedLines.size();
+            dirs = new ArrayList<>(delayedDirs);
+            lines = new ArrayList<>(delayedLines);
+            delayedDirs.clear();
+            delayedLines.clear();
+        }
+        for (int i = 0; i < n; i++) {
+            writeOne(dirs.get(i), lines.get(i));
+        }
+        return n;
+    }
 
     public LocalSpoolTransport(Path root, String selfId) throws IOException {
         if (!SwarmFrame.isValidId(selfId)) {
@@ -84,7 +118,7 @@ public final class LocalSpoolTransport implements SwarmTransport {
                 for (Path d : dirs) {
                     String id = d.getFileName().toString();
                     if (!id.equals(self) && SwarmFrame.isValidId(id) && Files.isDirectory(d)) {
-                        deliver(d, sealedLine);
+                        deliver(id, d, sealedLine);
                     }
                 }
             }
@@ -95,10 +129,30 @@ public final class LocalSpoolTransport implements SwarmTransport {
         }
         Path dir = inboxOf(recipient);
         Files.createDirectories(dir); // mail waits for a member that has not started yet
-        deliver(dir, sealedLine);
+        deliver(recipient, dir, sealedLine);
     }
 
-    private void deliver(Path dir, String line) throws IOException {
+    private void deliver(String recipient, Path dir, String line) throws IOException {
+        Fault f = fault;
+        if (f == null) {
+            writeOne(dir, line);
+            return;
+        }
+        Fault.Action action = f.apply(recipient, line);
+        if (action == null || action == Fault.Action.DELIVER) {
+            writeOne(dir, line);
+        } else if (action == Fault.Action.DUPLICATE) {
+            writeOne(dir, line);
+            writeOne(dir, line);
+        } else if (action == Fault.Action.DELAY) {
+            synchronized (delayedLines) {
+                delayedDirs.add(dir);
+                delayedLines.add(line);
+            }
+        }
+    }
+
+    private void writeOne(Path dir, String line) throws IOException {
         Path tmp = dir.resolve(".tmp-" + UUID.randomUUID());
         try {
             Files.write(tmp, line.getBytes(StandardCharsets.US_ASCII));

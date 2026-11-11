@@ -1,0 +1,7 @@
+{
+  "kind": "signet",
+  "algorithm": "Ed25519",
+  "name": "TestOnly",
+  "public": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+  "seed": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A"
+}

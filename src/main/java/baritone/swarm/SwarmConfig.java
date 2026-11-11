@@ -117,7 +117,7 @@ public final class SwarmConfig {
         public int maxLineChars = 256;
         public int lineReserveChars = 22;
         public int maxFrameBytes = 0;
-        public int maxChunks = 8;
+        public int maxChunks = 32; // Ostinato: signed command/cancel envelopes exceed eight small frames.
         public long reassemblyTimeoutMs = 30_000L;
         public int maxPendingMessages = 64;
         public int replayWindow = 256;
