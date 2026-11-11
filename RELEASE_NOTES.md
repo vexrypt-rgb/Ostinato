@@ -7,19 +7,52 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.27.0 lands Ostinato 2.0 (Phases 00-10: contracts, interaction outcomes, physics on 26.3, every experiment behind a
-default-off flag), the maze/backrooms builder, a faster A* neighbor loop and the magma sneak fix on 26.3 (`main`,
-Java 25). The other lines are rebuilt from the same branches as v1.26.0 and have no changes.
+v1.28.0-beta.1 is a **beta** for 26.3 (`main`, Java 25): the swarm command protocol, hidden and headless bots, legit
+mode and the command center window. Everything below "New in v1.28.0-beta.1" is 26.3 only; the other lines are rebuilt
+from the same branches as v1.27.0 and have no changes.
 
 New 26.3 work now happens in the monorepo [vexrypt-rgb/ostinato-tenorclef](https://github.com/vexrypt-rgb/ostinato-tenorclef).
 This repository keeps the release workflow and the older Minecraft lines.
 
 | Minecraft | Branch | Java | This tag |
 | --- | --- | --- | --- |
-| 26.3 | `main` | 25 | New. `ostinato-mc26.3-*` |
-| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.26.0 |
-| 1.21.4 | `1.21.4` | 21 | Unchanged since v1.26.0 |
-| 1.16.1 | `1.16.1` | 8 | Unchanged since v1.26.0 |
+| 26.3 | `main` | 25 | Beta. `ostinato-mc26.3-*` |
+| 1.21.11 | `1.21.11` | 21 | Unchanged since v1.27.0 |
+| 1.21.4 | `1.21.4` | 21 | Unchanged since v1.27.0 |
+| 1.16.1 | `1.16.1` | 8 | Unchanged since v1.27.0 |
+## New in v1.28.0-beta.1
+
+Beta: try it on a test world or a spare account first. Everything in this section is 26.3 only.
+
+### Behaviour changes (on by default)
+
+- **Legit mode** (`legitMode`, default `auto`): on a remote multiplayer server, ore targets are limited to blocks the
+  bot could have seen, and ore is gathered by caving, branch mining and water. Off in singleplayer and LAN. Turn it off
+  with `#set legitMode off`, or on everywhere with `#set legitMode on` (`docs/legit-mode.md`).
+- **`#center`** opens the command center window (second monitor, never steals focus): a wall of bot tiles with health
+  and food, a focus panel with actions, spawn and stop-all, and an accounts panel (offline accounts, launcher token
+  import, save this session, Microsoft sign-in). Tokens are encrypted at rest and never logged (`docs/bot-accounts.md`).
+- **`#theme`** and the header picker switch the command center between Default dark, Light, High contrast and
+  Colorblind safe, live, saved per user. All four meet WCAG AA, status never relies on color alone, and custom themes
+  are JSON files in `config/themes` (see `#help theme`).
+- `swarmMaxChunks` default raised from 8 to 32 so signed cancel frames fit on the wire.
+
+### New, off by default
+
+- **Signed swarm command protocol** (`swarmCommandProtocol`): `#swarm send <bot> <command>`, `#swarm outcome <id>`,
+  `#swarm cancel <id>`, with outcomes reported back to the sender, Ed25519 signets, and a same-PC local spool
+  (`swarmLocalRouting`) (`docs/swarm/PHASE1.md`).
+- **`#swarm spawn`** launches extra bot clients from your client using stored accounts.
+- **Hidden and headless run modes** (`runMode`): a bot client runs with no visible window; headless also skips world
+  rendering, the GPU device and audio (`docs/hidden-mode.md`).
+- `-Dostinato.commandInbox` file drain for unattended tests.
+
+### Known limits
+
+- The command center's war room view is a placeholder.
+- Changing theme during a Microsoft sign-in resets the sign-in; start it again.
+- Hidden/headless and spawn are tested on Windows only.
+
 ## New in v1.27.0
 
 Everything in this section is 26.3 only.
