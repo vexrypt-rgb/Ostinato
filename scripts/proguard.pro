@@ -21,6 +21,8 @@
 -dontwarn baritone.launch.BaritoneForgeModXD
 # progard doesn't like signature polymorphism
 -dontwarn java.lang.invoke.MethodHandle
+# Ostinato: VarHandle get/set are signature polymorphic too (DpapiProtector, Windows account protection).
+-dontwarn java.lang.invoke.VarHandle
 # LegatoLiveTest samples thread allocation via the management API, which is not in the library jars
 -dontwarn java.lang.management.**
 -dontwarn com.sun.management.**
