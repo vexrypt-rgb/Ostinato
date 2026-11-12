@@ -215,4 +215,24 @@ public class SwarmRateLimiterTest {
         assertEquals(1, l.sentInWindow(60_000)); // the burst at 0 has left the window
         assertEquals(0, l.sentInWindow(62_000));
     }
+    /** Ostinato: telemetry sees a busy link once the last minute used half the cap, not only when lines queue. */
+    @Test
+    public void quietNeedsAnEmptyQueueAndUnderHalfTheCap() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        assertEquals(35, l.windowCap());
+        assertTrue(l.quiet(0));
+        long t = 0;
+        // The live coordinator's steady load: one line every 2 s, so the queue is empty between lines.
+        for (int i = 0; i < 30; i++, t += 2_000L) {
+            assertTrue(l.offer(SwarmPriority.NORMAL, "m" + i));
+            assertEquals("m" + i, l.poll(t));
+            assertEquals(0, l.queued());
+        }
+        assertFalse("30 lines a minute is at the cap even with an empty queue", l.quiet(t));
+        // 17 lines in the window (34 < 35) is quiet again; 18 is not.
+        assertFalse(l.quiet(2_000L * 12 + 60_000L - 1)); // lines 12..29 still in the window
+        assertTrue(l.quiet(2_000L * 13 + 60_000L - 1)); // lines 13..29
+        assertTrue(l.offer(SwarmPriority.LOW, "q"));
+        assertFalse("a queued line is never quiet", l.quiet(2_000L * 13 + 60_000L - 1));
+    }
 }
