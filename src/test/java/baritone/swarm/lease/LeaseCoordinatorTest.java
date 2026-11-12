@@ -115,6 +115,100 @@ public class LeaseCoordinatorTest {
         assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
     }
 
+    // Ostinato: live 2026-11-12 (b' on chat) - the holder's report reached the restarted coordinator after 2*M, so a
+    // lease that had simply run out was booked as reconcile-timeout instead of what the bot reported.
+    @Test
+    public void chatHolderReportAfterTwoMarginsIsStillCounted() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        // The coordinator is down long enough for the lease to run out; Bob fences itself, nobody hears it.
+        s.advance(70_000L);
+        s.dropTo.add("Alice");
+        s.guard.tick();
+        s.pump();
+        s.dropTo.clear();
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.coord.start();
+        List<LeaseSupport.Msg> slow = s.take(LeaseMessage.TYPE, LeaseMessage.Op.RREQ); // still crossing chat
+        assertFalse(slow.isEmpty());
+        s.advance(7_000L);
+        s.coord.tick();
+        assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+        for (LeaseSupport.Msg m : slow) {
+            s.deliver(m);
+        }
+        s.pump();
+        s.advance(1_000L);
+        s.coord.tick();
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals("lease-expired", s.coord.record(id).endReason); // the bot's own report, not a timeout
+    }
+
+    // Ostinato: live 2026-11-12 (b5) - the coordinator came back 16 s before the holder's deadline and kept the
+    // lease, but the holder's renew backoff had already put its next renew past the deadline, so it fenced anyway.
+    @Test
+    public void keptLeaseIsRenewedBeforeTheHoldersDeadline() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.run(10_000L, 1_000L);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        s.dropTo.add("Alice"); // the coordinator's client dies
+        for (int i = 0; i < 34; i++) {
+            s.advance(1_000L);
+            s.guard.tick();
+            s.pump();
+        }
+        s.dropTo.clear();
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.coord.start();
+        s.pump();
+        s.run(25_000L, 1_000L); // well past the deadline the holder had when the coordinator died
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+    }
+
+    // Ostinato: live 2026-11-12 (b7) - after the restart the coordinator kept the lease, then re-submitted the bound
+    // command on the first renew; caps were not relearned yet, the submit was refused and the lease was revoked.
+    @Test
+    public void keptLeaseDoesNotResubmitItsCommandAfterRestart() throws Exception {
+        LeaseSupport s = active();
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.run(5_000L, 1_000L);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        int mines = s.bobExec.count("mine");
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.refuseAfterGrant = true; // any submit now is refused, as with caps unknown after a relaunch
+        s.coord.start();
+        s.pump();
+        s.run(60_000L, 1_000L);
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertFalse(s.logged("reason=command-refused"));
+        assertEquals(LeaseRecord.State.GRANTED, s.coord.record(id).state);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        assertEquals(mines, s.bobExec.count("mine"));
+    }
+
+    @Test
+    public void chatHolderThatNeverReportsStillTimesOut() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.advance(70_000L);
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.dropTo.add("Bob");
+        s.coord.start();
+        s.pump();
+        s.run(21_000L, 1_000L);
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals("reconcile-timeout", s.coord.record(id).endReason);
+    }
+
     @Test
     public void noReplacementBeforeExpiryOrRack() throws Exception {
         LeaseSupport s = active();
@@ -214,6 +308,53 @@ public class LeaseCoordinatorTest {
         assertTrue(s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER).isEmpty());
     }
 
+    /**
+     * Ostinato: live kill check, 2026-11-12. The holder died mid-mine, its lease expired, and the coordinator still
+     * refused every replacement because the dead holder's mine stayed observation-unknown. Expiry plus margin is the
+     * fence, so after it the replacement is offered at gen+1; before it the answer is "busy".
+     */
+    @Test
+    public void replacementAfterHolderDiesIsOfferedOnceTheFencePasses() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        assertEquals(LeaseRecord.State.GRANTED, s.coord.record(id).state);
+        s.dropTo.add("Bob"); // the holder's client is gone: nothing reaches it, nothing comes back
+        s.dropTo.add("Alice");
+        s.aliceP.onPeerDisconnect("Bob"); // its mine is now observation-unknown
+        String early = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(early, early.contains("busy") && early.contains("gen 1"));
+        s.run(30_000L, 1_000L);
+        String inside = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue("within D+M: " + inside, inside.contains("busy"));
+        s.run(4_000L, 1_000L);
+        assertEquals(LeaseRecord.State.EXPIRED, s.coord.record(id).state);
+        s.relaunchBob();
+        s.bobExec.byName.clear();
+        s.dropTo.clear();
+        String again = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(again, again.contains("gen 2"));
+        s.pump();
+        assertEquals(1, s.bobExec.count("mine"));
+    }
+
+    /** Ostinato: the fence only frees leased work; an unleased mine with an unknown outcome still blocks. */
+    @Test
+    public void unleasedUnknownMineStillBlocksAfterAnExpiry() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        s.dropTo.add("Bob");
+        s.dropTo.add("Alice");
+        s.aliceP.submit("Bob", "mine coal_ore"); // unleased, never answered
+        s.aliceP.onPeerDisconnect("Bob");
+        s.run(34_000L, 1_000L);
+        assertEquals(LeaseRecord.State.EXPIRED, s.coord.record(LeaseSupport.leaseIdOf(r)).state);
+        String again = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(again, again.contains("not offering") && again.contains("observation is unknown"));
+    }
+
     @Test
     public void noOfferForCommandThatWouldNotSend() throws Exception {
         LeaseSupport s = active();
@@ -221,5 +362,51 @@ public class LeaseCoordinatorTest {
         assertTrue(r, r.contains("not offering") && r.contains("missing arguments"));
         assertTrue(s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER).isEmpty());
         assertTrue(s.coord.lease("Bob", "t1", "mine diamond_ore").contains("gen 1"));
+    }
+
+    private static int count(List<LeaseSupport.Msg> sent, LeaseMessage.Op op, int from) {
+        int n = 0;
+        for (int i = from; i < sent.size(); i++) {
+            LeaseMessage m = sent.get(i).lease();
+            if (m != null && m.op == op) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Ostinato: REQ resends that cross a REVOKE in flight get one REVOKE per repeat gap, not one each. */
+    @Test
+    public void requestsWhileRevokingGetOneRevokePerGap() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        LeaseRecord rec = s.coord.record(id);
+        s.dropTo.add("Bob");
+        s.coord.revoke("ore1");
+        s.pump();
+        int mark = s.sent.size();
+        LeaseMessage req = new LeaseMessage(LeaseMessage.Op.REQ, id, "ore1", rec.gen, rec.commandId, 7L, 0L, "-");
+        for (int i = 0; i < 4; i++) {
+            s.coord.onMessage("Bob", req);
+            s.advance(1_000L);
+        }
+        assertEquals("no REVOKE beyond the one just sent", 0, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        s.advance(LeaseClock.repeatGap(30_000L));
+        s.coord.onMessage("Bob", req);
+        assertEquals(1, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        assertTrue(s.coord.repliesSuppressed() >= 4);
+        // Stale generation: one denial, then quiet until the gap passes.
+        mark = s.sent.size();
+        LeaseMessage stale = new LeaseMessage(LeaseMessage.Op.REQ, UUID.randomUUID(), "ore1", 9, UUID.randomUUID(),
+                1L, 0L, "-");
+        for (int i = 0; i < 5; i++) {
+            s.coord.onMessage("Bob", stale);
+        }
+        assertEquals(1, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        s.advance(LeaseClock.repeatGap(30_000L));
+        s.coord.onMessage("Bob", stale);
+        assertEquals(2, count(s.sent, LeaseMessage.Op.REVOKE, mark));
     }
 }

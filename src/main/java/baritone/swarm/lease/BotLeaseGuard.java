@@ -22,6 +22,7 @@ import baritone.api.swarm.protocol.ObservationState;
 import baritone.swarm.protocol.CommandCatalog;
 import baritone.swarm.protocol.CommandProtocol;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -71,8 +72,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
 
     /** Done leases remembered for reconciliation reports. */
     static final int KEEP_DONE = 64;
-    /** Ostinato: nonces remembered per lease (a GRANT must answer one of them). */
-    static final int NONCE_RING = 8;
+    /**
+     * Ostinato: hard cap on nonces remembered per lease. Nonces are kept for as long as a GRANT answering them
+     * could still be on time ({@code nonce + D > now}); the cap only bounds memory against a flood of re-sends.
+     */
+    static final int NONCE_CAP = 64;
     /** Ostinato: a repeated OFFER re-sends REQ at most this often. */
     static final long OFFER_REQ_GAP_MS = 5_000L;
 
@@ -92,12 +96,13 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         Phase phase = Phase.PENDING;
         long durationMs;
         long authUntil = Long.MIN_VALUE;
-        // Ostinato: chat links take tens of seconds and REQ is re-sent meanwhile; keep enough nonces that the
-        // one a late GRANT answers is still remembered.
-        final long[] nonces = new long[NONCE_RING];
-        int nonceCount;
+        // Ostinato: chat links take tens of seconds and REQ is re-sent meanwhile. A count-based ring evicted the
+        // nonce a late GRANT answered (ore1 gen2: 4 REQs in 42 s against a 3-slot ring), so nonces are now kept
+        // by time: every nonce whose GRANT would still be on time is remembered.
+        final ArrayDeque<Long> nonces = new ArrayDeque<>();
         long offeredAt;
         long lastReqAt;
+        long lastRackAt = Long.MIN_VALUE / 2; // Ostinato: repeat-gap for RACK
         boolean granted;
         boolean reqSent;
         boolean grantRejectLogged;
@@ -126,19 +131,20 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             this.coordinator = coordinator;
         }
 
-        void addNonce(long n) {
-            nonces[nonceCount % nonces.length] = n;
-            nonceCount++;
+        // Ostinato: time-based retention; a nonce older than D can only produce a late GRANT, which is rejected
+        // anyway, so dropping it loses nothing.
+        void addNonce(long n, long now) {
+            while (!nonces.isEmpty() && nonces.peekFirst() + durationMs <= now) {
+                nonces.pollFirst();
+            }
+            while (nonces.size() >= NONCE_CAP) {
+                nonces.pollFirst();
+            }
+            nonces.addLast(n);
         }
 
         boolean sentNonce(long n) {
-            int k = Math.min(nonceCount, nonces.length);
-            for (int i = 0; i < k; i++) {
-                if (nonces[i] == n) {
-                    return true;
-                }
-            }
-            return false;
+            return nonces.contains(n);
         }
 
         boolean authorized(long now) {
@@ -161,6 +167,20 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     private UUID lastStarted;
     private long ignored;
     private long grantRejects;
+    /** Ostinato: RACKs to REVOKEs for unknown leases, by lease and generation: when each last went out. */
+    private final java.util.LinkedHashMap<String, Long> unknownRacks = new java.util.LinkedHashMap<String, Long>(16, 0.75f,
+            true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> e) {
+            return size() > 64;
+        }
+    };
+    private long racksSuppressed;
+    /**
+     * Ostinato: REVOKE carries no D, so an unknown lease uses the spool gap; the coordinator's REVOKE timer
+     * (every D/3 >= 10 s) is never this fast, so only crossed copies are dropped.
+     */
+    static final long UNKNOWN_RACK_GAP_MS = LeaseClock.repeatGap(30_000L);
 
     public BotLeaseGuard(Sender sender, LongSupplier mono, Consumer<String> log, Supplier<String> allowedSource,
                          Predicate<UUID> stopper, Set<String> leased) {
@@ -181,6 +201,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     /** GRANTs from the designated coordinator that granted nothing (late, unknown nonce, stale or ended). */
     public synchronized long grantRejectCount() {
         return grantRejects;
+    }
+
+    /** Ostinato: RACKs not re-sent because one for the same lease went out less than {@link LeaseClock#repeatGap} ago. */
+    public synchronized long racksSuppressed() {
+        return racksSuppressed;
     }
 
     public synchronized long ignoredCount() {
@@ -337,10 +362,20 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
 
     private void onRevoke(String from, LeaseMessage m, List<Runnable> after) {
         Lease l = m.leaseId == null ? null : leases.get(m.leaseId);
+        long now = mono.getAsLong();
         if (l == null) {
             // Unknown here (a relaunch, or never offered): nothing runs under it, so ack at once.
-            send(from, new LeaseMessage(LeaseMessage.Op.RACK, m.leaseId, m.resource, m.gen, m.commandId, 0, 0,
-                    "unknown"));
+            // Ostinato: once per repeat gap; the coordinator re-sends REVOKE on its own timer if this one is lost.
+            String key = m.leaseId + "|" + m.gen;
+            Long last = unknownRacks.get(key);
+            if (last != null && now - last < UNKNOWN_RACK_GAP_MS) {
+                racksSuppressed++;
+                return;
+            }
+            if (send(from, new LeaseMessage(LeaseMessage.Op.RACK, m.leaseId, m.resource, m.gen, m.commandId, 0, 0,
+                    "unknown"))) {
+                unknownRacks.put(key, now);
+            }
             return;
         }
         if (l.gen != m.gen) {
@@ -348,6 +383,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         }
         if (l.phase == Phase.DONE || (l.phase == Phase.EXPIRED && !l.active)) {
             l.phase = Phase.DONE;
+            // Ostinato: a REVOKE that crossed our RACK in flight gets no second RACK; a timer resend after the gap does.
+            if (now - l.lastRackAt < LeaseClock.repeatGap(l.durationMs)) {
+                racksSuppressed++;
+                return;
+            }
             sendRack(l);
             return;
         }
@@ -365,6 +405,13 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         for (Lease l : leases.values()) {
             refresh(l, now);
             send(from, report(l));
+            // Ostinato: the restarted coordinator never saw the renew we were waiting on, and the backoff can put
+            // our next renew past the deadline (live b5: the lease was kept, then fenced 9 s later). Renew on the
+            // next tick, behind the report; the coordinator holds it until reconciliation ends.
+            if (l.phase == Phase.VALID && l.awaitingRenew) {
+                l.awaitingRenew = false;
+                l.nextRenewAt = now;
+            }
         }
         send(from, new LeaseMessage(LeaseMessage.Op.REPORT, null, "-", 0, null, 0, 0, "end"));
     }
@@ -540,6 +587,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     private void sendRack(Lease l) {
         if (send(l.coordinator, new LeaseMessage(LeaseMessage.Op.RACK, l.leaseId, l.resource, l.gen, l.commandId,
                 0, 0, l.stopConfirmed ? "stopped" : "idle"))) {
+            l.lastRackAt = mono.getAsLong(); // Ostinato:
             l.rackOwed = false;
             l.reportOwed = false; // The rack is the release.
             l.reportSent = true;
@@ -548,7 +596,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     }
 
     private void sendReq(Lease l, LeaseMessage.Op op, long now) {
-        l.addNonce(now);
+        l.addNonce(now, now); // Ostinato: time-based nonce retention
         l.lastReqAt = now;
         l.reqSent = true;
         send(l.coordinator, new LeaseMessage(op, l.leaseId, l.resource, l.gen, l.commandId, now, l.durationMs, "-"));

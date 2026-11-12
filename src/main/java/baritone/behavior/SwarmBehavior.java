@@ -360,6 +360,15 @@ public final class SwarmBehavior extends Behavior implements Helper {
                             CommandProtocol p = liveProtocol();
                             return p == null ? "link is not running" : p.leaseRefusal(bot, line);
                         }
+
+                        @Override
+                        public void fenced(UUID id) {
+                            // Ostinato: the old holder's authorization ended, so its unknown mine stops blocking.
+                            CommandProtocol p = liveProtocol();
+                            if (p != null) {
+                                p.fenced(id);
+                            }
+                        }
                     },
                     SwarmBehavior::nowMs, System::currentTimeMillis, this::logDirect,
                     () -> Baritone.settings().swarmLeaseSec.value * 1000L,
@@ -545,8 +554,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
                         + limiter.dropped() + ", too long " + transport.tooLong() + String.format(", rate %.2f/s burst %d",
                         limiter.rate(), limiter.burst()));
                 control.enableBuild(new Regions());
-                // Ostinato: status samples ride heartbeats, or go out only while the send queue is empty.
-                control.setSampling(s.swarmStatusSample.value, () -> limiter.queued() == 0);
+                // Ostinato: status samples ride heartbeats, only while the queue is empty and the link is under half its cap.
+                control.setSampling(s.swarmStatusSample.value, () -> limiter.quiet(nowMs())); // Ostinato: the limiter's clock
                 // Ostinato: command protocol rides the same sealed link. Off, this stays null.
                 CommandProtocol protocol = null;
                 if (protocolOn) {

@@ -142,4 +142,12 @@ public final class SwarmRateLimiter {
 
     /** Ostinato: most lines this bucket lets out in any {@link #CHAT_WINDOW_MS}: {@code rate*window + burst}. */
     public int windowCap() { return (int) Math.floor(rate * CHAT_WINDOW_MS / 1000.0) + burst; }
+
+    /**
+     * Ostinato: room for telemetry. True only while nothing waits to go out and the last minute used under half
+     * of {@link #windowCap()}, so heartbeat samples back off before real traffic brings the link near its cap.
+     */
+    public synchronized boolean quiet(long nowMs) {
+        return queued() == 0 && 2 * window.count(nowMs) < windowCap();
+    }
 }

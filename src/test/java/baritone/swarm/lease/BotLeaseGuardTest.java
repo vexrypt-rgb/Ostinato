@@ -190,6 +190,39 @@ public class BotLeaseGuardTest {
         assertEquals(0, s.guard.grantRejectCount());
     }
 
+    /**
+     * Ostinato: reproduces the lost GRANT of ore1 gen2. Over chat (D = 60 s) the bot re-sent REQ while the first
+     * one was still in flight; the GRANT answering the first REQ arrived after enough re-sends to evict its
+     * nonce from a count-based ring, so it was dropped as unknown-nonce and the lease fell to offer-lost.
+     */
+    @Test
+    public void grantForFirstRequestSurvivesManyResendsOverChat() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        UUID id = LeaseSupport.leaseIdOf(r);
+        List<LeaseSupport.Msg> offers = s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER);
+        assertEquals(1, offers.size());
+        assertEquals(LeaseClock.CHAT_MIN_DURATION_MS, offers.get(0).lease().durationMs);
+        s.deliver(offers.get(0));
+        List<LeaseSupport.Msg> firstReq = s.take(LeaseMessage.TYPE, LeaseMessage.Op.REQ);
+        assertEquals(1, firstReq.size());
+        // The OFFER keeps arriving (re-sent and echoed) for 51 s while the first REQ is stuck in a queue.
+        for (int i = 0; i < 10; i++) {
+            s.advance(5_100L);
+            s.deliver(offers.get(0));
+        }
+        int resends = s.take(LeaseMessage.TYPE, LeaseMessage.Op.REQ).size();
+        assertTrue("resends=" + resends, resends > 8); // more than the old ring held
+        s.deliver(firstReq.get(0));
+        List<LeaseSupport.Msg> grants = s.take(LeaseMessage.TYPE, LeaseMessage.Op.GRANT);
+        assertEquals(1, grants.size());
+        assertEquals(firstReq.get(0).lease().nonce, grants.get(0).lease().nonce);
+        s.deliver(grants.get(0));
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        assertEquals(0, s.guard.grantRejectCount());
+    }
+
     @Test
     public void repeatedOffersThrottleRequests() throws Exception {
         LeaseSupport s = active();
@@ -218,5 +251,50 @@ public class BotLeaseGuardTest {
         assertEquals(2, s.guard.grantRejectCount());
         assertEquals(1, s.loggedCount("grant-rejected lease=" + id));
         assertTrue(s.logged("reason=late"));
+    }
+
+    private static int racks(List<LeaseSupport.Msg> q) {
+        int n = 0;
+        for (LeaseSupport.Msg m : q) {
+            LeaseMessage lm = m.lease();
+            if (lm != null && lm.op == LeaseMessage.Op.RACK) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Ostinato: REVOKEs that cross our RACK in flight get no second RACK; one after the gap still does. */
+    @Test
+    public void repeatedRevokesGetOneRackPerGap() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        long gen = s.coord.record(id).gen;
+        UUID cmd = s.coord.record(id).commandId;
+        s.coord.revoke("ore1");
+        s.pump();
+        s.tick();
+        assertEquals(LeaseRecord.State.RELEASED, s.coord.record(id).state);
+        LeaseMessage revoke = new LeaseMessage(LeaseMessage.Op.REVOKE, id, "ore1", gen, cmd, 0, 0, "-");
+        for (int i = 0; i < 4; i++) {
+            s.guard.onMessage("Alice", revoke);
+            s.advance(500L);
+        }
+        assertEquals(0, racks(s.take(LeaseMessage.TYPE, LeaseMessage.Op.RACK)));
+        assertTrue(s.guard.racksSuppressed() >= 4);
+        s.advance(LeaseClock.repeatGap(30_000L));
+        s.guard.onMessage("Alice", revoke);
+        assertEquals(1, racks(s.take(LeaseMessage.TYPE, LeaseMessage.Op.RACK)));
+        // Unknown lease (a relaunch): one RACK per gap as well.
+        LeaseMessage unknown = new LeaseMessage(LeaseMessage.Op.REVOKE, UUID.randomUUID(), "ore1", 3, null, 0, 0, "-");
+        for (int i = 0; i < 3; i++) {
+            s.guard.onMessage("Alice", unknown);
+        }
+        assertEquals(1, racks(s.take(LeaseMessage.TYPE, LeaseMessage.Op.RACK)));
+        s.advance(BotLeaseGuard.UNKNOWN_RACK_GAP_MS);
+        s.guard.onMessage("Alice", unknown);
+        assertEquals(1, racks(s.take(LeaseMessage.TYPE, LeaseMessage.Op.RACK)));
     }
 }

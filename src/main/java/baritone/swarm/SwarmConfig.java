@@ -21,6 +21,7 @@ package baritone.swarm;
 import baritone.api.Settings;
 import baritone.swarm.crypto.SigilCodec;
 import baritone.swarm.crypto.SigilS1C;
+import baritone.swarm.crypto.SigilS2S;
 import baritone.swarm.crypto.SigilWire;
 
 /**
@@ -38,6 +39,7 @@ public final class SwarmConfig {
     private final int lineReserveChars;
     private final int maxFrameBytes;
     private final int maxChunks;
+    private final int frameLines;
     private final long reassemblyTimeoutMs;
     private final int maxPendingMessages;
     private final int replayWindow;
@@ -52,7 +54,11 @@ public final class SwarmConfig {
         this.lineReserveChars = clamp(b.lineReserveChars, 0, this.maxLineChars - MIN_SEAL_LINE);
         // signed senders seal every line as S2S, whose signature trailer leaves less room than the circle wire
         SigilWire sealed = b.requireSignedSender ? SigilWire.S2S : this.wire;
-        int auto = SigilCodec.maxSingleLinePayloadBytes(sealed, this.maxLineChars - this.lineReserveChars);
+        // Ostinato: a signed frame may span frameLines chat lines under one signature (S2S multi-part).
+        this.frameLines = sealed == SigilWire.S2S ? clamp(b.frameLines, 1, 4) : 1;
+        int auto = sealed == SigilWire.S2S
+                ? SigilS2S.maxPayloadBytes(this.maxLineChars - this.lineReserveChars, this.frameLines)
+                : SigilCodec.maxSingleLinePayloadBytes(sealed, this.maxLineChars - this.lineReserveChars);
         this.maxFrameBytes = b.maxFrameBytes <= 0 ? auto : Math.min(auto, Math.max(MIN_FRAME_BYTES, b.maxFrameBytes));
         this.maxChunks = clamp(b.maxChunks, 1, 64);
         this.reassemblyTimeoutMs = Math.max(1000L, Math.min(b.reassemblyTimeoutMs, 600_000L));
@@ -87,6 +93,7 @@ public final class SwarmConfig {
         b.lineReserveChars = s.swarmLineReserveChars.value;
         b.maxFrameBytes = s.swarmMaxFrameBytes.value;
         b.maxChunks = s.swarmMaxChunks.value;
+        b.frameLines = s.swarmFrameLines.value;
         b.reassemblyTimeoutMs = s.swarmReassemblyTimeoutMs.value;
         b.maxPendingMessages = s.swarmMaxPendingMessages.value;
         b.replayWindow = s.swarmReplayWindow.value;
@@ -103,6 +110,8 @@ public final class SwarmConfig {
     public int maxLineChars() { return maxLineChars; }
     public int lineReserveChars() { return lineReserveChars; }
     public int maxChunks() { return maxChunks; }
+    /** Ostinato: chat lines one signed frame may use (1 when frames are not S2S-sealed). */
+    public int frameLines() { return frameLines; }
     public long reassemblyTimeoutMs() { return reassemblyTimeoutMs; }
     public int maxPendingMessages() { return maxPendingMessages; }
     public int replayWindow() { return replayWindow; }
@@ -119,6 +128,7 @@ public final class SwarmConfig {
         public int maxFrameBytes = 0;
         public int maxChunks = 32; // Ostinato: signed command/cancel envelopes exceed eight small frames.
         public long reassemblyTimeoutMs = 30_000L;
+        public int frameLines = 2; // Ostinato: one signature per frame, spread over up to this many lines.
         public int maxPendingMessages = 64;
         public int replayWindow = 256;
         public int maxClockSkewSec = 0;

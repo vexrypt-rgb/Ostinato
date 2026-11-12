@@ -63,6 +63,10 @@ public final class LeaseCoordinator {
 
         /** Ostinato: why the command line would be refused if sent now, or null. Called outside the lock. */
         String refusal(String bot, String commandLine);
+
+        /** Ostinato: the lease bound to this command ended and its fence passed. Called outside the lock. */
+        default void fenced(UUID commandId) {
+        }
     }
 
     /** Prefix of {@link Commands#submitLeased} output when the command was queued. */
@@ -92,11 +96,20 @@ public final class LeaseCoordinator {
     /** Per lease: the duration sent with its last offer or grant. */
     private final Map<UUID, Long> durations = new HashMap<>();
     private final Map<UUID, Long> lastResend = new HashMap<>();
+    /** Ostinato: when each denial (REVOKE to an unknown, stale or wrong-state request) last went out, by bot and lease. */
+    private final LinkedHashMap<String, Long> lastDenied = new LinkedHashMap<String, Long>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> e) {
+            return size() > 128;
+        }
+    };
+    private long repliesSuppressed;
 
     // Reconciliation.
     private long reconcileStartMono;
     private long lastRreqMono;
     private final Map<String, Long> holderNotBefore = new HashMap<>(); // lower-cased bot -> latest notBeforeWall
+    private final List<UUID> prunedFenced = new ArrayList<>(); // Ostinato: fenced commands of pruned records
     private final Set<String> reported = new HashSet<>();
     private final Map<UUID, Claim> claims = new LinkedHashMap<>();
     private final List<Object[]> heldRequests = new ArrayList<>(); // {from, LeaseMessage}
@@ -264,26 +277,36 @@ public final class LeaseCoordinator {
 
     private void onRequest(String from, LeaseMessage m, List<Runnable> after) {
         LeaseRecord r = m.leaseId == null ? null : records.get(m.leaseId);
+        long now = mono.getAsLong();
         if (r == null || !r.bot.equalsIgnoreCase(from) || r.gen != m.gen || m.commandId == null
                 || !r.commandId.equals(m.commandId)) {
-            sendRevoke(from, m.leaseId, m.resource, m.gen, m.commandId);
-            log.accept("swarm-lease: denied lease=" + m.leaseId + " gen=" + m.gen + " bot=" + from
-                    + " (unknown or stale generation)");
+            if (denyDue(from, m.leaseId, m.gen, now)) {
+                sendRevoke(from, m.leaseId, m.resource, m.gen, m.commandId);
+                log.accept("swarm-lease: denied lease=" + m.leaseId + " gen=" + m.gen + " bot=" + from
+                        + " (unknown or stale generation)");
+            }
             return;
         }
+        long d = durationFor(r.bot);
         if (r.state == LeaseRecord.State.REVOKING) {
-            sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+            // Ostinato: the REVOKE timer in expire() repeats it; a REQ that crossed it in flight gets no extra copy.
+            if (now - lastResend.getOrDefault(r.leaseId, Long.MIN_VALUE / 2) >= LeaseClock.repeatGap(d)) {
+                lastResend.put(r.leaseId, now);
+                sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+            } else {
+                repliesSuppressed++;
+            }
             return;
         }
         boolean renew = m.op == LeaseMessage.Op.RENEW;
         if (!(r.state == LeaseRecord.State.GRANTED || (!renew && r.state == LeaseRecord.State.OFFERED))) {
-            sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
-            log.accept("swarm-lease: denied lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " state="
-                    + r.state.name().toLowerCase(Locale.ROOT));
+            if (denyDue(r.bot, r.leaseId, r.gen, now)) {
+                sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+                log.accept("swarm-lease: denied lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " state="
+                        + r.state.name().toLowerCase(Locale.ROOT));
+            }
             return;
         }
-        long now = mono.getAsLong();
-        long d = durationFor(r.bot);
         LeaseRecord.State before = r.state;
         long nbBefore = r.notBeforeWall;
         r.state = LeaseRecord.State.GRANTED;
@@ -457,12 +480,21 @@ public final class LeaseCoordinator {
     }
 
     private boolean reconcileDone(long now) {
-        if (now - reconcileStartMono < 2 * marginMs) {
+        long waited = now - reconcileStartMono;
+        if (waited < 2 * marginMs) {
             return false;
         }
         long w = wall.getAsLong();
         for (Map.Entry<String, Long> e : holderNotBefore.entrySet()) {
-            if (!reported.contains(e.getKey()) && w < e.getValue()) {
+            if (reported.contains(e.getKey())) {
+                continue;
+            }
+            if (w < e.getValue()) {
+                return false;
+            }
+            // Ostinato: a chat holder's report needs several seconds (two-line frames, rate limiter backlog), so
+            // 2*M alone turned a live holder into reconcile-timeout. Wait one renew period of its lease for it.
+            if (chatPeer != null && chatPeer.test(e.getKey()) && waited < LeaseClock.renewEvery(durationFor(e.getKey()))) {
                 return false;
             }
         }
@@ -490,6 +522,12 @@ public final class LeaseCoordinator {
                     && highWater.getOrDefault(r.resource, 0L) == r.gen;
             if (keep) {
                 kept.add(r.leaseId);
+                // Ostinato: live b7 - commandSent is not persisted, so the first renew after a restart re-submitted
+                // the bound command; with caps not yet relearned that was refused and the kept lease got revoked.
+                // A holder whose report shows the command already has it; nothing must be sent again.
+                if (!"none".equals(c.extra.getOrDefault("exec", "none")) || "true".equals(c.extra.get("active"))) {
+                    r.commandSent = true;
+                }
                 log.accept("swarm-lease: kept lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot);
                 continue;
             }
@@ -650,6 +688,15 @@ public final class LeaseCoordinator {
 
     /** Lease {@code resource} to {@code bot} and, once granted, send it {@code commandLine}. Returns a status line. */
     public String lease(String bot, String resource, String commandLine) {
+        // Ostinato: a live or still-fenced lease is the first answer the operator needs.
+        String busy = LeaseMessage.validResource(resource) ? busyReason(resource) : null;
+        if (busy != null) {
+            return "swarm-lease: resource " + resource + " busy: " + busy;
+        }
+        // Ostinato: commands of leases whose fence passed no longer block new leased work.
+        for (UUID id : fencedCommands()) {
+            commands.fenced(id);
+        }
         // Ostinato: ask outside the lock (the protocol has its own) whether the command could be sent at all.
         String refused = commandLine == null || bot == null ? null : commands.refusal(bot, commandLine.trim());
         if (refused != null) {
@@ -671,7 +718,7 @@ public final class LeaseCoordinator {
             if (commandLine == null || commandLine.trim().isEmpty()) {
                 return "swarm-lease: lease needs a command";
             }
-            String busy = busyReason(resource);
+            busy = busyReason(resource);
             if (busy != null) {
                 return "swarm-lease: resource " + resource + " busy: " + busy;
             }
@@ -735,6 +782,21 @@ public final class LeaseCoordinator {
     // ---- queries ----------------------------------------------------------------------------------------
 
     /** Null when {@code resource} may be leased now, else why not. */
+    /** Ostinato: command ids of ended leases whose deadline plus margin and notBefore have both passed. */
+    synchronized List<UUID> fencedCommands() {
+        long now = mono.getAsLong();
+        long w = wall.getAsLong();
+        List<UUID> out = new ArrayList<>(prunedFenced);
+        prunedFenced.clear();
+        for (LeaseRecord r : records.values()) {
+            if (r.commandId != null && !r.state.live() && r.state != LeaseRecord.State.OFFERED && w >= r.notBeforeWall
+                    && (r.coordDeadlineMono == Long.MIN_VALUE || now >= r.coordDeadlineMono)) {
+                out.add(r.commandId);
+            }
+        }
+        return out;
+    }
+
     public synchronized String busyReason(String resource) {
         long w = wall.getAsLong();
         long now = mono.getAsLong();
@@ -831,12 +893,32 @@ public final class LeaseCoordinator {
         for (Iterator<LeaseRecord> it = records.values().iterator(); it.hasNext() && terminal > CoordinatorStore.KEEP_TERMINAL; ) {
             LeaseRecord r = it.next();
             if (!r.state.live() && w >= r.notBeforeWall) {
+                if (r.commandId != null) {
+                    prunedFenced.add(r.commandId); // Ostinato: still owed its fence after the record is gone.
+                }
                 it.remove();
                 durations.remove(r.leaseId);
                 lastResend.remove(r.leaseId);
                 terminal--;
             }
         }
+    }
+
+    /** Ostinato: one denial per bot, lease and generation per {@link LeaseClock#repeatGap}; repeats crossed it in flight. */
+    private boolean denyDue(String bot, UUID leaseId, long gen, long now) {
+        String key = bot.toLowerCase(Locale.ROOT) + "|" + leaseId + "|" + gen;
+        Long last = lastDenied.get(key);
+        if (last != null && now - last < LeaseClock.repeatGap(durationFor(bot))) {
+            repliesSuppressed++;
+            return false;
+        }
+        lastDenied.put(key, now);
+        return true;
+    }
+
+    /** Ostinato: replies not sent because an identical one went out less than {@link LeaseClock#repeatGap} ago. */
+    public synchronized long repliesSuppressed() {
+        return repliesSuppressed;
     }
 
     private void sendRevoke(String bot, UUID leaseId, String resource, long gen, UUID commandId) {

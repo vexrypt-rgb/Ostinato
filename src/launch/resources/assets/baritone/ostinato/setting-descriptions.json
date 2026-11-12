@@ -309,6 +309,7 @@
  "swarmLineReserveChars": "Swarm messaging: characters of each line kept free for the transport prefix (for example \"/msg \").",
  "swarmMaxFrameBytes": "Swarm messaging: max bytes of one swarm frame (envelope header plus body) before sealing. 0 means the most that still fits one sealed line.",
  "swarmMaxChunks": "Swarm messaging: max frames one message may be split into; larger messages are refused on send and on receive.",
+ "swarmFrameLines": "Swarm messaging: chat lines one signed frame may span (1-4). One signature covers all of a frame's lines, so 2 lines carry about three times what a single signed line does.",
  "swarmReassemblyTimeoutMs": "Swarm messaging: how long a partially received message waits for its missing frames before it is dropped, in milliseconds.",
  "swarmMaxPendingMessages": "Swarm messaging: max partially received messages held at once; further new messages are refused until some complete or expire.",
  "swarmReplayWindow": "Swarm messaging: replay window, in sequence numbers per sender. Each sequence number is accepted once; ones this far below the newest seen are refused.",

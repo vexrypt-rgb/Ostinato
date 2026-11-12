@@ -74,6 +74,20 @@ public final class SigilS2S {
         return Math.max(0, SigilS2C.payloadRoom(maxLine, false) - TRAILER);
     }
 
+    /**
+     * Ostinato: largest ASCII plaintext (no sender) that {@link #seal} fits into at most {@code lines} lines of
+     * {@code maxLine}. One signature covers every part and rides on the last one, so a 2-line message carries
+     * almost three times what a single signed line does.
+     */
+    public static int maxPayloadBytes(int maxLine, int lines) {
+        if (lines <= 1) {
+            return maxSingleLinePayloadBytes(maxLine);
+        }
+        int room = SigilS2C.payloadRoom(maxLine, true);
+        int n = Math.min(lines, SigilS2C.MAX_PARTS);
+        return Math.max(maxSingleLinePayloadBytes(maxLine), n * room - TRAILER);
+    }
+
     public static String sealSingle(SigilCircle circle, SigilEd25519 signet, String plaintext, int maxLine)
             throws SigilException {
         List<String> lines = seal(circle, signet, plaintext, "", maxLine);
@@ -144,6 +158,14 @@ public final class SigilS2S {
         if (TRAILER > room) {
             throw new SigilException("max_line is too small for an S2S signature part.");
         }
+        // Ostinato: S2C.split keeps text that fits a single-part line whole, but a single-part line has more room
+        // than a part of a multi-part message; such text would overflow once the signature part is added.
+        if (parts.size() == 1 && sfield.length + parts.get(0).getBytes(StandardCharsets.UTF_8).length > room) {
+            String only = parts.remove(0);
+            int cut = cutAt(only, room - sfield.length);
+            parts.add(only.substring(0, cut));
+            parts.add(only.substring(cut));
+        }
         int last = parts.get(parts.size() - 1).getBytes(StandardCharsets.UTF_8).length
                 + (parts.size() == 1 ? sfield.length : 0);
         if (parts.size() == 1 || last + TRAILER > room) {
@@ -155,6 +177,22 @@ public final class SigilS2S {
         return parts;
     }
 
+    /** Ostinato: longest prefix of {@code s}, on a code point boundary, whose UTF-8 form fits {@code bytes}. */
+    private static int cutAt(String s, int bytes) {
+        int used = 0;
+        int i = 0;
+        while (i < s.length()) {
+            int cp = s.codePointAt(i);
+            int len = new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8).length;
+            if (used + len > bytes) {
+                break;
+            }
+            used += len;
+            i += Character.charCount(cp);
+        }
+        return i;
+    }
+
     public static final class Opened {
         public final SigilCircle circle;
         public final String text;
@@ -164,8 +202,11 @@ public final class SigilS2S {
         public final int total;
         public final byte[] header;
         public final byte[] plaintext;
+        /** Ostinato: the Ed25519 signature carried by the last part; null on other parts. */
+        public final byte[] sig;
 
-        Opened(SigilCircle circle, SigilS2C.Frame fr, byte[] pt, String sender, String text, byte[] keyid) {
+        Opened(SigilCircle circle, SigilS2C.Frame fr, byte[] pt, String sender, String text, byte[] keyid,
+               byte[] sig) {
             this.circle = circle;
             this.text = text;
             this.sender = sender;
@@ -174,6 +215,7 @@ public final class SigilS2S {
             this.total = fr.total;
             this.header = fr.header;
             this.plaintext = pt;
+            this.sig = sig;
         }
     }
 
@@ -199,12 +241,13 @@ public final class SigilS2S {
                 continue;
             }
             byte[] keyid = null;
+            byte[] sig = null;
             if (fr.index == fr.total) {
                 if (pt.length < TRAILER) {
                     throw new SigilException("S2S last part is too short for its signature trailer.");
                 }
                 keyid = Arrays.copyOfRange(pt, pt.length - TRAILER, pt.length - SigilEd25519.SIG_LEN);
-                byte[] sig = Arrays.copyOfRange(pt, pt.length - SigilEd25519.SIG_LEN, pt.length);
+                sig = Arrays.copyOfRange(pt, pt.length - SigilEd25519.SIG_LEN, pt.length);
                 pt = Arrays.copyOfRange(pt, 0, pt.length - TRAILER);
                 if (verifiers != null) {
                     SigilEd25519 match = null;
@@ -237,7 +280,7 @@ public final class SigilS2S {
             String text = (fr.flags & SigilS2C.FLAG_Z) != 0
                     ? SigilCodebookV2.expand(body)
                     : SigilCodebookV2.strictUtf8(body);
-            return new Opened(circle, fr, pt, sender, text, keyid);
+            return new Opened(circle, fr, pt, sender, text, keyid, sig);
         }
         throw lastErr;
     }

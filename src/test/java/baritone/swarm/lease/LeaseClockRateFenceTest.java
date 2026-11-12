@@ -85,4 +85,33 @@ public class LeaseClockRateFenceTest {
         assertFalse(LeaseMessage.Op.REQ.fromCoordinator());
         assertNull(LeaseMessage.parse("garbage"));
     }
+
+    /** Ostinato: v2 is the compact form on the wire; v1 bodies still parse to the same message. */
+    @Test
+    public void v2IsCompactAndV1StillParses() {
+        for (LeaseMessage.Op op : LeaseMessage.Op.values()) {
+            LeaseMessage m = new LeaseMessage(op, UUID.randomUUID(), "tunnel:12,-64,-300", 7, null,
+                    1_234_567_890_123L, 30_000L, "end");
+            String v2 = m.encode();
+            String v1 = m.encodeV1();
+            assertTrue(v2, v2.startsWith("2|"));
+            assertTrue(v2.length() + " vs " + v1.length(), v2.length() < v1.length() - 20);
+            for (String body : new String[]{v2, v1}) {
+                LeaseMessage back = LeaseMessage.parse(body);
+                assertEquals(body, op, back.op);
+                assertEquals(m.leaseId, back.leaseId);
+                assertNull(back.commandId);
+                assertEquals("tunnel:12,-64,-300", back.resource);
+                assertEquals(7L, back.gen);
+                assertEquals(1_234_567_890_123L, back.nonce);
+                assertEquals(30_000L, back.durationMs);
+                assertEquals("end", back.extra);
+            }
+        }
+        assertNull(LeaseMessage.parse("2|z|-|r|1|-|1|1|-")); // unknown op
+        assertNull(LeaseMessage.parse("2|g|short|r|1|-|1|1|-")); // id not 22 chars
+        assertNull(LeaseMessage.parse("2|g|-|r|-1|-|1|1|-")); // negative gen
+        assertNull(LeaseMessage.parse("2|g|-|bad resource|1|-|1|1|-"));
+        assertNull(LeaseMessage.parse("2|g|-|r|1|-|1|1"));
+    }
 }
