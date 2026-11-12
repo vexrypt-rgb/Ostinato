@@ -122,6 +122,8 @@ final class LeaseSupport {
     boolean refuseAfterGrant;
     /** Messages to these destinations are dropped (a dead link). */
     final java.util.Set<String> dropTo = new java.util.HashSet<>();
+    /** Ostinato: treat Bob as a chat-only peer (the coordinator then uses the chat minimum D). */
+    boolean chatLink;
 
     final Path dir;
     final CoordinatorStore store;
@@ -170,7 +172,7 @@ final class LeaseSupport {
                         return aliceP.leaseRefusal(b, line);
                     }
                 },
-                mono::get, wall::get, log::add, () -> 30_000L, 3_000L, 0L, p -> false, () -> List.of("Bob"));
+                mono::get, wall::get, log::add, () -> 30_000L, 3_000L, 0L, p -> chatLink, () -> List.of("Bob"));
     }
 
     /** A relaunched bot: fresh guard, fresh protocol, nothing remembered. */

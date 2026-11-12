@@ -92,6 +92,14 @@ public final class LeaseCoordinator {
     /** Per lease: the duration sent with its last offer or grant. */
     private final Map<UUID, Long> durations = new HashMap<>();
     private final Map<UUID, Long> lastResend = new HashMap<>();
+    /** Ostinato: when each denial (REVOKE to an unknown, stale or wrong-state request) last went out, by bot and lease. */
+    private final LinkedHashMap<String, Long> lastDenied = new LinkedHashMap<String, Long>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> e) {
+            return size() > 128;
+        }
+    };
+    private long repliesSuppressed;
 
     // Reconciliation.
     private long reconcileStartMono;
@@ -264,26 +272,36 @@ public final class LeaseCoordinator {
 
     private void onRequest(String from, LeaseMessage m, List<Runnable> after) {
         LeaseRecord r = m.leaseId == null ? null : records.get(m.leaseId);
+        long now = mono.getAsLong();
         if (r == null || !r.bot.equalsIgnoreCase(from) || r.gen != m.gen || m.commandId == null
                 || !r.commandId.equals(m.commandId)) {
-            sendRevoke(from, m.leaseId, m.resource, m.gen, m.commandId);
-            log.accept("swarm-lease: denied lease=" + m.leaseId + " gen=" + m.gen + " bot=" + from
-                    + " (unknown or stale generation)");
+            if (denyDue(from, m.leaseId, m.gen, now)) {
+                sendRevoke(from, m.leaseId, m.resource, m.gen, m.commandId);
+                log.accept("swarm-lease: denied lease=" + m.leaseId + " gen=" + m.gen + " bot=" + from
+                        + " (unknown or stale generation)");
+            }
             return;
         }
+        long d = durationFor(r.bot);
         if (r.state == LeaseRecord.State.REVOKING) {
-            sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+            // Ostinato: the REVOKE timer in expire() repeats it; a REQ that crossed it in flight gets no extra copy.
+            if (now - lastResend.getOrDefault(r.leaseId, Long.MIN_VALUE / 2) >= LeaseClock.repeatGap(d)) {
+                lastResend.put(r.leaseId, now);
+                sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+            } else {
+                repliesSuppressed++;
+            }
             return;
         }
         boolean renew = m.op == LeaseMessage.Op.RENEW;
         if (!(r.state == LeaseRecord.State.GRANTED || (!renew && r.state == LeaseRecord.State.OFFERED))) {
-            sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
-            log.accept("swarm-lease: denied lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " state="
-                    + r.state.name().toLowerCase(Locale.ROOT));
+            if (denyDue(r.bot, r.leaseId, r.gen, now)) {
+                sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
+                log.accept("swarm-lease: denied lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " state="
+                        + r.state.name().toLowerCase(Locale.ROOT));
+            }
             return;
         }
-        long now = mono.getAsLong();
-        long d = durationFor(r.bot);
         LeaseRecord.State before = r.state;
         long nbBefore = r.notBeforeWall;
         r.state = LeaseRecord.State.GRANTED;
@@ -837,6 +855,23 @@ public final class LeaseCoordinator {
                 terminal--;
             }
         }
+    }
+
+    /** Ostinato: one denial per bot, lease and generation per {@link LeaseClock#repeatGap}; repeats crossed it in flight. */
+    private boolean denyDue(String bot, UUID leaseId, long gen, long now) {
+        String key = bot.toLowerCase(Locale.ROOT) + "|" + leaseId + "|" + gen;
+        Long last = lastDenied.get(key);
+        if (last != null && now - last < LeaseClock.repeatGap(durationFor(bot))) {
+            repliesSuppressed++;
+            return false;
+        }
+        lastDenied.put(key, now);
+        return true;
+    }
+
+    /** Ostinato: replies not sent because an identical one went out less than {@link LeaseClock#repeatGap} ago. */
+    public synchronized long repliesSuppressed() {
+        return repliesSuppressed;
     }
 
     private void sendRevoke(String bot, UUID leaseId, String resource, long gen, UUID commandId) {

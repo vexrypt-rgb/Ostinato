@@ -2101,6 +2101,12 @@ public final class Settings {
     public final Setting<Integer> swarmMaxChunks = new Setting<>(32); // Ostinato: room for signed cancel envelopes.
 
     /**
+     * Swarm messaging: chat lines one signed frame may span (1-4). One signature covers all of a frame's lines,
+     * so 2 lines carry about three times what a single signed line does.
+     */
+    public final Setting<Integer> swarmFrameLines = new Setting<>(2); // Ostinato
+
+    /**
      * Swarm messaging: how long a partially received message waits for its missing frames
      * before it is dropped, in milliseconds.
      */

@@ -222,4 +222,50 @@ public class LeaseCoordinatorTest {
         assertTrue(s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER).isEmpty());
         assertTrue(s.coord.lease("Bob", "t1", "mine diamond_ore").contains("gen 1"));
     }
+
+    private static int count(List<LeaseSupport.Msg> sent, LeaseMessage.Op op, int from) {
+        int n = 0;
+        for (int i = from; i < sent.size(); i++) {
+            LeaseMessage m = sent.get(i).lease();
+            if (m != null && m.op == op) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Ostinato: REQ resends that cross a REVOKE in flight get one REVOKE per repeat gap, not one each. */
+    @Test
+    public void requestsWhileRevokingGetOneRevokePerGap() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        LeaseRecord rec = s.coord.record(id);
+        s.dropTo.add("Bob");
+        s.coord.revoke("ore1");
+        s.pump();
+        int mark = s.sent.size();
+        LeaseMessage req = new LeaseMessage(LeaseMessage.Op.REQ, id, "ore1", rec.gen, rec.commandId, 7L, 0L, "-");
+        for (int i = 0; i < 4; i++) {
+            s.coord.onMessage("Bob", req);
+            s.advance(1_000L);
+        }
+        assertEquals("no REVOKE beyond the one just sent", 0, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        s.advance(LeaseClock.repeatGap(30_000L));
+        s.coord.onMessage("Bob", req);
+        assertEquals(1, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        assertTrue(s.coord.repliesSuppressed() >= 4);
+        // Stale generation: one denial, then quiet until the gap passes.
+        mark = s.sent.size();
+        LeaseMessage stale = new LeaseMessage(LeaseMessage.Op.REQ, UUID.randomUUID(), "ore1", 9, UUID.randomUUID(),
+                1L, 0L, "-");
+        for (int i = 0; i < 5; i++) {
+            s.coord.onMessage("Bob", stale);
+        }
+        assertEquals(1, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+        s.advance(LeaseClock.repeatGap(30_000L));
+        s.coord.onMessage("Bob", stale);
+        assertEquals(2, count(s.sent, LeaseMessage.Op.REVOKE, mark));
+    }
 }

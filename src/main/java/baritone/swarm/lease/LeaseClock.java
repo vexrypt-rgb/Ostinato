@@ -58,4 +58,12 @@ public final class LeaseClock {
     public static long renewEvery(long durationMs) {
         return Math.max(1, durationMs / 3);
     }
+
+    /**
+     * Ostinato: shortest gap between two identical replies (REVOKE to a REQ, RACK to a REVOKE) for one lease.
+     * Timer resends come every {@link #renewEvery}; anything sooner crossed an earlier reply in flight.
+     */
+    public static long repeatGap(long durationMs) {
+        return Math.max(1, renewEvery(durationMs) / 2);
+    }
 }

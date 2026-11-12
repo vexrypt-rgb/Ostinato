@@ -121,6 +121,11 @@ public final class SwarmControl {
     private CommandProtocol commandProtocol;
     public static final long PEER_TIMEOUT_MS = 30_000L; // Ostinato: bounded crash detection.
     private long nextHeartbeatMs; // Ostinato:
+    /** Ostinato: heartbeat period while the send queue is empty. */
+    public static final long HEARTBEAT_MS = 10_000L;
+    /** Ostinato: longest gap between heartbeats while the queue is busy; under PEER_TIMEOUT_MS with room for one loss. */
+    public static final long BUSY_HEARTBEAT_MS = 20_000L;
+    private long lastHeartbeatMs = Long.MIN_VALUE / 2; // Ostinato:
     private long heartbeats; // Ostinato: every third heartbeat carries the sample instead.
     private long nextSampleMs; // Ostinato: sample timer while the command protocol is off.
     private boolean sampling; // Ostinato: off until the host turns it on (setSampling).
@@ -251,18 +256,28 @@ public final class SwarmControl {
             try {
                 long now = clockMs.getAsLong(); // Ostinato:
                 if (protocol.linkUp() && now >= nextHeartbeatMs) { // Ostinato:
-                    // Ostinato: every third heartbeat is the sample, so the perf strip costs no extra chat lines.
-                    boolean asSample = sampling && heartbeats++ % 3 == 0;
-                    String body = asSample ? sampleBody() : "hb";
-                    for (SwarmRoster.Group group : roster.groupsOf(endpoint.selfId())) { // Ostinato:
-                        try { // Ostinato:
-                            endpoint.send(group.id(), SwarmFrame.BROADCAST, asSample ? STS : PING, body, SwarmPriority.NORMAL); // Ostinato:
-                            if (asSample) samplesSent++; // Ostinato:
-                        } catch (Exception e) { // Ostinato:
-                            sendFailures++; // Ostinato:
-                        } // Ostinato:
-                    } // Ostinato: short heartbeats avoid status payloads and chat log spam.
-                    nextHeartbeatMs = now + 10_000L; // Ostinato:
+                    // Ostinato: telemetry yields to real traffic. While the send queue holds anything the
+                    // heartbeat waits (up to BUSY_HEARTBEAT_MS, so peers still see us inside PEER_TIMEOUT_MS)
+                    // and never carries the sample, so it cannot keep the link at its cap.
+                    boolean quiet = linkQuiet.getAsBoolean();
+                    if (!quiet && now - lastHeartbeatMs < BUSY_HEARTBEAT_MS) {
+                        nextHeartbeatMs = now + 1_000L;
+                    } else {
+                        // Ostinato: every third heartbeat is the sample, so the perf strip costs no extra chat lines.
+                        boolean asSample = sampling && quiet && heartbeats++ % 3 == 0;
+                        String body = asSample ? sampleBody() : "hb";
+                        for (SwarmRoster.Group group : roster.groupsOf(endpoint.selfId())) { // Ostinato:
+                            try { // Ostinato:
+                                endpoint.send(group.id(), SwarmFrame.BROADCAST, asSample ? STS : PING, body,
+                                        asSample ? SwarmPriority.LOW : SwarmPriority.NORMAL); // Ostinato:
+                                if (asSample) samplesSent++; // Ostinato:
+                            } catch (Exception e) { // Ostinato:
+                                sendFailures++; // Ostinato:
+                            } // Ostinato:
+                        } // Ostinato: short heartbeats avoid status payloads and chat log spam.
+                        lastHeartbeatMs = now;
+                        nextHeartbeatMs = now + HEARTBEAT_MS; // Ostinato:
+                    }
                 } // Ostinato:
                 for (Peer peer : peers.values()) { // Ostinato:
                     if (peer.lastSeenMs >= 0 && now - peer.lastSeenMs >= PEER_TIMEOUT_MS) { // Ostinato:
@@ -355,6 +370,11 @@ public final class SwarmControl {
                 p.sampleAtMs = now;
                 break;
             case PING:
+                if ("hb".equals(m.body())) {
+                    // Ostinato: a heartbeat needs no reply; each member's own heartbeat keeps it seen. A pong
+                    // here doubled the Phase 1 chat load for nothing.
+                    break;
+                }
                 try {
                     endpoint.send(m.group(), m.from(), PONG, "hb".equals(m.body()) ? "hb" : pongBody(m.msgId()), SwarmPriority.HIGH); // Ostinato: compact heartbeat reply.
                 } catch (Exception e) {

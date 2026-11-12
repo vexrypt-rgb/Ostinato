@@ -20,6 +20,7 @@ package baritone.swarm;
 
 import baritone.swarm.crypto.SigilException;
 import baritone.swarm.crypto.SigilCodec;
+import baritone.swarm.crypto.SigilS2S;
 import baritone.swarm.crypto.SigilWire;
 import org.junit.Test;
 
@@ -41,7 +42,13 @@ public class SwarmConfigTest {
         assertEquals(SigilWire.S2, c.wire());
         assertTrue(c.requireSignedSender());
         // auto: every line is sealed S2S by default, so the frame budget is the S2S one (signature trailer)
-        assertEquals(SigilCodec.maxSingleLinePayloadBytes(SigilWire.S2S, 234), c.maxFrameBytes());
+        // Ostinato: a signed frame may span swarmFrameLines (2) lines under one signature.
+        assertEquals(2, c.frameLines());
+        assertEquals(SigilS2S.maxPayloadBytes(234, 2), c.maxFrameBytes());
+        assertTrue(c.maxFrameBytes() > 2 * SigilCodec.maxSingleLinePayloadBytes(SigilWire.S2S, 234));
+        SwarmConfig.Builder one = SwarmConfig.builder();
+        one.frameLines = 1;
+        assertEquals(SigilCodec.maxSingleLinePayloadBytes(SigilWire.S2S, 234), one.build().maxFrameBytes());
         SwarmConfig.Builder unsigned = SwarmConfig.builder();
         unsigned.requireSignedSender = false;
         assertEquals(139, unsigned.build().maxFrameBytes()); // largest S2C payload sealSingle accepts at 234
