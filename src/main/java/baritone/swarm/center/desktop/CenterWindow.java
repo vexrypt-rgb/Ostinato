@@ -4,6 +4,8 @@ import baritone.Baritone;
 import baritone.api.command.ArgDecl;
 import baritone.api.command.FormPlacement;
 import baritone.api.command.manager.ICommandManager;
+import baritone.behavior.SwarmBehavior;
+import baritone.swarm.SwarmSample;
 import baritone.swarm.center.BotSnapshot;
 import baritone.swarm.center.ButtonModel;
 import baritone.swarm.center.CenterLayout;
@@ -82,6 +84,9 @@ public final class CenterWindow implements CenterRuntime.Host {
     private CardLayout cardLayout;
     private final Map<CenterLayout, JToggleButton> layoutButtons = new LinkedHashMap<>();
     private JPanel accounts;
+    private TelemetryPanel telemetry;
+    /** Ostinato: text width of the focus details, inside the 300 px focus panel's padding and scroll bar. */
+    private static final int FOCUS_TEXT_WIDTH = 240;
     private Timer timer;
     private List<String> shownNames = List.of();
     private final Map<String, TileView> views = new LinkedHashMap<>();
@@ -173,6 +178,7 @@ public final class CenterWindow implements CenterRuntime.Host {
 
     private JFrame build() {
         JFrame window = new JFrame("Ostinato command center");
+        WindowChrome.install(window); // Ostinato: own themed title bar and frame instead of the white system one.
         window.setAutoRequestFocus(FocusPolicy.AUTO_REQUEST_FOCUS);
         window.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         window.addWindowListener(new WindowAdapter() {
@@ -182,7 +188,7 @@ public final class CenterWindow implements CenterRuntime.Host {
             }
         });
         window.setContentPane(content());
-        window.setSize(1040, 680);
+        window.setSize(1040, 800); // Ostinato: room for the perf strip and link monitor.
         timer = new Timer(2000, event -> refresh());
         timer.setRepeats(true);
         return window;
@@ -205,6 +211,7 @@ public final class CenterWindow implements CenterRuntime.Host {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(Style.bg());
         scroll.getVerticalScrollBar().setUnitIncrement(16);
+        Style.flatScrollBars(scroll, Style.bg());
         // Ostinato: BorderLayout otherwise lets the wall's minimum size eat the accounts strip.
         scroll.setMinimumSize(new Dimension(0, 80));
         cards.add(scroll, CenterLayout.WALL.wire());
@@ -219,7 +226,12 @@ public final class CenterWindow implements CenterRuntime.Host {
         accounts = Style.panel(new BorderLayout(), Style.surface());
         accounts.setPreferredSize(new Dimension(400, 170));
         accounts.setMinimumSize(new Dimension(200, 150));
-        root.add(accounts, BorderLayout.SOUTH);
+        // Ostinato: perf strip and link monitor sit between the wall and the accounts strip.
+        telemetry = new TelemetryPanel();
+        JPanel south = Style.panel(new BorderLayout(), Style.bg());
+        south.add(telemetry.root, BorderLayout.NORTH);
+        south.add(accounts, BorderLayout.CENTER);
+        root.add(south, BorderLayout.SOUTH);
         try {
             AccountPanel.attach(accounts, UnifiedChat.configDir());
         } catch (RuntimeException ignored) {
@@ -245,6 +257,7 @@ public final class CenterWindow implements CenterRuntime.Host {
         layoutButtons.clear();
         shownNames = List.of();
         focusBuiltFor = null;
+        WindowChrome.restyle(frame);
         frame.setContentPane(content());
         frame.getContentPane().revalidate();
         frame.getContentPane().repaint();
@@ -255,8 +268,7 @@ public final class CenterWindow implements CenterRuntime.Host {
     /** Title, subtitle, and the right-hand chips: server, alerts, Stop all. */
     private JComponent titleBar() {
         JPanel bar = Style.panel(new BorderLayout(12, 0), Style.surface());
-        bar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Style.line()),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+        bar.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 6));
         JPanel titles = Style.panel(new GridLayout(2, 1, 0, 2), null);
         titles.add(Style.label("Ostinato command center", Style.text(), Font.BOLD, 15f));
         titles.add(Style.label(SUBTITLE, Style.muted(), Font.PLAIN, 12f));
@@ -280,7 +292,15 @@ public final class CenterWindow implements CenterRuntime.Host {
         JPanel right = Style.panel(new BorderLayout(), null);
         right.add(chips, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
-        return bar;
+        // Ostinato: the header is the window's title bar. Drag it to move, double-click to maximize.
+        JPanel chrome = Style.panel(new BorderLayout(), Style.surface());
+        chrome.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Style.line()));
+        chrome.add(bar, BorderLayout.CENTER);
+        JPanel buttons = Style.panel(new BorderLayout(), null);
+        buttons.add(WindowChrome.controls(CenterRuntime::close), BorderLayout.NORTH);
+        chrome.add(buttons, BorderLayout.EAST);
+        WindowChrome.draggable(chrome);
+        return chrome;
     }
 
     /** Ostinato: the header theme picker. Choosing runs the registered {@code theme <name>} command. */
@@ -383,6 +403,7 @@ public final class CenterWindow implements CenterRuntime.Host {
         scroll.setBorder(BorderFactory.createLineBorder(Style.accent(), 1));
         scroll.getViewport().setBackground(Style.surface());
         scroll.getVerticalScrollBar().setUnitIncrement(16);
+        Style.flatScrollBars(scroll, Style.surface());
         scroll.setPreferredSize(new Dimension(300, 200));
         return scroll;
     }
@@ -518,8 +539,12 @@ public final class CenterWindow implements CenterRuntime.Host {
         if (model == null || wall == null) {
             return;
         }
-        List<BotSnapshot> tiles = readTiles();
+        SwarmBehavior swarm = swarm();
+        List<BotSnapshot> tiles = readTiles(swarm);
         lastTiles = tiles;
+        if (telemetry != null) {
+            telemetry.update(TelemetryPanel.read(localName(), swarm), System.currentTimeMillis());
+        }
         model.tiles(tiles);
         String server = LiveTiles.serverLabel(readServer(), tiles);
         model.server(server);
@@ -596,12 +621,14 @@ public final class CenterWindow implements CenterRuntime.Host {
         focusBadge.setText(status.badge());
         focusBadge.setForeground(levelColor(status.level()));
         List<String> lines = TileFormatter.lines(bot);
-        StringBuilder sb = new StringBuilder("<html>");
+        // Ostinato: a fixed width lets a long line (perf) wrap instead of running under the panel edge.
+        // Words inside one "·" item stay together, so "ram 398/4050 MB" never splits.
+        StringBuilder sb = new StringBuilder("<html><body style='width:" + FOCUS_TEXT_WIDTH + "px'>");
         for (int i = 1; i < lines.size(); i++) {
             if (i > 1) {
                 sb.append("<br>");
             }
-            sb.append(escape(lines.get(i)));
+            sb.append(escape(lines.get(i)).replace(" ", "&nbsp;").replace("&nbsp;·&nbsp;", " · "));
         }
         focusDetails.setText(sb.append("</html>").toString());
         if (!bot.name().equals(focusBuiltFor)) {
@@ -735,7 +762,38 @@ public final class CenterWindow implements CenterRuntime.Host {
         }
     }
 
-    private List<BotSnapshot> readTiles() {
+    /** Ostinato: the primary client's swarm behavior, or null before a client exists. */
+    private static SwarmBehavior swarm() {
+        try {
+            return ((Baritone) baritone.api.BaritoneAPI.getProvider().getPrimaryBaritone()).getSwarmBehavior();
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
+    }
+
+    private static String localName() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            return mc != null && mc.player != null ? mc.player.getName().getString() : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Ostinato: a peer's last sample by name, unknown when it has sent none. */
+    private static SwarmSample peerSample(SwarmBehavior swarm, String name) {
+        if (swarm == null || name == null) {
+            return SwarmSample.UNKNOWN;
+        }
+        for (SwarmBehavior.PeerView view : swarm.peerViews()) {
+            if (view.link().name().equalsIgnoreCase(name)) {
+                return view.link().sample();
+            }
+        }
+        return SwarmSample.UNKNOWN;
+    }
+
+    private List<BotSnapshot> readTiles(SwarmBehavior swarm) {
         BotSnapshot local = null;
         String server = readServer();
         try {
@@ -743,7 +801,8 @@ public final class CenterWindow implements CenterRuntime.Host {
             if (mc != null && mc.player != null) {
                 int health = (int) mc.player.getHealth();
                 int hunger = mc.player.getFoodData().getFoodLevel();
-                local = LiveTiles.localPlayer(mc.player.getName().getString(), health, hunger, server);
+                local = LiveTiles.localPlayer(mc.player.getName().getString(), health, hunger, server,
+                        swarm == null ? SwarmSample.UNKNOWN : swarm.localSample());
             }
         } catch (RuntimeException ignored) {
             local = null;
@@ -751,7 +810,7 @@ public final class CenterWindow implements CenterRuntime.Host {
         List<BotSnapshot> children = new ArrayList<>();
         for (SwarmSpawnRegistry.Child child : SwarmSpawnRegistry.INSTANCE.list()) {
             boolean alive = child.process() != null && child.process().isAlive();
-            children.add(LiveTiles.child(child.name(), child.server(), alive));
+            children.add(LiveTiles.child(child.name(), child.server(), alive, peerSample(swarm, child.name())));
         }
         return LiveTiles.compose(local, children);
     }

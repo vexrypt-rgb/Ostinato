@@ -217,7 +217,9 @@ public abstract class AbstractNodeCostSearch implements IPathFinder, Helper {
             } else {
                 path = calculate0(primaryTimeout, failureTimeout).map(IPath::postProcess).orElse(null);
             }
-            baritone.utils.PlanStats.astarNs.addAndGet(System.nanoTime() - t0);
+            long searchNs = System.nanoTime() - t0; // Ostinato: also the perf strip's last search time
+            baritone.utils.PlanStats.astarNs.addAndGet(searchNs);
+            baritone.utils.PlanStats.lastSearchMs.set(searchNs / 1_000_000L);
             if (SimEdge.PROFILE) { // Ostinato 2.0 Phase 05B: every planner's wall time and allocation, one line per search
                 System.out.println(String.format(java.util.Locale.ROOT, "PLANPROF planner=%s start=%d,%d,%d us=%d allocKB=%d map=%d timedOut=%b reused=%b found=%b toGoal=%b len=%d primaryMs=%d",
                         getClass().getSimpleName(), startX, startY, startZ, (System.nanoTime() - t0) / 1000, (threadAllocated() - alloc0) / 1024, mapSize(),

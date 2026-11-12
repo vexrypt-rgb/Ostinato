@@ -2,7 +2,7 @@ package baritone.swarm.center;
 
 import java.util.List;
 
-/** Ostinato: tile text. Unknown vitals and missing memory are the words {@code n/a}, not a blank. */
+/** Ostinato: tile text. Unknown vitals and missing perf figures are the words {@code n/a}, not a blank. */
 public final class TileFormatter {
 
     private TileFormatter() {}
@@ -31,8 +31,9 @@ public final class TileFormatter {
         return bot.link().isBlank() ? "n/a" : bot.link();
     }
 
-    public static String memory(BotSnapshot bot) {
-        return bot.memory().isBlank() ? "n/a" : bot.memory();
+    /** Ostinato: path time, tick rate, ping and RAM from the bot's status sample (was memory, never filled). */
+    public static String perf(BotSnapshot bot) {
+        return PerfFormatter.summary(bot.perf());
     }
 
     public static List<String> lines(BotSnapshot bot) {
@@ -44,7 +45,7 @@ public final class TileFormatter {
                 "outcome " + outcome(bot),
                 "observation " + observation(bot),
                 "link " + link(bot),
-                "memory " + memory(bot)
+                "perf " + perf(bot)
         );
     }
 }

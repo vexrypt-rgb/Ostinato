@@ -60,6 +60,8 @@ public final class CommandProtocol {
     public static final long DEFAULT_DEADLINE_MS = 60_000L;
 
     private final Object lock = new Object();
+    private long retried; // Ostinato: command frames sent again because no ack came yet.
+
     private final BotIdentity self;
     private final Set<String> members;
     private final Wire wire;
@@ -198,6 +200,13 @@ public final class CommandProtocol {
             advertise();
         }
         return joined;
+    }
+
+    /** Ostinato: command frames queued again by {@link #pump()} because no ack came yet. */
+    public long retried() {
+        synchronized (lock) {
+            return retried;
+        }
     }
 
     public boolean linkUp() {
@@ -368,6 +377,7 @@ public final class CommandProtocol {
             boolean queued = wire.send(s.target, TYPE_CMD, s.body, priority);
             synchronized (lock) {
                 if (queued) {
+                    retried++; // Ostinato: link monitor counter.
                     s.sends++;
                     s.nextRetry = now + retryDelay(s.sends);
                 } else {

@@ -198,4 +198,21 @@ public class SwarmRateLimiterTest {
         assertTrue(vanillaPeak(new SwarmRateLimiter(0.5, 11, true, 64, 0), 50, 5) > 200);
         assertTrue(vanillaPeak(new SwarmRateLimiter(1.2, 5, true, 64, 0), 50, 600) > 200);
     }
+
+    // Ostinato: link monitor figures — lines sent in the last minute against the learned cap.
+    @Test
+    public void windowCountsSentLinesAgainstTheCap() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        assertEquals(35, l.windowCap()); // 30 a minute from the rate plus the burst of 5
+        assertEquals(0, l.sentInWindow(0));
+        for (int i = 0; i < 8; i++) {
+            l.offer(SwarmPriority.NORMAL, "m" + i);
+        }
+        assertEquals(5, drain(l, 0).size());
+        assertEquals(5, l.sentInWindow(0)); // only polled lines count, not queued ones
+        assertEquals("m5", l.poll(2_000));
+        assertEquals(6, l.sentInWindow(2_000));
+        assertEquals(1, l.sentInWindow(60_000)); // the burst at 0 has left the window
+        assertEquals(0, l.sentInWindow(62_000));
+    }
 }

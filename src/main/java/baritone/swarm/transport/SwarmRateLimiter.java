@@ -42,6 +42,8 @@ public final class SwarmRateLimiter {
     public static final double SAFE_MAX_RATE = 0.9;
     public static final int SAFE_MAX_BURST = 8;
     public static final double MIN_RATE = 0.05;
+    /** Ostinato: window the link monitor counts chat lines over. */
+    public static final long CHAT_WINDOW_MS = 60_000L;
 
     private final double rate;
     private final int burst;
@@ -52,6 +54,7 @@ public final class SwarmRateLimiter {
     private long lastMs;
     private long dropped;
     private long sent;
+    private final WindowCounter window = new WindowCounter(CHAT_WINDOW_MS, 4096); // Ostinato:
 
     public SwarmRateLimiter(double ratePerSec, int burst, boolean allowUnsafe, int queueMax, long nowMs) {
         double r = Double.isNaN(ratePerSec) ? MIN_RATE : Math.max(MIN_RATE, ratePerSec);
@@ -116,6 +119,7 @@ public final class SwarmRateLimiter {
             if (line != null) {
                 tokens -= 1.0;
                 sent++;
+                window.add(nowMs); // Ostinato: link monitor budget.
                 return line;
             }
         }
@@ -132,4 +136,10 @@ public final class SwarmRateLimiter {
 
     public synchronized long dropped() { return dropped; }
     public synchronized long sent() { return sent; }
+
+    /** Ostinato: lines that went out in the last {@link #CHAT_WINDOW_MS}. */
+    public synchronized int sentInWindow(long nowMs) { return window.count(nowMs); }
+
+    /** Ostinato: most lines this bucket lets out in any {@link #CHAT_WINDOW_MS}: {@code rate*window + burst}. */
+    public int windowCap() { return (int) Math.floor(rate * CHAT_WINDOW_MS / 1000.0) + burst; }
 }

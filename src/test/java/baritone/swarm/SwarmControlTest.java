@@ -245,6 +245,112 @@ public class SwarmControlTest {
         assertEquals(Collections.singletonList("/msg Alice " + pong.get(0).substring("/msg Alice ".length())), pong);
     }
 
+    // Ostinato: STS sample for the performance strip and link monitor.
+    private static final SwarmSample ALICE_SAMPLE = new SwarmSample(12, 199, 35, 812, 2048, 3, 35, 1, 2, "/msg");
+
+    private SwarmControl sampler(String name, SwarmTransport t, SwarmSample sample) throws Exception {
+        SwarmEndpoint e = new SwarmEndpoint(name, unsignedCfg(), circles, t, clock::get);
+        e.setMemberCheck(roster::isMember);
+        SwarmControl.LocalStatus st = new SwarmControl.LocalStatus() {
+            @Override
+            public String name() { return name; }
+            @Override
+            public String position() { return "0,64,0"; }
+            @Override
+            public String process() { return "idle"; }
+            @Override
+            public SwarmSample sample() { return sample; }
+        };
+        return new SwarmControl(roster, e, st, clock::get, log::add, null);
+    }
+
+    private static SwarmControl.PeerLink link(SwarmControl c, String name) {
+        for (SwarmControl.PeerLink l : c.peerLinks()) {
+            if (l.name().equals(name)) {
+                return l;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    public void sampleRoundTripWithoutProtocol() throws Exception {
+        InMemorySwarmBus bus = new InMemorySwarmBus();
+        SwarmControl alice = sampler("Alice", bus.register("Alice"), ALICE_SAMPLE);
+        SwarmControl bob = sampler("Bob", bus.register("Bob"), SwarmSample.UNKNOWN);
+        alice.setSampling(true, () -> true);
+        alice.tick();
+        assertEquals(1, alice.samplesSent());
+        clock.addAndGet(500);
+        bob.tick();
+        SwarmControl.PeerLink a = link(bob, "Alice");
+        assertNotNull(a);
+        assertEquals(ALICE_SAMPLE, a.sample());
+        assertEquals(clock.get(), a.sampleAtMs());
+        assertEquals(1, a.receivedInWindow());
+        assertEquals(1, a.received());
+        // no second sample until the interval passes
+        clock.addAndGet(1_000);
+        alice.tick();
+        assertEquals(1, alice.samplesSent());
+        clock.addAndGet(SwarmControl.SAMPLE_INTERVAL_MS);
+        alice.tick();
+        assertEquals(2, alice.samplesSent());
+    }
+
+    @Test
+    public void sampleWaitsForAQuietLink() throws Exception {
+        InMemorySwarmBus bus = new InMemorySwarmBus();
+        SwarmControl alice = sampler("Alice", bus.register("Alice"), ALICE_SAMPLE);
+        bus.register("Bob");
+        AtomicLong busy = new AtomicLong(1);
+        alice.setSampling(true, () -> busy.get() == 0);
+        alice.tick();
+        assertEquals(0, alice.samplesSent());
+        busy.set(0);
+        clock.addAndGet(1_000);
+        alice.tick();
+        assertEquals(0, alice.samplesSent()); // retries 5 s after the busy check
+        clock.addAndGet(4_000);
+        alice.tick();
+        assertEquals(1, alice.samplesSent());
+    }
+
+    @Test
+    public void samplingIsOffByDefault() throws Exception {
+        InMemorySwarmBus bus = new InMemorySwarmBus();
+        SwarmControl alice = sampler("Alice", bus.register("Alice"), ALICE_SAMPLE);
+        bus.register("Bob");
+        alice.tick();
+        clock.addAndGet(SwarmControl.SAMPLE_INTERVAL_MS * 3);
+        alice.tick();
+        assertEquals(0, alice.samplesSent());
+    }
+
+    @Test
+    public void olderPeerThatOnlyPingsHasNoSample() throws Exception {
+        InMemorySwarmBus bus = new InMemorySwarmBus();
+        SwarmControl alice = control("Alice", bus.register("Alice"), "idle");
+        SwarmControl bob = control("Bob", bus.register("Bob"), "idle");
+        alice.ping("crew");
+        clock.addAndGet(100);
+        bob.tick();
+        SwarmControl.PeerLink a = link(bob, "Alice");
+        assertNotNull(a);
+        assertEquals(SwarmSample.UNKNOWN, a.sample());
+        assertEquals(-1, a.sampleAtMs());
+        assertEquals(1, a.receivedInWindow());
+        assertEquals(clock.get(), a.lastSeenMs());
+    }
+
+    @Test
+    public void fullSampleBodyIsShort() {
+        assertTrue(ALICE_SAMPLE.encode().length() < 100);
+        SwarmSample worst = new SwarmSample(99_999_999, 99_999_999, 99_999_999, 99_999_999, 99_999_999,
+                99_999_999, 99_999_999, 99_999_999, 99_999_999, "/abcdefghijklmno");
+        assertTrue(worst.encode(), worst.encode().length() < 120);
+    }
+
     @Test
     public void bodyFieldsAreSanitised() {
         assertEquals("a_b_c_d", SwarmControl.clean("a;b=c\u00a7d"));

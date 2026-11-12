@@ -24,6 +24,7 @@ import baritone.swarm.frame.SwarmReject;
 import baritone.swarm.protocol.CommandProtocol;
 import baritone.swarm.roster.SwarmRoster;
 import baritone.swarm.transport.SwarmPriority;
+import baritone.swarm.transport.WindowCounter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -46,6 +48,12 @@ public final class SwarmControl {
 
     public static final String PING = "PING";
     public static final String PONG = "PONG";
+    /** Ostinato: a {@link SwarmSample} broadcast. No reply; members that do not know the type ignore it. */
+    public static final String STS = "STS";
+    /** Ostinato: sample period when the command protocol is off. With it on, every third heartbeat is the sample. */
+    public static final long SAMPLE_INTERVAL_MS = 30_000L;
+    /** Ostinato: window the per-member traffic count covers. */
+    public static final long TRAFFIC_WINDOW_MS = 60_000L;
     /** Pings older than this no longer match a pong for RTT. */
     public static final long PING_TTL_MS = 120_000L;
     static final int MAX_FIELD = 40;
@@ -59,6 +67,16 @@ public final class SwarmControl {
 
         /** Current Baritone process, or {@code "idle"}. */
         String process();
+
+        /** Ostinato: figures for the performance strip and link monitor; unknown unless the host supplies them. */
+        default SwarmSample sample() {
+            return SwarmSample.UNKNOWN;
+        }
+    }
+
+    /** Ostinato: a copy of one member's last sample and traffic, safe to hand to another thread. */
+    public record PeerLink(String name, long lastSeenMs, SwarmSample sample, long sampleAtMs, int receivedInWindow,
+                           long received) {
     }
 
     /** What we know about one other member. */
@@ -70,6 +88,9 @@ public final class SwarmControl {
         String proc;
         long rttMs = -1;
         long pongAtMs = -1;
+        SwarmSample sample = SwarmSample.UNKNOWN; // Ostinato:
+        long sampleAtMs = -1; // Ostinato:
+        final WindowCounter traffic = new WindowCounter(TRAFFIC_WINDOW_MS, 1024); // Ostinato:
 
         Peer(String name) {
             this.name = name;
@@ -82,6 +103,9 @@ public final class SwarmControl {
         public String proc() { return proc; }
         public long rttMs() { return rttMs; }
         public long pongAtMs() { return pongAtMs; }
+        /** Ostinato: last {@code STS} sample, or {@link SwarmSample#UNKNOWN} (an older bot, or none yet). */
+        public SwarmSample sample() { return sample; }
+        public long sampleAtMs() { return sampleAtMs; }
     }
 
     private final SwarmRoster roster;
@@ -97,6 +121,11 @@ public final class SwarmControl {
     private CommandProtocol commandProtocol;
     public static final long PEER_TIMEOUT_MS = 30_000L; // Ostinato: bounded crash detection.
     private long nextHeartbeatMs; // Ostinato:
+    private long heartbeats; // Ostinato: every third heartbeat carries the sample instead.
+    private long nextSampleMs; // Ostinato: sample timer while the command protocol is off.
+    private boolean sampling; // Ostinato: off until the host turns it on (setSampling).
+    private BooleanSupplier linkQuiet = () -> true; // Ostinato:
+    private long samplesSent; // Ostinato:
     private long ignored;
     private long sendFailures;
     private final Map<String, Consumer<SwarmMessage>> extraHandlers = new HashMap<>();
@@ -127,7 +156,7 @@ public final class SwarmControl {
         if (PING.equals(type) || PONG.equals(type) || SwarmBuild.BUILD.equals(type)
                 || SwarmBuild.STAT.equals(type) || SwarmBuild.STOP.equals(type)
                 || CommandProtocol.TYPE_CMD.equals(type) || CommandProtocol.TYPE_ACK.equals(type)
-                || CommandProtocol.TYPE_HELLO.equals(type)) {
+                || CommandProtocol.TYPE_HELLO.equals(type) || STS.equals(type)) {
             throw new IllegalArgumentException("reserved swarm message type " + type);
         }
         extraHandlers.put(type, handler);
@@ -222,9 +251,13 @@ public final class SwarmControl {
             try {
                 long now = clockMs.getAsLong(); // Ostinato:
                 if (protocol.linkUp() && now >= nextHeartbeatMs) { // Ostinato:
+                    // Ostinato: every third heartbeat is the sample, so the perf strip costs no extra chat lines.
+                    boolean asSample = sampling && heartbeats++ % 3 == 0;
+                    String body = asSample ? sampleBody() : "hb";
                     for (SwarmRoster.Group group : roster.groupsOf(endpoint.selfId())) { // Ostinato:
                         try { // Ostinato:
-                            endpoint.send(group.id(), SwarmFrame.BROADCAST, PING, "hb", SwarmPriority.NORMAL); // Ostinato:
+                            endpoint.send(group.id(), SwarmFrame.BROADCAST, asSample ? STS : PING, body, SwarmPriority.NORMAL); // Ostinato:
+                            if (asSample) samplesSent++; // Ostinato:
                         } catch (Exception e) { // Ostinato:
                             sendFailures++; // Ostinato:
                         } // Ostinato:
@@ -241,7 +274,73 @@ public final class SwarmControl {
             } catch (RuntimeException e) {
                 log.accept("swarm: command protocol tick failed: " + e.getMessage());
             }
+        } else if (sampling) {
+            sampleWithoutProtocol(clockMs.getAsLong());
         }
+    }
+
+    /**
+     * Ostinato: without heartbeats the sample goes out on its own timer, at the lowest priority and only while
+     * the chat queue is empty, so it never delays a real message or pushes the link toward the server limit.
+     */
+    private void sampleWithoutProtocol(long now) {
+        if (now < nextSampleMs) {
+            return;
+        }
+        if (!linkQuiet.getAsBoolean()) {
+            nextSampleMs = now + 5_000L;
+            return;
+        }
+        nextSampleMs = now + SAMPLE_INTERVAL_MS;
+        String body = null;
+        for (SwarmRoster.Group group : roster.groupsOf(endpoint.selfId())) {
+            if (group.members().size() < 2) {
+                continue;
+            }
+            try {
+                if (body == null) {
+                    body = sampleBody();
+                }
+                endpoint.send(group.id(), SwarmFrame.BROADCAST, STS, body, SwarmPriority.LOW);
+                samplesSent++;
+            } catch (Exception e) {
+                sendFailures++;
+            }
+        }
+    }
+
+    /** Ostinato: the local sample, encoded; a host failure sends an unknown sample rather than nothing. */
+    private String sampleBody() {
+        try {
+            SwarmSample s = local.sample();
+            String body = s == null ? "" : s.encode();
+            return body.isEmpty() ? "-" : body; // never an empty frame body
+        } catch (RuntimeException e) {
+            return "-";
+        }
+    }
+
+    /**
+     * Ostinato: turn the {@code STS} sample on or off. {@code quiet} says whether the chat queue is empty; it is
+     * only asked while the command protocol is off.
+     */
+    public synchronized void setSampling(boolean enabled, BooleanSupplier quiet) {
+        this.sampling = enabled;
+        this.linkQuiet = quiet == null ? () -> true : quiet;
+    }
+
+    /** Ostinato: {@code STS} frames sent. */
+    public synchronized long samplesSent() { return samplesSent; }
+
+    /** Ostinato: a copy of every known member's sample and traffic, for the command center. */
+    public synchronized List<PeerLink> peerLinks() {
+        long now = clockMs.getAsLong();
+        List<PeerLink> out = new ArrayList<>(peers.size());
+        for (Peer p : peers.values()) {
+            out.add(new PeerLink(p.name, p.lastSeenMs, p.sample, p.sampleAtMs, p.traffic.count(now),
+                    p.traffic.total()));
+        }
+        return out;
     }
 
     private void handle(SwarmMessage m) {
@@ -249,7 +348,12 @@ public final class SwarmControl {
         Peer p = peers.computeIfAbsent(m.from(), Peer::new);
         p.lastSeenMs = now;
         p.lastGroup = m.group();
+        p.traffic.add(now); // Ostinato: link monitor traffic per member.
         switch (m.type()) {
+            case STS: // Ostinato: performance sample; no reply.
+                p.sample = SwarmSample.parse(m.body());
+                p.sampleAtMs = now;
+                break;
             case PING:
                 try {
                     endpoint.send(m.group(), m.from(), PONG, "hb".equals(m.body()) ? "hb" : pongBody(m.msgId()), SwarmPriority.HIGH); // Ostinato: compact heartbeat reply.

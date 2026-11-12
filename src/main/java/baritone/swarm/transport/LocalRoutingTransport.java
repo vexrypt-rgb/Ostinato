@@ -99,6 +99,11 @@ public final class LocalRoutingTransport implements SwarmTransport {
         return chat == null ? null : chat.limiter();
     }
 
+    /** Ostinato: the chat transport behind this router, or null; the link monitor reads its counters. */
+    public ChatSwarmTransport chat() {
+        return chat;
+    }
+
     public long tooLong() {
         return chat == null ? 0L : chat.tooLong();
     }

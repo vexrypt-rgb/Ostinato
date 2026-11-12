@@ -366,12 +366,14 @@ public class Phase1GateTest {
         CommandProtocol.Sent first = w.alice.lookupSent(id);
         assertEquals(1, first.sends);
         assertFalse(first.acked);
+        assertEquals(0, w.alice.retried()); // Ostinato: the first send is not a retry.
         String body = first.body;
         w.clock.set(first.nextRetry); // Ostinato: respect queued-send backoff.
         w.alice.pump();
         CommandProtocol.Sent retried = w.alice.lookupSent(id);
         assertEquals(body, retried.body);
         assertEquals(2, retried.sends);
+        assertEquals(1, w.alice.retried()); // Ostinato: link monitor counter.
         assertFalse(retried.acked);
         assertTrue(w.aliceLane.q.size() >= 1);
         w.clock.set(retried.deadline);

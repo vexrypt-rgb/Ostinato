@@ -2161,6 +2161,14 @@ public final class Settings {
     public final Setting<Boolean> swarmCommandProtocol = new Setting<>(false);
 
     /**
+     * Swarm: send a small status sample (path time, tick rate, ping, RAM, chat budget) to the group
+     * for the command center. With the command protocol on it rides every third heartbeat, so no
+     * extra chat lines; off, one low-priority line every 30 s, only while the send queue is empty.
+     * Older bots ignore it.
+     */
+    public final Setting<Boolean> swarmStatusSample = new Setting<>(true);
+
+    /**
      * Swarm: only accept messages signed by a pinned member signet (S2S), and sign what we send. Needs
      * {@code signet-*.json} records in the sigil home. Off accepts unsigned circle messages (S1C/S2C).
      */
