@@ -18,6 +18,9 @@ import baritone.swarm.SwarmConfig;
 import baritone.swarm.SwarmControl;
 import baritone.swarm.SwarmEndpoint;
 import baritone.swarm.SwarmKeys;
+import baritone.swarm.SwarmSample;
+import baritone.swarm.TickRateMeter;
+import baritone.utils.PlanStats;
 import baritone.api.swarm.protocol.CapabilityDescriptor;
 import baritone.swarm.crypto.SigilEd25519;
 import baritone.swarm.crypto.SigilCircle;
@@ -61,6 +64,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
         final SwarmControl control;
         /** Ostinato: null when swarmCommandProtocol is off. */
         final CommandProtocol protocol;
+        /** Ostinato: builds this bot's status sample (perf strip and link monitor). */
+        final Status status;
 
         // Ostinato: immutable loaded roster; restart the link when the file contents change.
         final Path rosterPath;
@@ -68,11 +73,12 @@ public final class SwarmBehavior extends Behavior implements Helper {
         long nextRosterCheck;
 
         Link(String self, LocalRoutingTransport transport, SwarmControl control, CommandProtocol protocol,
-             Path rosterPath, byte[] rosterBytes) {
+             Status status, Path rosterPath, byte[] rosterBytes) {
             this.self = self;
             this.transport = transport;
             this.control = control;
             this.protocol = protocol;
+            this.status = status; // Ostinato:
             this.rosterPath = rosterPath; // Ostinato:
             this.rosterBytes = rosterBytes; // Ostinato:
         }
@@ -90,6 +96,14 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private volatile boolean localSurvival;
     /** swarm* setting values the link was started with; a change (e.g. from the GUI) restarts it. */
     private String startedWith;
+    // Ostinato: perf strip and link monitor. Written on the client thread, read by the command center.
+    private final TickRateMeter tickRate = new TickRateMeter();
+    private volatile SwarmSample localSample = SwarmSample.UNKNOWN;
+    private volatile List<PeerView> peerViews = List.of();
+    private long nextLocalSampleMs;
+
+    /** Ostinato: one swarm peer as the link monitor sees it; {@code local} means it is reached over the same-PC spool. */
+    public record PeerView(SwarmControl.PeerLink link, boolean local) {}
 
     public SwarmBehavior(Baritone baritone) {
         super(baritone);
@@ -97,6 +111,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
     @Override
     public void onTick(TickEvent event) {
+        if (event.getType() == TickEvent.Type.IN) {
+            tickRate.tick(nowMs()); // Ostinato: perf strip tick rate.
+        }
         try {
             tick(event);
         } catch (Throwable t) {
@@ -105,6 +122,61 @@ public final class SwarmBehavior extends Behavior implements Helper {
             stop();
             startedWith = was; // so a settings change still restarts the link
         }
+        refreshSamples();
+    }
+
+    /** Ostinato: once a second, cache this client's figures and the peer list for the command center. */
+    private void refreshSamples() {
+        long now = nowMs();
+        if (now < nextLocalSampleMs) {
+            return;
+        }
+        nextLocalSampleMs = now + 1000L;
+        try {
+            Link l = link;
+            localSample = l == null ? baseSample() : l.status.sample();
+            if (l == null) {
+                peerViews = List.of();
+            } else {
+                List<PeerView> views = new ArrayList<>();
+                for (SwarmControl.PeerLink p : l.control.peerLinks()) {
+                    views.add(new PeerView(p, l.transport.isLocal(p.name())));
+                }
+                peerViews = List.copyOf(views);
+            }
+        } catch (RuntimeException e) {
+            localSample = SwarmSample.UNKNOWN; // Ostinato: the strip shows n/a rather than a stale figure.
+        }
+    }
+
+    /** Ostinato: path time, tick rate, ping and RAM of this client; link fields unknown. Client thread only. */
+    private SwarmSample baseSample() {
+        int ping = -1;
+        try {
+            LocalPlayer p = ctx.player();
+            if (p != null && p.connection != null) {
+                net.minecraft.client.multiplayer.PlayerInfo info = p.connection.getPlayerInfo(p.getUUID());
+                ping = info == null ? -1 : info.getLatency();
+            }
+        } catch (RuntimeException ignored) {
+            ping = -1;
+        }
+        Runtime rt = Runtime.getRuntime();
+        long mb = 1024L * 1024L;
+        long max = rt.maxMemory();
+        return new SwarmSample(PlanStats.lastSearchMs.get(), tickRate.tpsX10(nowMs()), ping,
+                (int) ((rt.totalMemory() - rt.freeMemory()) / mb), max == Long.MAX_VALUE ? -1 : (int) (max / mb),
+                -1, -1, -1, -1, "");
+    }
+
+    /** Ostinato: this client's latest figures for the perf strip and link monitor (n/a until the first tick). */
+    public SwarmSample localSample() {
+        return localSample;
+    }
+
+    /** Ostinato: swarm peers with their latest sample and traffic, empty while the link is down. */
+    public List<PeerView> peerViews() {
+        return peerViews;
     }
 
     private void tick(TickEvent event) {
@@ -258,11 +330,19 @@ public final class SwarmBehavior extends Behavior implements Helper {
                         System::currentTimeMillis);
                 endpoint.setMemberCheck(roster::isMember);
                 SwarmKeys.bindSigning(endpoint, self, sigilHome);
-                SwarmControl control = new SwarmControl(roster, endpoint, new Status(), System::currentTimeMillis,
+                String command = "";
+                for (SwarmRoster.Group g : roster.groupsOf(self)) {
+                    command = SwarmSample.commandOf(chat.templateFor(chat.channelFor(g.id())));
+                    break; // Ostinato: the monitor shows the first group's command.
+                }
+                Status status = new Status(limiter, chat, command);
+                SwarmControl control = new SwarmControl(roster, endpoint, status, System::currentTimeMillis,
                         this::logDirect, () -> "queued " + limiter.queued() + ", sent " + limiter.sent() + ", dropped "
                         + limiter.dropped() + ", too long " + transport.tooLong() + String.format(", rate %.2f/s burst %d",
                         limiter.rate(), limiter.burst()));
                 control.enableBuild(new Regions());
+                // Ostinato: status samples ride heartbeats, or go out only while the send queue is empty.
+                control.setSampling(s.swarmStatusSample.value, () -> limiter.queued() == 0);
                 // Ostinato: command protocol rides the same sealed link. Off, this stays null.
                 CommandProtocol protocol = null;
                 if (protocolOn) {
@@ -313,8 +393,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
                         created.advertise();
                     }
                     protocol = created;
+                    status.protocol = created; // Ostinato: retried count for the link monitor.
                 }
-                return new Link(self, transport, control, protocol, rp, rosterBytes); // Ostinato:
+                return new Link(self, transport, control, protocol, status, rp, rosterBytes); // Ostinato:
             } catch (RuntimeException e) {
                 throw e;
             } catch (Exception e) {
@@ -570,6 +651,25 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private volatile boolean pendingStart;
 
     private final class Status implements SwarmControl.LocalStatus {
+        private final SwarmRateLimiter limiter;
+        private final ChatSwarmTransport chat;
+        private final String command;
+        volatile CommandProtocol protocol;
+
+        Status(SwarmRateLimiter limiter, ChatSwarmTransport chat, String command) {
+            this.limiter = limiter;
+            this.chat = chat;
+            this.command = command;
+        }
+
+        /** Ostinato: client figures plus this link's chat budget, losses and retries. Client thread. */
+        @Override
+        public SwarmSample sample() {
+            CommandProtocol p = protocol;
+            return baseSample().withLink(limiter.sentInWindow(nowMs()), limiter.windowCap(),
+                    limiter.dropped() + chat.tooLong() + chat.inboundDropped(), p == null ? -1 : p.retried(), command);
+        }
+
         @Override
         public String name() {
             return ctx.player() == null ? "?" : ctx.player().getName().getString();

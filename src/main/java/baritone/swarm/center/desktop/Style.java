@@ -10,14 +10,21 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.border.Border;
+import javax.swing.plaf.basic.BasicScrollBarUI;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.LayoutManager;
+import java.awt.RenderingHints;
+import java.awt.Rectangle;
+import java.awt.Graphics2D;
+import java.awt.Graphics;
+import java.awt.Dimension;
 
 /**
  * Ostinato: Swing pieces drawn with the current theme's tokens. Flat controls, 1 px borders, no focus grab.
@@ -195,6 +202,80 @@ final class Style {
         scroll.getViewport().setBackground(background);
         scroll.setBackground(background);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
+        flatScrollBars(scroll, background);
         return scroll;
+    }
+
+    /**
+     * Ostinato: thin scroll bars in the theme colors. The look-and-feel bar was light grey with arrow buttons
+     * in every theme, which glared in the dark ones.
+     */
+    static void flatScrollBars(JScrollPane scroll, Color track) {
+        for (JScrollBar bar : new JScrollBar[] {scroll.getVerticalScrollBar(), scroll.getHorizontalScrollBar()}) {
+            bar.setUI(new FlatScrollBarUI(track));
+            bar.setBackground(track);
+            bar.setOpaque(true);
+            bar.setFocusable(false);
+        }
+        scroll.getVerticalScrollBar().setPreferredSize(new Dimension(10, 0));
+        scroll.getHorizontalScrollBar().setPreferredSize(new Dimension(0, 10));
+        JPanel corner = panel(null, track);
+        scroll.setCorner(JScrollPane.LOWER_RIGHT_CORNER, corner);
+    }
+
+    /** Ostinato: a rounded thumb on a plain track, no arrow buttons. The thumb brightens under the mouse. */
+    private static final class FlatScrollBarUI extends BasicScrollBarUI {
+        private final Color track;
+
+        FlatScrollBarUI(Color track) {
+            this.track = track;
+        }
+
+        @Override
+        protected void configureScrollBarColors() {
+            thumbColor = line();
+            trackColor = track;
+        }
+
+        @Override
+        protected JButton createDecreaseButton(int orientation) {
+            return noButton();
+        }
+
+        @Override
+        protected JButton createIncreaseButton(int orientation) {
+            return noButton();
+        }
+
+        private static JButton noButton() {
+            JButton none = new JButton();
+            none.setPreferredSize(new Dimension(0, 0));
+            none.setMinimumSize(new Dimension(0, 0));
+            none.setMaximumSize(new Dimension(0, 0));
+            none.setFocusable(false);
+            return none;
+        }
+
+        @Override
+        protected void paintTrack(Graphics g, JComponent c, Rectangle bounds) {
+            g.setColor(trackColor);
+            g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        }
+
+        @Override
+        protected void paintThumb(Graphics g, JComponent c, Rectangle bounds) {
+            if (bounds.isEmpty() || !scrollbar.isEnabled()) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(isThumbRollover() || isDragging ? muted() : thumbColor);
+                int arc = Math.min(bounds.width, bounds.height) - 4;
+                g2.fillRoundRect(bounds.x + 2, bounds.y + 2, bounds.width - 4, bounds.height - 4, arc, arc);
+            } finally {
+                g2.dispose();
+            }
+        }
     }
 }

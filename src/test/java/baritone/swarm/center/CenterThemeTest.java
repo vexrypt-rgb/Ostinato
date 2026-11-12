@@ -83,7 +83,7 @@ public class CenterThemeTest {
     }
 
     private static BotSnapshot bot(int health, String task, ExecutionState state, ObservationState seen) {
-        return new BotSnapshot("Bot", health, 20, task, state, seen, "whisper", "", "local");
+        return new BotSnapshot("Bot", health, 20, task, state, seen, "whisper", null, "local");
     }
 
     @Test public void statusHasGlyphAndWordNotJustColor() {
