@@ -120,6 +120,65 @@ public class Phase1LinkDeliveryTest {
         assertEquals(CapabilityDescriptor.gameplay().kinds(), bob.peerCapabilities("Alice").kinds());
     }
 
+    // Ostinato: 2026-11-12 follow-up - a relaunched coordinator asked nobody, and a peer that still held its caps
+    // ignored the identical hello, so caps stayed unknown and every lease was refused for minutes.
+    @Test
+    public void relaunchedCoordinatorQueryIsAnsweredByPeerThatAlreadyKnowsIt() {
+        AtomicLong clock = new AtomicLong(Phase1Support.T0);
+        Wire bw = new Wire();
+        CommandProtocol bob = node("Bob", bw, clock);
+        bob.learnPeer("Alice", "Alicekey", CapabilityDescriptor.gameplay()); // Bob kept Alice's caps across her relaunch.
+        Wire aw = new Wire();
+        CommandProtocol alice = node("Alice", aw, clock); // Relaunched coordinator: knows nobody.
+        alice.noteOnlineMembers(Set.of("Alice", "Bob"));
+        assertEquals(1, aw.frames.size());
+        assertTrue(aw.frames.get(0).body.startsWith("1|helloq|Alice|"));
+        bob.receive("test", "Alice", CommandProtocol.TYPE_HELLO, aw.frames.get(0).body);
+        assertEquals(1, bw.frames.size());
+        assertTrue(bw.frames.get(0).body.startsWith("1|hello|Bob|")); // A reply is never a query.
+        alice.receive("test", "Bob", CommandProtocol.TYPE_HELLO, bw.frames.get(0).body);
+        assertEquals(CapabilityDescriptor.gameplay().kinds(), alice.peerCapabilities("Bob").kinds());
+        int sent = aw.frames.size();
+        assertTrue(aw.frames.get(sent - 1).body.startsWith("1|hello|Alice|")); // Nobody unknown: plain hello.
+        bob.receive("test", "Alice", CommandProtocol.TYPE_HELLO, aw.frames.get(sent - 1).body);
+        assertEquals(1, bw.frames.size()); // Identical plain hello: no reply, no loop.
+    }
+
+    // Ostinato: 2026-11-12 follow-up - a lost hello or reply was never retried while caps stayed unknown.
+    @Test
+    public void unknownPeerCapsAreReaskedWithBackoffUntilLearned() {
+        AtomicLong clock = new AtomicLong(Phase1Support.T0);
+        Wire aw = new Wire();
+        CommandProtocol alice = node("Alice", aw, clock);
+        alice.noteOnlineMembers(Set.of("Alice", "Bob")); // Query at T0; Bob's reply is lost.
+        assertEquals(1, aw.frames.size());
+        clock.set(Phase1Support.T0 + CommandProtocol.CAPS_PROBE_MIN_MS - 1);
+        alice.pump();
+        assertEquals(1, aw.frames.size());
+        clock.set(Phase1Support.T0 + CommandProtocol.CAPS_PROBE_MIN_MS);
+        alice.pump();
+        assertEquals(2, aw.frames.size()); // Re-asked 5 s after the relaunch.
+        assertTrue(aw.frames.get(1).body.startsWith("1|helloq|Alice|"));
+        clock.set(Phase1Support.T0 + 3 * CommandProtocol.CAPS_PROBE_MIN_MS - 1);
+        alice.pump();
+        assertEquals(2, aw.frames.size()); // Backoff: next ask 10 s later, not 5.
+        clock.set(Phase1Support.T0 + 3 * CommandProtocol.CAPS_PROBE_MIN_MS);
+        alice.pump();
+        assertEquals(3, aw.frames.size()); // Third ask at 15 s.
+        alice.onDisconnect();
+        clock.set(Phase1Support.T0 + 60_000L);
+        alice.pump();
+        assertEquals(3, aw.frames.size()); // No asks while the link is down.
+        alice.onReconnect(); // The reconnect hello is itself a query.
+        int sent = aw.frames.size();
+        assertTrue(aw.frames.get(sent - 1).body.startsWith("1|helloq|Alice|"));
+        alice.receive("test", "Bob", CommandProtocol.TYPE_HELLO, "1|hello|Bob|Bobkey|" + CapabilityDescriptor.gameplay().encode());
+        sent = aw.frames.size();
+        clock.set(Phase1Support.T0 + 600_000L);
+        alice.pump();
+        assertEquals(sent, aw.frames.size()); // Learned: probing stops.
+    }
+
     @Test
     public void reconnectAndRosterJoinEdgesAdvertise() {
         Wire wire = new Wire();
