@@ -136,10 +136,14 @@ public class Phase1LinkDeliveryTest {
         bob.receive("test", "Alice", CommandProtocol.TYPE_HELLO, aw.frames.get(0).body);
         assertEquals(1, bw.frames.size());
         assertTrue(bw.frames.get(0).body.startsWith("1|hello|Bob|")); // A reply is never a query.
+        // Ostinato: live 11-12 - at NORMAL these sat behind a saturated chat queue for minutes; both must go HIGH.
+        assertEquals(SwarmPriority.HIGH, aw.frames.get(0).priority);
+        assertEquals(SwarmPriority.HIGH, bw.frames.get(0).priority);
         alice.receive("test", "Bob", CommandProtocol.TYPE_HELLO, bw.frames.get(0).body);
         assertEquals(CapabilityDescriptor.gameplay().kinds(), alice.peerCapabilities("Bob").kinds());
         int sent = aw.frames.size();
         assertTrue(aw.frames.get(sent - 1).body.startsWith("1|hello|Alice|")); // Nobody unknown: plain hello.
+        assertEquals(SwarmPriority.NORMAL, aw.frames.get(sent - 1).priority); // An announcement stays NORMAL.
         bob.receive("test", "Alice", CommandProtocol.TYPE_HELLO, aw.frames.get(sent - 1).body);
         assertEquals(1, bw.frames.size()); // Identical plain hello: no reply, no loop.
     }

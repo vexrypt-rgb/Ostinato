@@ -71,6 +71,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             "bastion", "boat", "farm", "build"));
 
     /** Done leases remembered for reconciliation reports. */
+    static final long RECONCILE_REPORT_MIN_MS = 120_000L; // Ostinato:
     static final int KEEP_DONE = 64;
     /**
      * Ostinato: hard cap on nonces remembered per lease. Nonces are kept for as long as a GRANT answering them
@@ -118,6 +119,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         boolean stopConfirmed;
         boolean rackOwed;
         String endReason;
+        long endedAt = Long.MIN_VALUE; // Ostinato: when the lease ended here, for the reconcile report filter.
         boolean reportOwed;
         boolean reportSent;
         ExecutionState exec;
@@ -400,10 +402,30 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         }
     }
 
+    // Ostinato: how long after its end a finished lease is still reported to a reconciling coordinator.
+    static long reconcileReportWindow(Lease l) {
+        return Math.max(RECONCILE_REPORT_MIN_MS, 2 * l.durationMs);
+    }
+
+    private void markEnded(Lease l) {
+        if (l.endedAt == Long.MIN_VALUE) {
+            l.endedAt = mono.getAsLong();
+        }
+    }
+
     private void onReconcileRequest(String from) {
         long now = mono.getAsLong();
         for (Lease l : leases.values()) {
             refresh(l, now);
+            // Ostinato: a lease that ended long ago is kept only for duplicate detection; the coordinator expired or
+            // released it before it went down, and an unreported record ends as reconcile-unclaimed anyway. Reporting
+            // all KEEP_DONE of them on every RREQ resend overran the chat budget (~40 lines/min, live 11-12), so the
+            // live lease's report came 62 s late and the hello replies the relaunched coordinator waited on never
+            // left the queue. A recent end is still reported: its record may be one the coordinator is holding.
+            if (l.phase == Phase.DONE && !l.active && l.endedAt != Long.MIN_VALUE
+                    && now - l.endedAt > reconcileReportWindow(l)) {
+                continue;
+            }
             send(from, report(l));
             // Ostinato: the restarted coordinator never saw the renew we were waiting on, and the backoff can put
             // our next renew past the deadline (live b5: the lease was kept, then fenced 9 s later). Renew on the
@@ -523,6 +545,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             log.accept("swarm-lease: released lease=" + l.leaseId + " gen=" + l.gen + " bot=self exec="
                     + t.execution.label());
             l.phase = Phase.DONE;
+            markEnded(l); // Ostinato:
             l.reportOwed = true;
         } else if ((terminal || t.leaseEnded) && !l.reportSent && (l.phase == Phase.EXPIRED || l.phase == Phase.REVOKED)) {
             l.reportOwed = true;
@@ -536,6 +559,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     private void endLease(Lease l, Phase to, String reason, List<Runnable> after) {
         Phase from = l.phase;
         l.phase = to;
+        markEnded(l); // Ostinato:
         if (l.endReason == null) {
             l.endReason = reason;
         }
@@ -602,11 +626,24 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         send(l.coordinator, new LeaseMessage(op, l.leaseId, l.resource, l.gen, l.commandId, now, l.durationMs, "-"));
     }
 
+    /** Ostinato: one value inside the comma-separated SWL extra field: no comma, '=' or space. */
+    static String wireToken(String v) {
+        String t = v.replaceAll("[^A-Za-z0-9_:.+/-]+", "_");
+        if (t.length() > 64) {
+            t = t.substring(0, 64);
+        }
+        return t.isEmpty() ? "none" : t;
+    }
+
     private LeaseMessage report(Lease l) {
+        // Ostinato: the exec label of every terminal state ("canceled (confirmed)") has a space and brackets, which
+        // the SWL extra field does not allow, so the receiver dropped the whole REPORT: a finished lease was never
+        // reported, and still cost a chat line. Send the enum name (ExecutionState.parse accepts it) and keep the
+        // free-text stop reason to the wire's charset.
         String extra = "phase=" + l.phase.name().toLowerCase(Locale.ROOT)
-                + ",exec=" + (l.exec == null ? "none" : l.exec.label())
-                + ",obs=" + l.obs.label()
-                + ",reason=" + (l.endReason == null ? "none" : l.endReason)
+                + ",exec=" + (l.exec == null ? "none" : l.exec.name().toLowerCase(Locale.ROOT))
+                + ",obs=" + l.obs.name().toLowerCase(Locale.ROOT)
+                + ",reason=" + (l.endReason == null ? "none" : wireToken(l.endReason))
                 + ",active=" + l.active;
         return new LeaseMessage(LeaseMessage.Op.REPORT, l.leaseId, l.resource, l.gen, l.commandId, 0, 0, extra);
     }
