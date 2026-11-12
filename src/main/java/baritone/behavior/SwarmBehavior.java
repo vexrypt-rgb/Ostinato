@@ -26,6 +26,13 @@ import baritone.swarm.crypto.SigilEd25519;
 import baritone.swarm.crypto.SigilCircle;
 import baritone.swarm.protocol.AtCatalogBridge;
 import baritone.swarm.frame.SwarmFrame;
+import baritone.swarm.frame.SwarmMessage;
+import baritone.swarm.lease.BotLeaseGuard;
+import baritone.swarm.lease.CoordinatorStore;
+import baritone.swarm.lease.LeaseCoordinator;
+import baritone.swarm.lease.LeaseFence;
+import baritone.swarm.lease.LeaseMessage;
+import baritone.swarm.lease.LeaseRate;
 import baritone.swarm.protocol.CommandProtocol;
 import baritone.swarm.protocol.RegistryExecutor;
 import baritone.swarm.roster.SwarmRoster;
@@ -71,6 +78,10 @@ public final class SwarmBehavior extends Behavior implements Helper {
         final Path rosterPath;
         final byte[] rosterBytes;
         long nextRosterCheck;
+        /** Ostinato: sends one SWL body sealed at HIGH priority; null when leases and coordinator are off. */
+        java.util.function.BiPredicate<String, String> leaseSend;
+        /** Ostinato: roster members of this bot's groups, without self. */
+        Set<String> peers = Collections.emptySet();
 
         Link(String self, LocalRoutingTransport transport, SwarmControl control, CommandProtocol protocol,
              Status status, Path rosterPath, byte[] rosterBytes) {
@@ -94,6 +105,10 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private volatile boolean ownerEmergency;
     private volatile boolean immediateSafety;
     private volatile boolean localSurvival;
+    // Ostinato: Phase 2a leases. Kept across link restarts so a lease outlives a reconnect; null while off.
+    private BotLeaseGuard leaseGuard;
+    private LeaseCoordinator leaseCoordinator;
+    private final LeaseRate leaseRate = new LeaseRate(SwarmBehavior::nowMs);
     /** swarm* setting values the link was started with; a change (e.g. from the GUI) restarts it. */
     private String startedWith;
     // Ostinato: perf strip and link monitor. Written on the client thread, read by the command center.
@@ -181,6 +196,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
     private void tick(TickEvent event) {
         Settings s = Baritone.settings();
+        if (event.getType() == TickEvent.Type.IN) {
+            leaseTick(s); // Ostinato: the guard ticks with or without a link, so expiry still stops the bot.
+        }
         if (!s.swarmEnabled.value) {
             if (link != null || loading != null) {
                 stop();
@@ -253,8 +271,192 @@ public final class SwarmBehavior extends Behavior implements Helper {
             link.protocol.noteOnlineMembers(onlinePlayerNames());
         }
         link.control.tick();
+        coordinatorTick(s); // Ostinato:
         LocalPlayer player = ctx.player();
         link.transport.flush(nowMs(), line -> send(player, line));
+    }
+
+    // ---- Ostinato: Phase 2a leases -------------------------------------------------------------------------
+
+    private CommandProtocol leaseBoundTo;
+    private boolean coordinatorNeedsProtocolLogged;
+
+    /** Create, bind and tick the bot-side guard. swarmLeases=false drops it and clears the fence. */
+    private void leaseTick(Settings s) {
+        if (!s.swarmLeases.value) {
+            if (leaseGuard != null) {
+                if (leaseBoundTo != null) {
+                    leaseBoundTo.setLeaseHooks(null);
+                }
+                leaseGuard = null;
+                leaseBoundTo = null;
+                LeaseFence.clear();
+            }
+            return;
+        }
+        if (leaseGuard == null) {
+            BotLeaseGuard g = new BotLeaseGuard(this::sendLease, SwarmBehavior::nowMs, this::logDirect,
+                    SwarmBehavior::allowedCoordinator, this::stopLeasedProcess, BotLeaseGuard.LEASED_COMMANDS);
+            leaseGuard = g;
+            LeaseFence.install(() -> g.invalidActive() && leasedInControl());
+        }
+        CommandProtocol p = liveProtocol();
+        if (p != null && p != leaseBoundTo) {
+            leaseGuard.attach(p);
+            p.setLeaseHooks(leaseGuard);
+            leaseBoundTo = p;
+        }
+        leaseGuard.tick();
+        logLeaseRate();
+    }
+
+    private long nextRateLogAt = Long.MIN_VALUE;
+
+    /** Ostinato: the live SWL rate, once a minute while any lease traffic is in the window. */
+    private void logLeaseRate() {
+        long now = nowMs();
+        if (nextRateLogAt != Long.MIN_VALUE && now < nextRateLogAt) {
+            return;
+        }
+        nextRateLogAt = now + LeaseRate.WINDOW_MS;
+        for (String line : leaseRate.describe()) {
+            if (!line.contains(" out=0/min in=0/min")) {
+                logDirect(line);
+            }
+        }
+    }
+
+    /** Start (once the link is up) and tick the coordinator. Not the designated one: it refuses and says why. */
+    private void coordinatorTick(Settings s) {
+        if (!s.swarmCoordinator.value) {
+            leaseCoordinator = null;
+            return;
+        }
+        Link l = link;
+        if (l == null) {
+            return;
+        }
+        if (l.protocol == null) {
+            if (!coordinatorNeedsProtocolLogged) {
+                coordinatorNeedsProtocolLogged = true;
+                logDirect("swarm-lease: refused coordinator=" + l.self + " reason=swarmCommandProtocol is false");
+            }
+            return;
+        }
+        if (leaseCoordinator == null || !leaseCoordinator.self().equalsIgnoreCase(l.self)) {
+            Path state = ctx.minecraft().gameDirectory.toPath().resolve("ostinato").resolve("swarm")
+                    .resolve("coordinator.state");
+            leaseCoordinator = new LeaseCoordinator(l.self, SwarmBehavior::allowedCoordinator,
+                    new CoordinatorStore(state), this::sendLease,
+                    new LeaseCoordinator.Commands() {
+                        @Override
+                        public String submitLeased(String bot, String line, UUID id) {
+                            CommandProtocol p = liveProtocol();
+                            return p == null ? "swarm: link is not running" : p.submitLeased(bot, line, id);
+                        }
+
+                        @Override
+                        public String refusal(String bot, String line) {
+                            CommandProtocol p = liveProtocol();
+                            return p == null ? "link is not running" : p.leaseRefusal(bot, line);
+                        }
+                    },
+                    SwarmBehavior::nowMs, System::currentTimeMillis, this::logDirect,
+                    () -> Baritone.settings().swarmLeaseSec.value * 1000L,
+                    Baritone.settings().swarmLeaseMarginMs.value, LeaseCoordinator.DEFAULT_SKEW_MS,
+                    name -> {
+                        Link cur = link;
+                        return cur == null || !cur.transport.isLocal(name);
+                    },
+                    () -> {
+                        Link cur = link;
+                        return cur == null ? Collections.<String>emptySet() : cur.peers;
+                    });
+        }
+        if (leaseCoordinator.mode() == LeaseCoordinator.Mode.IDLE) {
+            if (!l.protocol.linkUp()) {
+                return;
+            }
+            leaseCoordinator.start();
+        }
+        leaseCoordinator.tick();
+        logLeaseRate();
+    }
+
+    /** swarmCoordinatorId, else agentOwner. Bots take coordinator ops only from this member. */
+    private static String allowedCoordinator() {
+        Settings s = Baritone.settings();
+        String c = s.swarmCoordinatorId.value == null ? "" : s.swarmCoordinatorId.value.trim();
+        if (!c.isEmpty()) {
+            return c;
+        }
+        return s.agentOwner.value == null ? "" : s.agentOwner.value.trim();
+    }
+
+    private boolean sendLease(String to, String body) {
+        Link l = link;
+        if (l == null || l.leaseSend == null) {
+            return false;
+        }
+        boolean ok = l.leaseSend.test(to, body);
+        if (ok) {
+            leaseRate.sent(to);
+        }
+        return ok;
+    }
+
+    /** SWL inbound, on the tick thread (SwarmControl.tick). */
+    private void onLeaseMessage(SwarmMessage msg) {
+        LeaseMessage m = LeaseMessage.parse(msg.body());
+        if (m == null) {
+            return;
+        }
+        leaseRate.received(msg.from());
+        BotLeaseGuard g = leaseGuard;
+        if (g != null && m.op.fromCoordinator()) {
+            g.onMessage(msg.from(), m);
+        }
+        LeaseCoordinator c = leaseCoordinator;
+        if (c != null) {
+            c.onMessage(msg.from(), m); // Bot ops; a coordinator op from a rival is counted there.
+        }
+    }
+
+    private List<IBaritoneProcess> leasedProcesses() {
+        return List.of(baritone.getMineProcess(), baritone.getTunnelProcess(), baritone.getBuilderProcess(),
+                baritone.getCustomGoalProcess());
+    }
+
+    /** True while one of the leased processes (mine, tunnel, builder, custom goal) is the one in control. */
+    private boolean leasedInControl() {
+        try {
+            Optional<IBaritoneProcess> p = baritone.getPathingControlManager().mostRecentInControl();
+            return p.isPresent() && leasedProcesses().contains(p.get());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Stop only the leased processes, never survival and never cancelEverything. True once none of them is active
+     * or in control; the guard calls again each tick until then.
+     */
+    private boolean stopLeasedProcess(UUID commandId) {
+        try {
+            for (IBaritoneProcess p : leasedProcesses()) {
+                if (p.isActive()) {
+                    p.onLostControl();
+                }
+            }
+            for (IBaritoneProcess p : leasedProcesses()) {
+                if (p.isActive()) {
+                    return false;
+                }
+            }
+            return !leasedInControl();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     // Ostinato: read the tab roster on the client tick thread, never in the async loader.
@@ -301,6 +503,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
         loadingFor = self;
         // Ostinato: @ catalog text, read on this thread. Null when the protocol is off or TenorClef is absent.
         final boolean protocolOn = s.swarmCommandProtocol.value;
+        final boolean leasesOn = s.swarmLeases.value; // Ostinato:
+        final boolean coordinatorOn = s.swarmCoordinator.value; // Ostinato:
         final Set<String> online = protocolOn ? onlinePlayerNames() : Set.of(); // Ostinato: initial snapshot.
         final String atCatalog = protocolOn ? AtCatalogBridge.exportInstalled() : null;
         loading = CompletableFuture.supplyAsync(() -> {
@@ -375,7 +579,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
                     created.setImmediateSafety(immediateSafety);
                     created.setLocalSurvival(localSurvival);
                     created.setGroups(groupIds);
-                    created.setLocalCapabilities(CapabilityDescriptor.gameplay());
+                    // Ostinato: advertise the lease cap only while swarmLeases is on.
+                    created.setLocalCapabilities(leasesOn ? CapabilityDescriptor.of("navigation", "mining",
+                            "building", "combat", "inventory", "lease") : CapabilityDescriptor.gameplay());
                     try {
                         Map<String, SigilEd25519> pins = SwarmKeys.signets(sigilHome);
                         for (Map.Entry<String, SigilEd25519> e : pins.entrySet()) {
@@ -395,7 +601,20 @@ public final class SwarmBehavior extends Behavior implements Helper {
                     protocol = created;
                     status.protocol = created; // Ostinato: retried count for the link monitor.
                 }
-                return new Link(self, transport, control, protocol, status, rp, rosterBytes); // Ostinato:
+                Link made = new Link(self, transport, control, protocol, status, rp, rosterBytes); // Ostinato:
+                // Ostinato: Phase 2a SWL rides the same sealed link at HIGH priority. Off, nothing registers.
+                if (leasesOn || coordinatorOn) {
+                    Set<String> peers = new HashSet<>();
+                    for (SwarmRoster.Group g : roster.groupsOf(self)) {
+                        peers.addAll(g.members());
+                    }
+                    peers.removeIf(m -> m.equalsIgnoreCase(self));
+                    made.peers = Collections.unmodifiableSet(peers);
+                    made.leaseSend = (to, body) -> sendSealed(endpoint, roster, self, to, LeaseMessage.TYPE, body,
+                            SwarmPriority.HIGH);
+                    control.registerHandler(LeaseMessage.TYPE, this::onLeaseMessage);
+                }
+                return made;
             } catch (RuntimeException e) {
                 throw e;
             } catch (Exception e) {
@@ -596,13 +815,52 @@ public final class SwarmBehavior extends Behavior implements Helper {
         Link l = link;
         List<String> base = l == null ? Collections.singletonList("swarm: " + state()) : l.control.statusLines();
         CommandProtocol p = anyProtocol();
-        if (p == null) {
-            return base;
-        }
         // Ostinato: read-only protocol lines. Building this list does not touch execution.
         List<String> all = new ArrayList<>(base);
-        all.addAll(p.statusLines());
+        if (p != null) {
+            all.addAll(p.statusLines());
+        }
+        all.addAll(leaseStatusLines());
         return all;
+    }
+
+    /** Ostinato: lease guard, coordinator and SWL rate lines; empty while both settings are off. */
+    public List<String> leaseStatusLines() {
+        List<String> out = new ArrayList<>();
+        BotLeaseGuard g = leaseGuard;
+        if (g != null) {
+            out.add("swarm-lease guard: coordinator=" + allowedCoordinator() + " ignored=" + g.ignoredCount()
+                    + " grantRejects=" + g.grantRejectCount() + " fenceDenials=" + LeaseFence.denials());
+            for (String line : g.describe()) {
+                out.add("  " + line);
+            }
+        }
+        LeaseCoordinator c = leaseCoordinator;
+        if (c != null) {
+            out.addAll(c.describe());
+        }
+        if (g != null || c != null) {
+            out.addAll(leaseRate.describe());
+        }
+        return out;
+    }
+
+    /** Ostinato: {@code #swarm lease <bot> <resource> <command...>}. Only on the designated coordinator. */
+    public String leaseOffer(String bot, String resource, String commandLine) {
+        LeaseCoordinator c = leaseCoordinator;
+        if (c == null) {
+            return "swarm: swarmCoordinator is false (or the link is not up yet)";
+        }
+        return c.lease(bot, resource, commandLine);
+    }
+
+    /** Ostinato: {@code #swarm lease revoke <resource|leaseId>}. */
+    public String leaseRevoke(String resourceOrId) {
+        LeaseCoordinator c = leaseCoordinator;
+        if (c == null) {
+            return "swarm: swarmCoordinator is false (or the link is not up yet)";
+        }
+        return c.revoke(resourceOrId);
     }
 
     /** Builds one region of a file in the schematics folder, as ordered over the link. */

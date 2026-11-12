@@ -61,7 +61,7 @@ public class SwarmCommand extends Command {
     // Ostinato: tab-complete, the registry schema, and the command-center buttons share this list.
     public static final List<String> ACTIONS = List.of(
             "ping", "status", "reload", "build", "stop", "spawn", "despawn", "bots");
-    public static final List<String> PROTOCOL_ACTIONS = List.of("send", "outcome", "cancel");
+    public static final List<String> PROTOCOL_ACTIONS = List.of("send", "outcome", "cancel", "lease"); // Ostinato: + lease
 
     public SwarmCommand(IBaritone baritone) {
         super(baritone, "swarm");
@@ -219,10 +219,43 @@ public class SwarmCommand extends Command {
                 logDirect(swarm.cancelCommand(args.getString()));
                 return;
             }
+            case "lease": {
+                // Ostinato: #swarm lease status | revoke <resource|id> | <bot> <resource> <command...>.
+                Settings ls = Baritone.settings();
+                if (!ls.swarmLeases.value && !ls.swarmCoordinator.value) {
+                    throw new CommandInvalidStateException("swarm lease: swarmLeases and swarmCoordinator are both false");
+                }
+                String sub = args.hasAny() ? args.getString() : "status";
+                if (sub.equalsIgnoreCase("status")) {
+                    args.requireMax(0);
+                    List<String> lines = swarm.leaseStatusLines();
+                    if (lines.isEmpty()) {
+                        logDirect("swarm-lease: no guard or coordinator yet (link not up?)");
+                    }
+                    lines.forEach(this::logDirect);
+                    return;
+                }
+                if (sub.equalsIgnoreCase("revoke")) {
+                    args.requireExactly(1);
+                    logDirect(swarm.leaseRevoke(args.getString()));
+                    return;
+                }
+                args.requireMin(2);
+                String resource = args.getString();
+                StringBuilder line = new StringBuilder();
+                while (args.hasAny()) {
+                    if (line.length() > 0) {
+                        line.append(' ');
+                    }
+                    line.append(args.getString());
+                }
+                logDirect(swarm.leaseOffer(sub, resource, line.toString()));
+                return;
+            }
             default:
                 // Ostinato: the extra words appear only while swarmCommandProtocol is on.
                 String expected = Baritone.settings().swarmCommandProtocol.value
-                        ? "ping, status, reload, build, stop, spawn, despawn, bots, send, outcome or cancel" // Ostinato:
+                        ? "ping, status, reload, build, stop, spawn, despawn, bots, send, outcome, cancel or lease" // Ostinato:
                         : "ping, status, reload, build, stop, spawn, despawn or bots"; // Ostinato:
                 throw new CommandInvalidTypeException(args.consumed(), expected);
         }
