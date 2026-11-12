@@ -335,6 +335,22 @@ public final class CommandProtocol {
         return line;
     }
 
+    /**
+     * Ostinato: the lease bound to command {@code id} ended and its deadline plus margin passed, so the old holder
+     * no longer holds authorization for it. Its observation stays unknown; it just stops blocking new leased work.
+     */
+    public void fenced(UUID id) {
+        if (id == null) {
+            return;
+        }
+        synchronized (lock) {
+            Sent s = outbound.get(id);
+            if (s != null) {
+                s.fenced = true;
+            }
+        }
+    }
+
     /** False for mine/place (and other non-idempotent acts) when the previous observation is unknown. */
     public boolean mayRetry(UUID previousId, String commandName) {
         if (previousId == null || commandName == null) {
@@ -360,7 +376,8 @@ public final class CommandProtocol {
             return false;
         }
         for (Sent s : outbound.values()) {
-            if (s.observation == ObservationState.UNKNOWN && nonIdempotent(nameOfBody(s.body))) {
+            // Ostinato: a fenced command stays observation-unknown but no longer blocks a new leased one.
+            if (s.observation == ObservationState.UNKNOWN && !s.fenced && nonIdempotent(nameOfBody(s.body))) {
                 return true;
             }
         }
@@ -1829,6 +1846,8 @@ public final class CommandProtocol {
         public String ackReason;
         public ExecutionState execution;
         public ObservationState observation;
+        /** Ostinato: its lease ended and the fence passed, so the holder can no longer act on it. */
+        public boolean fenced;
 
         Sent(UUID id, String target, String body, long deadline) {
             this.id = id;

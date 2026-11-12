@@ -171,6 +171,11 @@ final class LeaseSupport {
                     public String refusal(String b, String line) {
                         return aliceP.leaseRefusal(b, line);
                     }
+
+                    @Override
+                    public void fenced(UUID id) {
+                        aliceP.fenced(id); // Ostinato:
+                    }
                 },
                 mono::get, wall::get, log::add, () -> 30_000L, 3_000L, 0L, p -> chatLink, () -> List.of("Bob"));
     }

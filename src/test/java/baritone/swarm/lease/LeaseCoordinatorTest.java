@@ -214,6 +214,53 @@ public class LeaseCoordinatorTest {
         assertTrue(s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER).isEmpty());
     }
 
+    /**
+     * Ostinato: live kill check, 2026-11-12. The holder died mid-mine, its lease expired, and the coordinator still
+     * refused every replacement because the dead holder's mine stayed observation-unknown. Expiry plus margin is the
+     * fence, so after it the replacement is offered at gen+1; before it the answer is "busy".
+     */
+    @Test
+    public void replacementAfterHolderDiesIsOfferedOnceTheFencePasses() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        assertEquals(LeaseRecord.State.GRANTED, s.coord.record(id).state);
+        s.dropTo.add("Bob"); // the holder's client is gone: nothing reaches it, nothing comes back
+        s.dropTo.add("Alice");
+        s.aliceP.onPeerDisconnect("Bob"); // its mine is now observation-unknown
+        String early = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(early, early.contains("busy") && early.contains("gen 1"));
+        s.run(30_000L, 1_000L);
+        String inside = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue("within D+M: " + inside, inside.contains("busy"));
+        s.run(4_000L, 1_000L);
+        assertEquals(LeaseRecord.State.EXPIRED, s.coord.record(id).state);
+        s.relaunchBob();
+        s.bobExec.byName.clear();
+        s.dropTo.clear();
+        String again = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(again, again.contains("gen 2"));
+        s.pump();
+        assertEquals(1, s.bobExec.count("mine"));
+    }
+
+    /** Ostinato: the fence only frees leased work; an unleased mine with an unknown outcome still blocks. */
+    @Test
+    public void unleasedUnknownMineStillBlocksAfterAnExpiry() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "ore1", "mine diamond_ore");
+        s.pump();
+        s.dropTo.add("Bob");
+        s.dropTo.add("Alice");
+        s.aliceP.submit("Bob", "mine coal_ore"); // unleased, never answered
+        s.aliceP.onPeerDisconnect("Bob");
+        s.run(34_000L, 1_000L);
+        assertEquals(LeaseRecord.State.EXPIRED, s.coord.record(LeaseSupport.leaseIdOf(r)).state);
+        String again = s.coord.lease("Bob", "ore1", "mine iron_ore");
+        assertTrue(again, again.contains("not offering") && again.contains("observation is unknown"));
+    }
+
     @Test
     public void noOfferForCommandThatWouldNotSend() throws Exception {
         LeaseSupport s = active();

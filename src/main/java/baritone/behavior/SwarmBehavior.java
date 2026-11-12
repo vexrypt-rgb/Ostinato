@@ -360,6 +360,15 @@ public final class SwarmBehavior extends Behavior implements Helper {
                             CommandProtocol p = liveProtocol();
                             return p == null ? "link is not running" : p.leaseRefusal(bot, line);
                         }
+
+                        @Override
+                        public void fenced(UUID id) {
+                            // Ostinato: the old holder's authorization ended, so its unknown mine stops blocking.
+                            CommandProtocol p = liveProtocol();
+                            if (p != null) {
+                                p.fenced(id);
+                            }
+                        }
                     },
                     SwarmBehavior::nowMs, System::currentTimeMillis, this::logDirect,
                     () -> Baritone.settings().swarmLeaseSec.value * 1000L,

@@ -63,6 +63,10 @@ public final class LeaseCoordinator {
 
         /** Ostinato: why the command line would be refused if sent now, or null. Called outside the lock. */
         String refusal(String bot, String commandLine);
+
+        /** Ostinato: the lease bound to this command ended and its fence passed. Called outside the lock. */
+        default void fenced(UUID commandId) {
+        }
     }
 
     /** Prefix of {@link Commands#submitLeased} output when the command was queued. */
@@ -105,6 +109,7 @@ public final class LeaseCoordinator {
     private long reconcileStartMono;
     private long lastRreqMono;
     private final Map<String, Long> holderNotBefore = new HashMap<>(); // lower-cased bot -> latest notBeforeWall
+    private final List<UUID> prunedFenced = new ArrayList<>(); // Ostinato: fenced commands of pruned records
     private final Set<String> reported = new HashSet<>();
     private final Map<UUID, Claim> claims = new LinkedHashMap<>();
     private final List<Object[]> heldRequests = new ArrayList<>(); // {from, LeaseMessage}
@@ -668,6 +673,15 @@ public final class LeaseCoordinator {
 
     /** Lease {@code resource} to {@code bot} and, once granted, send it {@code commandLine}. Returns a status line. */
     public String lease(String bot, String resource, String commandLine) {
+        // Ostinato: a live or still-fenced lease is the first answer the operator needs.
+        String busy = LeaseMessage.validResource(resource) ? busyReason(resource) : null;
+        if (busy != null) {
+            return "swarm-lease: resource " + resource + " busy: " + busy;
+        }
+        // Ostinato: commands of leases whose fence passed no longer block new leased work.
+        for (UUID id : fencedCommands()) {
+            commands.fenced(id);
+        }
         // Ostinato: ask outside the lock (the protocol has its own) whether the command could be sent at all.
         String refused = commandLine == null || bot == null ? null : commands.refusal(bot, commandLine.trim());
         if (refused != null) {
@@ -689,7 +703,7 @@ public final class LeaseCoordinator {
             if (commandLine == null || commandLine.trim().isEmpty()) {
                 return "swarm-lease: lease needs a command";
             }
-            String busy = busyReason(resource);
+            busy = busyReason(resource);
             if (busy != null) {
                 return "swarm-lease: resource " + resource + " busy: " + busy;
             }
@@ -753,6 +767,21 @@ public final class LeaseCoordinator {
     // ---- queries ----------------------------------------------------------------------------------------
 
     /** Null when {@code resource} may be leased now, else why not. */
+    /** Ostinato: command ids of ended leases whose deadline plus margin and notBefore have both passed. */
+    synchronized List<UUID> fencedCommands() {
+        long now = mono.getAsLong();
+        long w = wall.getAsLong();
+        List<UUID> out = new ArrayList<>(prunedFenced);
+        prunedFenced.clear();
+        for (LeaseRecord r : records.values()) {
+            if (r.commandId != null && !r.state.live() && r.state != LeaseRecord.State.OFFERED && w >= r.notBeforeWall
+                    && (r.coordDeadlineMono == Long.MIN_VALUE || now >= r.coordDeadlineMono)) {
+                out.add(r.commandId);
+            }
+        }
+        return out;
+    }
+
     public synchronized String busyReason(String resource) {
         long w = wall.getAsLong();
         long now = mono.getAsLong();
@@ -849,6 +878,9 @@ public final class LeaseCoordinator {
         for (Iterator<LeaseRecord> it = records.values().iterator(); it.hasNext() && terminal > CoordinatorStore.KEEP_TERMINAL; ) {
             LeaseRecord r = it.next();
             if (!r.state.live() && w >= r.notBeforeWall) {
+                if (r.commandId != null) {
+                    prunedFenced.add(r.commandId); // Ostinato: still owed its fence after the record is gone.
+                }
                 it.remove();
                 durations.remove(r.leaseId);
                 lastResend.remove(r.leaseId);
