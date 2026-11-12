@@ -171,6 +171,28 @@ public class LeaseCoordinatorTest {
         assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
     }
 
+    // Ostinato: live 2026-11-12 (b7) - after the restart the coordinator kept the lease, then re-submitted the bound
+    // command on the first renew; caps were not relearned yet, the submit was refused and the lease was revoked.
+    @Test
+    public void keptLeaseDoesNotResubmitItsCommandAfterRestart() throws Exception {
+        LeaseSupport s = active();
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.run(5_000L, 1_000L);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        int mines = s.bobExec.count("mine");
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.refuseAfterGrant = true; // any submit now is refused, as with caps unknown after a relaunch
+        s.coord.start();
+        s.pump();
+        s.run(60_000L, 1_000L);
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertFalse(s.logged("reason=command-refused"));
+        assertEquals(LeaseRecord.State.GRANTED, s.coord.record(id).state);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        assertEquals(mines, s.bobExec.count("mine"));
+    }
+
     @Test
     public void chatHolderThatNeverReportsStillTimesOut() throws Exception {
         LeaseSupport s = active();

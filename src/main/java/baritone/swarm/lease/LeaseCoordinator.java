@@ -522,6 +522,12 @@ public final class LeaseCoordinator {
                     && highWater.getOrDefault(r.resource, 0L) == r.gen;
             if (keep) {
                 kept.add(r.leaseId);
+                // Ostinato: live b7 - commandSent is not persisted, so the first renew after a restart re-submitted
+                // the bound command; with caps not yet relearned that was refused and the kept lease got revoked.
+                // A holder whose report shows the command already has it; nothing must be sent again.
+                if (!"none".equals(c.extra.getOrDefault("exec", "none")) || "true".equals(c.extra.get("active"))) {
+                    r.commandSent = true;
+                }
                 log.accept("swarm-lease: kept lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot);
                 continue;
             }
