@@ -74,6 +74,17 @@ public interface ISwarm {
     default void setExternalCommandHook(baritone.api.swarm.protocol.ExternalCommandHook hook) {
     }
 
+    /**
+     * Ostinato: run a local player {@code @} chat line through the unified command registry, the same one the
+     * command center window uses. Returns true when the registry handled the line; it may or may not have run
+     * {@code body} (a refused line does not run). Returns false when no registry is installed, and the caller
+     * then runs {@code body} itself. Exceptions thrown by {@code body} reach the caller. Works while the link is
+     * offline. Older Ostinato builds that lack this method also mean "run it yourself".
+     */
+    default boolean localAt(String line, Runnable body) {
+        return false;
+    }
+
     /** Ostinato: safety hierarchy level 1. Swarm commands do not override it. */
     default void noteImmediateSafety(boolean on) {
     }
