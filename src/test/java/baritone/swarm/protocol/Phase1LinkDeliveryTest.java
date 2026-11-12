@@ -97,6 +97,29 @@ public class Phase1LinkDeliveryTest {
         assertEquals(3, aw.frames.size());
     }
 
+    // Ostinato: live 2026-11-12 - a relaunched coordinator never learned caps ("bot capabilities are unknown").
+    @Test
+    public void relaunchedPeerLearnsCapsWhenOurJoinHelloArrivedTooEarly() {
+        AtomicLong clock = new AtomicLong(Phase1Support.T0);
+        Wire aw = new Wire();
+        CommandProtocol alice = node("Alice", aw, clock);
+        alice.learnPeer("Bob", "Bobkey", CapabilityDescriptor.gameplay());
+        alice.noteOnlineMembers(Set.of("Alice", "Bob"));
+        int sent = aw.frames.size();
+        alice.noteOnlineMembers(Set.of("Alice")); // Bob's client dies.
+        assertNull(alice.peerCapabilities("Bob"));
+        alice.noteOnlineMembers(Set.of("Alice", "Bob")); // Bob rejoins; this hello is lost (no protocol yet).
+        assertEquals(sent + 1, aw.frames.size());
+        Wire bw = new Wire();
+        CommandProtocol bob = node("Bob", bw, clock);
+        bob.advertise(); // Bob's protocol comes up and says hello once.
+        alice.receive("test", "Bob", CommandProtocol.TYPE_HELLO, bw.frames.get(0).body);
+        assertEquals(sent + 2, aw.frames.size());
+        assertEquals(CommandProtocol.TYPE_HELLO, aw.frames.get(sent + 1).type);
+        bob.receive("test", "Alice", CommandProtocol.TYPE_HELLO, aw.frames.get(sent + 1).body);
+        assertEquals(CapabilityDescriptor.gameplay().kinds(), bob.peerCapabilities("Alice").kinds());
+    }
+
     @Test
     public void reconnectAndRosterJoinEdgesAdvertise() {
         Wire wire = new Wire();

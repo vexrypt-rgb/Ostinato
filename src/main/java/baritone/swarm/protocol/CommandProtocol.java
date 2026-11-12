@@ -210,6 +210,13 @@ public final class CommandProtocol {
             peers.retainAll(members);
             peers.remove(self.memberId());
             joined = !onlineMembers.containsAll(peers);
+            // Ostinato: forget a departed peer's caps. A relaunched peer's startup hello then reads as
+            // new and gets our hello back; our join-edge hello can land before its protocol exists.
+            for (String gone : onlineMembers) {
+                if (!peers.contains(gone)) {
+                    peerCaps.remove(gone);
+                }
+            }
             onlineMembers.clear();
             onlineMembers.addAll(peers);
         }
