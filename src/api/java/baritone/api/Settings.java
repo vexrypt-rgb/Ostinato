@@ -2161,6 +2161,37 @@ public final class Settings {
     public final Setting<Boolean> swarmCommandProtocol = new Setting<>(false);
 
     /**
+     * Ostinato: swarm Phase 2a bot side. On, a command marked lease-needing ({@code mine}, {@code tunnel}) only
+     * starts with a lease from the coordinator, and Baritone's break, place and container clicks for it stop when
+     * the lease runs out. Eating, fleeing and fighting never wait for a lease. Needs {@link #swarmCommandProtocol}.
+     * Off (with {@link #swarmCoordinator} off) is exactly Phase 1.
+     */
+    public final Setting<Boolean> swarmLeases = new Setting<>(false);
+
+    /**
+     * Ostinato: run the swarm lease coordinator in this client. Only one client may run it; a second one stays
+     * inactive and logs why. Its state is kept in {@code ostinato/swarm/coordinator.state} in the game directory.
+     */
+    public final Setting<Boolean> swarmCoordinator = new Setting<>(false);
+
+    /**
+     * Ostinato: the member whose lease messages bots accept. Empty means the circle owner (the first roster lead).
+     * Lease messages from anyone else are ignored and counted.
+     */
+    public final Setting<String> swarmCoordinatorId = new Setting<>("");
+
+    /**
+     * Ostinato: lease length in seconds. Bots renew at a third of it. On a chat transport it is raised to at least
+     * 60 so renewals stay inside the whisper budget.
+     */
+    public final Setting<Integer> swarmLeaseSec = new Setting<>(30);
+
+    /**
+     * Ostinato: extra milliseconds the coordinator waits past a lease's end before it treats the lease as gone.
+     */
+    public final Setting<Integer> swarmLeaseMarginMs = new Setting<>(3000);
+
+    /**
      * Swarm: send a small status sample (path time, tick rate, ping, RAM, chat budget) to the group
      * for the command center. With the command protocol on it rides every third heartbeat, so no
      * extra chat lines; off, one low-priority line every 30 s, only while the send queue is empty.

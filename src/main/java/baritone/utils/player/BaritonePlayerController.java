@@ -18,6 +18,7 @@
 package baritone.utils.player;
 
 import baritone.api.utils.IPlayerController;
+import baritone.swarm.lease.LeaseFence;
 import baritone.utils.accessor.IPlayerControllerMP;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -58,6 +59,9 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public boolean onPlayerDamageBlock(BlockPos pos, Direction side) {
+        if (LeaseFence.denied()) { // Ostinato: no break while a leased command runs on an invalid lease
+            return false;
+        }
         return mc.gameMode.continueDestroyBlock(pos, side);
     }
 
@@ -68,6 +72,10 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
+        // Ostinato: shared containers (windowId != 0) are fenced; the player's own inventory (0) never is.
+        if (windowId != 0 && LeaseFence.denied()) {
+            return;
+        }
         mc.gameMode.handleContainerInput(windowId, slotId, mouseButton, type, player);
     }
 
@@ -79,6 +87,9 @@ public final class BaritonePlayerController implements IPlayerController {
     @Override
     public InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
         // primaryplayercontroller is always in a ClientWorld so this is ok
+        if (LeaseFence.denied()) { // Ostinato: no place/use-on-block on an invalid lease
+            return InteractionResult.PASS;
+        }
         return mc.gameMode.useItemOn(player, hand, result);
     }
 
@@ -89,6 +100,9 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public boolean clickBlock(BlockPos loc, Direction face) {
+        if (LeaseFence.denied()) { // Ostinato: no break start on an invalid lease
+            return false;
+        }
         return mc.gameMode.startDestroyBlock(loc, face);
     }
 
