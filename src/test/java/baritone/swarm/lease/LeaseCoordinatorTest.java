@@ -146,6 +146,31 @@ public class LeaseCoordinatorTest {
         assertEquals("lease-expired", s.coord.record(id).endReason); // the bot's own report, not a timeout
     }
 
+    // Ostinato: live 2026-11-12 (b5) - the coordinator came back 16 s before the holder's deadline and kept the
+    // lease, but the holder's renew backoff had already put its next renew past the deadline, so it fenced anyway.
+    @Test
+    public void keptLeaseIsRenewedBeforeTheHoldersDeadline() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.run(10_000L, 1_000L);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        s.dropTo.add("Alice"); // the coordinator's client dies
+        for (int i = 0; i < 34; i++) {
+            s.advance(1_000L);
+            s.guard.tick();
+            s.pump();
+        }
+        s.dropTo.clear();
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.coord.start();
+        s.pump();
+        s.run(25_000L, 1_000L); // well past the deadline the holder had when the coordinator died
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+    }
+
     @Test
     public void chatHolderThatNeverReportsStillTimesOut() throws Exception {
         LeaseSupport s = active();

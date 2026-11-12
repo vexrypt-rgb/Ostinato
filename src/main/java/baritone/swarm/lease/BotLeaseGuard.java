@@ -405,6 +405,13 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         for (Lease l : leases.values()) {
             refresh(l, now);
             send(from, report(l));
+            // Ostinato: the restarted coordinator never saw the renew we were waiting on, and the backoff can put
+            // our next renew past the deadline (live b5: the lease was kept, then fenced 9 s later). Renew on the
+            // next tick, behind the report; the coordinator holds it until reconciliation ends.
+            if (l.phase == Phase.VALID && l.awaitingRenew) {
+                l.awaitingRenew = false;
+                l.nextRenewAt = now;
+            }
         }
         send(from, new LeaseMessage(LeaseMessage.Op.REPORT, null, "-", 0, null, 0, 0, "end"));
     }
