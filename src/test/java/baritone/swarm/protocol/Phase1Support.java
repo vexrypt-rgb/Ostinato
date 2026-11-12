@@ -65,6 +65,7 @@ final class Phase1Support {
         final Map<String, CommandCatalog.Entry> extra = new LinkedHashMap<>();
         int confirmCalls;
         boolean confirm = true;
+        int pathingFor; // Ostinato: confirmStopped answers false this many more times, then answers confirm.
         ExecutionState poll;
 
         int count(String name) {
@@ -109,6 +110,10 @@ final class Phase1Support {
         @Override
         public boolean confirmStopped(UUID id) {
             confirmCalls++;
+            if (pathingFor > 0) { // Ostinato:
+                pathingFor--;
+                return false;
+            }
             return confirm;
         }
 

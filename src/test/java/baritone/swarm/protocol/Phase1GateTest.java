@@ -327,6 +327,10 @@ public class Phase1GateTest {
         linked.exec.confirm = false;
         UUID liveCancel = UUID.randomUUID();
         linked.bob.receive("ipc", "Alice", CommandProtocol.TYPE_CMD, linked.cmd(liveCancel, "Alice", "Bob", "cancel", live.toString(), false));
+        // Ostinato: the stop is re-checked each tick; it settles as unknown once the window runs out.
+        for (int i = 0; i < CommandProtocol.CANCEL_CONFIRM_WINDOW_TICKS; i++) {
+            linked.bob.pollExecutions();
+        }
         assertEquals(ExecutionState.RUNNING, linked.bob.lookup(live).execution);
         assertEquals(ObservationState.UNKNOWN, linked.bob.lookup(live).observation);
         assertEquals(ExecutionState.RUNNING, linked.bob.lookup(liveCancel).execution);
