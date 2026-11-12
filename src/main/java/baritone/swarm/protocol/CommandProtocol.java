@@ -58,6 +58,8 @@ public final class CommandProtocol {
     public static final long DEFAULT_LEDGER_TTL_MS = 600_000L;
     /** How long {@code #swarm send} waits for an ack before it gives up, unless the caller passes one. */
     public static final long DEFAULT_DEADLINE_MS = 60_000L;
+    // Ostinato: client ticks a cancel keeps re-checking confirmStopped before it settles as unknown.
+    public static final int CANCEL_CONFIRM_WINDOW_TICKS = 40;
 
     private final Object lock = new Object();
     private long retried; // Ostinato: command frames sent again because no ack came yet.
@@ -72,6 +74,7 @@ public final class CommandProtocol {
     private final long retryMs;
     private final Map<UUID, Tracked> ledger = new LinkedHashMap<>();
     private final Map<UUID, Sent> outbound = new LinkedHashMap<>();
+    private final Map<UUID, PendingStop> pendingStops = new LinkedHashMap<>(); // Ostinato: keyed by target id.
     private final List<StatusView> views = new ArrayList<>();
     private boolean linkUp = true;
     private final Set<String> onlineMembers = new java.util.HashSet<>(); // Ostinato: join edges.
@@ -484,8 +487,7 @@ public final class CommandProtocol {
                     confirmed = false;
                 }
             }
-            String ack;
-            Decision targetAck = null; // Ostinato: snapshot the original outcome under the lock.
+            List<Decision> sends = new ArrayList<>(); // Ostinato: snapshot every ack under the lock.
             synchronized (lock) {
                 Tracked cancel = ledger.get(d.id);
                 Tracked target = d.cancelTarget == null ? null : ledger.get(d.cancelTarget);
@@ -499,41 +501,39 @@ public final class CommandProtocol {
                             move(target, ExecutionState.RUNNING);
                             target.observation = ObservationState.UNKNOWN;
                         }
-                    } else if (confirmed && target != null && !targetTerminal) {
-                        move(cancel, ExecutionState.RUNNING);
-                        move(cancel, ExecutionState.SUCCEEDED);
-                        cancel.observation = ObservationState.CONFIRMED;
-                        move(target, ExecutionState.RUNNING);
-                        move(target, ExecutionState.CANCELED);
-                        target.observation = ObservationState.CONFIRMED;
-                        target.rejectReason = null;
-                        targetAck = outcomeAck(target); // Ostinato: notify the original issuer too.
+                        sends.add(Decision.ack(from, ackBody(cancel)));
                     } else if (targetTerminal) {
                         // Verified finish won. The stop is not confirmed and must not rewrite the result.
                         move(cancel, ExecutionState.RUNNING);
                         cancel.observation = ObservationState.UNKNOWN;
                         cancel.rejectReason = "already-finished";
-                    } else {
-                        // Not confirmed (still running, or no such command). Unknown, never canceled.
+                        sends.add(Decision.ack(from, ackBody(cancel)));
+                    } else if (target == null) {
+                        // No such command. Unknown, never canceled.
                         move(cancel, ExecutionState.RUNNING);
                         cancel.observation = ObservationState.UNKNOWN;
-                        if (target != null && !targetTerminal) {
-                            move(target, ExecutionState.RUNNING);
-                            target.observation = ObservationState.UNKNOWN;
+                        sends.add(Decision.ack(from, ackBody(cancel)));
+                    } else {
+                        // Ostinato: pathing often outlives the first check. Hold the stop open and
+                        // re-check once per tick (pumpStops) until confirmed or the window runs out.
+                        PendingStop pending = pendingStops.get(target.id);
+                        if (pending == null) {
+                            pending = new PendingStop(target.id, CANCEL_CONFIRM_WINDOW_TICKS);
+                            pendingStops.put(target.id, pending);
+                        }
+                        move(cancel, ExecutionState.RUNNING);
+                        cancel.observation = ObservationState.CONFIRMED;
+                        pending.attach(cancel.id, from);
+                        if (confirmed) {
+                            settleStop(pending, true, sends);
+                        } else {
+                            sends.add(Decision.ack(from, ackBody(cancel))); // Ostinato: interim, non-terminal.
                         }
                     }
-                    ack = ackBody(cancel);
-                } else {
-                    ack = null;
                 }
             }
-            // Ostinato: send the original outcome outside the protocol lock.
-            if (targetAck != null) {
-                wire.send(targetAck.replyTo, TYPE_ACK, targetAck.ack, SwarmPriority.HIGH);
-            }
-            if (ack != null) {
-                wire.send(from, TYPE_ACK, ack, SwarmPriority.HIGH); // Ostinato: acks preempt retries.
-            }
+            // Ostinato: send outcomes outside the protocol lock; acks preempt retries.
+            sendAll(sends);
             return;
         }
         if (d.ack != null) {
@@ -556,6 +556,15 @@ public final class CommandProtocol {
                     t.observation = ObservationState.UNKNOWN;
                 }
             }
+            // Ostinato: an open stop window ends here as unknown. Nothing is sent now or on reconnect,
+            // and the stopped command no longer holds the busy slot.
+            for (PendingStop p : pendingStops.values()) {
+                Tracked target = ledger.get(p.target);
+                if (target != null && !target.execution.terminal()) {
+                    target.slotReleased = true;
+                }
+            }
+            pendingStops.clear();
             long now = clock.getAsLong();
             for (Sent s : outbound.values()) {
                 if (s.gaveUp) {
@@ -591,13 +600,15 @@ public final class CommandProtocol {
     } // Ostinato:
 
     public void pollExecutions() {
+        pumpStops(); // Ostinato: one stop re-check per tick, before outcomes are polled.
         List<UUID> running = new ArrayList<>();
         synchronized (lock) {
             if (!linkUp) {
                 return;
             }
             for (Tracked t : ledger.values()) {
-                if (t.started && t.execution == ExecutionState.RUNNING && t.observation != ObservationState.UNKNOWN) {
+                if (t.started && t.execution == ExecutionState.RUNNING && t.observation != ObservationState.UNKNOWN
+                        && !pendingStops.containsKey(t.id)) { // Ostinato: a stopping command is settled by its cancel.
                     running.add(t.id);
                 }
             }
@@ -618,7 +629,7 @@ public final class CommandProtocol {
                     return;
                 }
                 Tracked t = ledger.get(id);
-                if (t == null || t.execution.terminal()) {
+                if (t == null || t.execution.terminal() || pendingStops.containsKey(id)) { // Ostinato:
                     continue;
                 }
                 if (t.ambiguous) {
@@ -638,6 +649,90 @@ public final class CommandProtocol {
             // Ostinato: wire callbacks must not run under the protocol lock.
             if (outcome != null) {
                 wire.send(outcome.replyTo, TYPE_ACK, outcome.ack, SwarmPriority.HIGH);
+            }
+        }
+    }
+
+    // Ostinato: re-check every open stop once. Called once per client tick from pollExecutions.
+    private void pumpStops() {
+        List<UUID> targets;
+        synchronized (lock) {
+            if (!linkUp || pendingStops.isEmpty()) {
+                return;
+            }
+            targets = new ArrayList<>(pendingStops.keySet());
+        }
+        for (UUID id : targets) {
+            boolean confirmed;
+            try {
+                confirmed = executor.confirmStopped(id);
+            } catch (RuntimeException e) {
+                confirmed = false;
+            }
+            List<Decision> sends = new ArrayList<>();
+            synchronized (lock) {
+                PendingStop pending = pendingStops.get(id);
+                if (!linkUp || pending == null) {
+                    continue; // Ostinato: settled meanwhile, or the link drop already ended it.
+                }
+                if (confirmed) {
+                    settleStop(pending, true, sends);
+                } else if (--pending.ticksLeft <= 0) {
+                    settleStop(pending, false, sends);
+                }
+            }
+            sendAll(sends);
+        }
+    }
+
+    // Ostinato: caller holds lock. Ends one stop window with exactly one target outcome and one
+    // final ack per attached cancel. Unconfirmed ends as running/unknown and frees the busy slot.
+    private void settleStop(PendingStop pending, boolean confirmed, List<Decision> sends) {
+        pendingStops.remove(pending.target);
+        Tracked target = ledger.get(pending.target);
+        boolean finished = target == null || target.execution.terminal();
+        boolean canceled = confirmed && !finished;
+        if (!finished) {
+            move(target, ExecutionState.RUNNING);
+            if (canceled) {
+                move(target, ExecutionState.CANCELED);
+                target.observation = ObservationState.CONFIRMED;
+                target.rejectReason = null;
+            } else {
+                target.observation = ObservationState.UNKNOWN;
+                target.slotReleased = true;
+                log.accept("swarm: stop of " + target.id + " not confirmed in "
+                        + CANCEL_CONFIRM_WINDOW_TICKS + " ticks; observation unknown");
+            }
+            Decision outcome = outcomeAck(target); // Ostinato: notify the original issuer too.
+            if (outcome != null) {
+                sends.add(outcome);
+            }
+        }
+        for (int i = 0; i < pending.cancels.size(); i++) {
+            Tracked cancel = ledger.get(pending.cancels.get(i));
+            if (cancel == null || cancel.execution.terminal()) {
+                continue;
+            }
+            move(cancel, ExecutionState.RUNNING);
+            if (canceled) {
+                move(cancel, ExecutionState.SUCCEEDED);
+                cancel.observation = ObservationState.CONFIRMED;
+            } else {
+                cancel.observation = ObservationState.UNKNOWN;
+                if (finished) {
+                    cancel.rejectReason = "already-finished";
+                }
+            }
+            sends.add(Decision.ack(pending.replyTo.get(i), ackBody(cancel)));
+        }
+    }
+
+    // Ostinato: never call under the protocol lock.
+    private void sendAll(List<Decision> sends) {
+        for (Decision d : sends) {
+            if (d.replyTo != null && d.ack != null) {
+                wire.send(d.replyTo, TYPE_ACK, d.ack, SwarmPriority.HIGH);
             }
         }
     }
@@ -1056,7 +1151,7 @@ public final class CommandProtocol {
 
     private boolean busy() {
         for (Tracked t : ledger.values()) {
-            if (t.started && !t.execution.terminal()) {
+            if (t.started && !t.execution.terminal() && !t.slotReleased) { // Ostinato: unconfirmed stops free the slot.
                 return true;
             }
         }
@@ -1400,6 +1495,7 @@ public final class CommandProtocol {
         public boolean ambiguous;
         public boolean worldMutation;
         public long storedAtMs;
+        public boolean slotReleased; // Ostinato: stop requested but unconfirmed; no longer counts as busy.
 
         Tracked(UUID id, String name, String payloadHash, ExecutionState execution, ObservationState observation,
                 boolean started) {
@@ -1409,6 +1505,26 @@ public final class CommandProtocol {
             this.execution = execution;
             this.observation = observation;
             this.started = started;
+        }
+    }
+
+    // Ostinato: a stop still waiting for confirmStopped; later cancels of the same target attach to it.
+    private static final class PendingStop {
+        final UUID target;
+        final List<UUID> cancels = new ArrayList<>();
+        final List<String> replyTo = new ArrayList<>();
+        int ticksLeft;
+
+        PendingStop(UUID target, int ticksLeft) {
+            this.target = target;
+            this.ticksLeft = ticksLeft;
+        }
+
+        void attach(UUID cancel, String from) {
+            if (!cancels.contains(cancel)) {
+                cancels.add(cancel);
+                replyTo.add(from);
+            }
         }
     }
 

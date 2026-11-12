@@ -92,6 +92,7 @@ public final class CommandCatalog {
             case "reload":
             case "save":
             case "saveall":
+            case "explore": // Ostinato: ExploreCommand keeps ICommand#getPermission's OWNER default; never SWARM.
                 return CommandPermission.OWNER;
             case "cancel":
             case "forcecancel":
