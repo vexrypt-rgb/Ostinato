@@ -103,6 +103,12 @@ public final class SwarmApi implements ISwarm {
         return behavior.cancelCommand(commandId);
     }
 
+    // Ostinato: the public route for TenorClef @ chat; the registry is static, so this needs no running link.
+    @Override
+    public boolean localAt(String line, Runnable body) {
+        return baritone.swarm.center.UnifiedChat.localAt(line, body);
+    }
+
     @Override
     public void setExternalCommandHook(baritone.api.swarm.protocol.ExternalCommandHook hook) {
         behavior.setExternalCommandHook(hook);

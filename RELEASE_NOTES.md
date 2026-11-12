@@ -7,8 +7,8 @@ One set of jars per Minecraft version (`ostinato-mc<version>-*`). For a normal i
 `ostinato-mc<version>-unoptimized-fabric-*.jar` with Fabric Loader; `standalone` is obfuscated and
 `api` keeps the public API for other mods.
 
-v1.28.0-beta.1 is a **beta** for 26.3 (`main`, Java 25): the swarm command protocol, hidden and headless bots, legit
-mode and the command center window. Everything below "New in v1.28.0-beta.1" is 26.3 only; the other lines are rebuilt
+v1.28.0-beta.2 is a **beta** for 26.3 (`main`, Java 25): the swarm command protocol, hidden and headless bots, legit
+mode and the command center window. Everything in "New in v1.28.0-beta.2" and "New in v1.28.0-beta.1" is 26.3 only; the other lines are rebuilt
 from the same branches as v1.27.0 and have no changes.
 
 New 26.3 work now happens in the monorepo [vexrypt-rgb/ostinato-tenorclef](https://github.com/vexrypt-rgb/ostinato-tenorclef).
@@ -20,6 +20,15 @@ This repository keeps the release workflow and the older Minecraft lines.
 | 1.21.11 | `1.21.11` | 21 | Unchanged since v1.27.0 |
 | 1.21.4 | `1.21.4` | 21 | Unchanged since v1.27.0 |
 | 1.16.1 | `1.16.1` | 8 | Unchanged since v1.27.0 |
+## New in v1.28.0-beta.2
+
+Beta, 26.3 only. A small API follow-up to beta.1; no behaviour changes.
+
+- **`ISwarm.localAt(line, body)`** (public API): runs a local player `@` chat line through the unified command
+  registry that the command center window uses. It returns true when the registry handled the line and false when no
+  registry is installed, in which case the caller runs the command itself. It works while the swarm link is offline.
+  TenorClef now uses it instead of calling the internal `UnifiedChat` class by reflection.
+
 ## New in v1.28.0-beta.1
 
 Beta: try it on a test world or a spare account first. Everything in this section is 26.3 only.
