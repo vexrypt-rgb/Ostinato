@@ -115,6 +115,53 @@ public class LeaseCoordinatorTest {
         assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
     }
 
+    // Ostinato: live 2026-11-12 (b' on chat) - the holder's report reached the restarted coordinator after 2*M, so a
+    // lease that had simply run out was booked as reconcile-timeout instead of what the bot reported.
+    @Test
+    public void chatHolderReportAfterTwoMarginsIsStillCounted() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        // The coordinator is down long enough for the lease to run out; Bob fences itself, nobody hears it.
+        s.advance(70_000L);
+        s.dropTo.add("Alice");
+        s.guard.tick();
+        s.pump();
+        s.dropTo.clear();
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.coord.start();
+        List<LeaseSupport.Msg> slow = s.take(LeaseMessage.TYPE, LeaseMessage.Op.RREQ); // still crossing chat
+        assertFalse(slow.isEmpty());
+        s.advance(7_000L);
+        s.coord.tick();
+        assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+        for (LeaseSupport.Msg m : slow) {
+            s.deliver(m);
+        }
+        s.pump();
+        s.advance(1_000L);
+        s.coord.tick();
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals("lease-expired", s.coord.record(id).endReason); // the bot's own report, not a timeout
+    }
+
+    @Test
+    public void chatHolderThatNeverReportsStillTimesOut() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.advance(70_000L);
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.dropTo.add("Bob");
+        s.coord.start();
+        s.pump();
+        s.run(21_000L, 1_000L);
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals("reconcile-timeout", s.coord.record(id).endReason);
+    }
+
     @Test
     public void noReplacementBeforeExpiryOrRack() throws Exception {
         LeaseSupport s = active();

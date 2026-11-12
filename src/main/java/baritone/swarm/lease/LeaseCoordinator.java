@@ -480,12 +480,21 @@ public final class LeaseCoordinator {
     }
 
     private boolean reconcileDone(long now) {
-        if (now - reconcileStartMono < 2 * marginMs) {
+        long waited = now - reconcileStartMono;
+        if (waited < 2 * marginMs) {
             return false;
         }
         long w = wall.getAsLong();
         for (Map.Entry<String, Long> e : holderNotBefore.entrySet()) {
-            if (!reported.contains(e.getKey()) && w < e.getValue()) {
+            if (reported.contains(e.getKey())) {
+                continue;
+            }
+            if (w < e.getValue()) {
+                return false;
+            }
+            // Ostinato: a chat holder's report needs several seconds (two-line frames, rate limiter backlog), so
+            // 2*M alone turned a live holder into reconcile-timeout. Wait one renew period of its lease for it.
+            if (chatPeer != null && chatPeer.test(e.getKey()) && waited < LeaseClock.renewEvery(durationFor(e.getKey()))) {
                 return false;
             }
         }
