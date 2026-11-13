@@ -274,6 +274,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             link.protocol.noteOnlineMembers(onlinePlayerNames());
         }
         link.control.tick();
+        logLinkRate(link); // Ostinato:
         coordinatorTick(s); // Ostinato:
         LocalPlayer player = ctx.player();
         link.transport.flush(nowMs(), line -> send(player, line));
@@ -314,6 +315,33 @@ public final class SwarmBehavior extends Behavior implements Helper {
     }
 
     private long nextRateLogAt = Long.MIN_VALUE;
+    private long nextLinkLogAt = Long.MIN_VALUE;
+    private long[] linkLast; // Ostinato: counters at the previous swarm-link-rate line
+    private Link linkLastFor; // a new link starts its counters at zero, so it takes a new baseline
+
+    /**
+     * Ostinato: this link's own counters over the last 60 s, once a minute: lines sent, heartbeats sent and skipped
+     * (peer had a recent frame), samples sent and withdrawn, lines that expired still queued, and the queue now.
+     */
+    private void logLinkRate(Link l) {
+        long now = nowMs();
+        if (nextLinkLogAt != Long.MIN_VALUE && now < nextLinkLogAt) {
+            return;
+        }
+        nextLinkLogAt = now + 60_000L;
+        SwarmRateLimiter lim = l.status.limiter;
+        long[] c = {lim.sent(), l.control.heartbeatsSent(), l.control.heartbeatsSkipped(), l.control.samplesSent(),
+                lim.withdrawn(), lim.expiredQueued()};
+        long[] prev = linkLastFor == l ? linkLast : null;
+        linkLast = c;
+        linkLastFor = l;
+        if (prev == null) {
+            return; // first call only takes the baseline
+        }
+        logDirect("swarm-link-rate sent=" + (c[0] - prev[0]) + "/min hb-sent=" + (c[1] - prev[1]) + " hb-skipped="
+                + (c[2] - prev[2]) + " samples=" + (c[3] - prev[3]) + " withdrawn=" + (c[4] - prev[4]) + " expired="
+                + (c[5] - prev[5]) + " queued=" + lim.queued() + " high=" + lim.queued(SwarmPriority.HIGH));
+    }
 
     /** Ostinato: the live SWL rate, once a minute while any lease traffic is in the window. */
     private void logLeaseRate() {

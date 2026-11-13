@@ -350,7 +350,10 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         }
         l.renewFailures = 0;
         l.renewFailLogged = false;
-        l.nextRenewAt = m.nonce + LeaseClock.renewEvery(l.durationMs);
+        // Ostinato: schedule from the newest RENEW sent, not the one this GRANT answers. From the echoed nonce, a
+        // second RENEW sent while one was unanswered kept two in flight for good whenever renewEvery/2 < RTT <
+        // renewEvery (live b12: 8 renews/min per lease on Copper's saturated link instead of 4).
+        l.nextRenewAt = Math.max(m.nonce, l.lastReqAt) + LeaseClock.renewEvery(l.durationMs);
         if (first) {
             log.accept("swarm-lease: granted lease=" + l.leaseId + " gen=" + l.gen + " bot=self until+"
                     + (l.authUntil - now) + "ms");

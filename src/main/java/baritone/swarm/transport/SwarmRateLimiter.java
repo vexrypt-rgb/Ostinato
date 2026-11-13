@@ -21,6 +21,7 @@ package baritone.swarm.transport;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -203,19 +204,49 @@ public final class SwarmRateLimiter {
         }
     }
 
-    // Ostinato: one log line per line whose sender gave up on it while it still waited for a token.
+    // Ostinato: one log line per message whose sender gave up on it while it still waited for a token. A message
+    // split over several lines (one deadline, one label) is logged once with its line count; live b12r2 logged
+    // each leased command twice.
     private void logExpired(long nowMs) {
+        Map<String, int[]> found = null; // label|to -> {lines ahead of its first line, lines of it}
         int ahead = 0;
         for (ArrayDeque<Entry> q : queues) {
             for (Iterator<Entry> it = q.iterator(); it.hasNext(); ahead++) {
                 Entry e = it.next();
                 if (e.expiresAtMs != Long.MAX_VALUE && !e.expiryLogged && nowMs >= e.expiresAtMs) {
                     e.expiryLogged = true;
-                    expiredQueued++;
-                    log.accept("swarm: " + e.label + " expired still queued for " + (e.to == null ? "?" : e.to)
-                            + " (" + ahead + " lines ahead of it, " + queued() + " queued)");
+                    String k = e.label + "|" + (e.to == null ? "?" : e.to);
+                    if (found == null) {
+                        found = new LinkedHashMap<>();
+                    }
+                    int[] f = found.get(k);
+                    if (f == null) {
+                        found.put(k, new int[]{ahead, 1});
+                    } else {
+                        f[1]++;
+                    }
                 }
             }
+        }
+        if (found == null) {
+            return;
+        }
+        for (Map.Entry<String, int[]> f : found.entrySet()) {
+            String k = f.getKey();
+            int bar = k.lastIndexOf('|');
+            if (!loggedExpired.add(k)) {
+                continue; // its other lines expired on an earlier pass and were logged then
+            }
+            if (loggedExpired.size() > 64) {
+                Iterator<String> it = loggedExpired.iterator();
+                it.next();
+                it.remove();
+            }
+            expiredQueued++;
+            int[] v = f.getValue();
+            log.accept("swarm: " + k.substring(0, bar) + " expired still queued for " + k.substring(bar + 1) + " ("
+                    + v[0] + " lines ahead of it, " + queued() + " queued" + (v[1] > 1 ? ", " + v[1] + " lines" : "")
+                    + ")");
         }
     }
 
@@ -246,6 +277,7 @@ public final class SwarmRateLimiter {
     public synchronized int queued(SwarmPriority p) { return queues[p.ordinal()].size(); }
     public synchronized long withdrawn() { return withdrawn; }
     public synchronized long expiredQueued() { return expiredQueued; }
+    private final java.util.LinkedHashSet<String> loggedExpired = new java.util.LinkedHashSet<>(); // Ostinato:
     public synchronized long dropped() { return dropped; }
     public synchronized long sent() { return sent; }
 
