@@ -399,7 +399,7 @@ public final class LeaseCoordinator {
             return false;
         }
         for (Claim o : claims.values()) {
-            if (o != c && r.resource.equals(o.m.resource)) {
+            if (o != c && ReservationKey.conflicts(r.resource, o.m.resource)) { // Ostinato: overlap counts
                 return false; // Another claim on the resource: finishReconcile decides.
             }
         }
@@ -615,7 +615,7 @@ public final class LeaseCoordinator {
         Set<UUID> kept = new HashSet<>();
         for (Claim c : claims.values()) {
             LeaseRecord r = records.get(c.m.leaseId);
-            boolean keep = r != null && !poisoned.contains(c.m.resource) && r.bot.equalsIgnoreCase(c.bot)
+            boolean keep = r != null && !poisonedBy(poisoned, c.m.resource) && r.bot.equalsIgnoreCase(c.bot)
                     && r.gen == c.m.gen && r.state == LeaseRecord.State.GRANTED
                     && highWater.getOrDefault(r.resource, 0L) == r.gen;
             if (keep) {
@@ -688,6 +688,16 @@ public final class LeaseCoordinator {
         for (Object[] q : queued) {
             handleActive((String) q[0], (LeaseMessage) q[1], after, true);
         }
+    }
+
+    /** Ostinato: a claim is poisoned when its key is, or overlaps, a key whose high-water a claim exceeded. */
+    private static boolean poisonedBy(Set<String> poisoned, String resource) {
+        for (String p : poisoned) {
+            if (ReservationKey.conflicts(p, resource)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void sendRreq(long now) {
@@ -813,6 +823,11 @@ public final class LeaseCoordinator {
             if (!LeaseMessage.validResource(resource) || "-".equals(resource)) {
                 return "swarm-lease: bad resource name";
             }
+            // Ostinato: a typed-looking key must be canonical, or two spellings of one box would both be granted.
+            if (resource.length() > 1 && resource.charAt(1) == ':' && "vcr".indexOf(resource.charAt(0)) >= 0
+                    && ReservationKey.parse(resource) == null) {
+                return "swarm-lease: bad reservation key " + resource;
+            }
             if (commandLine == null || commandLine.trim().isEmpty()) {
                 return "swarm-lease: lease needs a command";
             }
@@ -899,11 +914,12 @@ public final class LeaseCoordinator {
         long w = wall.getAsLong();
         long now = mono.getAsLong();
         for (LeaseRecord r : records.values()) {
-            if (!r.resource.equals(resource)) {
+            if (!ReservationKey.conflicts(r.resource, resource)) { // Ostinato: overlapping boxes are one resource
                 continue;
             }
+            String via = r.resource.equals(resource) ? "" : " via " + r.resource;
             if (r.state.live()) {
-                return r.state.name().toLowerCase(Locale.ROOT) + " to " + r.bot + " (gen " + r.gen + ")";
+                return r.state.name().toLowerCase(Locale.ROOT) + " to " + r.bot + " (gen " + r.gen + ")" + via;
             }
             if (r.state == LeaseRecord.State.EXPIRED && w < r.notBeforeWall) {
                 return "expired lease gen " + r.gen + " blocks it for " + (r.notBeforeWall - w) + " ms";

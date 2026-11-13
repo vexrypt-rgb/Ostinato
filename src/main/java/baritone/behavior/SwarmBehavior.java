@@ -33,6 +33,7 @@ import baritone.swarm.lease.LeaseCoordinator;
 import baritone.swarm.lease.LeaseFence;
 import baritone.swarm.lease.LeaseMessage;
 import baritone.swarm.lease.LeaseRate;
+import baritone.swarm.lease.ReservationResolver;
 import baritone.swarm.protocol.CommandProtocol;
 import baritone.swarm.protocol.RegistryExecutor;
 import baritone.swarm.roster.SwarmRoster;
@@ -303,6 +304,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
                     SwarmBehavior::allowedCoordinator, this::stopLeasedProcess, BotLeaseGuard.LEASED_COMMANDS);
             leaseGuard = g;
             LeaseFence.install(() -> g.invalidActive() && leasedInControl());
+            // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
+            LeaseFence.installGeometry((kind, x, y, z) -> leasedInControl()
+                    && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z)));
         }
         CommandProtocol p = liveProtocol();
         if (p != null && p != leaseBoundTo) {
@@ -487,6 +491,27 @@ public final class SwarmBehavior extends Behavior implements Helper {
     }
 
     /** True while one of the leased processes (mine, tunnel, builder, custom goal) is the one in control. */
+    /** Ostinato: Phase 2b reservation dimension letter: o, n or e. */
+    private char dimChar() {
+        net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+        if (w == null) {
+            return '?';
+        }
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> d = w.dimension();
+        return d == net.minecraft.world.level.Level.NETHER ? 'n' : d == net.minecraft.world.level.Level.END ? 'e' : 'o';
+    }
+
+    /** Ostinato: Phase 2b. Ores (and ancient debris) are what a vein reservation limits. */
+    private boolean isOre(int x, int y, int z) {
+        net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+        if (w == null) {
+            return false;
+        }
+        net.minecraft.world.level.block.state.BlockState st = w.getBlockState(new net.minecraft.core.BlockPos(x, y, z));
+        return st.is(net.minecraft.world.level.block.Blocks.ANCIENT_DEBRIS)
+                || net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(st.getBlock()).getPath().endsWith("_ore");
+    }
+
     private boolean leasedInControl() {
         try {
             Optional<IBaritoneProcess> p = baritone.getPathingControlManager().mostRecentInControl();
@@ -926,7 +951,46 @@ public final class SwarmBehavior extends Behavior implements Helper {
         if (c == null) {
             return "swarm: swarmCoordinator is false (or the link is not up yet)";
         }
-        return c.lease(bot, resource, commandLine);
+        // Ostinato: Phase 2b - vein:/chest:/region: shorthand becomes a canonical reservation key here.
+        ReservationResolver.Result r =
+                ReservationResolver.resolve(resource, dimChar(), reservationWorld());
+        if (r.error != null) {
+            return "swarm-lease: not offering " + resource + ": " + r.error;
+        }
+        return c.lease(bot, r.key, commandLine);
+    }
+
+    /** Ostinato: the coordinator's loaded world, as the reservation resolver sees it. */
+    private ReservationResolver.World reservationWorld() {
+        return new ReservationResolver.World() {
+            @Override
+            public String block(int x, int y, int z) {
+                net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+                net.minecraft.core.BlockPos p = new net.minecraft.core.BlockPos(x, y, z);
+                if (w == null || !w.hasChunkAt(p)) {
+                    return null;
+                }
+                return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(w.getBlockState(p).getBlock())
+                        .toString();
+            }
+
+            @Override
+            public int[] otherChestHalf(int x, int y, int z) {
+                net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+                if (w == null) {
+                    return null;
+                }
+                net.minecraft.core.BlockPos p = new net.minecraft.core.BlockPos(x, y, z);
+                net.minecraft.world.level.block.state.BlockState st = w.getBlockState(p);
+                if (!(st.getBlock() instanceof net.minecraft.world.level.block.ChestBlock)
+                        || st.getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+                        == net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+                    return null;
+                }
+                net.minecraft.core.BlockPos o = p.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(st));
+                return new int[]{o.getX(), o.getY(), o.getZ()};
+            }
+        };
     }
 
     /** Ostinato: {@code #swarm lease revoke <resource|leaseId>}. */
