@@ -18,6 +18,7 @@
 package baritone.swarm.lease;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * Ostinato: the last-line fence for lease-protected world actions (break, place, container clicks).
@@ -42,6 +43,31 @@ public final class LeaseFence {
     public static void clear() {
         check = OFF;
         geometry = NO_GEOMETRY;
+        vein = NO_VEIN; // Ostinato: Phase 2c
+    }
+
+    /** Ostinato: Phase 2c. Supplies the vein box the active leased mine holds (null when none). */
+    private static final Supplier<ReservationKey> NO_VEIN = () -> null;
+    private static volatile Supplier<ReservationKey> vein = NO_VEIN;
+
+    public static void installVein(Supplier<ReservationKey> v) {
+        vein = v == null ? NO_VEIN : v;
+    }
+
+    /**
+     * Ostinato: Phase 2c. The verified vein box the active leased mine may head for, or null. A broken supplier gives
+     * null: the mine then falls back to its own targets, which the geometry fence still checks.
+     */
+    public static ReservationKey veinTarget() {
+        Supplier<ReservationKey> v = vein;
+        if (v == NO_VEIN) {
+            return null;
+        }
+        try {
+            return v.get();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** True when the current action must not run. Counts each denial. */

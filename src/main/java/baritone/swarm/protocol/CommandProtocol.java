@@ -1202,6 +1202,13 @@ public final class CommandProtocol {
                 }
                 return Decision.ack(from, null);
             }
+            // Ostinato: Phase 2c. A lease chosen from a shared observation runs only after the bot checked that
+            // observation in its own world. A failed check is a stored reject: never auto-retried.
+            String why = hooks.verify(p.id);
+            if (why != null) {
+                log.accept("swarm: rejected " + p.id + " " + why + " (shared observation not verified locally)");
+                return Decision.ack(from, rememberReject(p, why));
+            }
         }
         // A verified inline command (eta, help, echo) may run beside an in-flight path.
         // A second path or world action may not: that would be a second active task.
@@ -1872,6 +1879,15 @@ public final class CommandProtocol {
 
         /** State of the lease bound to {@code commandId}. Called under the protocol lock: must not call back. */
         LeaseState state(UUID commandId);
+
+        /**
+         * Ostinato: Phase 2c. Checks the shared observation the lease bound to {@code commandId} was chosen from,
+         * once, before the command starts. Null to go on; else the reject reason (obs-stale, obs-unknown). Called
+         * under the protocol lock: must not call back.
+         */
+        default String verify(UUID commandId) {
+            return null;
+        }
 
         /** A command started. Must not call back into the protocol. */
         default void started(UUID commandId, String name) {

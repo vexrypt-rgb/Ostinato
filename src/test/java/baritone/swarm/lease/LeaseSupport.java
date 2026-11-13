@@ -71,6 +71,8 @@ final class LeaseSupport {
 
     static final class Exec implements CommandProtocol.Executor {
         final Map<String, Integer> byName = new LinkedHashMap<>();
+        /** Ostinato: ids of the commands started, in order. */
+        final List<UUID> started = new ArrayList<>();
         boolean confirm = true;
         ExecutionState poll;
 
@@ -97,6 +99,7 @@ final class LeaseSupport {
         @Override
         public boolean start(UUID id, String name, String args) {
             byName.merge(name.toLowerCase(Locale.ROOT), 1, Integer::sum);
+            started.add(id);
             return true;
         }
 
