@@ -110,6 +110,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         long lastReqAt;
         long lastRackAt = Long.MIN_VALUE / 2; // Ostinato: repeat-gap for RACK
         boolean granted;
+        long grantedAt; // Ostinato: monotonic receipt of the first GRANT; bounds renewing before the start.
         boolean reqSent;
         boolean grantRejectLogged;
         long nextRenewAt;
@@ -332,6 +333,9 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         l.durationMs = Math.max(LeaseClock.MIN_DURATION_MS, m.durationMs);
         l.authUntil = Math.max(l.authUntil, until);
         boolean first = !l.granted;
+        if (first) {
+            l.grantedAt = now;
+        }
         l.granted = true;
         l.phase = Phase.VALID;
         l.awaitingRenew = false;
@@ -464,6 +468,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         boolean up = p != null && p.linkUp();
         List<Runnable> after = new ArrayList<>();
         List<UUID> toStop = new ArrayList<>();
+        Set<UUID> settled = up ? settledBeforeStart(p) : Collections.emptySet();
         synchronized (this) {
             long now = mono.getAsLong();
             for (Lease l : leases.values()) {
@@ -481,7 +486,8 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                     case VALID:
                         if (now >= l.authUntil) {
                             endLease(l, Phase.EXPIRED, "lease-expired", after);
-                        } else if (up && l.started && l.active && now >= l.nextRenewAt) {
+                        } else if (up && now >= l.nextRenewAt
+                                && (l.started ? l.active : renewsBeforeStart(l, now, settled))) {
                             if (l.awaitingRenew) {
                                 l.renewFailures++;
                                 if (!l.renewFailLogged) {
@@ -536,6 +542,45 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                 }
             }
         }
+    }
+
+    // Ostinato: a bot renews a lease it holds from the GRANT on, not from the start. The command can reach the bot
+    // after its grant (live b10t1: grant at T, start at T+12 s), and a renew deferred to the start shortened the
+    // lease a coordinator restart had to survive. Two bounds keep a command that never starts from holding the
+    // resource forever: no renew once the protocol settled the command without starting it (rejected, e.g. busy),
+    // and none once the first grant is D/2 old. Such a lease then expires at its last deadline, at most 1.5 D
+    // after the grant.
+    private boolean renewsBeforeStart(Lease l, long now, Set<UUID> settled) {
+        return !settled.contains(l.commandId) && now - l.grantedAt < l.durationMs / 2;
+    }
+
+    /**
+     * Ostinato: commands of granted, not yet started leases that the protocol already settled without starting.
+     * Looked up without the guard lock held: the lock order is protocol, then guard.
+     */
+    private Set<UUID> settledBeforeStart(CommandProtocol p) {
+        List<UUID> waiting = null;
+        synchronized (this) {
+            for (Lease l : leases.values()) {
+                if (l.phase == Phase.VALID && !l.started && l.commandId != null) {
+                    if (waiting == null) {
+                        waiting = new ArrayList<>();
+                    }
+                    waiting.add(l.commandId);
+                }
+            }
+        }
+        if (waiting == null) {
+            return Collections.emptySet();
+        }
+        Set<UUID> out = new HashSet<>();
+        for (UUID id : waiting) {
+            CommandProtocol.Tracked t = p.lookup(id);
+            if (t != null && !t.started && t.execution != null && t.execution.terminal()) {
+                out.add(id);
+            }
+        }
+        return out;
     }
 
     // Caller holds this. Picks up the leased command's outcome from the protocol that started it.

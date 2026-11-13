@@ -2187,10 +2187,16 @@ public final class Settings {
     public final Setting<String> swarmCoordinatorId = new Setting<>("");
 
     /**
-     * Ostinato: lease length in seconds. Bots renew at a third of it. On a chat transport it is raised to at least
-     * 60 so renewals stay inside the whisper budget.
+     * Ostinato: lease length D in seconds. Bots renew every D/6 from the grant on (15 s at 90), and timer resends
+     * run at D/3. On a chat transport it is raised to at least 60 so renewals stay inside the whisper budget.
+     * <p>
+     * Sizing: a coordinator restart must fit inside the time a held lease has left. In the worst case (the holder
+     * was about to renew when the coordinator died) that is 5D/6. Measured live (Phase 2a, 3 clients + server):
+     * restart 24-36 s, reconcile about 8 s, GRANT delivery over chat up to about 10 s, plus a 5 s margin, about
+     * 61 s, so D must be at least 73 s; 90 leaves 75 s. Cost: a holder that crashes blocks its resource for up to
+     * D (90 s) before another bot can be granted it.
      */
-    public final Setting<Integer> swarmLeaseSec = new Setting<>(30);
+    public final Setting<Integer> swarmLeaseSec = new Setting<>(90);
 
     /**
      * Ostinato: extra milliseconds the coordinator waits past a lease's end before it treats the lease as gone.

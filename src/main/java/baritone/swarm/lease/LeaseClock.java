@@ -32,8 +32,9 @@ package baritone.swarm.lease;
 public final class LeaseClock {
 
     /**
-     * Chat whispers are budgeted at 35/min. Ostinato: a renew every D/6 (10 s at D = 60 s) is 6 renews and 6 grants
-     * a minute per lease, two lines each; timer resends stay at D/3 ({@link #resendEvery}).
+     * Chat whispers are budgeted at 35/min. Ostinato: a renew every D/6 (10 s at this floor) is 6 renews and 6 grants
+     * a minute per lease, two lines each; timer resends stay at D/3 ({@link #resendEvery}). The default lease is
+     * 90 s (swarmLeaseSec), 4 renews a minute; this floor only bounds a smaller configured value.
      */
     public static final long CHAT_MIN_DURATION_MS = 60_000L;
     public static final long MIN_DURATION_MS = 5_000L;
