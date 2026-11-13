@@ -67,10 +67,8 @@ public final class ReservationKey {
      * covers both halves.
      */
     public static ReservationKey doubleChest(char dim, int ax, int ay, int az, int bx, int by, int bz) {
-        boolean aFirst = ax < bx || (ax == bx && az <= bz);
-        ReservationKey k = aFirst ? new ReservationKey(Type.CHEST, dim, ax, ay, az, bx, by, bz)
-                : new ReservationKey(Type.CHEST, dim, bx, by, bz, ax, ay, az);
-        return checked(k);
+        // Ostinato: the constructor sorts corners, so either half gives the same key.
+        return checked(new ReservationKey(Type.CHEST, dim, ax, ay, az, bx, by, bz));
     }
 
     private static ReservationKey checked(ReservationKey k) {
