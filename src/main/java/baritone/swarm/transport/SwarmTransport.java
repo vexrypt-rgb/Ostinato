@@ -38,6 +38,24 @@ public interface SwarmTransport extends Closeable {
         send(recipient, sealedLine);
     }
 
+    /**
+     * Ostinato: {@link #sendTo(String, String, String, SwarmPriority)} for a line the sender stops waiting for after
+     * {@code deadline}; a rate-limited transport logs once if the line is still queued then.
+     */
+    default void sendTo(String group, String recipient, String sealedLine, SwarmPriority priority,
+                        SwarmRateLimiter.Deadline deadline) throws IOException {
+        sendTo(group, recipient, sealedLine, priority);
+    }
+
+    /**
+     * Ostinato: whether any line left for {@code peer} (directed or one every member reads) less than {@code windowMs}
+     * before {@code nowMs}, on the caller's monotonic clock. A peer that got a frame does not need a heartbeat. False
+     * when the transport does not know, which keeps every heartbeat.
+     */
+    default boolean sentWithin(String peer, long nowMs, long windowMs) {
+        return false;
+    }
+
     List<String> receive() throws IOException;
 
     static boolean isSealed(String line) {

@@ -19,6 +19,11 @@
 package baritone.swarm.transport;
 
 import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Outgoing chat limiter: a token bucket ({@code swarmSendRatePerSec}, {@code swarmSendBurst})
@@ -49,12 +54,40 @@ public final class SwarmRateLimiter {
     private final int burst;
     private final int queueMax;
     @SuppressWarnings("unchecked")
-    private final ArrayDeque<String>[] queues = new ArrayDeque[SwarmPriority.values().length];
+    private final ArrayDeque<Entry>[] queues = new ArrayDeque[SwarmPriority.values().length];
     private double tokens;
     private long lastMs;
     private long dropped;
     private long sent;
     private final WindowCounter window = new WindowCounter(CHAT_WINDOW_MS, 4096); // Ostinato:
+    // Ostinato: when a line last left for each recipient ("*" = a line every member reads), on this clock.
+    private final Map<String, Long> lastSentTo = new HashMap<>();
+    private long withdrawn; // Ostinato: TELEMETRY lines taken back because real traffic needed the link
+    private long expiredQueued; // Ostinato: lines whose sender gave up while they still waited here
+    private Consumer<String> log = s -> {}; // Ostinato:
+
+    /**
+     * Ostinato: what the sender knows about a line's useful life. If the line is still queued {@code expiresInMs}
+     * after it was offered, the limiter logs {@code label} once: the sender gave up before the line ever left.
+     */
+    public record Deadline(long expiresInMs, String label) {
+    }
+
+    // Ostinato: one queued line, with whom it goes to and an optional deadline on this limiter's clock.
+    private static final class Entry {
+        final String line;
+        final String to;
+        final long expiresAtMs;
+        final String label;
+        boolean expiryLogged;
+
+        Entry(String line, String to, long expiresAtMs, String label) {
+            this.line = line;
+            this.to = to;
+            this.expiresAtMs = expiresAtMs;
+            this.label = label;
+        }
+    }
 
     public SwarmRateLimiter(double ratePerSec, int burst, boolean allowUnsafe, int queueMax, long nowMs) {
         double r = Double.isNaN(ratePerSec) ? MIN_RATE : Math.max(MIN_RATE, ratePerSec);
@@ -76,16 +109,36 @@ public final class SwarmRateLimiter {
     public double rate() { return rate; }
     public int burst() { return burst; }
 
+    /** Ostinato: where the one-off "expired while still queued" lines go. */
+    public synchronized void setLog(Consumer<String> log) {
+        this.log = log == null ? s -> {} : log;
+    }
+
     /**
      * Queue a line. When the queue is full, the newest line of the lowest priority below
      * {@code p} is dropped to make room; if there is none, this line is dropped.
      *
      * @return whether the line was queued
      */
-    public synchronized boolean offer(SwarmPriority p, String line) {
+    public boolean offer(SwarmPriority p, String line) {
+        return offer(p, line, null, null);
+    }
+
+    /**
+     * Ostinato: {@link #offer(SwarmPriority, String)} for a line going to {@code to} (a member, {@code *} for a line
+     * every member reads, or null when unknown). A TELEMETRY line is refused while {@link #telemetryRoom(long)} is
+     * false.
+     */
+    public synchronized boolean offer(SwarmPriority p, String line, String to, Deadline deadline) {
         // Ostinato: an identical pending line is already accepted, even when the queue is full.
-        if (queues[p.ordinal()].contains(line)) {
-            return true;
+        for (Entry e : queues[p.ordinal()]) {
+            if (e.line.equals(line)) {
+                return true;
+            }
+        }
+        if (p == SwarmPriority.TELEMETRY && !telemetryRoom(lastMs)) {
+            withdrawn++;
+            return false;
         }
         if (queued() >= queueMax) {
             boolean made = false;
@@ -101,7 +154,8 @@ public final class SwarmRateLimiter {
                 return false;
             }
         }
-        queues[p.ordinal()].addLast(line);
+        long expires = deadline == null ? Long.MAX_VALUE : lastMs + Math.max(0L, deadline.expiresInMs());
+        queues[p.ordinal()].addLast(new Entry(line, key(to), expires, deadline == null ? null : deadline.label()));
         return true;
     }
 
@@ -111,29 +165,87 @@ public final class SwarmRateLimiter {
             tokens = Math.min(burst, tokens + (nowMs - lastMs) * rate / 1000.0);
             lastMs = nowMs;
         }
+        withdrawTelemetry(nowMs); // Ostinato:
+        logExpired(nowMs); // Ostinato:
         if (tokens < 1.0) {
             return null;
         }
-        for (ArrayDeque<String> q : queues) {
-            String line = q.pollFirst();
-            if (line != null) {
+        for (ArrayDeque<Entry> q : queues) {
+            Entry e = q.pollFirst();
+            if (e != null) {
                 tokens -= 1.0;
                 sent++;
                 window.add(nowMs); // Ostinato: link monitor budget.
-                return line;
+                if (e.to != null) {
+                    lastSentTo.put(e.to, nowMs); // Ostinato: liveness for the heartbeat skip
+                }
+                return e.line;
             }
         }
         return null;
     }
 
+    /**
+     * Ostinato: whether TELEMETRY may use the link now: nothing URGENT or HIGH waits and the last minute used under
+     * half of {@link #windowCap()}.
+     */
+    public synchronized boolean telemetryRoom(long nowMs) {
+        return queues[SwarmPriority.URGENT.ordinal()].isEmpty() && queues[SwarmPriority.HIGH.ordinal()].isEmpty()
+                && 2 * window.count(nowMs) < windowCap();
+    }
+
+    // Ostinato: queued samples are stale the moment real traffic needs the link; take them back rather than send.
+    private void withdrawTelemetry(long nowMs) {
+        ArrayDeque<Entry> t = queues[SwarmPriority.TELEMETRY.ordinal()];
+        if (!t.isEmpty() && !telemetryRoom(nowMs)) {
+            withdrawn += t.size();
+            t.clear();
+        }
+    }
+
+    // Ostinato: one log line per line whose sender gave up on it while it still waited for a token.
+    private void logExpired(long nowMs) {
+        int ahead = 0;
+        for (ArrayDeque<Entry> q : queues) {
+            for (Iterator<Entry> it = q.iterator(); it.hasNext(); ahead++) {
+                Entry e = it.next();
+                if (e.expiresAtMs != Long.MAX_VALUE && !e.expiryLogged && nowMs >= e.expiresAtMs) {
+                    e.expiryLogged = true;
+                    expiredQueued++;
+                    log.accept("swarm: " + e.label + " expired still queued for " + (e.to == null ? "?" : e.to)
+                            + " (" + ahead + " lines ahead of it, " + queued() + " queued)");
+                }
+            }
+        }
+    }
+
+    /**
+     * Ostinato: whether a line left for {@code peer} (or for every member) less than {@code windowMs} before
+     * {@code nowMs}, on this limiter's clock.
+     */
+    public synchronized boolean sentWithin(String peer, long nowMs, long windowMs) {
+        Long to = lastSentTo.get(key(peer));
+        Long all = lastSentTo.get(SwarmTransport.BROADCAST);
+        long last = Math.max(to == null ? Long.MIN_VALUE : to, all == null ? Long.MIN_VALUE : all);
+        return last != Long.MIN_VALUE && nowMs - last < windowMs;
+    }
+
+    private static String key(String to) {
+        return to == null ? null : to.toLowerCase(Locale.ROOT);
+    }
+
     public synchronized int queued() {
         int n = 0;
-        for (ArrayDeque<String> q : queues) {
+        for (ArrayDeque<Entry> q : queues) {
             n += q.size();
         }
         return n;
     }
 
+    /** Ostinato: lines waiting at {@code p}. */
+    public synchronized int queued(SwarmPriority p) { return queues[p.ordinal()].size(); }
+    public synchronized long withdrawn() { return withdrawn; }
+    public synchronized long expiredQueued() { return expiredQueued; }
     public synchronized long dropped() { return dropped; }
     public synchronized long sent() { return sent; }
 

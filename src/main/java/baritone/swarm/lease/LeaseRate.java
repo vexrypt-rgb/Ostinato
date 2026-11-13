@@ -39,6 +39,9 @@ public final class LeaseRate {
     private final Map<String, Deque<Long>> out = new TreeMap<>();
     private final Map<String, Deque<Long>> in = new TreeMap<>();
     private final Map<String, Integer> peakOut = new TreeMap<>();
+    // Ostinato: the same windows split by op ("member|OP"), log-only, to see which message types fill the budget.
+    private final Map<String, Deque<Long>> opsOut = new TreeMap<>();
+    private final Map<String, Deque<Long>> opsIn = new TreeMap<>();
 
     public LeaseRate(LongSupplier mono) {
         this.mono = mono;
@@ -51,6 +54,35 @@ public final class LeaseRate {
 
     public synchronized void received(String member) {
         add(in, member);
+    }
+
+    /** Ostinato: {@link #sent(String)} that also counts the message's op. */
+    public synchronized void sent(String member, LeaseMessage.Op op) {
+        sent(member);
+        if (op != null) {
+            add(opsOut, key(member) + "|" + op.name());
+        }
+    }
+
+    /** Ostinato: {@link #received(String)} that also counts the message's op. */
+    public synchronized void received(String member, LeaseMessage.Op op) {
+        received(member);
+        if (op != null) {
+            add(opsIn, key(member) + "|" + op.name());
+        }
+    }
+
+    /** Ostinato: {@code OP:n,...} for one member over the window, ops in enum order; "-" when none. */
+    public synchronized String ops(String member, boolean outbound) {
+        Map<String, Deque<Long>> map = outbound ? opsOut : opsIn;
+        StringBuilder b = new StringBuilder();
+        for (LeaseMessage.Op op : LeaseMessage.Op.values()) {
+            int n = count(map, key(member) + "|" + op.name());
+            if (n > 0) {
+                b.append(b.length() == 0 ? "" : ",").append(op.name()).append(':').append(n);
+            }
+        }
+        return b.length() == 0 ? "-" : b.toString();
     }
 
     public synchronized int sentPerMin(String member) {
@@ -68,7 +100,8 @@ public final class LeaseRate {
         members.addAll(in.keySet());
         for (String m : members) {
             lines.add("swarm-lease-rate bot=" + m + " out=" + count(out, m) + "/min in=" + count(in, m)
-                    + "/min peakOut=" + peakOut.getOrDefault(m, 0) + " budget=" + CHAT_BUDGET_PER_MIN);
+                    + "/min peakOut=" + peakOut.getOrDefault(m, 0) + " budget=" + CHAT_BUDGET_PER_MIN
+                    + " ops-out=" + ops(m, true) + " ops-in=" + ops(m, false)); // Ostinato:
         }
         return lines;
     }

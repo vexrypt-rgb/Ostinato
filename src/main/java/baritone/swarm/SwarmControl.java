@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
@@ -125,9 +126,15 @@ public final class SwarmControl {
     public static final long HEARTBEAT_MS = 10_000L;
     /** Ostinato: longest gap between heartbeats while the queue is busy; under PEER_TIMEOUT_MS with room for one loss. */
     public static final long BUSY_HEARTBEAT_MS = 20_000L;
-    private long lastHeartbeatMs = Long.MIN_VALUE / 2; // Ostinato:
-    private long heartbeats; // Ostinato: every third heartbeat carries the sample instead.
-    private long nextSampleMs; // Ostinato: sample timer while the command protocol is off.
+    // Ostinato: whether any line left for a peer inside a window; such a peer needs no heartbeat.
+    private BiPredicate<String, Long> recentlySent = (peer, windowMs) -> false;
+    // Ostinato: when a heartbeat was last queued for each peer (lower case), so a slow queue gets no second one.
+    private final Map<String, Long> lastHbQueued = new HashMap<>();
+    // Ostinato: when each peer last came due under the plain schedule, for the sent/skipped counts only.
+    private final Map<String, Long> lastHbDue = new HashMap<>();
+    private long heartbeatsSent; // Ostinato: heartbeat lines queued (a broadcast counts once)
+    private long heartbeatsSkipped; // Ostinato: peer heartbeats left out because the peer had a recent frame
+    private long nextSampleMs; // Ostinato: sample timer, its own since heartbeats no longer carry it.
     private boolean sampling; // Ostinato: off until the host turns it on (setSampling).
     private BooleanSupplier linkQuiet = () -> true; // Ostinato:
     private long samplesSent; // Ostinato:
@@ -256,29 +263,12 @@ public final class SwarmControl {
             try {
                 long now = clockMs.getAsLong(); // Ostinato:
                 if (protocol.linkUp() && now >= nextHeartbeatMs) { // Ostinato:
-                    // Ostinato: telemetry yields to real traffic. While the send queue holds anything the
-                    // heartbeat waits (up to BUSY_HEARTBEAT_MS, so peers still see us inside PEER_TIMEOUT_MS)
-                    // and never carries the sample, so it cannot keep the link at its cap.
-                    boolean quiet = linkQuiet.getAsBoolean();
-                    if (!quiet && now - lastHeartbeatMs < BUSY_HEARTBEAT_MS) {
-                        nextHeartbeatMs = now + 1_000L;
-                    } else {
-                        // Ostinato: every third heartbeat is the sample, so the perf strip costs no extra chat lines.
-                        boolean asSample = sampling && quiet && heartbeats++ % 3 == 0;
-                        String body = asSample ? sampleBody() : "hb";
-                        for (SwarmRoster.Group group : roster.groupsOf(endpoint.selfId())) { // Ostinato:
-                            try { // Ostinato:
-                                endpoint.send(group.id(), SwarmFrame.BROADCAST, asSample ? STS : PING, body,
-                                        asSample ? SwarmPriority.LOW : SwarmPriority.NORMAL); // Ostinato:
-                                if (asSample) samplesSent++; // Ostinato:
-                            } catch (Exception e) { // Ostinato:
-                                sendFailures++; // Ostinato:
-                            } // Ostinato:
-                        } // Ostinato: short heartbeats avoid status payloads and chat log spam.
-                        lastHeartbeatMs = now;
-                        nextHeartbeatMs = now + HEARTBEAT_MS; // Ostinato:
-                    }
-                } // Ostinato:
+                    nextHeartbeatMs = now + 1_000L; // Ostinato: each peer is checked once a second
+                    heartbeat(now);
+                }
+                if (sampling && protocol.linkUp()) {
+                    sample(now); // Ostinato: own timer; no longer every third heartbeat
+                }
                 for (Peer peer : peers.values()) { // Ostinato:
                     if (peer.lastSeenMs >= 0 && now - peer.lastSeenMs >= PEER_TIMEOUT_MS) { // Ostinato:
                         protocol.onPeerDisconnect(peer.name); // Ostinato:
@@ -290,15 +280,70 @@ public final class SwarmControl {
                 log.accept("swarm: command protocol tick failed: " + e.getMessage());
             }
         } else if (sampling) {
-            sampleWithoutProtocol(clockMs.getAsLong());
+            sample(clockMs.getAsLong());
         }
     }
 
     /**
-     * Ostinato: without heartbeats the sample goes out on its own timer, at the lowest priority and only while
-     * the chat queue is empty, so it never delays a real message or pushes the link toward the server limit.
+     * Ostinato: any frame a peer gets is proof we are alive, so a heartbeat goes only to a peer that got nothing from
+     * us in the last interval (HEARTBEAT_MS; BUSY_HEARTBEAT_MS while the link is busy, which is still inside
+     * PEER_TIMEOUT_MS with room for one loss). All due: one broadcast. Some: one directed heartbeat each. None:
+     * nothing. Before this, an idle link carried a heartbeat every 10 s on top of every lease message.
      */
-    private void sampleWithoutProtocol(long now) {
+    private void heartbeat(long now) {
+        long need = linkQuiet.getAsBoolean() ? HEARTBEAT_MS : BUSY_HEARTBEAT_MS;
+        String self = endpoint.selfId();
+        Map<String, Boolean> seen = new HashMap<>();
+        for (SwarmRoster.Group group : roster.groupsOf(self)) {
+            List<String> due = new ArrayList<>();
+            int others = 0;
+            for (String member : group.members()) {
+                if (member.equalsIgnoreCase(self)) {
+                    continue;
+                }
+                others++;
+                String k = member.toLowerCase(Locale.ROOT);
+                if (seen.containsKey(k)) { // in an earlier group too: that group's heartbeat covers it
+                    continue;
+                }
+                boolean recent = recentlySent.test(member, need);
+                Long queuedAt = lastHbQueued.get(k);
+                boolean waiting = queuedAt != null && now - queuedAt < need;
+                Long dueAt = lastHbDue.get(k);
+                if (dueAt == null || now - dueAt >= need) { // the plain schedule would have sent one now
+                    lastHbDue.put(k, now);
+                    if (recent) heartbeatsSkipped++;
+                }
+                boolean send = !recent && !waiting;
+                seen.put(k, send);
+                if (send) {
+                    due.add(member);
+                }
+            }
+            if (due.isEmpty()) {
+                continue;
+            }
+            List<String> to = due.size() == others ? List.of(SwarmFrame.BROADCAST) : due;
+            for (String dest : to) {
+                try {
+                    endpoint.send(group.id(), dest, PING, "hb", SwarmPriority.NORMAL);
+                    heartbeatsSent++;
+                } catch (Exception e) {
+                    sendFailures++;
+                }
+            }
+            for (String member : due) {
+                lastHbQueued.put(member.toLowerCase(Locale.ROOT), now);
+            }
+        }
+    }
+
+    /**
+     * Ostinato: the status sample goes out on its own timer at TELEMETRY, the lowest priority. It is not even queued
+     * while anything URGENT or HIGH waits or the link is past half its cap ({@code linkQuiet}), and the rate limiter
+     * takes back a queued one the moment either becomes true, so it never delays a real message.
+     */
+    private void sample(long now) {
         if (now < nextSampleMs) {
             return;
         }
@@ -316,7 +361,7 @@ public final class SwarmControl {
                 if (body == null) {
                     body = sampleBody();
                 }
-                endpoint.send(group.id(), SwarmFrame.BROADCAST, STS, body, SwarmPriority.LOW);
+                endpoint.send(group.id(), SwarmFrame.BROADCAST, STS, body, SwarmPriority.TELEMETRY);
                 samplesSent++;
             } catch (Exception e) {
                 sendFailures++;
@@ -336,16 +381,29 @@ public final class SwarmControl {
     }
 
     /**
-     * Ostinato: turn the {@code STS} sample on or off. {@code quiet} says whether the chat queue is empty; it is
-     * only asked while the command protocol is off.
+     * Ostinato: turn the {@code STS} sample on or off. {@code quiet} says whether telemetry may use the link (nothing
+     * URGENT or HIGH waits and it is under half its cap); while false, no sample is queued and heartbeats stretch to
+     * BUSY_HEARTBEAT_MS.
      */
     public synchronized void setSampling(boolean enabled, BooleanSupplier quiet) {
         this.sampling = enabled;
         this.linkQuiet = quiet == null ? () -> true : quiet;
     }
 
+    /**
+     * Ostinato: {@code sent.test(peer, windowMs)} says whether any line left for {@code peer} in the last
+     * {@code windowMs}; such a peer gets no heartbeat. Null keeps every heartbeat.
+     */
+    public synchronized void setRecentlySent(BiPredicate<String, Long> sent) {
+        this.recentlySent = sent == null ? (peer, windowMs) -> false : sent;
+    }
+
     /** Ostinato: {@code STS} frames sent. */
     public synchronized long samplesSent() { return samplesSent; }
+    /** Ostinato: heartbeat lines queued; a broadcast counts once. */
+    public synchronized long heartbeatsSent() { return heartbeatsSent; }
+    /** Ostinato: heartbeats a peer did not need because it had just got another frame from us. */
+    public synchronized long heartbeatsSkipped() { return heartbeatsSkipped; }
 
     /** Ostinato: a copy of every known member's sample and traffic, for the command center. */
     public synchronized List<PeerLink> peerLinks() {

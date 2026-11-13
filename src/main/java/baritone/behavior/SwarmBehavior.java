@@ -430,7 +430,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         boolean ok = l.leaseSend.send(to, body, urgent);
         if (ok) {
-            leaseRate.sent(to);
+            LeaseMessage sentMsg = LeaseMessage.parse(body); // Ostinato: per-op counts, log-only
+            leaseRate.sent(to, sentMsg == null ? null : sentMsg.op);
         }
         return ok;
     }
@@ -441,7 +442,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
         if (m == null) {
             return;
         }
-        leaseRate.received(msg.from());
+        leaseRate.received(msg.from(), m.op); // Ostinato: per-op counts
         BotLeaseGuard g = leaseGuard;
         if (g != null && m.op.fromCoordinator()) {
             g.onMessage(msg.from(), m);
@@ -551,6 +552,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
                 Path sigilHome = SwarmKeys.sigilHome(home, env);
                 Map<String, SigilCircle> circles = SwarmKeys.circlesFor(roster, self, sigilHome);
                 SwarmRateLimiter limiter = new SwarmRateLimiter(rate, burst, unsafe, queueMax, nowMs());
+                limiter.setLog(this::logDirect); // Ostinato: "expired still queued" lines
                 ChatSwarmTransport chat = new ChatSwarmTransport(self, channel, template, roster, limiter,
                         cfg.maxLineChars);
                 for (SwarmRoster.Group g : roster.groupsOf(self)) {
@@ -575,8 +577,11 @@ public final class SwarmBehavior extends Behavior implements Helper {
                         + limiter.dropped() + ", too long " + transport.tooLong() + String.format(", rate %.2f/s burst %d",
                         limiter.rate(), limiter.burst()));
                 control.enableBuild(new Regions());
-                // Ostinato: status samples ride heartbeats, only while the queue is empty and the link is under half its cap.
-                control.setSampling(s.swarmStatusSample.value, () -> limiter.quiet(nowMs())); // Ostinato: the limiter's clock
+                // Ostinato: status samples go at TELEMETRY, only while nothing URGENT/HIGH waits and the link is under
+                // half its cap; the limiter also takes queued ones back the moment that stops holding.
+                control.setSampling(s.swarmStatusSample.value, () -> limiter.telemetryRoom(nowMs()));
+                // Ostinato: a peer that got any line inside the heartbeat interval needs no heartbeat.
+                control.setRecentlySent((peer, window) -> transport.sentWithin(peer, nowMs(), window));
                 // Ostinato: command protocol rides the same sealed link. Off, this stays null.
                 CommandProtocol protocol = null;
                 if (protocolOn) {
@@ -598,7 +603,13 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
                                 @Override
                                 public boolean send(String to, String type, String body, SwarmPriority priority) {
-                                    return sendSealed(endpoint, roster, self, to, type, body, priority);
+                                    return sendSealed(endpoint, roster, self, to, type, body, priority, null);
+                                }
+
+                                @Override
+                                public boolean send(String to, String type, String body, SwarmPriority priority,
+                                                    SwarmRateLimiter.Deadline deadline) {
+                                    return sendSealed(endpoint, roster, self, to, type, body, priority, deadline);
                                 }
                             },
                             new RegistryExecutor(baritone, () -> externalHook, atCatalog),
@@ -692,6 +703,12 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
     private static boolean sendSealed(SwarmEndpoint endpoint, SwarmRoster roster, String self, String to, String type,
                                       String body, SwarmPriority priority) { // Ostinato:
+        return sendSealed(endpoint, roster, self, to, type, body, priority, null);
+    }
+
+    private static boolean sendSealed(SwarmEndpoint endpoint, SwarmRoster roster, String self, String to, String type,
+                                      String body, SwarmPriority priority,
+                                      SwarmRateLimiter.Deadline deadline) { // Ostinato:
         try {
             String group = null;
             for (SwarmRoster.Group g : roster.groupsOf(self)) {
@@ -704,7 +721,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
                 return false;
             }
             String dest = ("*".equals(to) || "all".equalsIgnoreCase(to)) ? SwarmFrame.BROADCAST : to;
-            endpoint.send(group, dest, type, body, priority); // Ostinato: cancels overtake retries.
+            endpoint.send(group, dest, type, body, priority, deadline); // Ostinato: cancels overtake retries.
             return true;
         } catch (Exception e) {
             return false;

@@ -33,5 +33,10 @@ public enum SwarmPriority {
     /** Ordinary requests (ping, later assignments). */
     NORMAL,
     /** Bulk/status traffic that may wait or be dropped first. */
-    LOW
+    LOW,
+    /**
+     * Ostinato: status samples. Sent last, and the rate limiter withdraws them while URGENT or HIGH traffic waits or
+     * the last minute used half the link's cap: a sample never delays a lease message or a command.
+     */
+    TELEMETRY
 }

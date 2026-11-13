@@ -253,4 +253,96 @@ public class SwarmRateLimiterTest {
         assertTrue(l.offer(SwarmPriority.LOW, "q"));
         assertFalse("a queued line is never quiet", l.quiet(2_000L * 13 + 60_000L - 1));
     }
+
+    // Ostinato: exhaust the burst at t=0 so later lines wait in the queue.
+    private static void spendBurst(SwarmRateLimiter l) {
+        for (int i = 0; i < l.burst(); i++) {
+            l.offer(SwarmPriority.NORMAL, "burst" + i);
+        }
+        assertEquals(l.burst(), drain(l, 0).size());
+    }
+
+    /** Ostinato: a sample is not even queued while a HIGH line (a leased command) waits for a token. */
+    @Test
+    public void telemetryRefusedWhileHighIsQueued() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        spendBurst(l);
+        assertTrue(l.telemetryRoom(0));
+        assertTrue(l.offer(SwarmPriority.HIGH, "cmd", "bob", null));
+        assertFalse(l.telemetryRoom(0));
+        assertFalse(l.offer(SwarmPriority.TELEMETRY, "sts", "*", null));
+        assertEquals(0, l.queued(SwarmPriority.TELEMETRY));
+        assertEquals(1, l.withdrawn());
+    }
+
+    /** Ostinato: a sample already queued is taken back the moment HIGH traffic arrives, and never leaves. */
+    @Test
+    public void queuedTelemetryIsWithdrawnWhenHighArrives() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        spendBurst(l);
+        assertTrue(l.offer(SwarmPriority.TELEMETRY, "sts", "*", null));
+        assertTrue(l.offer(SwarmPriority.HIGH, "cmd", "bob", null));
+        List<String> out = new ArrayList<>();
+        for (long t = 1_000; t <= 60_000; t += 1_000) {
+            out.addAll(drain(l, t));
+        }
+        assertEquals(Arrays.asList("cmd"), out);
+        assertEquals(1, l.withdrawn());
+    }
+
+    /** Ostinato: samples stop once the last minute used half the cap, even with an empty queue. */
+    @Test
+    public void telemetryRefusedAtHalfTheCap() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        assertEquals(35, l.windowCap());
+        long t = 0;
+        for (int i = 0; i < 17; i++, t += 2_000L) {
+            l.offer(SwarmPriority.NORMAL, "m" + i);
+            assertEquals("m" + i, l.poll(t));
+        }
+        assertTrue("17 of 35 is under half", l.telemetryRoom(t - 2_000L));
+        l.offer(SwarmPriority.NORMAL, "m17");
+        assertEquals("m17", l.poll(t));
+        assertEquals(0, l.queued());
+        assertFalse("18 of 35 is past half", l.telemetryRoom(t));
+        assertFalse(l.offer(SwarmPriority.TELEMETRY, "sts", "*", null));
+        assertEquals(0, l.queued());
+    }
+
+    /** Ostinato: a line its sender gave up on while it still waited is logged once, with what was ahead of it. */
+    @Test
+    public void expiredWhileQueuedIsLoggedOnce() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        List<String> log = new ArrayList<>();
+        l.setLog(log::add);
+        spendBurst(l);
+        l.offer(SwarmPriority.NORMAL, "a", "carol", null);
+        l.offer(SwarmPriority.NORMAL, "b", "carol", null);
+        l.offer(SwarmPriority.NORMAL, "c", "Bob", new SwarmRateLimiter.Deadline(3_000L, "command X (leased)"));
+        assertEquals("a", l.poll(2_000));
+        assertTrue(log.isEmpty());
+        assertNull(l.poll(3_000));
+        assertNull(l.poll(3_500));
+        assertEquals("b", l.poll(4_000));
+        assertEquals("c", l.poll(6_000));
+        assertEquals(Arrays.asList("swarm: command X (leased) expired still queued for bob (1 lines ahead of it, 2 queued)"),
+                log);
+        assertEquals(1, l.expiredQueued());
+    }
+
+    /** Ostinato: liveness for the heartbeat skip counts lines that left, per peer; a broadcast counts for all. */
+    @Test
+    public void sentWithinCountsPolledLinesPerPeer() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 5, false, 64, 0);
+        l.offer(SwarmPriority.NORMAL, "x", "Bob", null);
+        assertFalse("queued is not sent", l.sentWithin("bob", 0, 10_000));
+        assertEquals("x", l.poll(0));
+        assertTrue(l.sentWithin("Bob", 9_999, 10_000));
+        assertFalse(l.sentWithin("Bob", 10_000, 10_000));
+        assertFalse(l.sentWithin("Carol", 5_000, 10_000));
+        l.offer(SwarmPriority.NORMAL, "y", "*", null);
+        assertEquals("y", l.poll(20_000));
+        assertTrue(l.sentWithin("Carol", 25_000, 10_000));
+        assertTrue(l.sentWithin("Bob", 25_000, 10_000));
+    }
 }

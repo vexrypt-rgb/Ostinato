@@ -33,6 +33,7 @@ import baritone.swarm.frame.SwarmReassembler;
 import baritone.swarm.frame.SwarmReject;
 import baritone.swarm.frame.SwarmReplayGuard;
 import baritone.swarm.transport.SwarmPriority;
+import baritone.swarm.transport.SwarmRateLimiter;
 import baritone.swarm.transport.SwarmTransport;
 
 import java.io.Closeable;
@@ -161,6 +162,12 @@ public final class SwarmEndpoint implements Closeable {
 
     public long send(String group, String to, String type, String body, SwarmPriority priority)
             throws SwarmFrameException, SigilException, IOException {
+        return send(group, to, type, body, priority, null);
+    }
+
+    /** Ostinato: {@link #send(String, String, String, String, SwarmPriority)} with the sender's deadline for its lines. */
+    public long send(String group, String to, String type, String body, SwarmPriority priority,
+                     SwarmRateLimiter.Deadline deadline) throws SwarmFrameException, SigilException, IOException {
         SigilCircle circle = groups.get(group);
         if (circle == null) {
             throw new SwarmFrameException(SwarmReject.WRONG_GROUP, "no circle for group " + group);
@@ -185,7 +192,7 @@ public final class SwarmEndpoint implements Closeable {
             }
         }
         for (String line : lines) {
-            transport.sendTo(group, to, line, priority);
+            transport.sendTo(group, to, line, priority, deadline);
         }
         return frames.get(0).msgId();
     }

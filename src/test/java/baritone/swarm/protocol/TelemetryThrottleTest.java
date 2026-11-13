@@ -80,8 +80,9 @@ public class TelemetryThrottleTest {
         run(s, 60_000L);
         int hb = w.count(s, "Alice", SwarmControl.PING, "hb");
         int sts = w.count(s, "Alice", SwarmControl.STS, null);
-        assertTrue("heartbeats " + hb + " samples " + sts, hb + sts >= 5 && hb + sts <= 7);
-        assertTrue("samples " + sts, sts >= 1);
+        // Ostinato: samples have their own 30 s timer now; heartbeats no longer carry them.
+        assertTrue("heartbeats " + hb, hb >= 5 && hb <= 7);
+        assertTrue("samples " + sts, sts >= 1 && sts <= 3);
         assertEquals("no reply to a heartbeat", 0, w.count(s, "Bob", SwarmControl.PONG, null));
     }
 

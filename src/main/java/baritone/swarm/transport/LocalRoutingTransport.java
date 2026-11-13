@@ -22,8 +22,11 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -46,6 +49,8 @@ public final class LocalRoutingTransport implements SwarmTransport {
     private final long aliveTtlMs;
     private final Function<String, Set<String>> broadcastTargets;
     private long lastTouchMs;
+    // Ostinato: when a line last went into each member's local spool, on this router's clock.
+    private final Map<String, Long> lastLocalSent = new HashMap<>();
 
     public static LocalRoutingTransport open(String self, ChatSwarmTransport chat, boolean enabled,
             String spoolDir, Path gameDir, Consumer<String> log) {
@@ -142,20 +147,51 @@ public final class LocalRoutingTransport implements SwarmTransport {
 
     @Override
     public void sendTo(String group, String recipient, String sealedLine, SwarmPriority priority) throws IOException {
+        sendTo(group, recipient, sealedLine, priority, null);
+    }
+
+    @Override
+    public void sendTo(String group, String recipient, String sealedLine, SwarmPriority priority,
+                       SwarmRateLimiter.Deadline deadline) throws IOException {
         SwarmTransport.requireSealed(sealedLine);
         if (BROADCAST.equals(recipient)) {
-            sendBroadcast(group, sealedLine, priority);
+            sendBroadcast(group, sealedLine, priority, deadline);
             return;
         }
         if (liveMember(recipient)) {
             try {
                 local.sendTo(group, recipient, sealedLine, priority);
+                markLocal(recipient);
                 return;
             } catch (IOException ignored) {
                 // Local channel is down; the whisper path below is the documented fallback.
             }
         }
-        fallback.sendTo(group, recipient, sealedLine, priority);
+        fallback.sendTo(group, recipient, sealedLine, priority, deadline);
+    }
+
+    /**
+     * Ostinato: a spool write counts at once (it is delivered on write); a whisper counts once the rate limiter let
+     * it out, which the chat transport answers on the caller's clock ({@code nowMs}).
+     */
+    @Override
+    public boolean sentWithin(String peer, long nowMs, long windowMs) {
+        if (peer != null) {
+            Long t;
+            synchronized (lastLocalSent) {
+                t = lastLocalSent.get(peer.toLowerCase(Locale.ROOT));
+            }
+            if (t != null && clock.getAsLong() - t < windowMs) {
+                return true;
+            }
+        }
+        return fallback.sentWithin(peer, nowMs, windowMs);
+    }
+
+    private void markLocal(String name) {
+        synchronized (lastLocalSent) {
+            lastLocalSent.put(name.toLowerCase(Locale.ROOT), clock.getAsLong());
+        }
     }
 
     @Override
@@ -187,7 +223,8 @@ public final class LocalRoutingTransport implements SwarmTransport {
         }
     }
 
-    private void sendBroadcast(String group, String sealedLine, SwarmPriority priority) throws IOException {
+    private void sendBroadcast(String group, String sealedLine, SwarmPriority priority,
+                               SwarmRateLimiter.Deadline deadline) throws IOException {
         Set<String> targets = broadcastTargets(group);
         Set<String> sentLocal = new LinkedHashSet<>();
         for (String name : targets) {
@@ -197,13 +234,14 @@ public final class LocalRoutingTransport implements SwarmTransport {
             try {
                 local.sendTo(group, name, sealedLine, priority);
                 sentLocal.add(name);
+                markLocal(name);
             } catch (IOException ignored) {
                 // Leave the name for the whisper pass.
             }
         }
         for (String name : targets) {
             if (!name.equals(self) && !sentLocal.contains(name)) {
-                fallback.sendTo(group, name, sealedLine, priority);
+                fallback.sendTo(group, name, sealedLine, priority, deadline);
             }
         }
     }

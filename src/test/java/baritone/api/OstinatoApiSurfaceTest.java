@@ -24,10 +24,15 @@ public class OstinatoApiSurfaceTest {
     public void swarmPriorityNamesMatchTransport() {
         SwarmPriority[] api = SwarmPriority.values();
         baritone.swarm.transport.SwarmPriority[] internal = baritone.swarm.transport.SwarmPriority.values();
-        assertEquals(internal.length, api.length);
-        for (int i = 0; i < api.length; i++) {
-            assertEquals(internal[i].name(), api[i].name());
+        // Ostinato: URGENT (lease reconcile) and TELEMETRY (status samples) are internal only, so an addon cannot
+        // jump ahead of lease traffic. Every API priority must still exist inside, in the same send order.
+        int last = -1;
+        for (SwarmPriority p : api) {
+            int at = baritone.swarm.transport.SwarmPriority.valueOf(p.name()).ordinal();
+            assertTrue(p + " sent before an earlier API priority", at > last);
+            last = at;
         }
+        assertTrue(internal.length >= api.length);
     }
 
     @Test
