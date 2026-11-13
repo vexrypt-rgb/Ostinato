@@ -81,6 +81,17 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     /** Ostinato: a repeated OFFER re-sends REQ at most this often. */
     static final long OFFER_REQ_GAP_MS = 5_000L;
 
+    /**
+     * Ostinato: Phase 2c. Checks the observation a lease was chosen from against this bot's loaded world.
+     * Returns null when it matches, else {@link #OBS_STALE} or {@link #OBS_UNKNOWN}. Called without the guard lock.
+     */
+    public interface ObsCheck {
+        String check(String resource, String expect);
+    }
+
+    public static final String OBS_STALE = "obs-stale";
+    public static final String OBS_UNKNOWN = "obs-unknown";
+
     public interface Sender {
         /** Send an SWL body to {@code to}; false when it could not be queued. */
         boolean send(String to, String body);
@@ -133,6 +144,10 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         boolean reportSent;
         ExecutionState exec;
         ObservationState obs = ObservationState.UNKNOWN;
+        // Ostinato: Phase 2c. The shared observation this lease was chosen from (OFFER extra ob=<ore>.<count>),
+        // and whether this bot already checked it in its own world.
+        String expect;
+        boolean verified;
 
         Lease(UUID leaseId, String resource, long gen, UUID commandId, String coordinator) {
             this.leaseId = leaseId;
@@ -175,6 +190,8 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     private final Map<String, Long> highWater = new HashMap<>();
     private final Set<String> ignoredLogged = new HashSet<>();
     private volatile CommandProtocol protocol;
+    // Ostinato: Phase 2c. Checks a shared observation in this bot's own world; null counts as obs-unknown.
+    private volatile ObsCheck obsCheck;
     private UUID lastStarted;
     private long ignored;
     private long grantRejects;
@@ -292,9 +309,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             l = new Lease(m.leaseId, m.resource, m.gen, m.commandId, from);
             l.durationMs = Math.max(LeaseClock.MIN_DURATION_MS, m.durationMs);
             l.offeredAt = now;
+            l.expect = expectOf(m.extra); // Ostinato: Phase 2c
             leases.put(l.leaseId, l);
             byCommand.put(l.commandId, l);
-            log.accept("swarm-lease: offered lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource=" + l.resource);
+            log.accept("swarm-lease: offered lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource=" + l.resource
+                    + (l.expect == null ? "" : " obs=" + l.expect));
             prune();
         }
         if (l.gen != m.gen || !l.commandId.equals(m.commandId)) {
@@ -766,6 +785,80 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return l.authorized(mono.getAsLong()) ? CommandProtocol.LeaseState.VALID : CommandProtocol.LeaseState.EXPIRED;
     }
 
+    // Ostinato: Phase 2c. The ob= token of an OFFER extra, or null.
+    static String expectOf(String extra) {
+        if (extra == null) {
+            return null;
+        }
+        for (String t : extra.split(",")) {
+            if (t.startsWith("ob=") && t.length() > 3) {
+                return t.substring(3);
+            }
+        }
+        return null;
+    }
+
+    public void setObsCheck(ObsCheck c) {
+        this.obsCheck = c;
+    }
+
+    /**
+     * Ostinato: Phase 2c. A lease chosen from a shared observation is checked in this bot's world before its command
+     * runs. A failed check ends the lease here (DONE, exec FAILED, obs STALE/UNKNOWN) and owes the coordinator a
+     * REPORT with the reason; the protocol stores the reject, so the command is never auto-retried. No callback into
+     * the protocol: it called us.
+     */
+    @Override
+    public String verify(UUID commandId) {
+        String resource;
+        String expect;
+        synchronized (this) {
+            Lease l = commandId == null ? null : byCommand.get(commandId);
+            if (l == null || l.expect == null || l.verified || !l.authorized(mono.getAsLong())) {
+                return null;
+            }
+            resource = l.resource;
+            expect = l.expect;
+        }
+        ObsCheck c = obsCheck;
+        String why;
+        try {
+            why = c == null ? OBS_UNKNOWN : c.check(resource, expect);
+        } catch (RuntimeException e) {
+            why = OBS_UNKNOWN;
+        }
+        if (why != null && !OBS_STALE.equals(why)) {
+            why = OBS_UNKNOWN;
+        }
+        synchronized (this) {
+            Lease l = byCommand.get(commandId);
+            if (l == null || !resource.equals(l.resource)) {
+                return why;
+            }
+            if (why == null) {
+                l.verified = true;
+                log.accept("swarm-lease: verified lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource="
+                        + l.resource + " obs=" + expect);
+                return null;
+            }
+            Phase from = l.phase;
+            l.phase = Phase.DONE;
+            markEnded(l);
+            if (l.endReason == null) {
+                l.endReason = why;
+            }
+            l.exec = ExecutionState.FAILED;
+            l.obs = OBS_STALE.equals(why) ? ObservationState.STALE : ObservationState.UNKNOWN;
+            l.active = false;
+            l.reportOwed = true;
+            l.expiryLogged = true;
+            log.accept("swarm-lease: done lease=" + l.leaseId + " gen=" + l.gen + " bot=self reason=" + why
+                    + " was=" + from.name().toLowerCase(Locale.ROOT) + " resource=" + l.resource + " obs=" + expect
+                    + " (not acting on the shared observation)");
+            return why;
+        }
+    }
+
     @Override
     public synchronized void started(UUID commandId, String name) {
         lastStarted = commandId;
@@ -843,6 +936,25 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             }
         }
         return anyTyped;
+    }
+
+    /**
+     * Ostinato: Phase 2c. The vein box the active leased command holds, so a mine whose own scan sees no ore can head
+     * there. Null unless the lease is active, authorized, a VEIN in this dimension, and (when it came from a shared
+     * observation) verified here first: a bot never steers by another bot's report alone.
+     */
+    public synchronized ReservationKey activeVein(char dim) {
+        long now = mono.getAsLong();
+        for (Lease l : leases.values()) {
+            if (!l.active || !l.authorized(now) || (l.expect != null && !l.verified)) {
+                continue;
+            }
+            ReservationKey k = ReservationKey.parse(l.resource);
+            if (k != null && k.type == ReservationKey.Type.VEIN && k.dim == dim) {
+                return k;
+            }
+        }
+        return null;
     }
 
     private static boolean appliesTo(ReservationKey.Type t, LeaseFence.Kind kind, boolean ore) {

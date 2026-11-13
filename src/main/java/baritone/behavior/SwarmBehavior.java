@@ -42,6 +42,11 @@ import baritone.swarm.transport.LocalRoutingTransport;
 import baritone.swarm.transport.SwarmChannel;
 import baritone.swarm.transport.SwarmPriority;
 import baritone.swarm.transport.SwarmRateLimiter;
+import baritone.swarm.world.ObservationMessage; // Ostinato: Phase 2c
+import baritone.swarm.world.ObservationRecord;
+import baritone.swarm.world.ObservationReporter;
+import baritone.swarm.world.ObservationVerifier;
+import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Vec3i;
@@ -84,6 +89,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
          * coordinator are off.
          */
         LeaseSend leaseSend;
+        /** Ostinato: Phase 2c - sends one SWO body sealed at the given priority; null when leases and coordinator are off. */
+        ObsSend obsSend;
         /** Ostinato: roster members of this bot's groups, without self. */
         Set<String> peers = Collections.emptySet();
 
@@ -113,6 +120,14 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private BotLeaseGuard leaseGuard;
     private LeaseCoordinator leaseCoordinator;
     private final LeaseRate leaseRate = new LeaseRate(SwarmBehavior::nowMs);
+    // Ostinato: Phase 2c shared world observations. The store lives on the coordinator (memory only, rebuilt from
+    // bot reports after a restart); every bot with leases or coordinator on reports what it sees.
+    private WorldKnowledge worldKnowledge;
+    private final ObservationReporter obsReporter = new ObservationReporter();
+    private long nextObsScanAt;
+    /** Set by {@code #swarm obs world <tag>}: overrides the server-derived world id (test stand-in for a world change). */
+    private volatile String obsWorldOverride;
+    private long nextFenceLogAt;
     /** swarm* setting values the link was started with; a change (e.g. from the GUI) restarts it. */
     private String startedWith;
     // Ostinato: perf strip and link monitor. Written on the client thread, read by the command center.
@@ -277,6 +292,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
         link.control.tick();
         logLinkRate(link); // Ostinato:
         coordinatorTick(s); // Ostinato:
+        obsTick(s); // Ostinato: Phase 2c
         LocalPlayer player = ctx.player();
         link.transport.flush(nowMs(), line -> send(player, line));
     }
@@ -305,8 +321,20 @@ public final class SwarmBehavior extends Behavior implements Helper {
             leaseGuard = g;
             LeaseFence.install(() -> g.invalidActive() && leasedInControl());
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
-            LeaseFence.installGeometry((kind, x, y, z) -> leasedInControl()
-                    && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z)));
+            LeaseFence.installGeometry((kind, x, y, z) -> {
+                boolean out = leasedInControl() && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z));
+                if (out) {
+                    logFenceDenied(kind, x, y, z); // Ostinato: Phase 2c - the fence is visible in the log
+                }
+                return out;
+            });
+            // Ostinato: Phase 2c - the mine heads for the verified vein box the lease holds, even where its own
+            // seen-only scan knows no ore there yet. Only the mine asks, and only an active (started) lease answers,
+            // so this needs no in-control check (on its first tick the mine is not in control yet).
+            LeaseFence.installVein(() -> g.activeVein(dimChar()));
+            // Ostinato: Phase 2c - a lease chosen from a shared observation is checked against this bot's own world
+            // before it acts; a stale record is reported back as a correction.
+            g.setObsCheck(this::checkObservation);
         }
         CommandProtocol p = liveProtocol();
         if (p != null && p != leaseBoundTo) {
@@ -365,6 +393,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private void coordinatorTick(Settings s) {
         if (!s.swarmCoordinator.value) {
             leaseCoordinator = null;
+            worldKnowledge = null; // Ostinato: Phase 2c
             return;
         }
         Link l = link;
@@ -416,14 +445,23 @@ public final class SwarmBehavior extends Behavior implements Helper {
                         Link cur = link;
                         return cur == null ? Collections.<String>emptySet() : cur.peers;
                     });
+            // Ostinato: Phase 2c - a new coordinator starts with an empty store that rebuilds from bot reports.
+            WorldKnowledge wk = new WorldKnowledge(SwarmBehavior::nowMs, this::logDirect);
+            worldKnowledge = wk;
+            leaseCoordinator.setObsReportListener((res, reason, bot) -> wk.leaseReport(res, reason, bot));
         }
         if (leaseCoordinator.mode() == LeaseCoordinator.Mode.IDLE) {
             if (!l.protocol.linkUp()) {
                 return;
             }
             leaseCoordinator.start();
+            obsRebuild(l); // Ostinato: Phase 2c
         }
         leaseCoordinator.tick();
+        WorldKnowledge wk = worldKnowledge;
+        if (wk != null) {
+            wk.tick(); // Ostinato: Phase 2c rebuild timeout and entity expiry
+        }
         logLeaseRate();
     }
 
@@ -440,6 +478,169 @@ public final class SwarmBehavior extends Behavior implements Helper {
     /** Ostinato: one sealed SWL send; {@code urgent} picks {@link SwarmPriority#URGENT} over HIGH. */
     interface LeaseSend {
         boolean send(String to, String body, boolean urgent);
+    }
+
+    // ---- Ostinato: Phase 2c shared world observations ------------------------------------------------------
+
+    /** Ostinato: Phase 2c. One sealed SWO send at the given priority. */
+    interface ObsSend {
+        boolean send(String to, String body, SwarmPriority priority);
+    }
+
+    /**
+     * Ostinato: Phase 2c. The id observations are bound to: the {@code #swarm obs world} override, else "sp" in
+     * single player, else a short hash of the server address (the address itself never leaves the bot).
+     */
+    private String obsWorldId() {
+        String o = obsWorldOverride;
+        if (o != null) {
+            return o;
+        }
+        if (ctx.minecraft().hasSingleplayerServer()) {
+            return "sp";
+        }
+        net.minecraft.client.multiplayer.ServerData sd = ctx.minecraft().getCurrentServer();
+        String ip = sd == null || sd.ip == null ? "" : sd.ip.trim().toLowerCase(java.util.Locale.ROOT);
+        if (ip.isEmpty()) {
+            return "unknown";
+        }
+        long h = 1125899906842597L; // stable across runs and PCs, unlike String.hashCode salt-free but short
+        for (int i = 0; i < ip.length(); i++) {
+            h = 31 * h + ip.charAt(i);
+        }
+        String b = Long.toString(h & 0x7fffffffffffffffL, 36);
+        return "s" + b.substring(0, Math.min(6, b.length()));
+    }
+
+    /** True when this bot is the designated coordinator and runs one. */
+    private boolean selfIsCoordinator(Link l) {
+        return worldKnowledge != null && l.self.equalsIgnoreCase(allowedCoordinator());
+    }
+
+    /**
+     * Ostinato: Phase 2c. The coordinator (re)binds its store to the current world, asks every bot for its
+     * observations (one Q broadcast) and refuses picks until each live peer answered with E or 25 s passed.
+     */
+    private void obsRebuild(Link l) {
+        WorldKnowledge wk = worldKnowledge;
+        LeaseCoordinator c = leaseCoordinator;
+        if (wk == null || l.obsSend == null || (c != null && c.mode() == LeaseCoordinator.Mode.REFUSED)) {
+            return;
+        }
+        String world = obsWorldId();
+        wk.setWorld(world);
+        Set<String> online = new HashSet<>();
+        for (String n : onlinePlayerNames()) {
+            online.add(n.toLowerCase(java.util.Locale.ROOT));
+        }
+        List<String> live = new ArrayList<>();
+        for (String p : l.peers) {
+            if (online.contains(p.toLowerCase(java.util.Locale.ROOT))) {
+                live.add(p);
+            }
+        }
+        l.obsSend.send("*", new ObservationMessage(ObservationMessage.Op.Q, world, new ArrayList<>()).encode(),
+                SwarmPriority.HIGH);
+        wk.startRebuild(live);
+        obsReporter.onQuery(true, nowMs()); // the coordinator's own records go straight into the store
+    }
+
+    /** Ostinato: Phase 2c. Scan, report and (on the coordinator) follow world changes. */
+    private void obsTick(Settings s) {
+        Link l = link;
+        if (l == null || l.obsSend == null || ctx.player() == null || ctx.minecraft().level == null) {
+            return;
+        }
+        long now = nowMs();
+        String world = obsWorldId();
+        if (obsReporter.setWorld(world)) {
+            logDirect("swarm-obs: reporting for world " + world);
+            nextObsScanAt = now;
+        }
+        boolean coordinator = selfIsCoordinator(l);
+        WorldKnowledge wk = worldKnowledge;
+        if (coordinator && wk.rebuildAsked() && !world.equals(wk.world())) {
+            obsRebuild(l); // world or session changed under the coordinator: drop everything and ask again
+        }
+        if (now >= nextObsScanAt) {
+            nextObsScanAt = now + 5_000L;
+            net.minecraft.core.BlockPos p = ctx.player().blockPosition();
+            ObservationReporter.Scan scan = ObservationReporter.scan(reservationWorld(), dimChar(), p.getX(),
+                    p.getY(), p.getZ(), 16, 8);
+            obsReporter.observe(scan.seen, scan.box, now);
+        }
+        if (coordinator) {
+            if (!wk.rebuildAsked()) {
+                return; // not started yet: keep the reports until the store is bound
+            }
+            obsReporter.tick(now, true, m -> {
+                wk.apply(l.self, m);
+                return true;
+            });
+            return;
+        }
+        String to = allowedCoordinator();
+        if (to.isEmpty()) {
+            return;
+        }
+        boolean spool = l.transport.isLocal(to);
+        obsReporter.tick(now, spool, m -> l.obsSend.send(to, m.encode(),
+                m.op == ObservationMessage.Op.G ? SwarmPriority.HIGH : SwarmPriority.NORMAL));
+    }
+
+    /** Ostinato: Phase 2c. SWO inbound, on the tick thread. */
+    private void onObsMessage(SwarmMessage msg) {
+        ObservationMessage m = ObservationMessage.decode(msg.body());
+        if (m == null) {
+            return;
+        }
+        if (m.op == ObservationMessage.Op.Q) {
+            if (!msg.from().equalsIgnoreCase(allowedCoordinator())) {
+                return; // only the designated coordinator may ask for a dump
+            }
+            String mine = obsReporter.world();
+            if (mine == null || !mine.equals(m.worldId)) {
+                logDirect("swarm-obs: rebuild from " + msg.from() + " for world " + m.worldId + " but this bot is in "
+                        + mine + "; not answering");
+                return;
+            }
+            Link l = link;
+            obsReporter.onQuery(l != null && l.transport.isLocal(msg.from()), nowMs());
+            logDirect("swarm-obs: rebuild asked by " + msg.from() + ", dumping " + obsReporter.reportedSize()
+                    + " records");
+            return;
+        }
+        WorldKnowledge wk = worldKnowledge;
+        if (wk != null) {
+            wk.apply(msg.from(), m);
+        }
+    }
+
+    /** Ostinato: Phase 2c. The bot-side check before acting on a lease chosen from a shared observation. */
+    private String checkObservation(String resource, String expect) {
+        ObservationVerifier.Result r = ObservationVerifier.verify(resource, expect, dimChar(), reservationWorld());
+        if (r.state == ObservationVerifier.State.CONFIRMED) {
+            logDirect("swarm-obs: verified " + resource + " (" + r.why + ")");
+            return null;
+        }
+        if (r.state == ObservationVerifier.State.STALE) {
+            obsReporter.correction(resource, r.key, r.detail, nowMs());
+            logDirect("swarm-obs: stale " + resource + " (" + r.why + "); reporting the correction");
+            return BotLeaseGuard.OBS_STALE;
+        }
+        logDirect("swarm-obs: cannot verify " + resource + " (" + r.why + ")");
+        return BotLeaseGuard.OBS_UNKNOWN;
+    }
+
+    /** Ostinato: Phase 2c. One log line per 2 s when the reservation fence denies an action. */
+    private void logFenceDenied(LeaseFence.Kind kind, int x, int y, int z) {
+        long now = nowMs();
+        if (now < nextFenceLogAt) {
+            return;
+        }
+        nextFenceLogAt = now + 2_000L;
+        logDirect("swarm-lease: fence denied " + kind + " at " + x + "," + y + "," + z + " outside reservation"
+                + " (fenceDenials=" + (LeaseFence.denials() + 1) + ")");
     }
 
     // Ostinato: one Sender for guard and coordinator, so reconcile replies reach the URGENT queue.
@@ -707,6 +908,10 @@ public final class SwarmBehavior extends Behavior implements Helper {
                     made.leaseSend = (to, body, urgent) -> sendSealed(endpoint, roster, self, to, LeaseMessage.TYPE,
                             body, urgent ? SwarmPriority.URGENT : SwarmPriority.HIGH);
                     control.registerHandler(LeaseMessage.TYPE, this::onLeaseMessage);
+                    // Ostinato: Phase 2c - SWO observation reports (spool when the coordinator is local).
+                    made.obsSend = (to, body, priority) -> sendSealed(endpoint, roster, self, to,
+                            ObservationMessage.TYPE, body, priority);
+                    control.registerHandler(ObservationMessage.TYPE, this::onObsMessage);
                 }
                 return made;
             } catch (RuntimeException e) {
@@ -930,7 +1135,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
         BotLeaseGuard g = leaseGuard;
         if (g != null) {
             out.add("swarm-lease guard: coordinator=" + allowedCoordinator() + " ignored=" + g.ignoredCount()
-                    + " grantRejects=" + g.grantRejectCount() + " fenceDenials=" + LeaseFence.denials());
+                    + " grantRejects=" + g.grantRejectCount() + " fenceDenials=" + LeaseFence.denials()
+                    + " geometryDenials=" + LeaseFence.geometryDenials()); // Ostinato: Phase 2c
             for (String line : g.describe()) {
                 out.add("  " + line);
             }
@@ -951,13 +1157,93 @@ public final class SwarmBehavior extends Behavior implements Helper {
         if (c == null) {
             return "swarm: swarmCoordinator is false (or the link is not up yet)";
         }
+        WorldKnowledge wk = worldKnowledge;
+        // Ostinato: Phase 2c - obs:<ore> picks the best shared vein observation; the bot verifies it before acting.
+        if (resource.startsWith("obs:")) {
+            String ore = resource.substring(4).trim().toLowerCase(java.util.Locale.ROOT);
+            if (wk == null || ore.isEmpty()) {
+                return "swarm-lease: not offering " + resource + ": no observation store";
+            }
+            WorldKnowledge.Pick p = wk.pick(ore, dimChar(), key -> c.busyReason(key) != null);
+            if (p.record == null) {
+                return "swarm-lease: not offering " + resource + ": " + p.reason;
+            }
+            logDirect("swarm-obs: " + resource + " picked " + p.record);
+            return c.lease(bot, p.record.key, commandLine, p.record.detail);
+        }
         // Ostinato: Phase 2b - vein:/chest:/region: shorthand becomes a canonical reservation key here.
         ReservationResolver.Result r =
                 ReservationResolver.resolve(resource, dimChar(), reservationWorld());
         if (r.error != null) {
+            // Ostinato: Phase 2c - the coordinator cannot see the vein, but a bot reported one covering it.
+            int[] at = r.error.contains("unloaded") ? veinSeed(resource) : null;
+            ObservationRecord rec = at == null || wk == null ? null : wk.covering(dimChar(), at[0], at[1], at[2]);
+            if (rec != null) {
+                logDirect("swarm-obs: " + resource + " is not loaded here; using " + rec);
+                return c.lease(bot, rec.key, commandLine, rec.detail);
+            }
             return "swarm-lease: not offering " + resource + ": " + r.error;
         }
         return c.lease(bot, r.key, commandLine);
+    }
+
+    /** Ostinato: Phase 2c. The x,y,z of a {@code vein:x,y,z} shorthand, else null. */
+    private static int[] veinSeed(String resource) {
+        if (!resource.startsWith("vein:")) {
+            return null;
+        }
+        String[] f = resource.substring(5).split(",", -1);
+        if (f.length != 3) {
+            return null;
+        }
+        try {
+            return new int[]{Integer.parseInt(f[0].trim()), Integer.parseInt(f[1].trim()), Integer.parseInt(f[2].trim())};
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Ostinato: Phase 2c. {@code #swarm obs status}. */
+    public List<String> obsStatusLines() {
+        List<String> out = new ArrayList<>();
+        ObservationReporter rep = obsReporter;
+        out.add("swarm-obs reporter: world=" + rep.world() + " reported=" + rep.reportedSize() + " pending="
+                + rep.pending() + " sent=" + rep.sentMessages() + "msg/" + rep.sentEntries() + "entries corrections="
+                + rep.corrections() + " queries=" + rep.queries() + " fenceDenials=" + LeaseFence.denials()
+                + " geometryDenials=" + LeaseFence.geometryDenials());
+        WorldKnowledge wk = worldKnowledge;
+        if (wk != null) {
+            out.addAll(wk.status(8));
+        }
+        return out;
+    }
+
+    /** Ostinato: Phase 2c. {@code #swarm obs see|waypoint|structure}: report one observation by hand. */
+    public String obsSee(String key, String detail, int confidence, long ageMs) {
+        if (!ObservationMessage.validKey(key)) {
+            return "swarm-obs: bad key " + key;
+        }
+        if (detail == null || !detail.matches("[A-Za-z0-9_:.,@-]{1,48}")) {
+            return "swarm-obs: bad detail " + detail;
+        }
+        if (obsReporter.world() == null) {
+            return "swarm-obs: not reporting yet (link down or not in a world)";
+        }
+        obsReporter.manual(key, detail, confidence, ageMs, nowMs());
+        return "swarm-obs: queued " + key + " " + detail + " conf=" + confidence + " age=" + ageMs + "ms";
+    }
+
+    /** Ostinato: Phase 2c. {@code #swarm obs world <tag|auto>}: test equivalent of a world/session change. */
+    public String obsWorld(String tag) {
+        if ("auto".equalsIgnoreCase(tag)) {
+            obsWorldOverride = null;
+            return "swarm-obs: world id back to auto";
+        }
+        if (!ObservationMessage.validWorld(tag)) {
+            return "swarm-obs: bad world tag " + tag;
+        }
+        obsWorldOverride = tag;
+        return "swarm-obs: world id set to " + tag;
     }
 
     /** Ostinato: the coordinator's loaded world, as the reservation resolver sees it. */

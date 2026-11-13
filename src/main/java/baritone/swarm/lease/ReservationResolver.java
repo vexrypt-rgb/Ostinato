@@ -44,18 +44,23 @@ public final class ReservationResolver {
     public static final class Result {
         public final String key;
         public final String error;
+        /** Ostinato: Phase 2c. For a vein: the ore id and its block count (0 / null otherwise). */
+        public final String ore;
+        public final int count;
 
-        private Result(String key, String error) {
+        private Result(String key, String error, String ore, int count) {
             this.key = key;
             this.error = error;
+            this.ore = ore;
+            this.count = count;
         }
 
         static Result ok(String k) {
-            return new Result(k, null);
+            return new Result(k, null, null, 0);
         }
 
         static Result fail(String e) {
-            return new Result(null, e);
+            return new Result(null, e, null, 0);
         }
     }
 
@@ -100,7 +105,8 @@ public final class ReservationResolver {
     }
 
     /** Six-neighbour flood fill over blocks with the seed's id; the key is the bounding box. */
-    static Result vein(char dim, int sx, int sy, int sz, World w) {
+    // Ostinato: Phase 2c. Public so a bot can re-check a shared vein observation against its own world.
+    public static Result vein(char dim, int sx, int sy, int sz, World w) {
         String ore = w.block(sx, sy, sz);
         if (ore == null) {
             return Result.fail("vein not loaded");
@@ -140,7 +146,7 @@ public final class ReservationResolver {
                 }
             }
         }
-        return Result.ok(ReservationKey.vein(dim, x1, y1, z1, x2, y2, z2).toString());
+        return new Result(ReservationKey.vein(dim, x1, y1, z1, x2, y2, z2).toString(), null, ore, seen.size());
     }
 
     private static long pack(int x, int y, int z) {

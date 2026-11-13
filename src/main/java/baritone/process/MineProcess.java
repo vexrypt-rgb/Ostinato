@@ -38,6 +38,9 @@ import baritone.legit.LegitGatherLive;
 import baritone.legit.LegitScan;
 import baritone.legit.LegitTargets;
 import baritone.legit.McSeenView;
+import baritone.swarm.lease.LeaseFence; // Ostinato: Phase 2c
+import baritone.swarm.lease.LeasedVein; // Ostinato: Phase 2c
+import baritone.swarm.lease.ReservationKey; // Ostinato: Phase 2c
 import baritone.utils.BaritoneProcessHelper;
 import baritone.utils.BlockStateInterface;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -127,6 +130,11 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         updateLoucaSystem();
         int mineGoalUpdateInterval = Baritone.settings().mineGoalUpdateInterval.value;
         List<BlockPos> curr = new ArrayList<>(knownOreLocations);
+        // Ostinato: Phase 2c - while a vein lease is held, ore outside its box is not a target (the fence would deny it).
+        ReservationKey vein = LeaseFence.veinTarget();
+        if (vein != null) {
+            curr.removeIf(pos -> !LeasedVein.keep(vein, pos.getX(), pos.getY(), pos.getZ(), filter.has(baritone.bsi.get0(pos))));
+        }
         if (mineGoalUpdateInterval != 0 && tickCount++ % mineGoalUpdateInterval == 0) { // big brain
             CalculationContext context = new CalculationContext(baritone, true);
             if (LegitTargets.active()) {
@@ -344,6 +352,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             } else {
                 chosen = locs2;
             }
+            // Ostinato: Phase 2c - a held vein lease limits the targets to its box.
+            ReservationKey held = LeaseFence.veinTarget();
+            if (held != null) {
+                chosen.removeIf(pos -> !LeasedVein.keep(held, pos.getX(), pos.getY(), pos.getZ(),
+                        filter.has(context.get(pos.getX(), pos.getY(), pos.getZ()))));
+            }
             if (chosen.isEmpty()) {
                 locs = chosen;
             } else {
@@ -355,6 +369,12 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             }
         }
         // we don't know any ore locations at the moment
+        // Ostinato: Phase 2c - a held vein lease was verified in this bot's world before the command ran, so head for
+        // its box rather than wander; once the box is loaded and holds none of the ore, the vein is done.
+        ReservationKey vein = LeaseFence.veinTarget();
+        if (vein != null) {
+            return veinGoal(vein, filter, legit);
+        }
         if (LegitTargets.active()) {
             // Ostinato: no visible ore. One bot may cave, branch, or swim. This is not a path toward a cached ore.
             return legitGather();
@@ -390,6 +410,35 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             };
         }
         return new PathingCommand(branchPointRunaway, PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+    }
+
+    /**
+     * Ostinato: Phase 2c. The goal for a held vein lease when no known ore is a target: the leased ore still in the
+     * box (it becomes the known ore, so the usual mining runs on it), the box centre while part of it is not loaded
+     * here, or null (the mine ends and the lease is released) once the loaded box holds none of it.
+     */
+    private PathingCommand veinGoal(ReservationKey vein, BlockOptionalMetaLookup filter, boolean legit) {
+        CalculationContext context = new CalculationContext(baritone);
+        LeasedVein.Scan scan = LeasedVein.scan(vein, (x, y, z) -> !context.bsi.worldContainsLoadedChunk(x, z)
+                ? LeasedVein.Blocks.UNLOADED
+                : filter.has(context.get(x, y, z)) && !blacklist.contains(new BlockPos(x, y, z))
+                ? LeasedVein.Blocks.MATCH : LeasedVein.Blocks.OTHER);
+        if (scan.state == LeasedVein.State.UNKNOWN) {
+            int[] c = LeasedVein.centre(vein);
+            return new PathingCommand(new GoalNear(new BlockPos(c[0], c[1], c[2]), 3), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+        }
+        if (scan.state == LeasedVein.State.MINED_OUT) {
+            logDirect("swarm-lease: vein " + vein + " mined out here, ending the leased mine");
+            return null;
+        }
+        List<BlockPos> ore = new ArrayList<>();
+        for (int[] p : scan.ore) {
+            ore.add(new BlockPos(p[0], p[1], p[2]));
+        }
+        knownOreLocations = new ArrayList<>(ore);
+        Goal goal = Baritone.settings().cadenza.value ? cadenzaGoal(context, ore, filter)
+                : new GoalComposite(ore.stream().map(loc -> coalesce(loc, ore, context)).toArray(Goal[]::new));
+        return new PathingCommand(goal, legit ? PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH : PathingCommandType.REVALIDATE_GOAL_AND_PATH);
     }
 
     /**
