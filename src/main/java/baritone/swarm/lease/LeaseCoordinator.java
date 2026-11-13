@@ -317,6 +317,10 @@ public final class LeaseCoordinator {
             return;
         }
         LeaseRecord.State before = r.state;
+        // Ostinato: a RENEW on a lease this coordinator never granted is the holder's reconcile renew (the RREQ made
+        // it). Live b9r1 it landed just after reconciliation ended, went out HIGH and waited 6 s behind the caps
+        // query, past the lease's deadline. Its GRANT goes URGENT however late in reconciliation it arrives.
+        urgent |= renew && r.lastGrantMono == Long.MIN_VALUE;
         if (!grant(r, m, d, now, urgent)) {
             return;
         }

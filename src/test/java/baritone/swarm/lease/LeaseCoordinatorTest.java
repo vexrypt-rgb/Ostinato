@@ -276,6 +276,41 @@ public class LeaseCoordinatorTest {
         assertEquals(1, s.bobExec.count("mine"));
     }
 
+    // Ostinato: live b9r1 - the reconcile renew landed just after reconciliation ended and its GRANT queued HIGH.
+    @Test
+    public void reconcileRenewArrivingAfterReconcileIsStillUrgent() throws Exception {
+        Restarted r = restarted();
+        LeaseSupport s = r.s;
+        s.guard.tick(); // Bob's reconcile renew, behind his report
+        List<LeaseSupport.Msg> inFlight = s.take(LeaseMessage.TYPE, LeaseMessage.Op.RENEW);
+        assertEquals(1, inFlight.size());
+        assertTrue(inFlight.get(0).urgent);
+        for (int i = 0; i < 40 && s.coord.mode() != LeaseCoordinator.Mode.ACTIVE; i++) {
+            s.advance(1_000L);
+            s.coord.tick(); // the renew is still in flight (slow chat) when reconciliation ends
+            s.pump();
+        }
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals(0, r.grants(r.bob).size());
+        for (LeaseSupport.Msg m : inFlight) {
+            s.deliver(m);
+        }
+        s.pump();
+        List<LeaseSupport.Msg> g = r.grants(r.bob);
+        assertEquals(1, g.size());
+        assertTrue(g.get(0).toString(), g.get(0).urgent);
+        assertTrue(s.logged("bot=self after-reconcile deadline in"));
+        assertEquals(1, s.bobExec.count("mine")); // a renew, never a second submit
+        int mark = s.sent.size();
+        s.run(15_000L, 1_000L);
+        List<LeaseSupport.Msg> later = s.sentSince(mark, "Alice", LeaseMessage.Op.GRANT);
+        assertFalse(later.isEmpty());
+        for (LeaseSupport.Msg m : later) {
+            assertFalse(m.toString(), m.urgent); // only the first renew after the relaunch
+        }
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(r.bob));
+    }
+
     // ---- the safety rules: exactly one thing wrong each time, and nothing is renewed early ----
 
     @Test
