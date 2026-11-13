@@ -163,6 +163,63 @@ public class BotLeaseGuardTest {
         assertEquals("end", reports.get(1).lease().extra);
     }
 
+    /**
+     * Ostinato: after a coordinator relaunch the RREQ answer carries only leases that still matter. Finished leases
+     * the guard remembers (up to KEEP_DONE) used to be reported too, oldest first, on every RREQ resend; over chat
+     * that queued ~40 lines/min per bot, delayed the live lease's report past the reconcile timeout and starved the
+     * hello replies the relaunched coordinator needs to relearn capabilities.
+     */
+    @Test
+    public void reconcileRequestSkipsFinishedLeases() throws Exception {
+        LeaseSupport s = active();
+        for (int i = 0; i < 6; i++) {
+            String r = s.coord.lease("Bob", "old" + i, "mine iron_ore");
+            s.pump();
+            UUID id = LeaseSupport.leaseIdOf(r);
+            s.coord.revoke("old" + i);
+            s.pump();
+            s.tick();
+            assertEquals(BotLeaseGuard.Phase.DONE, s.guard.phaseOf(id));
+        }
+        s.advance(BotLeaseGuard.RECONCILE_REPORT_MIN_MS + 1_000L); // They ended well before the coordinator went down.
+        UUID live = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        s.sent.clear();
+        s.guard.onMessage("Alice", new LeaseMessage(LeaseMessage.Op.RREQ, null, "-", 0, null, 0, 0, "-"));
+        List<LeaseSupport.Msg> reports = s.take(LeaseMessage.TYPE, LeaseMessage.Op.REPORT);
+        assertEquals(2, reports.size());
+        assertEquals(live, reports.get(0).lease().leaseId);
+        assertEquals("end", reports.get(1).lease().extra);
+    }
+
+    /** Ostinato: a recently finished lease's REPORT must parse; the "canceled (confirmed)" label made it unreadable. */
+    @Test
+    public void finishedLeaseReportIsReadable() throws Exception {
+        LeaseSupport s = active();
+        String r = s.coord.lease("Bob", "old0", "mine iron_ore");
+        s.pump();
+        UUID id = LeaseSupport.leaseIdOf(r);
+        s.coord.revoke("old0");
+        s.pump();
+        s.tick();
+        assertEquals(BotLeaseGuard.Phase.DONE, s.guard.phaseOf(id));
+        s.guard.onMessage("Alice", new LeaseMessage(LeaseMessage.Op.RREQ, null, "-", 0, null, 0, 0, "-"));
+        List<LeaseSupport.Msg> reports = s.take(LeaseMessage.TYPE, LeaseMessage.Op.REPORT);
+        assertEquals(2, reports.size());
+        LeaseMessage rep = reports.get(0).lease();
+        assertEquals(id, rep.leaseId);
+        assertTrue(rep.extra, rep.extra.contains("exec=canceled,"));
+        assertTrue(rep.extra, rep.extra.contains("reason=lease-revoked"));
+        assertEquals("end", reports.get(1).lease().extra);
+    }
+
+    @Test
+    public void wireTokenKeepsTheExtraFieldParseable() {
+        assertEquals("stopped_by_Bob_2_", BotLeaseGuard.wireToken("stopped by Bob (2)"));
+        assertEquals("a_b_c", BotLeaseGuard.wireToken("a,b=c"));
+        assertEquals("none", BotLeaseGuard.wireToken(""));
+    }
+
     /** Chat latency: the OFFER is re-sent several times before the first GRANT arrives, 25 s late. */
     @Test
     public void lateGrantAnswersEarlyRequestUnderChatLatency() throws Exception {

@@ -92,6 +92,13 @@ public final class CommandProtocol {
     private final Map<UUID, Held> held = new LinkedHashMap<>();
     private final Map<UUID, LeaseStop> leaseStops = new LinkedHashMap<>();
     private final List<Decision> deferredAcks = new ArrayList<>();
+    // Ostinato: a query hello asks every peer to answer, even one that already knows our caps. A reply is
+    // always a plain hello, so queries cannot loop. Queries repeat with backoff while an online peer is unknown.
+    static final String HELLO_QUERY = "helloq";
+    public static final long CAPS_PROBE_MIN_MS = 5_000L;
+    public static final long CAPS_PROBE_MAX_MS = 60_000L;
+    private long capsProbeGap = CAPS_PROBE_MIN_MS;
+    private long nextCapsProbe = Long.MAX_VALUE;
     /** How long a command that arrived before its lease grant waits for the grant. */
     public static final long HOLD_MS = 2_000L;
 
@@ -177,6 +184,20 @@ public final class CommandProtocol {
 
     /** Tell peers what this bot can do. The body is sealed by {@link Wire}; this method does not sign. */
     public void advertise() {
+        boolean query;
+        synchronized (lock) {
+            query = !unknownPeersLocked().isEmpty();
+            if (query) {
+                armCapsProbeLocked(clock.getAsLong()); // Ostinato: this hello is the probe for now.
+            }
+        }
+        sendHello("*", query, query ? SwarmPriority.HIGH : SwarmPriority.NORMAL);
+    }
+
+    // Ostinato: a query asks the receiver to answer; a plain hello only announces. Queries and their answers go
+    // HIGH: a relaunched coordinator refuses every lease until it has the caps, so they must not wait behind
+    // NORMAL traffic in a chat queue (live 11-12: caps took 158 s).
+    private void sendHello(String to, boolean query, SwarmPriority priority) {
         CapabilityDescriptor caps;
         synchronized (lock) {
             caps = localCaps;
@@ -184,7 +205,44 @@ public final class CommandProtocol {
         if (caps == null || !caps.understood()) {
             return;
         }
-        wire.send("*", TYPE_HELLO, "1|hello|" + self.memberId() + "|" + self.signetKeyId() + "|" + caps.encode());
+        wire.send(to, TYPE_HELLO, "1|" + (query ? HELLO_QUERY : "hello") + "|" + self.memberId() + "|"
+                + self.signetKeyId() + "|" + caps.encode(), priority);
+    }
+
+    // Ostinato: online roster peers whose caps this bot does not know yet.
+    private List<String> unknownPeersLocked() {
+        List<String> unknown = new ArrayList<>();
+        for (String m : onlineMembers) {
+            if (!peerCaps.containsKey(m)) {
+                unknown.add(m);
+            }
+        }
+        java.util.Collections.sort(unknown);
+        return unknown;
+    }
+
+    private void armCapsProbeLocked(long now) {
+        nextCapsProbe = now + capsProbeGap;
+        capsProbeGap = Math.min(CAPS_PROBE_MAX_MS, capsProbeGap * 2);
+    }
+
+    // Ostinato: ask again, with backoff, while an online peer's caps are unknown. A lost hello or reply
+    // otherwise left a relaunched coordinator refusing every lease ("bot capabilities are unknown").
+    private void probeCaps(long now) {
+        List<String> unknown;
+        synchronized (lock) {
+            unknown = unknownPeersLocked();
+            if (unknown.isEmpty()) {
+                capsProbeGap = CAPS_PROBE_MIN_MS;
+                nextCapsProbe = Long.MAX_VALUE;
+                return;
+            }
+            if (!linkUp || now < nextCapsProbe) {
+                return;
+            }
+        }
+        log.accept("swarm: asking for caps, unknown " + unknown);
+        advertise();
     }
 
     // Ostinato: reconnect the existing protocol without discarding its command ledger.
@@ -219,6 +277,9 @@ public final class CommandProtocol {
             }
             onlineMembers.clear();
             onlineMembers.addAll(peers);
+            if (joined) {
+                capsProbeGap = CAPS_PROBE_MIN_MS; // Ostinato: a fresh join probes quickly again.
+            }
         }
         if (joined) {
             advertise();
@@ -444,6 +505,7 @@ public final class CommandProtocol {
                 }
             }
         }
+        probeCaps(now); // Ostinato:
         for (Sent s : due) {
             if (!linkUp()) {
                 break;
@@ -1538,7 +1600,8 @@ public final class CommandProtocol {
 
     private void onHello(String from, String body) {
         String[] f = body.split("\\|", -1);
-        if (f.length != 5 || !"1".equals(f[0]) || !"hello".equals(f[1])) {
+        boolean query = f.length == 5 && HELLO_QUERY.equals(f[1]); // Ostinato:
+        if (f.length != 5 || !"1".equals(f[0]) || !("hello".equals(f[1]) || query)) {
             log.accept("swarm: ignored bad hello");
             return;
         }
@@ -1559,9 +1622,18 @@ public final class CommandProtocol {
             }
             // Ostinato: compare understood capability sets, not descriptor identity or ordering.
             CapabilityDescriptor previous = peerCaps.put(from, caps);
-            if (previous != null && previous.version() == caps.version() && previous.kinds().equals(caps.kinds())) {
+            boolean same = previous != null && previous.version() == caps.version()
+                    && previous.kinds().equals(caps.kinds());
+            if (!same) {
+                log.accept("swarm: caps from " + from + " " + caps.encode()); // Ostinato: time caps after a relaunch.
+            }
+            if (same && !query) {
                 return;
             }
+        }
+        if (query) {
+            sendHello(from, false, SwarmPriority.HIGH); // Ostinato: always answer a query, directly, never as one.
+            return;
         }
         advertise(); // Ostinato: teach a late joiner our caps without an identical-hello loop.
     }
