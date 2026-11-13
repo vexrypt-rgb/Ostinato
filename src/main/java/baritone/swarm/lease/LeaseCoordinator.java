@@ -118,6 +118,7 @@ public final class LeaseCoordinator {
     private long rivalOps;
     private long grants;
     private long renewals;
+    private long earlyRenewals; // Ostinato: renews granted while reconciling
 
     private static final class Claim {
         final String bot;
@@ -225,7 +226,10 @@ public final class LeaseCoordinator {
             switch (mode) {
                 case RECONCILING:
                     if (m.op == LeaseMessage.Op.REPORT) {
-                        onReconcileReport(from, m);
+                        onReconcileReport(from, m, after);
+                    } else if (m.op == LeaseMessage.Op.RENEW && reported.contains(from.toLowerCase(Locale.ROOT))
+                            && tryEarlyRenew(from, m, after)) {
+                        break; // Ostinato: renewed now, not held until reconciliation ends.
                     } else if (m.op == LeaseMessage.Op.REQ || m.op == LeaseMessage.Op.RENEW) {
                         heldRequests.add(new Object[]{from, m});
                         log.accept("swarm-lease: grant-held lease=" + m.leaseId + " gen=" + m.gen + " bot=" + from
@@ -259,10 +263,15 @@ public final class LeaseCoordinator {
     }
 
     private void handleActive(String from, LeaseMessage m, List<Runnable> after) {
+        handleActive(from, m, after, false);
+    }
+
+    /** Ostinato: {@code urgent} for requests held through reconciliation; their GRANTs go out ahead of the queue. */
+    private void handleActive(String from, LeaseMessage m, List<Runnable> after, boolean urgent) {
         switch (m.op) {
             case REQ:
             case RENEW:
-                onRequest(from, m, after);
+                onRequest(from, m, after, urgent);
                 break;
             case RACK:
                 onRack(from, m);
@@ -275,7 +284,7 @@ public final class LeaseCoordinator {
         }
     }
 
-    private void onRequest(String from, LeaseMessage m, List<Runnable> after) {
+    private void onRequest(String from, LeaseMessage m, List<Runnable> after, boolean urgent) {
         LeaseRecord r = m.leaseId == null ? null : records.get(m.leaseId);
         long now = mono.getAsLong();
         if (r == null || !r.bot.equalsIgnoreCase(from) || r.gen != m.gen || m.commandId == null
@@ -308,20 +317,9 @@ public final class LeaseCoordinator {
             return;
         }
         LeaseRecord.State before = r.state;
-        long nbBefore = r.notBeforeWall;
-        r.state = LeaseRecord.State.GRANTED;
-        r.notBeforeWall = Math.max(r.notBeforeWall, LeaseClock.notBeforeWall(wall.getAsLong(), d, marginMs, skewMs));
-        if (!persist()) {
-            r.state = before;
-            r.notBeforeWall = nbBefore;
-            log.accept("swarm-lease: grant-withheld lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot
-                    + " (store write failed)");
+        if (!grant(r, m, d, now, urgent)) {
             return;
         }
-        r.lastGrantMono = now;
-        r.coordDeadlineMono = LeaseClock.coordDeadline(now, d, marginMs);
-        durations.put(r.leaseId, d);
-        send(r.bot, new LeaseMessage(LeaseMessage.Op.GRANT, r.leaseId, r.resource, r.gen, r.commandId, m.nonce, d, "-"));
         if (before == LeaseRecord.State.OFFERED) {
             grants++;
             log.accept("swarm-lease: granted lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " resource="
@@ -347,6 +345,77 @@ public final class LeaseCoordinator {
                 }
             });
         }
+    }
+
+    /**
+     * Ostinato: the grant core shared by {@link #onRequest} and {@link #tryEarlyRenew}: persist GRANTED and the new
+     * notBefore first, then send. False (state restored, nothing sent) when the store write failed.
+     */
+    private boolean grant(LeaseRecord r, LeaseMessage m, long d, long now, boolean urgent) {
+        LeaseRecord.State before = r.state;
+        long nbBefore = r.notBeforeWall;
+        r.state = LeaseRecord.State.GRANTED;
+        r.notBeforeWall = Math.max(r.notBeforeWall, LeaseClock.notBeforeWall(wall.getAsLong(), d, marginMs, skewMs));
+        if (!persist()) {
+            r.state = before;
+            r.notBeforeWall = nbBefore;
+            log.accept("swarm-lease: grant-withheld lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot
+                    + " (store write failed)");
+            return false;
+        }
+        r.lastGrantMono = now;
+        r.coordDeadlineMono = LeaseClock.coordDeadline(now, d, marginMs);
+        durations.put(r.leaseId, d);
+        send(r.bot, new LeaseMessage(LeaseMessage.Op.GRANT, r.leaseId, r.resource, r.gen, r.commandId, m.nonce, d, "-"),
+                urgent);
+        return true;
+    }
+
+    /**
+     * Ostinato: renew a reported holder's lease while reconciliation still waits on other bots. Live b8r3 kept a
+     * lease and fenced it 4 s past its deadline because its renew sat in heldRequests until every holder reported.
+     * Only a lease this store already holds is renewed early: at exactly the stored generation, for exactly the bot
+     * it was granted to, at the resource's high-water mark, and only when that bot's own report claims it valid and
+     * running with no other claim on the resource. Anything else stays held for {@link #finishReconcile}. Never a
+     * REQ, never an OFFERED or unknown lease, and never a command submit.
+     */
+    private boolean tryEarlyRenew(String from, LeaseMessage m, List<Runnable> after) {
+        if (m.op != LeaseMessage.Op.RENEW || m.leaseId == null || m.commandId == null) {
+            return false;
+        }
+        LeaseRecord r = records.get(m.leaseId);
+        if (r == null || !r.bot.equalsIgnoreCase(from) || r.gen != m.gen || !r.commandId.equals(m.commandId)
+                || r.state != LeaseRecord.State.GRANTED || highWater.getOrDefault(r.resource, 0L) != r.gen) {
+            return false;
+        }
+        Claim c = claims.get(r.leaseId);
+        if (c == null || !c.bot.equalsIgnoreCase(r.bot) || c.m.gen != r.gen || c.m.commandId == null
+                || !c.m.commandId.equals(r.commandId) || !"valid".equals(c.extra.get("phase"))
+                || !("true".equals(c.extra.get("active")) || !"none".equals(c.extra.getOrDefault("exec", "none")))) {
+            return false;
+        }
+        for (Claim o : claims.values()) {
+            if (o != c && r.resource.equals(o.m.resource)) {
+                return false; // Another claim on the resource: finishReconcile decides.
+            }
+        }
+        long d = durationFor(r.bot);
+        boolean sentBefore = r.commandSent;
+        r.commandSent = true; // The holder already runs the command; reconciliation never submits one.
+        if (!grant(r, m, d, mono.getAsLong(), true)) {
+            r.commandSent = sentBefore;
+            return false;
+        }
+        renewals++;
+        earlyRenewals++;
+        log.accept("swarm-lease: renewed-early lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot
+                + " (reconciling)");
+        return true;
+    }
+
+    /** Ostinato: renews granted while reconciliation was still running. */
+    public synchronized long earlyRenewals() {
+        return earlyRenewals;
     }
 
     /** The bound command was refused after the grant: revoke, so the resource frees on rack or expiry. */
@@ -449,11 +518,12 @@ public final class LeaseCoordinator {
 
     // ---- reconciliation ---------------------------------------------------------------------------------
 
-    private void onReconcileReport(String from, LeaseMessage m) {
+    private void onReconcileReport(String from, LeaseMessage m, List<Runnable> after) {
         String bot = from.toLowerCase(Locale.ROOT);
         if (m.leaseId == null) {
             if ("end".equals(m.extra) && reported.add(bot)) {
                 log.accept("swarm-lease: reconcile-report bot=" + from + " claims=" + claimCount(from));
+                renewHeld(from, after);
             }
             return;
         }
@@ -466,6 +536,30 @@ public final class LeaseCoordinator {
         boolean active = "true".equals(x.get("active"));
         if (active || "pending".equals(phase) || "valid".equals(phase)) {
             claims.put(m.leaseId, new Claim(from, m, x));
+        }
+    }
+
+    /**
+     * Ostinato: a holder just finished its report. The newest held renew per lease of that bot gets an early renew;
+     * one that is granted takes every held renew of its lease with it, the rest stay held.
+     */
+    private void renewHeld(String from, List<Runnable> after) {
+        Map<UUID, LeaseMessage> newest = new LinkedHashMap<>();
+        for (Object[] q : heldRequests) {
+            LeaseMessage h = (LeaseMessage) q[1];
+            if (h.op == LeaseMessage.Op.RENEW && h.leaseId != null && from.equalsIgnoreCase((String) q[0])) {
+                LeaseMessage prev = newest.get(h.leaseId);
+                if (prev == null || h.nonce >= prev.nonce) {
+                    newest.put(h.leaseId, h);
+                }
+            }
+        }
+        for (LeaseMessage h : newest.values()) {
+            if (tryEarlyRenew(from, h, after)) {
+                heldRequests.removeIf(q -> from.equalsIgnoreCase((String) q[0])
+                        && ((LeaseMessage) q[1]).op == LeaseMessage.Op.RENEW
+                        && h.leaseId.equals(((LeaseMessage) q[1]).leaseId));
+            }
         }
     }
 
@@ -494,7 +588,7 @@ public final class LeaseCoordinator {
             }
             // Ostinato: a chat holder's report needs several seconds (two-line frames, rate limiter backlog), so
             // 2*M alone turned a live holder into reconcile-timeout. Wait one renew period of its lease for it.
-            if (chatPeer != null && chatPeer.test(e.getKey()) && waited < LeaseClock.renewEvery(durationFor(e.getKey()))) {
+            if (chatPeer != null && chatPeer.test(e.getKey()) && waited < LeaseClock.resendEvery(durationFor(e.getKey()))) {
                 return false;
             }
         }
@@ -588,7 +682,7 @@ public final class LeaseCoordinator {
         heldRequests.clear();
         claims.clear();
         for (Object[] q : queued) {
-            handleActive((String) q[0], (LeaseMessage) q[1], after);
+            handleActive((String) q[0], (LeaseMessage) q[1], after, true);
         }
     }
 
@@ -609,7 +703,7 @@ public final class LeaseCoordinator {
             }
         }
         for (String b : to) {
-            send(b, new LeaseMessage(LeaseMessage.Op.RREQ, null, "-", 0, null, 0, 0, "-"));
+            send(b, new LeaseMessage(LeaseMessage.Op.RREQ, null, "-", 0, null, 0, 0, "-"), true);
         }
     }
 
@@ -622,7 +716,7 @@ public final class LeaseCoordinator {
             if (mode == Mode.RECONCILING) {
                 if (reconcileDone(now)) {
                     finishReconcile(now, after);
-                } else if (now - lastRreqMono >= LeaseClock.renewEvery(durationFor(null))) {
+                } else if (now - lastRreqMono >= LeaseClock.resendEvery(durationFor(null))) {
                     sendRreq(now);
                 }
             } else if (mode == Mode.ACTIVE) {
@@ -647,7 +741,7 @@ public final class LeaseCoordinator {
                         changed = true;
                         log.accept("swarm-lease: expired lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot
                                 + " reason=offer-unanswered");
-                    } else if (now - lastResend.getOrDefault(r.leaseId, r.offeredAtMono) >= LeaseClock.renewEvery(d)) {
+                    } else if (now - lastResend.getOrDefault(r.leaseId, r.offeredAtMono) >= LeaseClock.resendEvery(d)) {
                         lastResend.put(r.leaseId, now);
                         send(r.bot, new LeaseMessage(LeaseMessage.Op.OFFER, r.leaseId, r.resource, r.gen, r.commandId,
                                 0, d, "-"));
@@ -669,7 +763,7 @@ public final class LeaseCoordinator {
                         log.accept("swarm-lease: expired lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot
                                 + " reason=" + r.endReason);
                     } else if (r.state == LeaseRecord.State.REVOKING
-                            && now - lastResend.getOrDefault(r.leaseId, Long.MIN_VALUE / 2) >= LeaseClock.renewEvery(d)) {
+                            && now - lastResend.getOrDefault(r.leaseId, Long.MIN_VALUE / 2) >= LeaseClock.resendEvery(d)) {
                         lastResend.put(r.leaseId, now);
                         sendRevoke(r.bot, r.leaseId, r.resource, r.gen, r.commandId);
                     }
@@ -844,7 +938,7 @@ public final class LeaseCoordinator {
     public synchronized List<String> describe() {
         List<String> out = new ArrayList<>();
         out.add("coordinator mode=" + mode.name().toLowerCase(Locale.ROOT) + (refusedReason == null ? ""
-                : " (" + refusedReason + ")") + " grants=" + grants + " renewals=" + renewals + " rivalOps="
+                : " (" + refusedReason + ")") + " grants=" + grants + " renewals=" + renewals + " early=" + earlyRenewals + " rivalOps="
                 + rivalOps + " " + store.path());
         long w = wall.getAsLong();
         for (LeaseRecord r : records.values()) {
@@ -926,8 +1020,16 @@ public final class LeaseCoordinator {
     }
 
     private void send(String to, LeaseMessage m) {
+        send(to, m, false);
+    }
+
+    private void send(String to, LeaseMessage m, boolean urgent) {
         try {
-            sender.send(to, m.encode());
+            if (urgent) {
+                sender.send(to, m.encode(), true);
+            } else {
+                sender.send(to, m.encode());
+            }
         } catch (RuntimeException e) {
             log.accept("swarm-lease: send-failed op=" + m.op.wire() + " bot=" + to + ": " + e.getMessage());
         }

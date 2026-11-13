@@ -19,10 +19,15 @@
 package baritone.swarm.transport;
 
 /**
- * Outgoing priority. {@link #HIGH} is sent first, {@link #LOW} last; order within one
+ * Outgoing priority. {@link #URGENT} is sent first, {@link #LOW} last; order within one
  * priority is FIFO. (Declaration order is the send order: lower ordinal = sent sooner.)
  */
 public enum SwarmPriority {
+    /**
+     * Ostinato: lease reconciliation after a coordinator relaunch (RREQ, REPORT, the renew it triggers and its GRANT):
+     * a held lease's deadline is running. Shares the token bucket with everything else, so it never exceeds the budget.
+     */
+    URGENT,
     /** Time-critical replies (pong, later acks/cancels). */
     HIGH,
     /** Ordinary requests (ping, later assignments). */

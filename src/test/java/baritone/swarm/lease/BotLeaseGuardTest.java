@@ -280,6 +280,25 @@ public class BotLeaseGuardTest {
         assertEquals(0, s.guard.grantRejectCount());
     }
 
+    // Ostinato: over chat (D = 60 s) a held lease renews every 10 s, D/6: six renews a minute, 12 chat lines.
+    @Test
+    public void chatLeaseRenewsSixTimesAMinute() throws Exception {
+        LeaseSupport s = active();
+        s.chatLink = true;
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        int since = s.sent.size();
+        s.run(60_000L, 1_000L);
+        int renews = s.sentSince(since, "Bob", LeaseMessage.Op.RENEW).size();
+        assertEquals(6, renews);
+        assertTrue(2 * renews <= 35);
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        String d = s.guard.describe().get(0);
+        long left = Long.parseLong(d.substring(d.indexOf("left=") + 5, d.indexOf("ms", d.indexOf("left="))));
+        assertTrue("left=" + left, left >= 50_000L); // the last renew was answered at most 10 s ago
+    }
+
     @Test
     public void repeatedOffersThrottleRequests() throws Exception {
         LeaseSupport s = active();

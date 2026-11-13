@@ -78,8 +78,11 @@ public final class SwarmBehavior extends Behavior implements Helper {
         final Path rosterPath;
         final byte[] rosterBytes;
         long nextRosterCheck;
-        /** Ostinato: sends one SWL body sealed at HIGH priority; null when leases and coordinator are off. */
-        java.util.function.BiPredicate<String, String> leaseSend;
+        /**
+         * Ostinato: sends one SWL body sealed at HIGH priority, or URGENT for reconcile traffic; null when leases and
+         * coordinator are off.
+         */
+        LeaseSend leaseSend;
         /** Ostinato: roster members of this bot's groups, without self. */
         Set<String> peers = Collections.emptySet();
 
@@ -295,7 +298,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             return;
         }
         if (leaseGuard == null) {
-            BotLeaseGuard g = new BotLeaseGuard(this::sendLease, SwarmBehavior::nowMs, this::logDirect,
+            BotLeaseGuard g = new BotLeaseGuard(leaseSender, SwarmBehavior::nowMs, this::logDirect,
                     SwarmBehavior::allowedCoordinator, this::stopLeasedProcess, BotLeaseGuard.LEASED_COMMANDS);
             leaseGuard = g;
             LeaseFence.install(() -> g.invalidActive() && leasedInControl());
@@ -347,7 +350,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             Path state = ctx.minecraft().gameDirectory.toPath().resolve("ostinato").resolve("swarm")
                     .resolve("coordinator.state");
             leaseCoordinator = new LeaseCoordinator(l.self, SwarmBehavior::allowedCoordinator,
-                    new CoordinatorStore(state), this::sendLease,
+                    new CoordinatorStore(state), leaseSender,
                     new LeaseCoordinator.Commands() {
                         @Override
                         public String submitLeased(String bot, String line, UUID id) {
@@ -402,12 +405,30 @@ public final class SwarmBehavior extends Behavior implements Helper {
         return s.agentOwner.value == null ? "" : s.agentOwner.value.trim();
     }
 
-    private boolean sendLease(String to, String body) {
+    /** Ostinato: one sealed SWL send; {@code urgent} picks {@link SwarmPriority#URGENT} over HIGH. */
+    interface LeaseSend {
+        boolean send(String to, String body, boolean urgent);
+    }
+
+    // Ostinato: one Sender for guard and coordinator, so reconcile replies reach the URGENT queue.
+    private final BotLeaseGuard.Sender leaseSender = new BotLeaseGuard.Sender() {
+        @Override
+        public boolean send(String to, String body) {
+            return sendLease(to, body, false);
+        }
+
+        @Override
+        public boolean send(String to, String body, boolean urgent) {
+            return sendLease(to, body, urgent);
+        }
+    };
+
+    private boolean sendLease(String to, String body, boolean urgent) {
         Link l = link;
         if (l == null || l.leaseSend == null) {
             return false;
         }
-        boolean ok = l.leaseSend.test(to, body);
+        boolean ok = l.leaseSend.send(to, body, urgent);
         if (ok) {
             leaseRate.sent(to);
         }
@@ -619,8 +640,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
                     }
                     peers.removeIf(m -> m.equalsIgnoreCase(self));
                     made.peers = Collections.unmodifiableSet(peers);
-                    made.leaseSend = (to, body) -> sendSealed(endpoint, roster, self, to, LeaseMessage.TYPE, body,
-                            SwarmPriority.HIGH);
+                    made.leaseSend = (to, body, urgent) -> sendSealed(endpoint, roster, self, to, LeaseMessage.TYPE,
+                            body, urgent ? SwarmPriority.URGENT : SwarmPriority.HIGH);
                     control.registerHandler(LeaseMessage.TYPE, this::onLeaseMessage);
                 }
                 return made;

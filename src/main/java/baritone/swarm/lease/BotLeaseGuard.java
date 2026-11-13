@@ -84,6 +84,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     public interface Sender {
         /** Send an SWL body to {@code to}; false when it could not be queued. */
         boolean send(String to, String body);
+
+        /** Ostinato: {@code urgent} sends ahead of other traffic (reconcile replies); same budget. */
+        default boolean send(String to, String body, boolean urgent) {
+            return send(to, body);
+        }
     }
 
     enum Phase { PENDING, VALID, EXPIRED, REVOKED, DONE }
@@ -111,6 +116,9 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         boolean awaitingRenew;
         int renewFailures;
         boolean renewFailLogged;
+        // Ostinato: set by an RREQ. The next renew goes out urgent, and its GRANT is logged with the margin left.
+        boolean urgentRenew;
+        boolean logNextRenew;
         boolean expiryLogged;
         boolean started;
         /** The leased process may still be running: set at start, cleared by a terminal or a confirmed stop. */
@@ -180,7 +188,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     private long racksSuppressed;
     /**
      * Ostinato: REVOKE carries no D, so an unknown lease uses the spool gap; the coordinator's REVOKE timer
-     * (every D/3 >= 10 s) is never this fast, so only crossed copies are dropped.
+     * (every D/3 >= 20 s; renews every D/6 >= 10 s) is never this fast, so only crossed copies are dropped.
      */
     static final long UNKNOWN_RACK_GAP_MS = LeaseClock.repeatGap(30_000L);
 
@@ -320,15 +328,21 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             rejectGrant(l, m, "late", now);
             return; // Arrived after its own deadline: grants nothing.
         }
+        long left = l.authUntil - now; // Ostinato: margin this grant was renewed with, measured before it extends
         l.durationMs = Math.max(LeaseClock.MIN_DURATION_MS, m.durationMs);
         l.authUntil = Math.max(l.authUntil, until);
         boolean first = !l.granted;
         l.granted = true;
         l.phase = Phase.VALID;
         l.awaitingRenew = false;
-        if (l.renewFailures > 0) {
+        if (!first && l.logNextRenew) {
+            // Ostinato: the first renew after a coordinator relaunch, with the time that was left on the lease.
+            l.logNextRenew = false;
+            log.accept("swarm-lease: renewed lease=" + l.leaseId + " gen=" + l.gen + " bot=self after-reconcile"
+                    + " deadline in " + left + " ms (unanswered=" + l.renewFailures + ")");
+        } else if (l.renewFailures > 0) {
             log.accept("swarm-lease: renewed lease=" + l.leaseId + " gen=" + l.gen + " bot=self after "
-                    + l.renewFailures + " unanswered renew(s)");
+                    + l.renewFailures + " unanswered renew(s), deadline in " + left + " ms");
         }
         l.renewFailures = 0;
         l.renewFailLogged = false;
@@ -426,16 +440,20 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                     && now - l.endedAt > reconcileReportWindow(l)) {
                 continue;
             }
-            send(from, report(l));
+            send(from, report(l), true);
             // Ostinato: the restarted coordinator never saw the renew we were waiting on, and the backoff can put
             // our next renew past the deadline (live b5: the lease was kept, then fenced 9 s later). Renew on the
             // next tick, behind the report; the coordinator holds it until reconciliation ends.
-            if (l.phase == Phase.VALID && l.awaitingRenew) {
+            // Ostinato: every valid lease renews now, not only one waiting on a renew: the relaunched coordinator
+            // grants it early once our report is in, so the margin no longer depends on where the cadence was.
+            if (l.phase == Phase.VALID) {
                 l.awaitingRenew = false;
-                l.nextRenewAt = now;
+                l.nextRenewAt = Math.min(l.nextRenewAt, now);
+                l.urgentRenew = true;
+                l.logNextRenew = true;
             }
         }
-        send(from, new LeaseMessage(LeaseMessage.Op.REPORT, null, "-", 0, null, 0, 0, "end"));
+        send(from, new LeaseMessage(LeaseMessage.Op.REPORT, null, "-", 0, null, 0, 0, "end"), true);
     }
 
     // ---- tick -------------------------------------------------------------------------------------------
@@ -456,7 +474,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                             log.accept("swarm-lease: dropped lease=" + l.leaseId + " gen=" + l.gen
                                     + " bot=self (no grant within " + l.durationMs + " ms)");
                             endLease(l, Phase.DONE, "offer-lost", after);
-                        } else if (up && now - l.lastReqAt >= Math.max(5_000L, LeaseClock.renewEvery(l.durationMs))) {
+                        } else if (up && now - l.lastReqAt >= Math.max(5_000L, LeaseClock.resendEvery(l.durationMs))) {
                             sendReq(l, LeaseMessage.Op.REQ, now);
                         }
                         break;
@@ -476,7 +494,9 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                             long wait = LeaseClock.renewEvery(l.durationMs) << Math.min(l.renewFailures, 4);
                             l.nextRenewAt = now + wait;
                             l.awaitingRenew = true;
-                            sendReq(l, LeaseMessage.Op.RENEW, now);
+                            boolean urgent = l.urgentRenew;
+                            l.urgentRenew = false;
+                            sendReq(l, LeaseMessage.Op.RENEW, now, urgent);
                         }
                         break;
                     default:
@@ -620,10 +640,15 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     }
 
     private void sendReq(Lease l, LeaseMessage.Op op, long now) {
+        sendReq(l, op, now, false);
+    }
+
+    private void sendReq(Lease l, LeaseMessage.Op op, long now, boolean urgent) {
         l.addNonce(now, now); // Ostinato: time-based nonce retention
         l.lastReqAt = now;
         l.reqSent = true;
-        send(l.coordinator, new LeaseMessage(op, l.leaseId, l.resource, l.gen, l.commandId, now, l.durationMs, "-"));
+        send(l.coordinator, new LeaseMessage(op, l.leaseId, l.resource, l.gen, l.commandId, now, l.durationMs, "-"),
+                urgent);
     }
 
     /** Ostinato: one value inside the comma-separated SWL extra field: no comma, '=' or space. */
@@ -649,8 +674,12 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     }
 
     private boolean send(String to, LeaseMessage m) {
+        return send(to, m, false);
+    }
+
+    private boolean send(String to, LeaseMessage m, boolean urgent) {
         try {
-            return sender.send(to, m.encode());
+            return urgent ? sender.send(to, m.encode(), true) : sender.send(to, m.encode());
         } catch (RuntimeException e) {
             return false;
         }

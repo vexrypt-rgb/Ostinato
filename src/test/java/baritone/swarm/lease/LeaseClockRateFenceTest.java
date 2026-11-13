@@ -40,9 +40,14 @@ public class LeaseClockRateFenceTest {
         assertEquals(10L + 30_000L + 3_000L + 500L, LeaseClock.notBeforeWall(10L, 30_000L, 3_000L, 500L));
         assertEquals(LeaseClock.CHAT_MIN_DURATION_MS, LeaseClock.effectiveDuration(30_000L, true));
         assertEquals(LeaseClock.MIN_DURATION_MS, LeaseClock.effectiveDuration(1_000L, false));
-        assertEquals(20_000L, LeaseClock.renewEvery(60_000L));
-        // Chat budget: with D >= 60s and renew at D/3 a bot sends <= 3 renews/min.
-        assertTrue(60_000L / LeaseClock.renewEvery(LeaseClock.CHAT_MIN_DURATION_MS) <= 35);
+        // Ostinato: renew every D/6 (10 s at D=60 s); resends of OFFER, REVOKE, RREQ and pending REQ stay at D/3.
+        assertEquals(10_000L, LeaseClock.renewEvery(60_000L));
+        assertEquals(20_000L, LeaseClock.resendEvery(60_000L));
+        assertEquals(10_000L, LeaseClock.repeatGap(60_000L));
+        // Chat budget: at D >= 60 s one lease costs 6 renews/min, 2 chat lines each, under the 35 lines/min cap.
+        long renewsPerMin = 60_000L / LeaseClock.renewEvery(LeaseClock.CHAT_MIN_DURATION_MS);
+        assertEquals(6L, renewsPerMin);
+        assertTrue(2 * renewsPerMin <= 35);
     }
 
     @Test

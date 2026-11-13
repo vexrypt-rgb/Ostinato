@@ -22,7 +22,7 @@ import java.util.ArrayDeque;
 
 /**
  * Outgoing chat limiter: a token bucket ({@code swarmSendRatePerSec}, {@code swarmSendBurst})
- * in front of a priority queue ({@link SwarmPriority#HIGH} first, FIFO within a priority).
+ * in front of a priority queue ({@link SwarmPriority#URGENT} first, FIFO within a priority).
  *
  * <p>Vanilla 1.16.1 {@code ServerGamePacketListenerImpl} (verified from the 1.16.1 server jar
  * with Mojang's mappings): every chat packet, commands included, does

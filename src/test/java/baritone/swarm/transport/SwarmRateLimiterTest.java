@@ -92,6 +92,24 @@ public class SwarmRateLimiterTest {
         assertEquals(Arrays.asList("high1", "high2", "norm1", "norm2", "low1", "low2"), order);
     }
 
+    // Ostinato: lease reconciliation goes out ahead of HIGH, but spends the same tokens: no extra budget.
+    @Test
+    public void urgentGoesBeforeHighWithinTheSameBudget() {
+        SwarmRateLimiter l = new SwarmRateLimiter(0.5, 2, false, 3, 0);
+        l.offer(SwarmPriority.LOW, "tele");
+        l.offer(SwarmPriority.HIGH, "ack");
+        l.offer(SwarmPriority.NORMAL, "cmd");
+        assertTrue(l.offer(SwarmPriority.URGENT, "rreq")); // queue full: the LOW line makes room
+        assertEquals(1, l.dropped());
+        assertEquals(Arrays.asList("rreq", "ack"), drain(l, 0)); // burst 2: two lines, URGENT first
+        assertNull(l.poll(1999));
+        assertTrue(l.offer(SwarmPriority.URGENT, "report"));
+        assertEquals("report", l.poll(2000));
+        assertNull(l.poll(2001));
+        assertEquals("cmd", l.poll(4000));
+        assertEquals(4, l.sentInWindow(4000));
+    }
+
     @Test
     public void lateHighPriorityOvertakesQueuedLow() {
         SwarmRateLimiter l = new SwarmRateLimiter(0.5, 1, false, 64, 0);
