@@ -41,6 +41,7 @@ public final class LeaseFence {
 
     public static void clear() {
         check = OFF;
+        geometry = NO_GEOMETRY;
     }
 
     /** True when the current action must not run. Counts each denial. */
@@ -59,6 +60,52 @@ public final class LeaseFence {
             denials++;
         }
         return d;
+    }
+
+    /** Ostinato: Phase 2b. The kind of world action a positional check is asked about. */
+    public enum Kind { BREAK, PLACE, CONTAINER }
+
+    /** Ostinato: Phase 2b. Position-aware check: does this action fall outside the active reservation? */
+    public interface Geometry {
+        boolean outside(Kind kind, int x, int y, int z);
+    }
+
+    private static final Geometry NO_GEOMETRY = (k, x, y, z) -> false;
+    private static volatile Geometry geometry = NO_GEOMETRY;
+
+    public static void installGeometry(Geometry g) {
+        geometry = g == null ? NO_GEOMETRY : g;
+    }
+
+    /**
+     * Ostinato: true when the action must not run, either because the lease is invalid ({@link #denied()}) or because
+     * the position is outside the reservation the active leased command holds. Fails open like {@link #denied()}.
+     */
+    public static boolean denied(Kind kind, int x, int y, int z) {
+        if (denied()) {
+            return true;
+        }
+        Geometry g = geometry;
+        if (g == NO_GEOMETRY) {
+            return false;
+        }
+        boolean d;
+        try {
+            d = g.outside(kind, x, y, z);
+        } catch (RuntimeException e) {
+            d = false;
+        }
+        if (d) {
+            denials++;
+            geometryDenials++;
+        }
+        return d;
+    }
+
+    private static volatile long geometryDenials;
+
+    public static long geometryDenials() {
+        return geometryDenials;
     }
 
     public static long denials() {

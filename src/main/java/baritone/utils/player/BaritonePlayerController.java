@@ -59,7 +59,8 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public boolean onPlayerDamageBlock(BlockPos pos, Direction side) {
-        if (LeaseFence.denied()) { // Ostinato: no break while a leased command runs on an invalid lease
+        // Ostinato: no break on an invalid lease, nor outside the active reservation (Phase 2b)
+        if (LeaseFence.denied(LeaseFence.Kind.BREAK, pos.getX(), pos.getY(), pos.getZ())) {
             return false;
         }
         return mc.gameMode.continueDestroyBlock(pos, side);
@@ -87,7 +88,13 @@ public final class BaritonePlayerController implements IPlayerController {
     @Override
     public InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
         // primaryplayercontroller is always in a ClientWorld so this is ok
-        if (LeaseFence.denied()) { // Ostinato: no place/use-on-block on an invalid lease
+        // Ostinato: no place/use-on-block on an invalid lease. Phase 2b: opening a container is checked at the
+        // container, a placement at the block it lands in.
+        BlockPos hit = result.getBlockPos();
+        boolean container = world.getBlockEntity(hit) instanceof net.minecraft.world.Container;
+        BlockPos at = container ? hit : hit.relative(result.getDirection());
+        if (LeaseFence.denied(container ? LeaseFence.Kind.CONTAINER : LeaseFence.Kind.PLACE,
+                at.getX(), at.getY(), at.getZ())) {
             return InteractionResult.PASS;
         }
         return mc.gameMode.useItemOn(player, hand, result);
@@ -100,7 +107,8 @@ public final class BaritonePlayerController implements IPlayerController {
 
     @Override
     public boolean clickBlock(BlockPos loc, Direction face) {
-        if (LeaseFence.denied()) { // Ostinato: no break start on an invalid lease
+        // Ostinato: no break start on an invalid lease, nor outside the active reservation (Phase 2b)
+        if (LeaseFence.denied(LeaseFence.Kind.BREAK, loc.getX(), loc.getY(), loc.getZ())) {
             return false;
         }
         return mc.gameMode.startDestroyBlock(loc, face);

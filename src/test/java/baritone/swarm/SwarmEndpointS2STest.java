@@ -139,6 +139,25 @@ public class SwarmEndpointS2STest {
         }
     }
 
+    /** Ostinato: Phase 2b. The longest reservation key (region, 8-digit coords) still fits a 2-line frame. */
+    @Test
+    public void longestReservationKeyFitsTwoLines() throws Exception {
+        List<String> seen = wire();
+        SwarmEndpoint a = signed("botA", aKey);
+        SwarmEndpoint b = signed("botB", bKey);
+        String key = baritone.swarm.lease.ReservationKey.region('o', -29999984, 256, -29999984,
+                -29999921, 319, -29999921).toString();
+        assertTrue(key, LeaseMessage.validResource(key));
+        for (LeaseMessage.Op op : LeaseMessage.Op.values()) {
+            seen.clear();
+            LeaseMessage m = new LeaseMessage(op, UUID.randomUUID(), key, 123456789L,
+                    UUID.randomUUID(), System.nanoTime() / 1_000_000L, 60_000L, "end");
+            a.send("alpha", "botB", LeaseMessage.TYPE, m.encode());
+            assertTrue(op + ": " + seen.size() + " lines", seen.size() <= 2);
+            assertEquals(m.encode(), LeaseMessage.parse(b.poll().get(0).body()).encode());
+        }
+    }
+
     @Test
     public void echoedLinesCountAsReplayAndDeliverOnce() throws Exception {
         bus.setInterceptor(new InMemorySwarmBus.Interceptor() {

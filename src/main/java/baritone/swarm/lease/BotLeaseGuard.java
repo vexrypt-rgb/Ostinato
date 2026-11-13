@@ -819,6 +819,45 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return false;
     }
 
+    /**
+     * Ostinato: Phase 2b. Whether a world action at a position breaks the geometry of the reservations held by the
+     * active leased command. Only active leases count; untyped keys never deny. With no active lease this is false
+     * (non-leased work and survival are not fenced).
+     *
+     * @param ore whether the block at the position is an ore (only ores are vein-limited: digging a path through
+     *            stone to reach the vein stays allowed)
+     */
+    public synchronized boolean outsideReservation(LeaseFence.Kind kind, char dim, int x, int y, int z, boolean ore) {
+        boolean anyTyped = false;
+        for (Lease l : leases.values()) {
+            if (!l.active) {
+                continue;
+            }
+            ReservationKey k = ReservationKey.parse(l.resource);
+            if (k == null || !appliesTo(k.type, kind, ore)) {
+                continue;
+            }
+            anyTyped = true;
+            if (k.contains(dim, x, y, z)) {
+                return false;
+            }
+        }
+        return anyTyped;
+    }
+
+    private static boolean appliesTo(ReservationKey.Type t, LeaseFence.Kind kind, boolean ore) {
+        switch (t) {
+            case VEIN:
+                return kind == LeaseFence.Kind.BREAK && ore;
+            case REGION:
+                return kind == LeaseFence.Kind.BREAK || kind == LeaseFence.Kind.PLACE;
+            case CHEST:
+                return kind == LeaseFence.Kind.CONTAINER;
+            default:
+                return false;
+        }
+    }
+
     /** For status: one line per live lease. */
     public synchronized List<String> describe() {
         List<String> out = new ArrayList<>();
