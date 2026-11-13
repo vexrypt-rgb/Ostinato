@@ -19,14 +19,24 @@
 package baritone.swarm.transport;
 
 /**
- * Outgoing priority. {@link #HIGH} is sent first, {@link #LOW} last; order within one
+ * Outgoing priority. {@link #URGENT} is sent first, {@link #LOW} last; order within one
  * priority is FIFO. (Declaration order is the send order: lower ordinal = sent sooner.)
  */
 public enum SwarmPriority {
+    /**
+     * Ostinato: lease reconciliation after a coordinator relaunch (RREQ, REPORT, the renew it triggers and its GRANT):
+     * a held lease's deadline is running. Shares the token bucket with everything else, so it never exceeds the budget.
+     */
+    URGENT,
     /** Time-critical replies (pong, later acks/cancels). */
     HIGH,
     /** Ordinary requests (ping, later assignments). */
     NORMAL,
     /** Bulk/status traffic that may wait or be dropped first. */
-    LOW
+    LOW,
+    /**
+     * Ostinato: status samples. Sent last, and the rate limiter withdraws them while URGENT or HIGH traffic waits or
+     * the last minute used half the link's cap: a sample never delays a lease message or a command.
+     */
+    TELEMETRY
 }

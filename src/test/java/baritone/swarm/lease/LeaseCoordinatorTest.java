@@ -101,6 +101,374 @@ public class LeaseCoordinatorTest {
         assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
     }
 
+    // ---- Ostinato: early renew while reconciling (live b8r3: a reported holder's renew sat in heldRequests) ----
+
+    private static final String CLAIM = "phase=valid,exec=running,obs=running,reason=none,active=true";
+
+    /** A restarted coordinator still reconciling: Bob has reported his ore1 lease, Carol (store only) has not. */
+    private static final class Restarted {
+        LeaseSupport s;
+        UUID bob;
+        UUID carol;
+        int since;
+
+        UUID cmd(UUID lease) {
+            return s.coord.record(lease).commandId;
+        }
+
+        void from(String bot, LeaseMessage.Op op, UUID lease, String resource, long gen, UUID cmd) {
+            s.coord.onMessage(bot, new LeaseMessage(op, lease, resource, gen, cmd, s.mono.get(), 30_000, "-"));
+            s.pump();
+        }
+
+        void claim(String bot, UUID lease, String resource, long gen, UUID cmd) {
+            claim(bot, lease, resource, gen, cmd, CLAIM);
+        }
+
+        void claim(String bot, UUID lease, String resource, long gen, UUID cmd, String extra) {
+            s.coord.onMessage(bot, new LeaseMessage(LeaseMessage.Op.REPORT, lease, resource, gen, cmd, 0, 0, extra));
+        }
+
+        /** Ostinato: control for the claim tests - Carol re-sends a correct claim and her renew now goes out early. */
+        void carolCorrectClaimIsRenewed() {
+            claim("Carol", carol, "ore9", 1, cmd(carol));
+            from("Carol", LeaseMessage.Op.RENEW, carol, "ore9", 1, cmd(carol));
+            assertEquals(1, grants(carol).size());
+            assertTrue(s.logged("renewed-early lease=" + carol));
+        }
+
+        void end(String bot) {
+            s.coord.onMessage(bot, new LeaseMessage(LeaseMessage.Op.REPORT, null, "-", 0, null, 0, 0, "end"));
+            s.pump();
+        }
+
+        List<LeaseSupport.Msg> grants(UUID lease) {
+            List<LeaseSupport.Msg> out = new java.util.ArrayList<>();
+            for (LeaseSupport.Msg m : s.sentSince(since, "Alice", LeaseMessage.Op.GRANT)) {
+                if (lease.equals(m.lease().leaseId)) {
+                    out.add(m);
+                }
+            }
+            return out;
+        }
+
+        void assertNotRenewedEarly(UUID lease) {
+            assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+            assertEquals(0, grants(lease).size());
+            assertFalse(s.logged("renewed-early lease=" + lease));
+            assertEquals(0, s.coord.earlyRenewals());
+        }
+    }
+
+    private Restarted restarted(boolean pumpReports, java.util.function.Consumer<LeaseSupport> beforeRestart)
+            throws Exception {
+        Restarted r = new Restarted();
+        LeaseSupport s = active();
+        r.s = s;
+        r.bob = LeaseSupport.leaseIdOf(s.coord.lease("Bob", "ore1", "mine diamond_ore"));
+        s.pump();
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(r.bob));
+        assertEquals(1, s.bobExec.count("mine"));
+        r.carol = s.addHolder("Carol", "ore9", 1, LeaseRecord.State.GRANTED, s.wall.get() + 20_000L);
+        beforeRestart.accept(s);
+        r.since = s.sent.size();
+        s.coord = s.newCoordinator("Alice", "Alice");
+        s.coord.start();
+        if (pumpReports) {
+            s.pump();
+            assertTrue(s.logged("reconcile-report bot=Bob"));
+        }
+        assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+        return r;
+    }
+
+    private Restarted restarted() throws Exception {
+        return restarted(true, s -> { });
+    }
+
+    @Test
+    public void reportedHolderIsRenewedWhileOthersStillReconcile() throws Exception {
+        Restarted r = restarted();
+        LeaseSupport s = r.s;
+        s.tick(); // Bob's renew goes out right behind his report
+        assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+        assertTrue(s.logged("swarm-lease: renewed-early lease=" + r.bob + " gen=1 bot=Bob (reconciling)"));
+        assertEquals(1, s.coord.earlyRenewals());
+        assertEquals(1, r.grants(r.bob).size());
+        assertTrue(s.logged("bot=self after-reconcile deadline in"));
+        assertEquals(1, s.bobExec.count("mine")); // a renew, never a second submit
+        assertEquals(0, r.grants(r.carol).size());
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(r.bob));
+    }
+
+    @Test
+    public void renewHeldBeforeTheReportIsGrantedWhenTheReportEnds() throws Exception {
+        Restarted r = restarted(false, s -> { });
+        LeaseSupport s = r.s;
+        for (LeaseSupport.Msg m : s.take(LeaseMessage.TYPE, LeaseMessage.Op.RREQ)) {
+            s.deliver(m); // Bob answers; his reports stay queued (slow chat)
+        }
+        List<LeaseSupport.Msg> reports = s.take(LeaseMessage.TYPE, LeaseMessage.Op.REPORT);
+        assertFalse(reports.isEmpty());
+        s.tick(); // the renew overtakes the reports
+        assertTrue(s.logged("grant-held"));
+        assertEquals(0, r.grants(r.bob).size());
+        for (LeaseSupport.Msg m : reports) {
+            s.deliver(m);
+        }
+        s.pump();
+        assertEquals(LeaseCoordinator.Mode.RECONCILING, s.coord.mode());
+        assertEquals(1, r.grants(r.bob).size());
+        assertEquals(1, s.coord.earlyRenewals());
+        assertTrue(s.logged("bot=self after-reconcile deadline in"));
+    }
+
+    // Ostinato: the margin is measured on the bot, the time left on its lease when the first renew lands.
+    @Test
+    public void afterReconcileLogShowsTheMeasuredTimeLeft() throws Exception {
+        Restarted r = restarted();
+        LeaseSupport s = r.s;
+        s.advance(4_000L);
+        s.pump();
+        String d = s.guard.describe().get(0);
+        long left = Long.parseLong(d.substring(d.indexOf("left=") + 5, d.indexOf("ms", d.indexOf("left="))));
+        s.tick();
+        assertTrue(s.log.toString(), s.logged("after-reconcile deadline in " + left + " ms (unanswered=0)"));
+        assertTrue(left > 0 && left < 30_000L);
+        s.run(20_000L, 1_000L);
+        assertEquals(1, s.loggedCount("after-reconcile")); // only the first renew after the RREQ
+    }
+
+    @Test
+    public void reconcileTrafficIsUrgentAndLaterRenewsAreNot() throws Exception {
+        Restarted r = restarted();
+        LeaseSupport s = r.s;
+        s.tick();
+        List<LeaseSupport.Msg> rreq = s.sentSince(r.since, "Alice", LeaseMessage.Op.RREQ);
+        List<LeaseSupport.Msg> reports = s.sentSince(r.since, "Bob", LeaseMessage.Op.REPORT);
+        List<LeaseSupport.Msg> renews = s.sentSince(r.since, "Bob", LeaseMessage.Op.RENEW);
+        assertFalse(rreq.isEmpty());
+        assertTrue(reports.size() >= 2); // the claim and the end marker
+        assertEquals(1, renews.size());
+        for (LeaseSupport.Msg m : rreq) {
+            assertTrue(m.toString(), m.urgent);
+        }
+        for (LeaseSupport.Msg m : reports) {
+            assertTrue(m.toString(), m.urgent);
+        }
+        assertTrue(renews.get(0).urgent);
+        assertTrue(r.grants(r.bob).get(0).urgent);
+        for (int i = 0; i < 40 && s.coord.mode() != LeaseCoordinator.Mode.ACTIVE; i++) {
+            s.run(1_000L, 1_000L); // Carol's notBefore passes: reconciliation ends
+        }
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        int mark = s.sent.size();
+        s.run(30_000L, 1_000L);
+        List<LeaseSupport.Msg> later = s.sentSince(mark, "Bob", LeaseMessage.Op.RENEW);
+        assertTrue(later.size() >= 4);
+        for (LeaseSupport.Msg m : later) {
+            assertFalse(m.toString(), m.urgent);
+        }
+        for (LeaseSupport.Msg m : s.sentSince(mark, "Alice", LeaseMessage.Op.GRANT)) {
+            assertFalse(m.toString(), m.urgent);
+        }
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(r.bob));
+        assertEquals(1, s.bobExec.count("mine"));
+    }
+
+    // Ostinato: live b9r1 - the reconcile renew landed just after reconciliation ended and its GRANT queued HIGH.
+    @Test
+    public void reconcileRenewArrivingAfterReconcileIsStillUrgent() throws Exception {
+        Restarted r = restarted();
+        LeaseSupport s = r.s;
+        s.guard.tick(); // Bob's reconcile renew, behind his report
+        List<LeaseSupport.Msg> inFlight = s.take(LeaseMessage.TYPE, LeaseMessage.Op.RENEW);
+        assertEquals(1, inFlight.size());
+        assertTrue(inFlight.get(0).urgent);
+        for (int i = 0; i < 40 && s.coord.mode() != LeaseCoordinator.Mode.ACTIVE; i++) {
+            s.advance(1_000L);
+            s.coord.tick(); // the renew is still in flight (slow chat) when reconciliation ends
+            s.pump();
+        }
+        assertEquals(LeaseCoordinator.Mode.ACTIVE, s.coord.mode());
+        assertEquals(0, r.grants(r.bob).size());
+        for (LeaseSupport.Msg m : inFlight) {
+            s.deliver(m);
+        }
+        s.pump();
+        List<LeaseSupport.Msg> g = r.grants(r.bob);
+        assertEquals(1, g.size());
+        assertTrue(g.get(0).toString(), g.get(0).urgent);
+        assertTrue(s.logged("bot=self after-reconcile deadline in"));
+        assertEquals(1, s.bobExec.count("mine")); // a renew, never a second submit
+        int mark = s.sent.size();
+        s.run(15_000L, 1_000L);
+        List<LeaseSupport.Msg> later = s.sentSince(mark, "Alice", LeaseMessage.Op.GRANT);
+        assertFalse(later.isEmpty());
+        for (LeaseSupport.Msg m : later) {
+            assertFalse(m.toString(), m.urgent); // only the first renew after the relaunch
+        }
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(r.bob));
+    }
+
+    // ---- the safety rules: exactly one thing wrong each time, and nothing is renewed early ----
+
+    @Test
+    public void unknownLeaseIsNeverRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        UUID ghost = UUID.randomUUID();
+        r.claim("Bob", ghost, "ore1", 1, r.cmd(r.bob));
+        r.from("Bob", LeaseMessage.Op.RENEW, ghost, "ore1", 1, r.cmd(r.bob));
+        r.assertNotRenewedEarly(ghost);
+        assertEquals(0, r.s.coord.earlyRenewals());
+    }
+
+    @Test
+    public void wrongGenerationIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 2, r.cmd(r.bob));
+        r.assertNotRenewedEarly(r.bob);
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 1, r.cmd(r.bob)); // control: the right gen is
+        assertEquals(1, r.grants(r.bob).size());
+    }
+
+    @Test
+    public void anotherBotsLeaseIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 1, r.cmd(r.carol));
+        r.end("Carol");
+        r.from("Bob", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol)); // control: its holder is
+        assertEquals(1, r.grants(r.carol).size());
+    }
+
+    @Test
+    public void offeredLeaseIsNotRenewedEarly() throws Exception {
+        UUID[] offered = new UUID[1];
+        Restarted r = restarted(true, s -> {
+            try {
+                offered[0] = s.addHolder("Bob", "ore5", 1, LeaseRecord.State.OFFERED, s.wall.get() + 20_000L);
+            } catch (java.io.IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        r.claim("Bob", offered[0], "ore5", 1, r.cmd(offered[0]));
+        r.from("Bob", LeaseMessage.Op.RENEW, offered[0], "ore5", 1, r.cmd(offered[0]));
+        r.assertNotRenewedEarly(offered[0]);
+        assertEquals(LeaseRecord.State.OFFERED, r.s.coord.record(offered[0]).state);
+    }
+
+    @Test
+    public void requestIsNeverGrantedWhileReconciling() throws Exception {
+        Restarted r = restarted();
+        r.from("Bob", LeaseMessage.Op.REQ, r.bob, "ore1", 1, r.cmd(r.bob));
+        r.assertNotRenewedEarly(r.bob);
+        assertTrue(r.s.logged("grant-held"));
+    }
+
+    @Test
+    public void staleRecordBelowHighWaterIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted(true, s -> {
+            try {
+                s.setHighWater("ore1", 2);
+            } catch (java.io.IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 1, r.cmd(r.bob));
+        r.assertNotRenewedEarly(r.bob);
+    }
+
+    @Test
+    public void competingClaimOnTheResourceBlocksEarlyRenew() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", UUID.randomUUID(), "ore1", 1, UUID.randomUUID());
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 1, r.cmd(r.bob));
+        r.assertNotRenewedEarly(r.bob);
+    }
+
+    @Test
+    public void claimWithoutEndOfReportWaitsForTheEnd() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 1, r.cmd(r.carol));
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        assertTrue(r.s.logged("grant-held"));
+        r.end("Carol"); // control: the held renew goes out once her report is complete
+        assertEquals(1, r.grants(r.carol).size());
+        assertTrue(r.s.logged("renewed-early lease=" + r.carol));
+    }
+
+    @Test
+    public void reportWithoutClaimIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+    }
+
+    @Test
+    public void wrongCommandIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 1, UUID.randomUUID());
+        r.assertNotRenewedEarly(r.bob);
+        r.from("Bob", LeaseMessage.Op.RENEW, r.bob, "ore1", 1, r.cmd(r.bob)); // control: the right command is
+        assertEquals(1, r.grants(r.bob).size());
+    }
+
+    // Ostinato: the claim must come from the holder itself, at the lease's generation and command, valid and doing
+    // something. Each test breaks one of those and nothing else; the control then sends the correct claim.
+    @Test
+    public void claimByAnotherBotIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Bob", r.carol, "ore9", 1, r.cmd(r.carol));
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.carolCorrectClaimIsRenewed();
+    }
+
+    @Test
+    public void claimAtAnotherGenerationIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 2, r.cmd(r.carol));
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.carolCorrectClaimIsRenewed();
+    }
+
+    @Test
+    public void claimWithAnotherCommandIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 1, UUID.randomUUID());
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.carolCorrectClaimIsRenewed();
+    }
+
+    @Test
+    public void expiredClaimIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 1, r.cmd(r.carol), "phase=expired,exec=running,obs=running,reason=none,active=true");
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.carolCorrectClaimIsRenewed();
+    }
+
+    @Test
+    public void idleClaimIsNotRenewedEarly() throws Exception {
+        Restarted r = restarted();
+        r.claim("Carol", r.carol, "ore9", 1, r.cmd(r.carol), "phase=valid,exec=none,obs=none,reason=none,active=false");
+        r.end("Carol");
+        r.from("Carol", LeaseMessage.Op.RENEW, r.carol, "ore9", 1, r.cmd(r.carol));
+        r.assertNotRenewedEarly(r.carol);
+        r.carolCorrectClaimIsRenewed();
+    }
+
     @Test
     public void reconcileFinishesEarlyWhenBotReports() throws Exception {
         LeaseSupport s = active();

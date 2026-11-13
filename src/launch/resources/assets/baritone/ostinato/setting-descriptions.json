@@ -469,6 +469,6 @@
  "swarmLeases": "Ostinato: swarm Phase 2a bot side. On, a command marked lease-needing (mine, tunnel) only starts with a lease from the coordinator, and Baritone's break, place and container clicks for it stop when the lease runs out. Eating, fleeing and fighting never wait for a lease. Needs swarmCommandProtocol. Off (with swarmCoordinator off) is exactly Phase 1.",
  "swarmCoordinator": "Ostinato: run the swarm lease coordinator in this client. Only one client may run it; a second one stays inactive and logs why. Its state is kept in ostinato/swarm/coordinator.state in the game directory.",
  "swarmCoordinatorId": "Ostinato: the member whose lease messages bots accept. Empty means the circle owner (the first roster lead). Lease messages from anyone else are ignored and counted.",
- "swarmLeaseSec": "Ostinato: lease length in seconds. Bots renew at a third of it. On a chat transport it is raised to at least 60 so renewals stay inside the whisper budget.",
+ "swarmLeaseSec": "Ostinato: lease length in seconds (default 90). Bots renew every sixth of it from the grant on. Sized so a lease survives a coordinator restart (measured 24-36 s, plus reconcile and grant delivery, about 61 s with a 5 s margin). Cost: a crashed holder blocks its resource for up to this long. On a chat transport it is raised to at least 60 so renewals stay inside the whisper budget.",
  "swarmLeaseMarginMs": "Ostinato: extra milliseconds the coordinator waits past a lease's end before it treats the lease as gone."
 }

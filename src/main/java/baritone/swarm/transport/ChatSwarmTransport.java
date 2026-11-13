@@ -91,17 +91,26 @@ public final class ChatSwarmTransport implements SwarmTransport {
 
     @Override
     public void sendTo(String group, String recipient, String sealedLine, SwarmPriority priority) throws IOException {
+        sendTo(group, recipient, sealedLine, priority, null);
+    }
+
+    @Override
+    public void sendTo(String group, String recipient, String sealedLine, SwarmPriority priority,
+                       SwarmRateLimiter.Deadline deadline) throws IOException {
         SwarmTransport.requireSealed(sealedLine);
         SwarmChannel channel = channelFor(group);
         String template = templateFor(channel);
         List<String> commands = new ArrayList<>();
+        List<String> tags = new ArrayList<>(); // Ostinato: who reads each line, for the heartbeat skip
         if (channel == SwarmChannel.WHISPER) {
             for (String to : recipients(group, recipient)) {
                 commands.add(template.replace("{to}", to).replace("{msg}", sealedLine));
+                tags.add(to);
             }
         } else {
             commands.add(template.replace("{to}", BROADCAST.equals(recipient) ? "" : recipient)
                     .replace("{msg}", sealedLine));
+            tags.add(BROADCAST.equals(recipient) ? BROADCAST : recipient);
         }
         for (String c : commands) {
             if (c.length() > maxLineChars) {
@@ -111,9 +120,15 @@ public final class ChatSwarmTransport implements SwarmTransport {
                 throw new IOException("swarm chat line is " + c.length() + " > " + maxLineChars + " chars");
             }
         }
-        for (String c : commands) {
-            limiter.offer(priority, c);
+        for (int i = 0; i < commands.size(); i++) {
+            limiter.offer(priority, commands.get(i), tags.get(i), deadline);
         }
+    }
+
+    // Ostinato: lines leave on the limiter's clock, so the caller passes that clock's now.
+    @Override
+    public boolean sentWithin(String peer, long nowMs, long windowMs) {
+        return limiter.sentWithin(peer, nowMs, windowMs);
     }
 
     // Ostinato: local routing splits a broadcast into same-PC vs whisper recipients.

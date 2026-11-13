@@ -19,6 +19,7 @@ package baritone.swarm.protocol;
 
 import baritone.agent.AgentPolicy;
 import baritone.swarm.transport.SwarmPriority; // Ostinato: preserve transport priority.
+import baritone.swarm.transport.SwarmRateLimiter;
 import baritone.api.command.CommandPermission;
 import baritone.api.swarm.protocol.CapabilityDescriptor;
 import baritone.api.swarm.protocol.ExecutionState;
@@ -386,10 +387,12 @@ public final class CommandProtocol {
         UUID id = givenId != null ? givenId : UUID.randomUUID(); // Ostinato: leased commands reuse the lease's id.
         String body = encodeCmd(id, self.memberId(), target.trim(), name, args, now, deadlineMs, dryRun);
         Sent sent = new Sent(id, target.trim(), body, deadlineMs);
+        sent.leased = givenId != null; // Ostinato:
         synchronized (lock) {
             outbound.put(id, sent);
         }
-        boolean queued = wire.send(sent.target, TYPE_CMD, body, commandPriority(name));
+        boolean queued = wire.send(sent.target, TYPE_CMD, body, sendPriority(sent, commandPriority(name)),
+                deadlineOf(sent, now));
         synchronized (lock) {
             if (queued) {
                 sent.sends = 1;
@@ -511,9 +514,9 @@ public final class CommandProtocol {
                 break;
             }
             // Ostinato: ordinary retries yield to safety commands and acknowledgements.
-            SwarmPriority priority = commandPriority(nameOfBody(s.body)) == SwarmPriority.HIGH
-                    ? SwarmPriority.HIGH : SwarmPriority.LOW;
-            boolean queued = wire.send(s.target, TYPE_CMD, s.body, priority);
+            SwarmPriority priority = sendPriority(s, commandPriority(nameOfBody(s.body)) == SwarmPriority.HIGH
+                    ? SwarmPriority.HIGH : SwarmPriority.LOW);
+            boolean queued = wire.send(s.target, TYPE_CMD, s.body, priority, deadlineOf(s, now));
             synchronized (lock) {
                 if (queued) {
                     retried++; // Ostinato: link monitor counter.
@@ -529,6 +532,19 @@ public final class CommandProtocol {
     // Ostinato: allow the slow whisper queue to drain; cap exponential backoff at 30 seconds.
     private long retryDelay(int sends) {
         return Math.min(30_000L, Math.min(retryMs, 30_000L) * (1L << Math.min(sends + 1, 15)));
+    }
+
+    /**
+     * Ostinato: a command bound to a lease goes at HIGH, first send and retries alike. Its lease is already running
+     * and the holder needs the command before it ends: live b11r2 had one wait behind lease traffic until its deadline.
+     */
+    private static SwarmPriority sendPriority(Sent s, SwarmPriority otherwise) {
+        return s.leased ? SwarmPriority.HIGH : otherwise;
+    }
+
+    // Ostinato: the sender stops waiting at the command's deadline; a line still queued then is logged once.
+    private static SwarmRateLimiter.Deadline deadlineOf(Sent s, long now) {
+        return new SwarmRateLimiter.Deadline(s.deadline - now, "command " + s.id + (s.leased ? " (leased)" : ""));
     }
 
     // Ostinato: safety commands preempt ordinary traffic, including on redelivery.
@@ -1751,6 +1767,12 @@ public final class CommandProtocol {
         default boolean send(String to, String type, String body, SwarmPriority priority) {
             return send(to, type, body);
         }
+
+        // Ostinato: a send the protocol stops waiting for at the deadline (commands); see SwarmRateLimiter.Deadline.
+        default boolean send(String to, String type, String body, SwarmPriority priority,
+                             SwarmRateLimiter.Deadline deadline) {
+            return send(to, type, body, priority);
+        }
     }
 
     /** Runs a command that has already passed auth, dedup and the safety check. */
@@ -1927,6 +1949,8 @@ public final class CommandProtocol {
         public ObservationState observation;
         /** Ostinato: its lease ended and the fence passed, so the holder can no longer act on it. */
         public boolean fenced;
+        /** Ostinato: sent for a lease (submitLeased); goes at HIGH priority. */
+        public boolean leased;
 
         Sent(UUID id, String target, String body, long deadline) {
             this.id = id;

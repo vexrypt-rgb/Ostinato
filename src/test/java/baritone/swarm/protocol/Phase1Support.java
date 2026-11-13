@@ -201,22 +201,33 @@ final class Phase1Support {
         final LocalSpoolTransport bobSpool;
 
         Signed(InMemorySwarmBus bus) throws Exception {
-            this(bus, null, null, null);
+            this(bus, null, null, null, "Alice,Bob");
+        }
+
+        // Ostinato: a third roster member that is on the bus but never runs, for per-peer heartbeat tests.
+        Signed(InMemorySwarmBus bus, String extraMember) throws Exception {
+            this(bus, null, null, null, "Alice,Bob," + extraMember);
         }
 
         Signed(Path spoolRoot) throws Exception {
-            this(null, spoolRoot, new LocalSpoolTransport(spoolRoot, "Alice"), new LocalSpoolTransport(spoolRoot, "Bob"));
+            this(null, spoolRoot, new LocalSpoolTransport(spoolRoot, "Alice"), new LocalSpoolTransport(spoolRoot, "Bob"),
+                    "Alice,Bob");
         }
 
-        private Signed(InMemorySwarmBus bus, Path ignored, LocalSpoolTransport aliceSpool, LocalSpoolTransport bobSpool)
-                throws Exception {
+        private Signed(InMemorySwarmBus bus, Path ignored, LocalSpoolTransport aliceSpool, LocalSpoolTransport bobSpool,
+                       String members) throws Exception {
             this.bus = bus;
             this.aliceSpool = aliceSpool;
             this.bobSpool = bobSpool;
-            roster = SwarmRoster.parse("group crew circle=swarm-test-alpha members=Alice,Bob lead=Alice\n");
+            roster = SwarmRoster.parse("group crew circle=swarm-test-alpha members=" + members + " lead=Alice\n");
             circles.put("crew", TestCircles.alpha());
             signets.put("Alice", SigilEd25519.testSignet("Alice-DO-NOT-USE"));
             signets.put("Bob", SigilEd25519.testSignet("Bob-DO-NOT-USE"));
+            for (String m : members.split(",")) { // Ostinato: extra members only receive
+                if (bus != null && !m.equals("Alice") && !m.equals("Bob")) {
+                    bus.register(m);
+                }
+            }
             SwarmTransport aliceT = bus != null ? bus.register("Alice") : aliceSpool;
             SwarmTransport bobT = bus != null ? bus.register("Bob") : bobSpool;
             aliceEp = endpoint("Alice", aliceT);

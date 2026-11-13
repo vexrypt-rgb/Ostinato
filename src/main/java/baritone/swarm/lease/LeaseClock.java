@@ -31,7 +31,11 @@ package baritone.swarm.lease;
  */
 public final class LeaseClock {
 
-    /** Chat whispers are budgeted at 35/min; a renew every D/3 must leave room for the rest. */
+    /**
+     * Chat whispers are budgeted at 35/min. Ostinato: a renew every D/6 (10 s at this floor) is 6 renews and 6 grants
+     * a minute per lease, two lines each; timer resends stay at D/3 ({@link #resendEvery}). The default lease is
+     * 90 s (swarmLeaseSec), 4 renews a minute; this floor only bounds a smaller configured value.
+     */
     public static final long CHAT_MIN_DURATION_MS = 60_000L;
     public static final long MIN_DURATION_MS = 5_000L;
 
@@ -55,15 +59,25 @@ public final class LeaseClock {
         return chatPeer ? Math.max(CHAT_MIN_DURATION_MS, d) : d;
     }
 
+    // Ostinato: D/6, was D/3. Live b8r3 (D = 60 s) fenced a kept lease 4 s past its deadline: a renew that was due
+    // while the coordinator relaunched waited a whole D/3 backoff step. Twice as many tries leave twice the margin.
     public static long renewEvery(long durationMs) {
+        return Math.max(1, durationMs / 6);
+    }
+
+    /**
+     * Ostinato: timer resends that are not renews (OFFER, REVOKE, RREQ, a pending REQ) and a reconciling coordinator's
+     * wait for an unreported chat holder: D/3, the old renew period, so only renews got faster.
+     */
+    public static long resendEvery(long durationMs) {
         return Math.max(1, durationMs / 3);
     }
 
     /**
      * Ostinato: shortest gap between two identical replies (REVOKE to a REQ, RACK to a REVOKE) for one lease.
-     * Timer resends come every {@link #renewEvery}; anything sooner crossed an earlier reply in flight.
+     * Timer resends come every {@link #resendEvery}; anything sooner crossed an earlier reply in flight.
      */
     public static long repeatGap(long durationMs) {
-        return Math.max(1, renewEvery(durationMs) / 2);
+        return Math.max(1, resendEvery(durationMs) / 2);
     }
 }

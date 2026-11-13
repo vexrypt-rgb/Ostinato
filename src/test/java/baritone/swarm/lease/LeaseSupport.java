@@ -49,6 +49,8 @@ final class LeaseSupport {
         final String to;
         final String type;
         final String body;
+        /** Ostinato: sent through the URGENT queue. */
+        boolean urgent;
 
         Msg(String from, String to, String type, String body) {
             this.from = from;
@@ -150,8 +152,25 @@ final class LeaseSupport {
         coord = newCoordinator("Alice", "Alice");
     }
 
+    /** Ostinato: an SWL sender for {@code from} that records whether each message went urgent. */
+    BotLeaseGuard.Sender sender(String from) {
+        return new BotLeaseGuard.Sender() {
+            @Override
+            public boolean send(String to, String body) {
+                return queue(from, to, LeaseMessage.TYPE, body);
+            }
+
+            @Override
+            public boolean send(String to, String body, boolean urgent) {
+                boolean ok = queue(from, to, LeaseMessage.TYPE, body);
+                sent.get(sent.size() - 1).urgent = urgent;
+                return ok;
+            }
+        };
+    }
+
     BotLeaseGuard newGuard() {
-        return new BotLeaseGuard((to, body) -> queue("Bob", to, LeaseMessage.TYPE, body), mono::get, log::add,
+        return new BotLeaseGuard(sender("Bob"), mono::get, log::add,
                 () -> "Alice", id -> {
                     stopCalls.add(id);
                     return stopOk;
@@ -159,8 +178,7 @@ final class LeaseSupport {
     }
 
     LeaseCoordinator newCoordinator(String self, String designated) {
-        return new LeaseCoordinator(self, () -> designated, store,
-                (to, body) -> queue(self, to, LeaseMessage.TYPE, body),
+        return new LeaseCoordinator(self, () -> designated, store, sender(self),
                 new LeaseCoordinator.Commands() {
                     @Override
                     public String submitLeased(String b, String line, UUID id) {
@@ -290,6 +308,44 @@ final class LeaseSupport {
         pump();
         advance(6_100L);
         tick();
+    }
+
+    /**
+     * Ostinato: write a second live holder, Carol, straight into the store (no peer of hers ever answers), so a
+     * restarted coordinator keeps reconciling while Bob has already reported. Returns her lease id.
+     */
+    UUID addHolder(String bot, String resource, long gen, LeaseRecord.State state, long notBeforeWall)
+            throws java.io.IOException {
+        CoordinatorStore.Snapshot snap = store.load();
+        UUID id = UUID.randomUUID();
+        LeaseRecord r = new LeaseRecord(id, resource, gen, UUID.randomUUID(), bot, "mine x", state);
+        r.notBeforeWall = notBeforeWall;
+        List<LeaseRecord> leases = new ArrayList<>(snap.leases);
+        leases.add(r);
+        Map<String, Long> hw = new LinkedHashMap<>(snap.highWater);
+        hw.merge(resource, gen, Math::max);
+        store.save(hw, leases);
+        return id;
+    }
+
+    /** Ostinato: overwrite one resource's durable high-water mark. */
+    void setHighWater(String resource, long gen) throws java.io.IOException {
+        CoordinatorStore.Snapshot snap = store.load();
+        Map<String, Long> hw = new LinkedHashMap<>(snap.highWater);
+        hw.put(resource, gen);
+        store.save(hw, snap.leases);
+    }
+
+    /** Ostinato: lease messages of {@code op} sent by {@code from} since index {@code since} of {@link #sent}. */
+    List<Msg> sentSince(int since, String from, LeaseMessage.Op op) {
+        List<Msg> out = new ArrayList<>();
+        for (Msg m : sent.subList(since, sent.size())) {
+            LeaseMessage lm = m.lease();
+            if (lm != null && lm.op == op && m.from.equals(from)) {
+                out.add(m);
+            }
+        }
+        return out;
     }
 
     boolean logged(String part) {
