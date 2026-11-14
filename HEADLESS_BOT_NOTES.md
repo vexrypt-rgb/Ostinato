@@ -626,3 +626,61 @@ inference, not a proven fact, and is listed as an open issue.
 
 Phase 2 **does not** implement a headless `IPlayerContext`, A* execution, or `PathExecutor`; those
 are Phase 3 and remain **needs a live run**.
+
+## 14. Phase 2 live gate: obstacle course (2026-11-14 11:13-11:18 MST)
+
+**Gate: PASS.** One bot (`HBot1`, protocol 777) on the local dedicated 26.3 server
+(`127.0.0.1:25570`, `online-mode=false`), offline build at `440aefc65`, no client JVM.
+
+World, built and verified through the server console (commands in
+`headless-bot-logs\console-in.txt`, replies in `server\server.out`):
+
+| feature | build command | verification marker |
+| --- | --- | --- |
+| floor | `fill -2 -61 -2 2 -61 72 minecraft:stone` | top surface y=-60 |
+| slabs (step-up) | `fill -1 -60 20 1 -60 34 minecraft:smooth_stone_slab[type=bottom]` | `SLAB_OK`, top y=-59.5 |
+| plateau | `fill -1 -60 48 1 -54 52 minecraft:stone` | `PLATEAU_OK`, top y=-53 |
+| ladder | `fill -1 -60 47 1 -54 47 minecraft:ladder[facing=north]` | `LADDER_FACING_NORTH_OK`, `LADDER_TOP_FACING_NORTH_OK`, `LADDER_SUPPORT_Z48_OK` |
+| water pool | `fill -2 -61 55 2 -61 72 minecraft:stone` + `fill -1 -60 55 1 -59 72 minecraft:water` | `WATER_OK`, `A_WATER_AT_0_-60_60` |
+
+Course `headless-bot-logs\phase2\obstacle-course.txt` (13 segments, 651 ticks): settle, walk,
+sprint, jump take-off + arc, step-up, slab walk-off, ladder approach + climb, plateau walk-off,
+walk to water, wade, settle. Driver evidence is one line per segment at 20 TPS.
+
+Result, from `headless-bot-logs\phase2\obstacle-evidence.txt` and `obstacle-gate-run.log`
+(300.2 s run, 6,002 ticks, 4,754 simulated movement ticks after attach):
+
+```
+SIM_FINAL x=-0.5 y=-60.0 z=93.116400706 | REPORTED x=-0.5 y=-60.0 z=93.116400706
+          | delta=0.00000000000 | resyncs=0 corrections=0
+```
+
+Segment checkpoints (sim position at the end of each stage, no correction/resync anywhere):
+
+| stage | tick | sim position | what it proves |
+| --- | --- | --- | --- |
+| settle | 20 | (-0.5, -60.0, -0.5) | spawn-consistent rest |
+| walk | 80 | (-0.5, -60.0, 12.19) | 0.203 blocks/tick ground walk |
+| sprint | 120 | (-0.5, -59.5, 23.34) | slab step-up on the way in, sprint speed 0.24+ |
+| jump | 121-161 | (-0.5, -59.5, 35.34) | sprint-jump arc (y peaks then lands) |
+| climb/plateau | 211-271 | (-0.5, -53.0, 47.85) | **ladder** ascent with jump input = 0, lands on plateau top |
+| water | 441-541 | (-0.5, -60.0, 68.8 -> 78.6) | wade speed 0.098 blocks/tick vs 0.203 on land |
+| settle | 651 | (-0.5, -60.0, 93.116) | final rest outside the pool |
+
+Cross-checks:
+
+* `server\server.out` 11:13:37-11:18:37: join, then only the bot's own clean disconnect at
+  11:18:37. No `moved wrongly`, no `moved too quickly`, no kick.
+* `corrections=0` is counted from `ClientboundPlayerPositionPacket` past the spawn teleport,
+  `SetEntityMotion` / `EntityPositionSync` for our id, and explosion knockback; `resyncs=0`.
+* Tick loop stayed at `chunks=49` and `tickErrors=0` for the whole run.
+* The ladder segment is the regression that originally stalled at `z=46.699999988`: with
+  `facing=south` the collision plate sat at z=47.0 and the support face pointed at z=46 air, so the
+  player stopped in front of the climbable cell. `facing=north` puts the plate against the plateau
+  at z=48, which is what vanilla requires for a ladder attached to a block; after the rebuild the
+  same course climbs without any driver change.
+
+Caveats: still one bot, one dimension, still (non-flowing) water, no entities, mobs, inventory or
+damage; the course exercises walk, sprint, sprint-jump, 0.5 slab step-up, ladder climb across 7
+blocks of height and 2-deep water, which is the Phase 2 scope. Phase 3 (headless `IPlayerContext`,
+A* execution, `PathExecutor`) is still open.
