@@ -28,6 +28,8 @@ public final class HeadlessMovement {
     public static final class Step {
         public final int ticks;
         public final float yaw;
+        /** Look pitch in degrees, sent to the server and used by water swimming. 0 = horizontal. */
+        public final float pitch;
         /** 1 forward, -1 back, 0 none. */
         public final int forward;
         /** +1 left, -1 right, 0 none. */
@@ -39,8 +41,14 @@ public final class HeadlessMovement {
 
         public Step(int ticks, float yaw, int forward, int strafe,
                     boolean sprint, boolean jump, boolean shift, String label) {
+            this(ticks, yaw, 0f, forward, strafe, sprint, jump, shift, label);
+        }
+
+        public Step(int ticks, float yaw, float pitch, int forward, int strafe,
+                    boolean sprint, boolean jump, boolean shift, String label) {
             this.ticks = ticks;
             this.yaw = yaw;
+            this.pitch = pitch;
             this.forward = forward;
             this.strafe = strafe;
             this.sprint = sprint;
@@ -51,7 +59,7 @@ public final class HeadlessMovement {
 
         @Override
         public String toString() {
-            return ticks + " " + yaw + " " + forward + " " + strafe + " "
+            return ticks + " " + yaw + " " + pitch + " " + forward + " " + strafe + " "
                     + (sprint ? 1 : 0) + " " + (jump ? 1 : 0) + " " + (shift ? 1 : 0) + " #" + label;
         }
     }
@@ -100,17 +108,22 @@ public final class HeadlessMovement {
                 continue;
             }
             String[] t = line.split("\\s+");
-            if (t.length != 7) {
+            if (t.length != 7 && t.length != 8) {
                 throw new IllegalArgumentException("course line " + lineNo
-                        + ": expected 'ticks yaw forward strafe sprint jump shift', got: " + line);
+                        + ": expected 'ticks yaw [pitch] forward strafe sprint jump shift', got: " + line);
             }
             int ticks = Integer.parseInt(t[0]);
             if (ticks <= 0) {
                 throw new IllegalArgumentException("course line " + lineNo + ": ticks must be positive");
             }
-            out.add(new Step(ticks, Float.parseFloat(t[1]), Integer.parseInt(t[2]),
-                    Integer.parseInt(t[3]), !t[4].equals("0"), !t[5].equals("0"), !t[6].equals("0"),
-                    label.isEmpty() ? "step" + out.size() : label));
+            float yaw = Float.parseFloat(t[1]);
+            // Ostinato: pitch is optional (column 2) so the flat/walk courses stay 7-column; only water
+            // swimming needs a look angle, and our courses swim horizontally at pitch 0.
+            float pitch = t.length == 8 ? Float.parseFloat(t[2]) : 0f;
+            int arg0 = t.length == 8 ? 2 : 1;
+            out.add(new Step(ticks, yaw, pitch, Integer.parseInt(t[arg0 + 1]),
+                    Integer.parseInt(t[arg0 + 2]), !t[arg0 + 3].equals("0"), !t[arg0 + 4].equals("0"),
+                    !t[arg0 + 5].equals("0"), label.isEmpty() ? "step" + out.size() : label));
         }
         return out;
     }
@@ -228,7 +241,15 @@ public final class HeadlessMovement {
             inputPackets++;
         }
 
-        sim.tick(step.yaw, step.forward, step.strafe, step.sprint, step.jump);
+        // Ostinato: the vanilla client branches travel() on whether the player is in a fluid. Match it so the
+        // sim predicts water physics instead of air physics; otherwise the server's authoritative position
+        // (computed with travelInWater) diverges from the reported sim position and we get a correction.
+        boolean inFluid = sim.inWater() || sim.swimming;
+        if (inFluid) {
+            sim.tickWater(step.yaw, step.pitch, step.forward > 0, step.sprint, step.jump, step.shift);
+        } else {
+            sim.tick(step.yaw, step.forward, step.strafe, step.sprint, step.jump);
+        }
         simTicks++;
 
         if (sim.sprinting != lastSprinting) {
@@ -244,7 +265,7 @@ public final class HeadlessMovement {
         reportedZ = sim.z;
         bot.setReportedPosition(sim.x, sim.y, sim.z, sim.onGround);
         bot.send(new ServerboundMovePlayerPacket.PosRot(
-                sim.x, sim.y, sim.z, step.yaw, 0f, sim.onGround, sim.collidedH));
+                sim.x, sim.y, sim.z, step.yaw, step.pitch, sim.onGround, sim.collidedH));
         positionPackets++;
         // Must be last in the client tick: the server clears receivedPositionThisTick here.
         bot.send(ServerboundClientTickEndPacket.INSTANCE);

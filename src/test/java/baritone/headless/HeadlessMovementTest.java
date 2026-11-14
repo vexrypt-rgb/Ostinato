@@ -30,6 +30,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import static org.junit.Assert.*;
 
@@ -44,17 +45,17 @@ public class HeadlessMovementTest {
         access = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
     }
 
-    /** A flat stone floor at y=-61 inside five by five decoded chunks, exactly like the live flat world. */
+    /** A flat stone floor at y=-61 inside seven-by-five decoded chunks, enough for 250+ ticks of walking. */
     private static HeadlessBlockStateInterface flatWorld() {
         HeadlessChunkStore store = new HeadlessChunkStore();
         store.setDimension(-64, 384);
         for (int cx = -2; cx <= 2; cx++) {
-            for (int cz = -2; cz <= 2; cz++) {
+            for (int cz = -2; cz <= 4; cz++) {
                 store.createEmptyChunk(cx, cz);
             }
         }
         for (int x = -32; x <= 32; x++) {
-            for (int z = -32; z <= 32; z++) {
+            for (int z = -32; z <= 60; z++) {
                 assertTrue("floor cell must be inside a decoded chunk",
                         store.setBlockState(new BlockPos(x, -61, z), Blocks.STONE.defaultBlockState()));
             }
@@ -182,6 +183,144 @@ public class HeadlessMovementTest {
         assertFalse(driver.sim().onGround);
         assertEquals(1, driver.resyncs());
         assertEquals(10.25, driver.reportedX(), 0.0);
+    }
+
+    /** Flat floor plus a bottom-slab ledge (top at -59.5, a 0.5 step within PlayerSim's STEP=0.6) from z=8. */
+    private static HeadlessBlockStateInterface stepUpWorld() {
+        HeadlessBlockStateInterface bsi = flatWorld();
+        for (int x = -1; x <= 1; x++) {
+            for (int z = 8; z <= 60; z++) {
+                bsi.store().setBlockState(new BlockPos(x, -60, z), Blocks.STONE_SLAB.defaultBlockState());
+            }
+        }
+        return bsi;
+    }
+
+    /**
+     * A {@link PlayerSim.World} that delegates everything to a real BsiWorld but overrides fluid and
+     * climbable detection with caller-supplied predicates. The plain-JVM unit test has no datapack tags
+     * (those arrive from the server's configuration phase), so this pins the sim's water/ladder
+     * *physics* deterministically without depending on BlockTags.CLIMBABLE / FluidTags.WATER being bound.
+     */
+    private static final class ForcedWorld implements PlayerSim.World {
+        private final PlayerSim.World base;
+        private final Predicate<BlockPos> water;
+        private final Predicate<BlockPos> climb;
+
+        ForcedWorld(PlayerSim.World base, Predicate<BlockPos> water,
+                    Predicate<BlockPos> climb) {
+            this.base = base;
+            this.water = water;
+            this.climb = climb;
+        }
+
+        @Override
+        public void collect(double a, double b, double c, double d, double e, double f, List<double[]> o) {
+            base.collect(a, b, c, d, e, f, o);
+        }
+
+        @Override
+        public float slipperiness(int x, int y, int z) {
+            return base.slipperiness(x, y, z);
+        }
+
+        @Override
+        public float bounce(int x, int y, int z) {
+            return base.bounce(x, y, z);
+        }
+
+        @Override
+        public float speedFactor(int x, int y, int z) {
+            return base.speedFactor(x, y, z);
+        }
+
+        @Override
+        public float jumpFactor(int x, int y, int z) {
+            return base.jumpFactor(x, y, z);
+        }
+
+        @Override
+        public boolean bouncy(int x, int y, int z) {
+            return base.bouncy(x, y, z);
+        }
+
+        @Override
+        public boolean sticky(int x, int y, int z) {
+            return base.sticky(x, y, z);
+        }
+
+        @Override
+        public boolean cellBoxes(int x, int y, int z, List<double[]> o) {
+            return base.cellBoxes(x, y, z, o);
+        }
+
+        @Override
+        public boolean water(int x, int y, int z) {
+            return water.test(new BlockPos(x, y, z));
+        }
+
+        @Override
+        public boolean climbable(int x, int y, int z) {
+            return climb.test(new BlockPos(x, y, z));
+        }
+    }
+
+    @Test
+    public void stepUpClimbsOneBlockAndContinues() {
+        PlayerSim sim = new PlayerSim(new BsiWorld(stepUpWorld()));
+        sim.x = 0.5;
+        sim.y = -60.0;
+        sim.z = 0.5;
+        sim.onGround = true;
+        for (int i = 0; i < 250; i++) {
+            sim.tick(0f, 1, 0, false, false); // walk +z into the ledge
+        }
+        // A 0.5-block step-up must land the player on the slab ledge (top -59.5) and let them keep going.
+        assertTrue("player should be on the slab ledge (y near -59.5), got y=" + sim.y,
+                sim.y > -60.0 && sim.onGround);
+        assertTrue("player should have advanced well past the ledge start, z=" + sim.z, sim.z > 9.0);
+    }
+
+    @Test
+    public void ladderClimbLiftsThePlayer() {
+        // Force the ladder column climbable (no datapack tags in the unit test) over open air, wide enough
+        // in z that the player's slow forward drift stays within it for the whole climb.
+        PlayerSim.World forced = new ForcedWorld(new BsiWorld(flatWorld()),
+                bp -> false,
+                bp -> bp.getX() >= -1 && bp.getX() <= 1 && bp.getZ() >= 8 && bp.getZ() <= 13
+                        && bp.getY() >= -60 && bp.getY() <= -30);
+        PlayerSim sim = new PlayerSim(forced);
+        sim.x = 0.5;
+        sim.y = -60.0;
+        sim.z = 8.0; // standing inside the climbable column
+        sim.onGround = true;
+        assertTrue("player's feet cell must be climbable", sim.climbable());
+        double startY = sim.y;
+        for (int i = 0; i < 30; i++) {
+            sim.tick(0f, 1, 0, false, true); // press into the ladder + jump
+        }
+        assertTrue("climbing a ladder must raise y, start=" + startY + " end=" + sim.y, sim.y > startY + 0.5);
+    }
+
+    @Test
+    public void stillWaterLetsThePlayerSwim() {
+        // Force a still-water pool (no datapack tags in the unit test); the region is open air so the
+        // player can occupy it. This pins travelInWater's horizontal swim response.
+        PlayerSim.World forced = new ForcedWorld(new BsiWorld(flatWorld()),
+                bp -> bp.getY() >= -61 && bp.getY() <= -58 && bp.getX() >= -1 && bp.getX() <= 1
+                        && bp.getZ() >= 0 && bp.getZ() <= 20,
+                bp -> false);
+        PlayerSim sim = new PlayerSim(forced);
+        sim.x = 0.5;
+        sim.y = -59.0;
+        sim.z = 0.5;
+        sim.onGround = false; // submerged
+        assertTrue("feet must be in forced water", sim.inWater());
+        for (int i = 0; i < 30; i++) {
+            sim.tickWater(0f, 0f, true, false, false, false); // horizontal swim, pitch 0
+        }
+        assertTrue("still water must keep the player submerged", sim.inWater() || sim.eyesInWater());
+        assertTrue("swimming forward must advance z, z=" + sim.z, sim.z > 0.6);
     }
 
     private static final class RecordingTransport implements HeadlessTransport {
