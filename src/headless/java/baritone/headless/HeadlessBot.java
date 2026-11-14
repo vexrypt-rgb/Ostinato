@@ -39,6 +39,8 @@ import net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket;
+import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
@@ -113,6 +115,9 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private volatile RegistryAccess.Frozen registryAccess;
     private final HeadlessRegistries registries = new HeadlessRegistries();
     private final HeadlessChunkStore chunks;
+    // Ostinato: Phase 2. When set, the PlayerSim driver owns movement packets for every tick;
+    // the idle path below stays byte-for-byte the Phase 1 behaviour when it is not set.
+    private volatile HeadlessMovement movement;
 
     private final ClientLoginPacketListener loginListener;
     private final ClientConfigurationPacketListener configurationListener;
@@ -178,7 +183,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         send(new ServerboundHelloPacket(username, uuid));
     }
 
-    private void send(net.minecraft.network.protocol.Packet<?> packet) {
+    /** Package-private so the movement driver sends through the same observable path. */
+    void send(net.minecraft.network.protocol.Packet<?> packet) {
         packetsOut.incrementAndGet();
         transport.send(packet);
     }
@@ -374,7 +380,40 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             ClientboundSetEntityMotionPacket motion = (ClientboundSetEntityMotionPacket) p;
             if (motion.id() == playerId) {
                 lastVelocity = motion.movement();
-                event("velocity " + lastVelocity);
+                HeadlessMovement driver = movement;
+                if (driver != null) {
+                    driver.applyVelocity(lastVelocity);
+                }
+                if (lastVelocity.lengthSqr() > 1.0E-12) {
+                    corrections.incrementAndGet();
+                    event("correction velocity " + lastVelocity);
+                }
+            }
+            return;
+        }
+        if (p instanceof ClientboundEntityPositionSyncPacket) {
+            ClientboundEntityPositionSyncPacket sync = (ClientboundEntityPositionSyncPacket) p;
+            if (sync.id() == playerId) {
+                Vec3 end = sync.position().endPosition();
+                double d = (end.x - x) * (end.x - x) + (end.y - y) * (end.y - y)
+                        + (end.z - z) * (end.z - z);
+                if (d > 1.0E-12) {
+                    corrections.incrementAndGet();
+                    event("correction entity sync -> " + end + " (delta^2=" + d + ")");
+                }
+            }
+            return;
+        }
+        if (p instanceof ClientboundExplodePacket) {
+            ClientboundExplodePacket boom = (ClientboundExplodePacket) p;
+            if (boom.playerKnockback().isPresent()) {
+                Vec3 v = boom.playerKnockback().get();
+                HeadlessMovement driver = movement;
+                if (driver != null) {
+                    driver.applyVelocity(v);
+                }
+                corrections.incrementAndGet();
+                event("correction explosion knockback " + v);
             }
             return;
         }
@@ -447,6 +486,10 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         send(new ServerboundAcceptTeleportationPacket(p.id(), x, y, z, yRot, xRot));
         if (spawnTeleports > 1) {
             corrections.incrementAndGet();
+            HeadlessMovement driver = movement;
+            if (driver != null) {
+                driver.resync(x, y, z, onGround);
+            }
             event("correction teleport #" + (spawnTeleports - 1) + " id=" + p.id() + " -> " + pos);
         } else {
             event("spawn teleport id=" + p.id() + " -> " + pos);
@@ -473,6 +516,20 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (state != State.PLAY || !spawnKnown || !loadedSent) {
             return;
         }
+        HeadlessMovement driver = movement;
+        if (driver != null) {
+            try {
+                driver.tick(this);
+            } catch (RuntimeException e) {
+                event("ERROR movement tick: " + e);
+                e.printStackTrace(System.err);
+            }
+            if (n % 200 == 0) {
+                event("tick " + n + " pos=" + x + "," + y + "," + z
+                        + " chunks=" + chunks.chunkCount() + " corrections=" + corrections.get());
+            }
+            return;
+        }
         positionReminder++;
         if (positionReminder >= POSITION_REMINDER_TICKS) {
             send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot, onGround, false));
@@ -493,6 +550,34 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
 
     public HeadlessChunkStore chunks() {
         return chunks;
+    }
+
+    /** Attach the PlayerSim driver. Called after spawn so the sim can be seeded from the real position. */
+    public void setMovement(HeadlessMovement driver) {
+        this.movement = driver;
+        if (spawnKnown) {
+            driver.start(x, y, z, onGround);
+        }
+        event("movement driver attached (" + driver.status().trim().replace('\n', ' ') + ")");
+    }
+
+    public HeadlessMovement movement() {
+        return movement;
+    }
+
+    void setReportedPosition(double nx, double ny, double nz, boolean ground) {
+        this.x = nx;
+        this.y = ny;
+        this.z = nz;
+        this.onGround = ground;
+    }
+
+    public int playerId() {
+        return playerId;
+    }
+
+    public boolean onGround() {
+        return onGround;
     }
 
     public State state() {
@@ -574,6 +659,15 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             int from = Math.max(0, events.size() - 25);
             for (int i = from; i < events.size(); i++) {
                 sb.append("  ").append(events.get(i)).append('\n');
+            }
+        }
+        HeadlessMovement driver = movement;
+        if (driver != null) {
+            sb.append("movement:\n").append(driver.status());
+            List<String> lines = driver.log();
+            int from = Math.max(0, lines.size() - 60);
+            for (int i = from; i < lines.size(); i++) {
+                sb.append("  ").append(lines.get(i)).append('\n');
             }
         }
         return sb.toString();

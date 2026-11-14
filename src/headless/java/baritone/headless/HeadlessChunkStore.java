@@ -179,6 +179,20 @@ public final class HeadlessChunkStore {
         chunks.clear();
     }
 
+    /** Install an all-air chunk column (synthetic worlds, unit tests, offline simulation). */
+    public void createEmptyChunk(int cx, int cz) {
+        List<PalettedContainer<BlockState>> sections = new ArrayList<>(expectedSections);
+        for (int i = 0; i < expectedSections; i++) {
+            sections.add(new PalettedContainer<>(Blocks.AIR.defaultBlockState(), BLOCK_STATES));
+        }
+        chunks.put(key(cx, cz), new Chunk(sections));
+    }
+
+    /** True when the store holds decoded sections for this chunk column. */
+    public boolean isChunkLoaded(int cx, int cz) {
+        return chunks.containsKey(key(cx, cz));
+    }
+
     public int chunkCount() {
         return chunks.size();
     }

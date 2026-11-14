@@ -582,3 +582,47 @@ Fixes, both common-side and using vanilla code (no `net.minecraft.client.*`):
 Net effect: the only thing that still needs the config-derived registry access is PLAY packet
 decoding, which is exactly what the server sends registry data for. The Phase 0 "PLAY protocol
 binding works" claim is therefore narrowed to: **the codec binds; decoding needs the config data**.
+
+Live confirmation (Phase 1 gate, 2026-11-14 02:41-02:51 MST): the server sent 32 registry-data
+packets; `HeadlessRegistries.build()` produced **127 registries** and 15 tag registries were applied
+before the PLAY codec was bound. `ClientboundLoginPacket` decoded its `Holder<DimensionType>`,
+49 chunks / 1176 sections decoded, and `execute if block` markers at (5,-60,5) diamond,
+(6,-60,5) emerald and (7,-60,5) gold - the last one changed **after** the bot joined - all read
+back identically from the bot's chunk store. So the reconstruction is not just theoretical.
+
+## 13. Phase 2 implementation: PlayerSim as the movement authority
+
+The dependency cut is deliberately narrow. Nothing in `src/main` was rewritten for Phase 2:
+
+* `PlayerSim` (`src/main/java/baritone/pathing/kinematic/PlayerSim.java`) is **pure Java** - its only
+  imports are `java.util.ArrayList/Arrays/List`. `BsiWorld` uses only `net.minecraft.world.level.*`,
+  `core.BlockPos`, `phys.AABB`, `phys.shapes.VoxelShape`. Neither touches a client class.
+* `BlockStateInterface` already had a `protected BlockStateInterface(int minY, int height,
+  BetterWorldBorder)` headless constructor. `HeadlessBlockStateInterface` is a **subclass**, not a
+  modification: `get0`, `isLoaded`, `isKnown`, `worldContainsLoadedChunk` read the decoded chunk
+  store, and unloaded cells map `VOID_AIR` -> `AIR` so collision stays passable.
+* `HeadlessMovement` is the replacement for `KeyboardInput` / `InputOverrideHandler`. It owns a
+  `PlayerSim(new BsiWorld(bsi))`, seeds it from the server-confirmed spawn, and each 20 TPS tick
+  emits one `ServerboundPlayerInputPacket` on change, one `ServerboundPlayerCommandPacket` on
+  sprint-state change, exactly one `ServerboundMovePlayerPacket.PosRot`, and one
+  `ServerboundClientTickEndPacket` last in the tick. That last packet is what clears the server's
+  `receivedPositionThisTick`; without it the second position packet in a server tick is a kick.
+* 26.3's `ServerboundPlayerCommandPacket` has only **Entity-based** public constructors. A plain JVM
+  has no `Entity`. Rather than invent a packet class or fabricate an `Entity`, the bot writes the
+  three wire fields into a `FriendlyByteBuf` and calls the packet's own
+  `STREAM_CODEC.decode(...)`, which reaches vanilla's private `(FriendlyByteBuf)` constructor.
+  Still a vanilla packet, still a vanilla codec, no reflection and no client object.
+  Evidence: `headless-bot-logs\phase1\movement-api.txt`.
+* Corrections are counted from `ClientboundPlayerPositionPacket` past the spawn teleport,
+  `ClientboundSetEntityMotionPacket` for our entity id, `ClientboundEntityPositionSyncPacket` for
+  our id when `endPosition()` differs, and `ClientboundExplodePacket` knockback. The first two also
+  write the server-owned state back into the sim (`resync` / `applyVelocity`).
+
+**Known limitation:** `ClientboundMoveEntityPacket.Pos/PosRot` do not expose an entity id in their
+public API, so they are still counted as unhandled rather than classified. Phase 1 saw 1548 `Pos`
+and 406 `PosRot` over 10 minutes while the bot never moved and the server never corrected it; they
+are therefore very likely other-entity traffic (or self-sync with no delta), but that is an
+inference, not a proven fact, and is listed as an open issue.
+
+Phase 2 **does not** implement a headless `IPlayerContext`, A* execution, or `PathExecutor`; those
+are Phase 3 and remain **needs a live run**.

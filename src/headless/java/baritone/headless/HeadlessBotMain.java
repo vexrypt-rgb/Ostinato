@@ -5,6 +5,7 @@
  * writes evidence, and accepts a few local file commands (never a remote connection):
  *   probe <x> <y> <z>   append the block state held in the bot's chunk store to probe-out.txt
  *   status              write a status snapshot to the evidence file
+ *   course <file>       load a scripted PlayerSim course and attach the movement driver
  *   stop                end the run early
  */
 package baritone.headless;
@@ -105,6 +106,13 @@ public final class HeadlessBotMain {
                         snapshot(evidence, bot, startedAt, tickerErrors.get(), "command status");
                     } else if (line.startsWith("probe ")) {
                         probe(probeOut, bot, line);
+                    } else if (line.startsWith("course ")) {
+                        Path course = Path.of(line.substring("course ".length()).trim());
+                        List<String> spec = Files.readAllLines(course, StandardCharsets.UTF_8);
+                        HeadlessBlockStateInterface bsi = new HeadlessBlockStateInterface(bot.chunks());
+                        HeadlessMovement driver = new HeadlessMovement(bsi, HeadlessMovement.parse(spec));
+                        bot.setMovement(driver);
+                        snapshot(evidence, bot, startedAt, tickerErrors.get(), "course attached " + course);
                     } else {
                         System.err.println("[HeadlessBotMain] unknown command: " + line);
                     }
@@ -136,6 +144,19 @@ public final class HeadlessBotMain {
                 elapsed / 1e9, bot.state(), bot.isConnected(), bot.corrections(), bot.ticks(),
                 bot.packetsIn(), bot.packetsOut(), bot.chunks().chunkCount());
         Files.writeString(evidence, summary, StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+        HeadlessMovement driver = bot.movement();
+        if (driver != null) {
+            String sim = String.format("SIM_FINAL x=%.9f y=%.9f z=%.9f | REPORTED x=%.9f y=%.9f z=%.9f"
+                            + " | delta=%.12g | simTicks=%d positionPackets=%d resyncs=%d corrections=%d%n",
+                    driver.sim().x, driver.sim().y, driver.sim().z,
+                    driver.reportedX(), driver.reportedY(), driver.reportedZ(),
+                    Math.sqrt(Math.pow(driver.sim().x - driver.reportedX(), 2)
+                            + Math.pow(driver.sim().y - driver.reportedY(), 2)
+                            + Math.pow(driver.sim().z - driver.reportedZ(), 2)),
+                    driver.simTicks(), driver.positionPackets(), driver.resyncs(), bot.corrections());
+            Files.writeString(evidence, sim, StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+            System.out.print(sim);
+        }
         System.out.print(summary);
         // Everything we created is shut down; exit explicitly so no Netty thread keeps the JVM alive.
         System.exit(exit);
