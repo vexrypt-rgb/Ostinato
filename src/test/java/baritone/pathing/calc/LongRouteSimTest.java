@@ -44,13 +44,18 @@ public class LongRouteSimTest {
     @Before
     public void defaults() {
         Settings s = Baritone.settings();
-        for (Settings.Setting<?> x : List.of(s.pathingFarSegmentWeight, s.pathingHierarchical, s.primaryTimeoutMS, s.failureTimeoutMS,
-                s.failureTimeoutMaxMS, s.planAheadPrimaryTimeoutMS, s.planAheadFailureTimeoutMS, s.planningTickLookahead,
-                s.pathingHierarchyLevels, s.pathingHierarchyCandidates, s.pathingHierarchyBidirectional, s.pathingHierarchyHeuristicFactor,
-                s.pathingHierarchyCorridorRadius, s.pathingHierarchyCoarseFactorShift, s.pathingHierarchyFarTerrain, s.simplifyUnloadedYCoord,
-                s.maxPathLengthBlocks, s.cutoffAtLoadBoundary, s.costVerificationLookahead, s.pathingStateIdCache)) {
+        // Ostinato: restore every declared default, not a hand-picked subset. Baritone.settings() is one static
+        // singleton shared by the whole suite, and several test classes leave planner settings modified (fastMode,
+        // piCheapPathing, legato, allowBreak, pathTieBreak, simEdgeHorizon, maestroMaxStates, ...). Starting a
+        // long-route corridor search from that foreign configuration makes this class order-dependent. Resetting
+        // to the declared defaults is test isolation: no assertion in this class is relaxed.
+        for (Settings.Setting<?> x : s.allSettings) {
             reset(x);
         }
+        // PathBench.boot() applies these once for headless synthetic worlds; restore them per test.
+        s.considerPotionEffects.value = false;
+        s.chatDebug.value = false;
+        s.desktopNotifications.value = false;
     }
 
     @SuppressWarnings("unchecked")
