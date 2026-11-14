@@ -1,0 +1,588 @@
+/*
+ * Ostinato: fully headless 26.3 protocol bot (Phase 1). New file, replaces no Baritone code.
+ *
+ * Login -> configuration -> play state machine, using vanilla's own packet classes and codecs.
+ * No Minecraft client object is constructed anywhere; the only game side used is Bootstrap,
+ * the built-in registries, the network codecs and the chunk palette code.
+ */
+package baritone.headless;
+
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.ConnectionProtocol;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
+import net.minecraft.network.protocol.common.ClientboundPingPacket;
+import net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket;
+import net.minecraft.network.protocol.common.ClientboundStoreCookiePacket;
+import net.minecraft.network.protocol.common.ClientboundTransferPacket;
+import net.minecraft.network.protocol.common.ClientboundUpdateTagsPacket;
+import net.minecraft.network.protocol.common.ServerboundClientInformationPacket;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
+import net.minecraft.network.protocol.common.ServerboundPongPacket;
+import net.minecraft.network.protocol.common.ServerboundResourcePackPacket;
+import net.minecraft.network.protocol.common.custom.BrandPayload;
+import net.minecraft.network.protocol.configuration.ClientConfigurationPacketListener;
+import net.minecraft.network.protocol.configuration.ClientboundCodeOfConductPacket;
+import net.minecraft.network.protocol.configuration.ClientboundFinishConfigurationPacket;
+import net.minecraft.network.protocol.configuration.ClientboundRegistryDataPacket;
+import net.minecraft.network.protocol.configuration.ClientboundSelectKnownPacks;
+import net.minecraft.network.protocol.configuration.ClientboundUpdateEnabledFeaturesPacket;
+import net.minecraft.network.protocol.configuration.ConfigurationProtocols;
+import net.minecraft.network.protocol.configuration.ServerboundAcceptCodeOfConductPacket;
+import net.minecraft.network.protocol.configuration.ServerboundFinishConfigurationPacket;
+import net.minecraft.network.protocol.configuration.ServerboundSelectKnownPacks;
+import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket;
+import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.network.protocol.game.ClientboundLoginPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+import net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.protocol.game.ClientboundStartConfigurationPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.GameProtocols;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket;
+import net.minecraft.network.protocol.game.ServerboundClientTickEndPacket;
+import net.minecraft.network.protocol.game.ServerboundConfigurationAcknowledgedPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
+import net.minecraft.network.protocol.login.ClientLoginPacketListener;
+import net.minecraft.network.protocol.login.ClientboundHelloPacket;
+import net.minecraft.network.protocol.login.ClientboundLoginCompressionPacket;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
+import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
+import net.minecraft.network.protocol.login.ServerboundHelloPacket;
+import net.minecraft.network.protocol.login.ServerboundLoginAcknowledgedPacket;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * One bot connection. All clientbound packets funnel through {@link #onPacket(Object)}; all
+ * serverbound packets go through {@link HeadlessTransport}, which makes the whole sequence
+ * observable in a JUnit fake-server test.
+ */
+public final class HeadlessBot implements HeadlessPacketListeners.Handler {
+
+    public enum State { NEW, LOGIN, CONFIGURATION, PLAY, DISCONNECTED }
+
+    /** A survival bot: no creative slot packets, no command-block packets. */
+    private static final GameProtocols.Context SURVIVAL_CONTEXT = new GameProtocols.Context() {
+        @Override
+        public boolean hasInfiniteMaterials() {
+            return false;
+        }
+
+        @Override
+        public boolean canUseCommandBlocks() {
+            return false;
+        }
+    };
+
+    private static final float DESIRED_CHUNKS_PER_TICK = 64.0f;
+    /** Vanilla sends a position packet at least once every 20 client ticks. */
+    private static final int POSITION_REMINDER_TICKS = 20;
+
+    private final HeadlessTransport transport;
+    private final String host;
+    private final int port;
+    private final String username;
+    private final UUID uuid;
+    // Ostinato: the PLAY codec needs datapack registries that Bootstrap does not create. The
+    // built-in access is a placeholder until configuration has delivered the real registry data.
+    private volatile RegistryAccess.Frozen registryAccess;
+    private final HeadlessRegistries registries = new HeadlessRegistries();
+    private final HeadlessChunkStore chunks;
+
+    private final ClientLoginPacketListener loginListener;
+    private final ClientConfigurationPacketListener configurationListener;
+    private final ClientGamePacketListener gameListener;
+
+    private volatile State state = State.NEW;
+    private volatile String disconnectReason;
+    private volatile int compressionThreshold = -1;
+    private volatile int playerId = -1;
+    private volatile String dimension = "";
+    private volatile int chunkCenterX;
+    private volatile int chunkCenterZ;
+    private volatile int chunkRadius = -1;
+    private volatile boolean loadedSent;
+    private volatile boolean spawnKnown;
+    private volatile int spawnTeleports;
+    private volatile int positionReminder;
+    private volatile boolean onGround = true;
+    private volatile double x;
+    private volatile double y;
+    private volatile double z;
+    private volatile float yRot;
+    private volatile float xRot;
+    private volatile Vec3 lastVelocity = Vec3.ZERO;
+    private volatile int lastBlockChangeSequence = -1;
+
+    private final AtomicLong packetsIn = new AtomicLong();
+    private final AtomicLong packetsOut = new AtomicLong();
+    private final AtomicLong keepAlives = new AtomicLong();
+    private final AtomicLong ticks = new AtomicLong();
+    private final AtomicLong corrections = new AtomicLong();
+    private final AtomicLong registryDataPackets = new AtomicLong();
+    private final AtomicLong chunkBatchReplies = new AtomicLong();
+    private final AtomicLong tagRegistriesApplied = new AtomicLong();
+    private final AtomicLong unhandled = new AtomicLong();
+    private final Map<String, AtomicLong> unhandledTypes = new LinkedHashMap<>();
+    private final List<String> events = new ArrayList<>();
+
+    public HeadlessBot(HeadlessTransport transport, String host, int port, String username,
+                       UUID uuid, RegistryAccess.Frozen registryAccess) {
+        this.transport = transport;
+        this.host = host;
+        this.port = port;
+        this.username = username;
+        this.uuid = uuid;
+        this.registryAccess = registryAccess;
+        this.chunks = new HeadlessChunkStore();
+        this.loginListener = HeadlessPacketListeners.create(
+                ClientLoginPacketListener.class, ConnectionProtocol.LOGIN, this);
+        this.configurationListener = HeadlessPacketListeners.create(
+                ClientConfigurationPacketListener.class, ConnectionProtocol.CONFIGURATION, this);
+        this.gameListener = HeadlessPacketListeners.create(
+                ClientGamePacketListener.class, ConnectionProtocol.PLAY, this);
+    }
+
+    // ------------------------------------------------------------------ startup
+
+    /** Vanilla's ConnectScreen$1 does exactly this: initiate, then send Hello. */
+    public void start() {
+        state = State.LOGIN;
+        event("start login as " + username + " to " + host + ":" + port);
+        transport.initiate(host, port, loginListener);
+        send(new ServerboundHelloPacket(username, uuid));
+    }
+
+    private void send(net.minecraft.network.protocol.Packet<?> packet) {
+        packetsOut.incrementAndGet();
+        transport.send(packet);
+    }
+
+    // ------------------------------------------------------------------ inbound
+
+    @Override
+    public void onPacket(Object packet) {
+        if (packet == null) {
+            return;
+        }
+        packetsIn.incrementAndGet();
+        try {
+            dispatch(packet);
+        } catch (RuntimeException e) {
+            event("ERROR handling " + packet.getClass().getName() + ": " + e);
+            e.printStackTrace(System.err);
+        }
+    }
+
+    @Override
+    public void onDisconnect(String reason) {
+        state = State.DISCONNECTED;
+        disconnectReason = reason;
+        event("disconnected: " + reason);
+    }
+
+    private void dispatch(Object p) {
+        // ---- shared by LOGIN / CONFIGURATION / PLAY --------------------------
+        if (p instanceof ClientboundKeepAlivePacket) {
+            send(new ServerboundKeepAlivePacket(((ClientboundKeepAlivePacket) p).getId()));
+            keepAlives.incrementAndGet();
+            return;
+        }
+        if (p instanceof ClientboundPingPacket) {
+            send(new ServerboundPongPacket(((ClientboundPingPacket) p).getId()));
+            return;
+        }
+        if (p instanceof ClientboundUpdateTagsPacket) {
+            applyTags((ClientboundUpdateTagsPacket) p);
+            return;
+        }
+        if (p instanceof ClientboundDisconnectPacket) {
+            onDisconnect("play/config disconnect: " + ((ClientboundDisconnectPacket) p).reason().getString());
+            return;
+        }
+        if (p instanceof ClientboundResourcePackPushPacket) {
+            // A headless bot never downloads a pack. Decline so the server does not wait forever.
+            send(new ServerboundResourcePackPacket(((ClientboundResourcePackPushPacket) p).id(),
+                    ServerboundResourcePackPacket.Action.DECLINED));
+            return;
+        }
+        if (p instanceof ClientboundCookieRequestPacket) {
+            event("cookie request ignored: " + ((ClientboundCookieRequestPacket) p).key());
+            return;
+        }
+        if (p instanceof ClientboundStoreCookiePacket || p instanceof ClientboundTransferPacket) {
+            // Transfers are deliberately ignored: the bot only ever connects to its own local server.
+            event("ignored " + p.getClass().getSimpleName());
+            return;
+        }
+        if (p instanceof ClientboundSystemChatPacket) {
+            event("chat: " + ((ClientboundSystemChatPacket) p).content().getString());
+            return;
+        }
+
+        // ---- LOGIN -----------------------------------------------------------
+        if (p instanceof ClientboundLoginCompressionPacket) {
+            int threshold = ((ClientboundLoginCompressionPacket) p).getCompressionThreshold();
+            compressionThreshold = threshold;
+            transport.setupCompression(threshold, true);
+            event("compression threshold " + threshold);
+            return;
+        }
+        if (p instanceof ClientboundLoginFinishedPacket) {
+            event("login finished: " + ((ClientboundLoginFinishedPacket) p).gameProfile());
+            enterConfiguration(false);
+            return;
+        }
+        if (p instanceof ClientboundHelloPacket) {
+            onDisconnect("server requested encryption (online mode) - out of scope for this bot");
+            return;
+        }
+        if (p instanceof ClientboundLoginDisconnectPacket) {
+            onDisconnect("login disconnect: " + ((ClientboundLoginDisconnectPacket) p).reason().getString());
+            return;
+        }
+
+        // ---- CONFIGURATION ---------------------------------------------------
+        if (p instanceof ClientboundRegistryDataPacket) {
+            ClientboundRegistryDataPacket data = (ClientboundRegistryDataPacket) p;
+            registries.appendContents(data);
+            registryDataPackets.incrementAndGet();
+            event("registry data: " + data.registry().identifier() + " (" + data.entries().size() + " entries)");
+            return;
+        }
+        if (p instanceof ClientboundSelectKnownPacks) {
+            // Empty selection forces the server to send the full registry data.
+            send(new ServerboundSelectKnownPacks(List.of()));
+            return;
+        }
+        if (p instanceof ClientboundUpdateEnabledFeaturesPacket) {
+            event("enabled features: " + ((ClientboundUpdateEnabledFeaturesPacket) p).features().size());
+            return;
+        }
+        if (p instanceof ClientboundCodeOfConductPacket) {
+            send(ServerboundAcceptCodeOfConductPacket.INSTANCE);
+            return;
+        }
+        if (p instanceof ClientboundFinishConfigurationPacket) {
+            enterPlay();
+            return;
+        }
+
+        // ---- PLAY ------------------------------------------------------------
+        if (p instanceof ClientboundLoginPacket) {
+            ClientboundLoginPacket login = (ClientboundLoginPacket) p;
+            playerId = login.playerId();
+            dimension = login.commonPlayerSpawnInfo().dimension().identifier().toString();
+            try {
+                chunks.setDimension(login.commonPlayerSpawnInfo().dimensionType().value().minY(),
+                        login.commonPlayerSpawnInfo().dimensionType().value().height());
+            } catch (RuntimeException e) {
+                event("dimension type not resolvable, keeping -64/384 default: " + e);
+            }
+            spawnKnown = false;
+            loadedSent = false;
+            event("play login id=" + playerId + " dim=" + dimension
+                    + " view=" + login.chunkRadius() + " sim=" + login.simulationDistance()
+                    + " secureChat=" + login.enforcesSecureChat());
+            return;
+        }
+        if (p instanceof ClientboundPlayerPositionPacket) {
+            handlePlayerPosition((ClientboundPlayerPositionPacket) p);
+            return;
+        }
+        if (p instanceof ClientboundLevelChunkWithLightPacket) {
+            chunks.loadChunk((ClientboundLevelChunkWithLightPacket) p);
+            return;
+        }
+        if (p instanceof ClientboundSectionBlocksUpdatePacket) {
+            chunks.applySectionUpdate((ClientboundSectionBlocksUpdatePacket) p);
+            return;
+        }
+        if (p instanceof ClientboundBlockUpdatePacket) {
+            ClientboundBlockUpdatePacket u = (ClientboundBlockUpdatePacket) p;
+            chunks.setBlockState(u.getPos(), u.getBlockState());
+            return;
+        }
+        if (p instanceof ClientboundForgetLevelChunkPacket) {
+            var pos = ((ClientboundForgetLevelChunkPacket) p).pos();
+            chunks.forgetChunk(pos.x(), pos.z());
+            return;
+        }
+        if (p instanceof ClientboundChunkBatchStartPacket) {
+            return;
+        }
+        if (p instanceof ClientboundChunkBatchFinishedPacket) {
+            send(new ServerboundChunkBatchReceivedPacket(DESIRED_CHUNKS_PER_TICK));
+            chunkBatchReplies.incrementAndGet();
+            if (!loadedSent) {
+                send(new ServerboundPlayerLoadedPacket());
+                send(new ServerboundPlayerInputPacket(Input.EMPTY));
+                loadedSent = true;
+                event("player loaded (" + ((ClientboundChunkBatchFinishedPacket) p).batchSize()
+                        + " chunks in first batch)");
+            }
+            return;
+        }
+        if (p instanceof ClientboundSetChunkCacheCenterPacket) {
+            chunkCenterX = ((ClientboundSetChunkCacheCenterPacket) p).getX();
+            chunkCenterZ = ((ClientboundSetChunkCacheCenterPacket) p).getZ();
+            return;
+        }
+        if (p instanceof ClientboundSetChunkCacheRadiusPacket) {
+            chunkRadius = ((ClientboundSetChunkCacheRadiusPacket) p).getRadius();
+            return;
+        }
+        if (p instanceof ClientboundStartConfigurationPacket) {
+            enterConfiguration(true);
+            return;
+        }
+        if (p instanceof ClientboundRespawnPacket) {
+            ClientboundRespawnPacket respawn = (ClientboundRespawnPacket) p;
+            chunks.clear();
+            dimension = respawn.commonPlayerSpawnInfo().dimension().identifier().toString();
+            spawnKnown = false;
+            loadedSent = false;
+            event("respawn into " + dimension);
+            return;
+        }
+        if (p instanceof ClientboundSetEntityMotionPacket) {
+            ClientboundSetEntityMotionPacket motion = (ClientboundSetEntityMotionPacket) p;
+            if (motion.id() == playerId) {
+                lastVelocity = motion.movement();
+                event("velocity " + lastVelocity);
+            }
+            return;
+        }
+        if (p instanceof ClientboundBlockChangedAckPacket) {
+            lastBlockChangeSequence = ((ClientboundBlockChangedAckPacket) p).sequence();
+            return;
+        }
+
+        unhandled.incrementAndGet();
+        String type = p.getClass().getSimpleName();
+        synchronized (unhandledTypes) {
+            unhandledTypes.computeIfAbsent(type, k -> new AtomicLong()).incrementAndGet();
+        }
+    }
+
+    // ------------------------------------------------------------------ protocol switches
+
+    /** Login finished, or play -> configuration re-entry. */
+    private void enterConfiguration(boolean fromPlay) {
+        state = State.CONFIGURATION;
+        // Outbound is still LOGIN (or PLAY on re-entry), which is exactly what the ack packet needs.
+        transport.setupInbound(ConfigurationProtocols.CLIENTBOUND, configurationListener);
+        if (fromPlay) {
+            send(ServerboundConfigurationAcknowledgedPacket.INSTANCE);
+        } else {
+            send(ServerboundLoginAcknowledgedPacket.INSTANCE);
+        }
+        transport.setupOutbound(ConfigurationProtocols.SERVERBOUND);
+        send(new ServerboundCustomPayloadPacket(new BrandPayload("vanilla")));
+        send(new ServerboundClientInformationPacket(ClientInformation.createDefault()));
+        event("entered configuration" + (fromPlay ? " (re-entry)" : ""));
+    }
+
+    private void enterPlay() {
+        // Configuration has delivered the dynamic registries; rebuild them common-side before the
+        // first ClientboundLoginPacket, whose Holder<DimensionType> needs the dimension_type registry.
+        if (registries.registryDataPackets() > 0) {
+            try {
+                RegistryAccess.Frozen built = registries.build();
+                registryAccess = built;
+                event("rebuilt " + built.listRegistryKeys().count() + " registries from configuration");
+            } catch (RuntimeException e) {
+                event("registry reconstruction FAILED: " + e + " - PLAY decode may fail");
+                e.printStackTrace(System.err);
+            }
+        }
+        var decorator = RegistryFriendlyByteBuf.decorator(registryAccess);
+        var inbound = GameProtocols.CLIENTBOUND_TEMPLATE.bind(decorator);
+        var outbound = GameProtocols.SERVERBOUND_TEMPLATE.bind(decorator, SURVIVAL_CONTEXT);
+        state = State.PLAY;
+        // Inbound first, then the terminal config packet while outbound is still CONFIGURATION.
+        transport.setupInbound(inbound, gameListener);
+        send(ServerboundFinishConfigurationPacket.INSTANCE);
+        transport.setupOutbound(outbound);
+        event("entered play");
+    }
+
+    private void handlePlayerPosition(ClientboundPlayerPositionPacket p) {
+        // Vanilla's own relative/absolute resolution, including DELTA_* and ROTATE_DELTA.
+        PositionMoveRotation current = new PositionMoveRotation(new Vec3(x, y, z), Vec3.ZERO, yRot, xRot);
+        PositionMoveRotation absolute = PositionMoveRotation.calculateAbsolute(current, p.change(), p.relatives());
+        Vec3 pos = absolute.position();
+        x = pos.x;
+        y = pos.y;
+        z = pos.z;
+        yRot = absolute.yRot();
+        xRot = absolute.xRot();
+        spawnKnown = true;
+        spawnTeleports++;
+        send(new ServerboundAcceptTeleportationPacket(p.id(), x, y, z, yRot, xRot));
+        if (spawnTeleports > 1) {
+            corrections.incrementAndGet();
+            event("correction teleport #" + (spawnTeleports - 1) + " id=" + p.id() + " -> " + pos);
+        } else {
+            event("spawn teleport id=" + p.id() + " -> " + pos);
+        }
+    }
+
+    /** Common-side replacement for the client-only RegistryDataCollector tag path. */
+    private void applyTags(ClientboundUpdateTagsPacket packet) {
+        registries.appendTags(packet);
+        tagRegistriesApplied.addAndGet(packet.tags().size());
+        event("tags collected for " + packet.tags().size() + " registries");
+    }
+
+    // ------------------------------------------------------------------ tick
+
+    /**
+     * One 20 TPS client tick. Vanilla sends StatusOnly on most ticks and a position packet at
+     * least every 20 ticks; doing that (rather than a position packet every tick) also guarantees
+     * the server never sees two position packets inside one of its own ticks.
+     */
+    public void tick() {
+        long n = ticks.incrementAndGet();
+        transport.tick();
+        if (state != State.PLAY || !spawnKnown || !loadedSent) {
+            return;
+        }
+        positionReminder++;
+        if (positionReminder >= POSITION_REMINDER_TICKS) {
+            send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot, onGround, false));
+            positionReminder = 0;
+        } else {
+            send(new ServerboundMovePlayerPacket.StatusOnly(onGround, false));
+        }
+        // Must be the last packet of the client tick: the server clears its per-tick movement
+        // flags in ServerGamePacketListenerImpl.handleClientTickEnd.
+        send(ServerboundClientTickEndPacket.INSTANCE);
+        if (n % 200 == 0) {
+            event("tick " + n + " pos=" + x + "," + y + "," + z
+                    + " chunks=" + chunks.chunkCount() + " corrections=" + corrections.get());
+        }
+    }
+
+    // ------------------------------------------------------------------ observation
+
+    public HeadlessChunkStore chunks() {
+        return chunks;
+    }
+
+    public State state() {
+        return state;
+    }
+
+    public String disconnectReason() {
+        return disconnectReason;
+    }
+
+    public boolean isConnected() {
+        return state != State.DISCONNECTED && transport.isConnected();
+    }
+
+    public double x() {
+        return x;
+    }
+
+    public double y() {
+        return y;
+    }
+
+    public double z() {
+        return z;
+    }
+
+    public long corrections() {
+        return corrections.get();
+    }
+
+    public long ticks() {
+        return ticks.get();
+    }
+
+    public long packetsIn() {
+        return packetsIn.get();
+    }
+
+    public long packetsOut() {
+        return packetsOut.get();
+    }
+
+    public String status() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("state=").append(state)
+                .append(" user=").append(username)
+                .append(" connected=").append(isConnected())
+                .append(" disconnectReason=").append(disconnectReason)
+                .append("\nplayerId=").append(playerId)
+                .append(" dimension=").append(dimension)
+                .append(" pos=").append(x).append(',').append(y).append(',').append(z)
+                .append(" rot=").append(yRot).append(',').append(xRot)
+                .append(" onGround=").append(onGround)
+                .append("\ncompression=").append(compressionThreshold)
+                .append(" chunkCenter=").append(chunkCenterX).append(',').append(chunkCenterZ)
+                .append(" chunkRadius=").append(chunkRadius)
+                .append("\nticks=").append(ticks.get())
+                .append(" packetsIn=").append(packetsIn.get())
+                .append(" packetsOut=").append(packetsOut.get())
+                .append(" keepAlives=").append(keepAlives.get())
+                .append(" corrections=").append(corrections.get())
+                .append(" spawnTeleports=").append(spawnTeleports)
+                .append("\nregistryDataPackets=").append(registryDataPackets.get())
+                .append(" tagRegistriesApplied=").append(tagRegistriesApplied.get())
+                .append(" chunkBatchReplies=").append(chunkBatchReplies.get())
+                .append("\nchunks=").append(chunks.chunkCount())
+                .append(" loadedChunks=").append(chunks.loadedChunks())
+                .append(" decodedSections=").append(chunks.decodedSections())
+                .append(" blockUpdates=").append(chunks.blockUpdates())
+                .append(" forgotten=").append(chunks.forgottenChunks())
+                .append(" minSection=").append(chunks.minSection())
+                .append(" expectedSections=").append(chunks.expectedSections())
+                .append("\nunhandled=").append(unhandled.get()).append(' ');
+        synchronized (unhandledTypes) {
+            sb.append(new LinkedHashMap<>(unhandledTypes));
+        }
+        sb.append("\nevents:\n");
+        synchronized (events) {
+            int from = Math.max(0, events.size() - 25);
+            for (int i = from; i < events.size(); i++) {
+                sb.append("  ").append(events.get(i)).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private void event(String text) {
+        synchronized (events) {
+            events.add(text);
+        }
+        System.out.println("[HeadlessBot " + username + "] " + text);
+    }
+}

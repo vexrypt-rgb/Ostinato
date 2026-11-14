@@ -536,3 +536,49 @@ behaviour on the client path. Proposed sequence (Phase 3):
   production-repo change is test-only isolation in `LongRouteSimTest`.
 - **GATE 0: PASS** (notes written + Bootstrap probe passes + full suite green).
 - No live gates have been run; Phases 1-4 are all **needs a live run** at this point.
+
+## 12. Phase 1 implementation findings (correction to the Phase 0 survey)
+
+Phase 0's probe built `RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)` and
+checked that `GameProtocols.CLIENTBOUND_TEMPLATE.bind(...)` produced a non-null `ProtocolInfo`.
+That proves the **codec object can be constructed**; it does not prove a PLAY packet can be
+**decoded**. Writing Phase 1 code found the real blocker:
+
+* 26.3 has **95 static registries** after `Bootstrap.bootStrap()`. `minecraft:worldgen/biome` and
+  `minecraft:dimension_type` are **datapack registries** and are absent from the built-in access.
+  Evidence: `headless-bot-logs\phase1\registry-diag.log` / `registry-diag2.log`.
+* `PalettedContainerFactory.create(builtInAccess)` throws
+  `IllegalStateException: Missing registry: minecraft:worldgen/biome`.
+  `ClientboundLoginPacket.commonPlayerSpawnInfo()` needs `Holder<DimensionType>`, so the first
+  PLAY packet would fail the same way.
+* `RegistryDataLoader.load(Map.of(), ResourceProvider.EMPTY, ...)` fails with 13
+  `Registry must be non-empty: minecraft:*_variant` errors: `NetworkRegistryLoadTask.load` returns
+  immediately for any synchronized registry with no network entry, and a `ResourceProvider` cannot
+  enumerate files.
+
+Fixes, both common-side and using vanilla code (no `net.minecraft.client.*`):
+
+1. `HeadlessRegistries` is the replacement for the client-only `RegistryDataCollector`. It
+   accumulates `ClientboundRegistryDataPacket` / `ClientboundUpdateTagsPacket`, resolves static
+   tags with `NetworkPayload.resolve` -> `Registry.prepareTagReload` -> `PendingTags.apply`, and
+   rebuilds the RELOADABLE layer with
+   `RegistryDataLoader.load(Map<ResourceKey, NetworkedRegistryData>, ResourceProvider,
+   TagLoader.buildUpdatedLookups(...), SYNCHRONIZED_REGISTRIES, executor)` over
+   `RegistryLayer.createRegistryAccess()`. The bot calls `build()` immediately before binding the
+   PLAY protocol, after the last configuration packet. The Mojmap merged jar bundles the whole
+   vanilla datapack (9,884 `data/` entries), so `CLASSPATH_RESOURCES` supplies the same JSON the
+   client's resource manager would.
+   **Only a live server supplies the full `NetworkedRegistryData` map**; `build()` with no config
+   data is not a supported path (documented, and the unit tests do not pretend otherwise).
+2. Chunk decoding no longer needs a biome registry at all. `HeadlessChunkStore.readSection` uses
+   vanilla `PalettedContainer.read(FriendlyByteBuf)` for the block states and again for the biome
+   palette (to consume the bytes), with a synthetic `IdMap<Integer>` standing in for the BIOME
+   registry. This is safe because `Strategy$2.getConfigurationForBitCount` derives the wire storage
+   length from the **bits on the wire**, not from the id map, and `PalettedContainer.read` only
+   calls `IdMap.byId` through `globalMap()`. Evidence:
+   `headless-bot-logs\phase1\paletted-container-bytecode.txt` and
+   `chunk-decode-bytecode.txt`. Pathing only needs block states.
+
+Net effect: the only thing that still needs the config-derived registry access is PLAY packet
+decoding, which is exactly what the server sends registry data for. The Phase 0 "PLAY protocol
+binding works" claim is therefore narrowed to: **the codec binds; decoding needs the config data**.

@@ -136,9 +136,18 @@ sourceSets {
         compileClasspath += api.output
         runtimeClasspath += api.output
     }
+    // Ostinato: fully headless 26.3 protocol bot. A separate source set (not a subproject) keeps the
+    // Fabric mod's classpath and behaviour byte-for-byte unchanged while letting the bot reuse vanilla
+    // packet classes/codecs plus Ostinato's PlayerSim. Nothing here boots a Minecraft client.
+    headless {
+        java.srcDir 'src/headless/java'
+        resources.srcDir 'src/headless/resources'
+        compileClasspath += main.output + api.output + main.compileClasspath
+        runtimeClasspath += output + compileClasspath + main.runtimeClasspath
+    }
     test {
-        compileClasspath += main.compileClasspath + main.runtimeClasspath + main.output
-        runtimeClasspath += main.compileClasspath + main.runtimeClasspath + main.output
+        compileClasspath += main.compileClasspath + main.runtimeClasspath + main.output + headless.output
+        runtimeClasspath += main.compileClasspath + main.runtimeClasspath + main.output + headless.output
     }
     launch {
         compileClasspath += main.compileClasspath + main.runtimeClasspath + main.output
@@ -156,6 +165,20 @@ sourceSets {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+}
+
+// Ostinato: launcher for the fully headless bot. Pass -PbotArgs="127.0.0.1 25565 HBot1 600 ...".
+tasks.register('runHeadlessBot', JavaExec) {
+    group = 'headless'
+    description = 'Run one or more fully headless 26.3 protocol bots (no Minecraft client JVM).'
+    classpath = sourceSets.headless.runtimeClasspath
+    mainClass = 'baritone.headless.HeadlessBotMain'
+    if (project.hasProperty('botArgs')) {
+        args project.property('botArgs').toString().split(/\s+/) as List
+    }
+    // The bot targets -server; keep the JVM small so Phase 4 memory numbers are meaningful.
+    maxHeapSize = project.findProperty('botXmx') ?: '256m'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 
 jar {
