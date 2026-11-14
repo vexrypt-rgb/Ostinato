@@ -63,6 +63,12 @@ public final class HeadlessPacketListeners {
                     }
                     return null;
                 case "createDisconnectionInfo":
+                    // Ostinato: Connection never logs the cause of a decode failure, and the reason component
+                    // only carries the top message. Print the throwable so a codec mismatch is diagnosable.
+                    if (args != null && args.length > 1 && args[1] instanceof Throwable) {
+                        System.err.println("[HeadlessBot] disconnect cause:");
+                        ((Throwable) args[1]).printStackTrace(System.err);
+                    }
                     // Same as PacketListener's default implementation.
                     return new DisconnectionDetails((Component) args[0]);
                 case "fillCrashReport":

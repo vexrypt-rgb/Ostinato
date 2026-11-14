@@ -52,6 +52,42 @@ public class HeadlessRegistriesTest {
     }
 
     @Test
+    public void buildBindsDefaultItemComponents() {
+        // Ostinato: 26.3 binds item/entity default components from DataComponentInitializers during client
+        // startup. A plain JVM never runs that step, so ItemStack decode throws "Components not bound yet".
+        // Build the access the server builds (elements + tags from the vanilla datapack) and verify the
+        // common-side binding produces usable item components.
+        try (VanillaDatapackResourceManager datapack = VanillaDatapackResourceManager.fromClasspath()) {
+            net.minecraft.core.LayeredRegistryAccess<net.minecraft.server.RegistryLayer> layered =
+                    net.minecraft.server.RegistryLayer.createRegistryAccess();
+            RegistryAccess.Frozen loading =
+                    layered.getAccessForLoading(net.minecraft.server.RegistryLayer.RELOADABLE);
+            java.util.List<net.minecraft.core.Registry.PendingTags<?>> staticTags =
+                    net.minecraft.tags.TagLoader.loadTagsForExistingRegistries(datapack, loading);
+            java.util.List<net.minecraft.core.HolderLookup.RegistryLookup<?>> lookups =
+                    net.minecraft.tags.TagLoader.buildUpdatedLookups(loading, staticTags);
+            RegistryAccess.Frozen reloadable = net.minecraft.resources.RegistryDataLoader.load(
+                    datapack, lookups, net.minecraft.resources.RegistryDataLoader.SYNCHRONIZED_REGISTRIES,
+                    Runnable::run).join();
+            staticTags.forEach(net.minecraft.core.Registry.PendingTags::apply);
+            RegistryAccess.Frozen access =
+                    layered.replaceFrom(net.minecraft.server.RegistryLayer.RELOADABLE, reloadable).compositeAccess();
+
+            HeadlessRegistries.bindDefaultComponents(access);
+            net.minecraft.core.Holder<net.minecraft.world.item.Item> stone =
+                    BuiltInRegistries.ITEM.wrapAsHolder(net.minecraft.world.item.Items.STONE);
+            assertTrue("item holder components must be bound", stone.areComponentsBound());
+            assertEquals("stone is a full stack",
+                    64, (int) stone.components().getOrDefault(
+                            net.minecraft.core.component.DataComponents.MAX_STACK_SIZE, 0));
+            net.minecraft.core.Holder<net.minecraft.world.item.Item> netheriteScrap =
+                    BuiltInRegistries.ITEM.wrapAsHolder(net.minecraft.world.item.Items.NETHERITE_SCRAP);
+            assertTrue("fire-resistant items resolve the damage_type/is_fire tag",
+                    netheriteScrap.components().has(net.minecraft.core.component.DataComponents.DAMAGE_RESISTANT));
+        }
+    }
+
+    @Test
     public void configurationRegistryAndTagPacketsAreAccumulated() {
         HeadlessRegistries registries = new HeadlessRegistries();
         ClientboundRegistryDataPacket data = new ClientboundRegistryDataPacket(

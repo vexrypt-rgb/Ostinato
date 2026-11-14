@@ -122,8 +122,22 @@ public final class HeadlessRegistries {
         }
         RegistryAccess.Frozen result = layered.replaceFrom(RegistryLayer.RELOADABLE, reloadable).compositeAccess();
         pendingStaticTags.forEach(Registry.PendingTags::apply);
+        bindDefaultComponents(result);
         built = result;
         return result;
+    }
+
+    /**
+     * Ostinato: 26.3 builds each item's/entity type's default DataComponentMap in
+     * DataComponentInitializers, and the client applies those pending maps at startup (and again on a
+     * memory connection through RegistryDataCollector.updateComponents). A plain JVM never runs that
+     * client init, so without this every ItemStack decoded from a packet throws
+     * "Components not bound yet" (for example an item entity's tracked DATA_ITEM in SetEntityData).
+     */
+    public static void bindDefaultComponents(HolderLookup.Provider access) {
+        for (var pending : net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(access)) {
+            pending.apply();
+        }
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
