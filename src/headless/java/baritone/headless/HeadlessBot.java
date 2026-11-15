@@ -677,7 +677,9 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (loadedSent || state != State.PLAY || !spawnKnown) {
             return;
         }
-        if (chunks.chunkCount() < 9) {
+        // Paper holds the rest of the view until the client acknowledges the first
+        // chunk; waiting for a 3x3 neighborhood deadlocks at chunks=1.
+        if (chunks.chunkCount() < 1) {
             return;
         }
         send(new ServerboundPlayerLoadedPacket());
