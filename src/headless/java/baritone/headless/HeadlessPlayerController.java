@@ -221,6 +221,21 @@ public final class HeadlessPlayerController implements IPlayerController {
             if (awaitingPlace) {
                 return InteractionResult.SUCCESS;
             }
+            // Ostinato: the real client sends one UseItemOn per pillar layer. After the
+            // server (or prediction) has accepted a cell, do not click it again every
+            // tick of the jump. Repeating it is Grim Simulation 0.075 / Post placement.
+            BlockPos already = lastPlaced;
+            if (already != null && lastPlaceAcked && !lastPlaceFailed) {
+                ItemStack held = this.player.getItemInHand(hand);
+                if (!held.isEmpty() && held.getItem() instanceof BlockItem) {
+                    BlockPos clicked = result.getBlockPos();
+                    BlockState clickedState = level.getBlockState(clicked);
+                    BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
+                    if (already.equals(dest)) {
+                        return InteractionResult.SUCCESS;
+                    }
+                }
+            }
             syncHeldItem();
             int seq = ++sequence;
             bot.send(new ServerboundUseItemOnPacket(hand, result, seq));

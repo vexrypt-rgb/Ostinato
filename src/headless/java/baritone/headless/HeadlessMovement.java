@@ -314,6 +314,20 @@ public final class HeadlessMovement {
     }
 
     /** Exactly one movement packet and one ClientTickEnd per 20 TPS tick. */
+
+    /** Ostinato: last look written to a movement packet. Place only against this look. */
+    public float lastSentYaw() {
+        return lastSentYaw;
+    }
+
+    public float lastSentPitch() {
+        return lastSentPitch;
+    }
+
+    public boolean lookMatchesLastSent(float yaw, float pitch) {
+        return !Float.isNaN(lastSentYaw) && yaw == lastSentYaw && pitch == lastSentPitch;
+    }
+
     public void tick(HeadlessBot bot) {
         if (!started) {
             // Ostinato: seed the look the spawn packet confirmed before a live driver reads the body.

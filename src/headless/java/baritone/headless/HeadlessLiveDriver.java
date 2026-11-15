@@ -303,6 +303,19 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         if (!owns) return null;
         try {
             host.getPathingBehavior().tick();
+            // Ostinato: vanilla/Baritone apply look at tick HEAD, place in handleKeybinds
+            // against that look (already on the wire from last tick's sendChanges, or the
+            // pre-place Rot), then may update look again before PosRot. Pathing.tick()
+            // writes a new look immediately; placing against it in the same tick is
+            // Grim RotationPlace (UseItemOn before the rotation packet). Snapshot the
+            // desired look, restore last-sent look for attack/place, then re-apply.
+            Rotation desiredLook = new Rotation(player.getYRot(), player.getXRot());
+            boolean restoredSentLook = false;
+            if (!movement.lookMatchesLastSent(desiredLook.getYaw(), desiredLook.getPitch())
+                    && !Float.isNaN(movement.lastSentYaw())) {
+                look.updateTarget(new Rotation(movement.lastSentYaw(), movement.lastSentPitch()), true);
+                restoredSentLook = true;
+            }
             if (mining != null) tickMining();
             else if (placing != null) tickPlaceCommand();
             else if (combat.active() || craft.active()) {
@@ -311,9 +324,12 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 tickAttack();
                 tickUse();
             }
+            if (restoredSentLook) {
+                look.updateTarget(desiredLook, true);
+            }
             holdSneakIfHanging(movement);
             String why = placing != null ? "place" : craft.active() ? "craft" : combat.active() ? "combat" : "pathing";
-            return new HeadlessMovement.Step(1, player.getYRot(), player.getXRot(),
+            return new HeadlessMovement.Step(1, desiredLook.getYaw(), desiredLook.getPitch(),
                     key(Input.MOVE_FORWARD) - key(Input.MOVE_BACK), key(Input.MOVE_LEFT) - key(Input.MOVE_RIGHT),
                     down(Input.SPRINT), down(Input.JUMP), down(Input.SNEAK), why);
         } catch (RuntimeException e) {
@@ -370,10 +386,21 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             pendingPlaceWant = Set.copyOf(want);
             return;
         }
+        // Ostinato: MovementPillar holds CLICK_RIGHT for the whole jump after the
+        // block exists (or after toPlace becomes empty). The real client clicks
+        // once per layer, at pre-apex. A bare CLICK_RIGHT here would spam UseItemOn
+        // every tick on the top of the block we just placed (the next layer),
+        // which Grim flags as Simulation 0.075 and Post placement.
         if (!down(Input.CLICK_RIGHT)) {
             return;
         }
         if (!(hit instanceof BlockHitResult block) || hit.getType() != HitResult.Type.BLOCK) {
+            return;
+        }
+        if (placing == null && want.isEmpty()) {
+            return;
+        }
+        if (placing == null && !placesInto(block, want)) {
             return;
         }
         clickPlace(block);
@@ -493,7 +520,17 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         }
         var exec = host.getPathingBehavior().getCurrent();
         if (exec instanceof PathExecutor path) {
-            return path.toPlace();
+            // Ostinato: only the current movement's toPlace. PathExecutor.toPlace() is
+            // every remaining cell, so a later pillar block is clicked as soon as the
+            // ray hits the block we just placed (mid-first-jump, often with the wrong
+            // look). The real client only right-clicks the current MovementPillar.
+            // That early UseItemOn is Grim RotationPlace / Simulation 0.075.
+            int i = path.getPosition();
+            var moves = path.getPath().movements();
+            if (i >= 0 && i < moves.size()) {
+                var movement = (baritone.pathing.movement.Movement) moves.get(i);
+                return Set.copyOf(movement.toPlace(host.bsi()));
+            }
         }
         return Set.of();
     }
@@ -688,10 +725,27 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private void tickAttack() {
         HitResult hit = down(Input.CLICK_LEFT) ? context.objectMouseOver() : null;
         if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {
+            // Ostinato: the real client sends no PlayerAction during a 5-block pillar.
+            // MovementPillar can set CLICK_LEFT on a just-placed throwaway at src, and
+            // tickAttack would START/STOP destroy (Grim FastBreak). Only dig cells the
+            // path actually listed as toBreak.
+            if (ignorePathingBreak(block.getBlockPos())) {
+                controller.resetBlockRemoving();
+                return;
+            }
             controller.onPlayerDamageBlock(block.getBlockPos(), block.getDirection());
         } else {
             controller.resetBlockRemoving();
         }
+    }
+
+    /** True when this left-click is not aimed at a path toBreak cell. */
+    private boolean ignorePathingBreak(BlockPos pos) {
+        var exec = host.getPathingBehavior().getCurrent();
+        if (!(exec instanceof PathExecutor path)) {
+            return false;
+        }
+        return !wantHas(path.toBreak(), pos);
     }
 
     private void finishMining(String result) {
