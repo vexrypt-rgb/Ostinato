@@ -72,6 +72,8 @@ public final class HeadlessMovement {
         // Ostinato: null yields to the course; a Step owns this tick without sending packets.
         Step tick(HeadlessBot bot, HeadlessMovement movement);
         default void afterTick(HeadlessMovement movement) { }
+        // Ostinato: send a place that was armed during tick(), against the post-sim pose.
+        default void flushPlaceAfterPhysics() { }
         default void afterPackets(HeadlessBot bot) { }
         default float[] pollAnalog() { return null; }
     }
@@ -387,8 +389,10 @@ public final class HeadlessMovement {
             sim.tickImpulse(step.yaw, 0, 0, false, false, false, false);
         }
         simTicks++;
-        // Ostinato: publish the stepped body before readers see the next tick.
+        // Ostinato: publish the stepped body, then place against that pose so
+        // UseItemOn and the position packet describe the same tick.
         if (driver != null) driver.afterTick(this);
+        if (driver != null && live != null) driver.flushPlaceAfterPhysics();
 
         if (sim.sprinting != lastSprinting) {
             bot.send(playerCommand(bot.playerId(), sim.sprinting
@@ -427,6 +431,11 @@ public final class HeadlessMovement {
 
     // Ostinato: match LocalPlayer.sendPosition(). Repeating PosRot with an
     // unchanged look is not what a vanilla client does and trips AimDuplicateLook.
+    // The squared 2.0E-4 test drops the tick after a jump apex (dy ≈ +0.003,
+    // dy^2 ≈ 9e-6). A still look has no Rot to carry that position, so the next
+    // packet is two physics ticks ahead and Grim reports Simulation 0.075444
+    // then 0.076891. The real pillar client sends this tick because its yaw
+    // changes. Send any real vertical change.
     private void sendMovementPacket(HeadlessBot bot, float yaw, float pitch) {
         yaw = Mth.wrapDegrees(yaw);
         pitch = Mth.wrapDegrees(pitch);
@@ -436,6 +445,7 @@ public final class HeadlessMovement {
         double dz = sim.z - lastSentZ;
         boolean posChanged = Double.isNaN(lastSentX)
                 || dx * dx + dy * dy + dz * dz > 2.0E-4
+                || Math.abs(dy) > 1.0E-4
                 || positionReminder >= 20;
         boolean rotChanged = Float.isNaN(lastSentYaw) || yaw != lastSentYaw || pitch != lastSentPitch;
         boolean statusChanged = sim.onGround != lastSentOnGround || sim.collidedH != lastSentCollidedH;

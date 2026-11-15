@@ -65,6 +65,9 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private HeadlessMovement movement;
     // Ostinato: one UseItemOn per dest until the prediction is rejected or the movement advances.
     private BlockPos sentPlaceDest;
+    // Ostinato: the click is chosen before physics and sent after it, so UseItemOn
+    // and the position packet share the post-sim pose (the vanilla client order).
+    private BlockHitResult armedPlace;
 
 
     /** Down from the target first (click the top of the floor), then the four sides, then the ceiling. */
@@ -381,14 +384,9 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             Set<BlockPos> pendingWant = pendingPlaceWant;
             if (placesInto(pendingHit, pendingWant) && pendingHit instanceof BlockHitResult block
                     && pendingHit.getType() == HitResult.Type.BLOCK) {
-                if (canSendPlace(block)) {
-                    pendingPlaceLook = null;
-                    pendingPlaceWant = null;
-                    clickPlace(block);
-                }
-                // Ostinato: keep the pending look while the feet AABB still intersects
-                // the dest (jump toward pre-apex). The rotation is already on the player
-                // and will go out this tick if it has not already.
+                // Ostinato: keep the pending look until flush sends. The apex check
+                // runs after physics, on the pose the position packet will carry.
+                armPlace(block);
                 return;
             }
             pendingPlaceLook = null;
@@ -398,9 +396,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         if (!want.isEmpty()) {
             if (placesInto(hit, want) && hit instanceof BlockHitResult block
                     && hit.getType() == HitResult.Type.BLOCK) {
-                if (canSendPlace(block)) {
-                    clickPlace(block);
-                }
+                armPlace(block);
                 return;
             }
             Optional<Rotation> aim = aimAtPlace(want);
@@ -414,9 +410,11 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         }
         // Ostinato: MovementPillar holds CLICK_RIGHT for the whole jump after the
         // block exists (or after toPlace becomes empty). The real client clicks
-        // once per layer, at pre-apex. A bare CLICK_RIGHT here would spam UseItemOn
-        // every tick on the top of the block we just placed (the next layer),
-        // which Grim flags as Simulation 0.075 and Post placement.
+        // once per layer, at the jump apex (about 0.249 above the dest top, the
+        // *.7508 tick). Clicking at the first tick the box clears (about 0.001
+        // above the top) is two ticks early and Grim reports Simulation
+        // 0.075444 then 0.076891. A bare CLICK_RIGHT here would also spam
+        // UseItemOn every tick on the top of the block we just placed.
         if (!down(Input.CLICK_RIGHT)) {
             return;
         }
@@ -429,6 +427,23 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         if (placing == null && !placesInto(block, want)) {
             return;
         }
+        armPlace(block);
+    }
+
+    private void armPlace(BlockHitResult block) {
+        armedPlace = block;
+    }
+
+    /** Send the armed click against the post-sim body, before the position packet. */
+    @Override
+    public void flushPlaceAfterPhysics() {
+        BlockHitResult block = armedPlace;
+        armedPlace = null;
+        if (block == null || !canSendPlace(block)) {
+            return;
+        }
+        pendingPlaceLook = null;
+        pendingPlaceWant = null;
         clickPlace(block);
     }
 
@@ -843,10 +858,13 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     /**
      * Ostinato: Paper rejects a place whose block would intersect the player's
      * bounding box, and Grim RotationPlace / Simulation can cancel a place whose
-     * look is not already on the wire. The ground-truth client only places when
-     * the feet AABB already clears the dest (beside the feet, or pre-apex
-     * y approx *.7508 after jumping out of the cell) and only once per layer.
-     * tickUse runs before travel, so the current body is the last-sent / server-side one.
+     * look is not already on the wire. Beside-the-feet places, and a place made
+     * while still on the ground, send once the box clears the cell. An airborne
+     * pillar cell under the body waits for the jump apex
+     * (feet about 0.249 above the dest top, the client's *.7508 tick). Sending
+     * at the first clear tick (about 0.001 above) is what Grim reports as
+     * Simulation 0.075444 then 0.076891. The click is flushed after travel,
+     * so this body is the pose the position packet will carry.
      */
     private boolean canSendPlace(BlockHitResult hit) {
         BlockPos dest = placeDest(hit);
@@ -863,12 +881,41 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             logPlaceGate("hold aabb-intersect", dest);
             return false;
         }
+        if (!pillarApexReady(dest, feet)) {
+            logPlaceGate("hold pillar-apex", dest);
+            return false;
+        }
         if (sentPlaceDest != null && sentPlaceDest.getX() == dest.getX()
                 && sentPlaceDest.getY() == dest.getY() && sentPlaceDest.getZ() == dest.getZ()
                 && !controller.placeRejected(dest)) {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Ostinato: an airborne dest in the column under the body is a pillar. The
+     * client clicks when the feet are about 0.249 above that cell's top and
+     * vertical velocity is still near zero (the apex), not on the first tick
+     * the box clears the cell and not on the next tick when vy is about
+     * -0.075444. A sneak bridge also occupies that column once the body edges
+     * over the cell, but the feet stay on the ground at the dest top, so the
+     * apex window must not apply while onGround. The first pillar layer is
+     * the same: the client clicks it on the ground.
+     */
+    private boolean pillarApexReady(BlockPos dest, AABB feet) {
+        if (player.onGround()) {
+            return true;
+        }
+        if (dest.getX() != Mth.floor(player.getX()) || dest.getZ() != Mth.floor(player.getZ())) {
+            return true;
+        }
+        if (dest.getY() >= Mth.floor(feet.minY)) {
+            return true;
+        }
+        double above = feet.minY - (dest.getY() + 1.0);
+        double vy = player.getDeltaMovement().y;
+        return above >= 0.20 && above <= 0.30 && vy > -0.02 && vy < 0.05;
     }
 
     private BlockPos placeDest(BlockHitResult hit) {
