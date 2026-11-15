@@ -50,8 +50,10 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
         this.finished = false;
         this.goal = goal;
         BetterBlockPos start = host.getPlayerContext().playerFeet();
+        // Ostinato: bridges and pillars plan only when a throwaway block is actually in the inventory.
+        boolean hasThrowaway = Baritone.settings().allowPlace.value && host.hasGenericThrowaway();
         CalculationContext context = new CalculationContext(host, host.bsi(),
-                new ToolSet(host.getPlayerContext().player()), false, host.bsi().minY(), host.bsi().height());
+                new ToolSet(host.getPlayerContext().player()), hasThrowaway, host.bsi().minY(), host.bsi().height());
         host.setCalculationContext(context);
         finder = new AStarPathFinder(start, start.x, start.y, start.z, goal,
                 new Favoring(null, context), context, 1);

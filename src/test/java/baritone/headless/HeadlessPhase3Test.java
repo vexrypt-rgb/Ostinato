@@ -52,6 +52,7 @@ public class HeadlessPhase3Test {
 
     private static RegistryAccess.Frozen access;
     private boolean allowPlace;
+    private boolean allowParkour;
     private boolean allowParkourPlace;
     private boolean allowGodBridge;
     private boolean unifiedExecutor;
@@ -67,6 +68,7 @@ public class HeadlessPhase3Test {
     public void saveSettings() {
         var settings = Baritone.settings();
         allowPlace = settings.allowPlace.value;
+        allowParkour = settings.allowParkour.value;
         allowParkourPlace = settings.allowParkourPlace.value;
         allowGodBridge = settings.allowGodBridge.value;
         unifiedExecutor = settings.unifiedExecutor.value;
@@ -76,6 +78,7 @@ public class HeadlessPhase3Test {
     public void restoreSettings() {
         var settings = Baritone.settings();
         settings.allowPlace.value = allowPlace;
+        settings.allowParkour.value = allowParkour;
         settings.allowParkourPlace.value = allowParkourPlace;
         settings.allowGodBridge.value = allowGodBridge;
         settings.unifiedExecutor.value = unifiedExecutor;

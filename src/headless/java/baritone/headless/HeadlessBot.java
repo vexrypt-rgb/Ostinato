@@ -118,6 +118,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private volatile RegistryAccess.Frozen registryAccess;
     private final HeadlessRegistries registries = new HeadlessRegistries();
     private final HeadlessChunkStore chunks;
+    // Ostinato: inventory packets can arrive before the pathing player exists. They queue here.
+    private final HeadlessInventory inventory = new HeadlessInventory();
     // Ostinato: Phase 2. When a course is still running, or Phase 3 pathing/mining owns the keys,
     // this driver sends the one movement packet. Otherwise the idle path below stays the Phase 1
     // StatusOnly + 20-tick position reminder.
@@ -347,11 +349,13 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         }
         if (p instanceof ClientboundSectionBlocksUpdatePacket) {
             chunks.applySectionUpdate((ClientboundSectionBlocksUpdatePacket) p);
+            notePlaceWorld();
             return;
         }
         if (p instanceof ClientboundBlockUpdatePacket) {
             ClientboundBlockUpdatePacket u = (ClientboundBlockUpdatePacket) p;
             chunks.setBlockState(u.getPos(), u.getBlockState());
+            notePlaceWorld();
             return;
         }
         if (p instanceof ClientboundForgetLevelChunkPacket) {
@@ -441,6 +445,10 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         }
         if (p instanceof ClientboundBlockChangedAckPacket) {
             lastBlockChangeSequence = ((ClientboundBlockChangedAckPacket) p).sequence();
+            notePlaceAck();
+            return;
+        }
+        if (inventory.handle(p)) {
             return;
         }
 
@@ -643,6 +651,29 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         return lastBlockChangeSequence;
     }
 
+    /** The survival inventory mirror. Packets received before the host exists are queued on it. */
+    public HeadlessInventory inventory() {
+        return inventory;
+    }
+
+    HeadlessLiveDriver liveDriver() {
+        return live;
+    }
+
+    private void notePlaceWorld() {
+        HeadlessLiveDriver current = live;
+        if (current != null) {
+            current.noteWorldChange();
+        }
+    }
+
+    private void notePlaceAck() {
+        HeadlessLiveDriver current = live;
+        if (current != null) {
+            current.noteAck();
+        }
+    }
+
     /** Where stdin, commands.txt, and accepted whispers deliver operator lines that are not pathing. */
     public void setChatCommandListener(Consumer<String> listener) {
         this.chatCommands = listener;
@@ -679,6 +710,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             player.setYRot(yRot);
             player.setXRot(xRot);
             player.setOnGround(onGround);
+            inventory.bind(player);
             HeadlessLiveDriver created = new HeadlessLiveDriver(this, player, level);
             if (movement != null) {
                 movement.setDriver(created);
@@ -739,6 +771,14 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 live.mine(parsed.text());
                 event("mine " + parsed.text());
                 System.out.println("[HeadlessPathing] mine " + parsed.text() + " " + live.status());
+            }
+            case PLACE -> {
+                ensureHost();
+                ensureMovement();
+                live.sync(movement);
+                live.place(parsed.x(), parsed.y(), parsed.z());
+                event("place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+                System.out.println("[HeadlessPlace] place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             }
             default -> System.err.println("[HeadlessBot] not a pathing command: " + parsed.kind());
         }

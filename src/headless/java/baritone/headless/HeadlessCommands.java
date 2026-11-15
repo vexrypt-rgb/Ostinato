@@ -2,7 +2,7 @@
  * Ostinato: fully headless 26.3 protocol bot (Phase 3). New file, replaces no Baritone code.
  *
  * Parses operator commands from commands.txt, stdin, and owner whispers. `stop` / `quit` / `exit`
- * end the process. `cancel` and `stop path` only drop the current path or mine.
+ * end the process. `cancel` and `stop path` only drop the current path, mine, or place.
  */
 package baritone.headless;
 
@@ -11,7 +11,7 @@ import java.util.Locale;
 public final class HeadlessCommands {
 
     public enum Kind {
-        STOP, CANCEL, GOTO, MINE, STATUS, PROBE, COURSE
+        STOP, CANCEL, GOTO, MINE, PLACE, STATUS, PROBE, COURSE
     }
 
     /** A parsed command. {@code error} is set when the verb was recognized but the arguments were not. */
@@ -63,6 +63,17 @@ public final class HeadlessCommands {
                     yield bad("usage: mine <block>");
                 }
                 yield new Parsed(Kind.MINE, 0, 0, 0, parts[1].toLowerCase(Locale.ROOT), null);
+            }
+            case "place" -> {
+                if (parts.length != 4) {
+                    yield bad("usage: place <x> <y> <z>");
+                }
+                try {
+                    yield new Parsed(Kind.PLACE, Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),
+                            Integer.parseInt(parts[3]), "", null);
+                } catch (NumberFormatException e) {
+                    yield bad("usage: place <x> <y> <z> (integers)");
+                }
             }
             case "probe" -> {
                 if (parts.length != 4) {
@@ -139,7 +150,7 @@ public final class HeadlessCommands {
         }
         String word = body.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         return switch (word) {
-            case "stop", "quit", "exit", "cancel", "goto", "mine", "status", "probe", "course" -> true;
+            case "stop", "quit", "exit", "cancel", "goto", "mine", "place", "status", "probe", "course" -> true;
             default -> false;
         };
     }

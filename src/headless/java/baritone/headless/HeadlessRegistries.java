@@ -196,8 +196,13 @@ public final class HeadlessRegistries {
     }
 
     public static void bindDefaultComponents(HolderLookup.Provider access) {
+        // Ostinato: a second call (unit test, then a registry build) must not rebind holders.
         for (var pending : net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(access)) {
-            pending.apply();
+            pending.forEach((holder, components) -> {
+                if (!holder.areComponentsBound()) {
+                    holder.bindComponents(components);
+                }
+            });
         }
     }
 

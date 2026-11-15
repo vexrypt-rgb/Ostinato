@@ -38,6 +38,15 @@ public class HeadlessCommandTest {
         assertEquals("dirt", HeadlessCommands.parse("mine dirt").text());
         assertTrue(HeadlessCommands.parse("mine").error().contains("usage: mine"));
 
+        HeadlessCommands.Parsed place = HeadlessCommands.parse("place -3 64 8");
+        assertEquals(HeadlessCommands.Kind.PLACE, place.kind());
+        assertEquals(-3, place.x());
+        assertEquals(64, place.y());
+        assertEquals(8, place.z());
+        assertNull(place.error());
+        assertTrue(HeadlessCommands.parse("place 1 2").error().contains("usage: place"));
+        assertTrue(HeadlessCommands.parse("place 1.5 2 3").error().contains("integers"));
+
         assertEquals(5, HeadlessCommands.parse("probe 5 6 7").x());
         assertEquals("C:\\courses\\my course.txt", HeadlessCommands.parse("course C:\\courses\\my course.txt").text());
         assertEquals(HeadlessCommands.Kind.STATUS, HeadlessCommands.parse("status").kind());
@@ -55,6 +64,8 @@ public class HeadlessCommandTest {
         assertEquals("mine stone", HeadlessCommands.commandFromChat("<Server> mine stone"));
         assertEquals("status", HeadlessCommands.commandFromChat("[\u00a7dxX\u00a7r -> me] status"));
         assertEquals("goto 1 64 1", HeadlessCommands.commandFromChat("goto 1 64 1"));
+        assertEquals("place 1 2 3", HeadlessCommands.commandFromChat("Server whispers to you: place 1 2 3"));
+        assertEquals("place 4 5 6", HeadlessCommands.commandFromChat("[Server] place 4 5 6"));
         assertNull(HeadlessCommands.commandFromChat("You whisper to Server: goto 1 2 3"));
         assertNull(HeadlessCommands.commandFromChat("<Bob> goto 1 2 3"));
         assertNull(HeadlessCommands.commandFromChat("Server whispers to you: hello there"));

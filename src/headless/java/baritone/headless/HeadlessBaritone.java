@@ -9,6 +9,8 @@
  */
 package baritone.headless;
 
+import baritone.Baritone;
+import baritone.altoclef.AltoClefSettings;
 import baritone.api.behavior.ILookBehavior;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.cache.IWorldData;
@@ -35,6 +37,11 @@ import baritone.pathing.unified.UnifiedExecutor;
 import baritone.utils.BlockBreakHelper;
 import baritone.utils.BlockStateInterface;
 import baritone.utils.InputArbiter;
+
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -89,13 +96,86 @@ public final class HeadlessBaritone implements IPathingHost {
 
     @Override
     public boolean hasGenericThrowaway() {
-        // An empty inventory plans no bridges and no extension jumps.
+        // Ostinato: hotbar, offhand and the main inventory all count. There is no LocalPlayer to ask.
+        if (AltoClefSettings.getInstance().isInteractionPaused()) {
+            return false;
+        }
+        for (Item item : Baritone.settings().acceptableThrowawayItems.value) {
+            if (AltoClefSettings.getInstance().isItemProtected(item)) {
+                continue;
+            }
+            if (findThrowaway(item, false)) {
+                return true;
+            }
+        }
         return false;
     }
 
     @Override
     public boolean selectThrowawayForLocation(boolean select, int x, int y, int z) {
+        // Ostinato: no builder process on this host. Acceptable throwaways, then a hotbar select.
+        // select(true) cannot SWAP a backpack stack: that click needs a hashed slot map we do not send.
+        if (AltoClefSettings.getInstance().isInteractionPaused()) {
+            return false;
+        }
+        if (AltoClefSettings.getInstance().shouldAvoidPlacingAt(x, y, z)) {
+            return false;
+        }
+        for (Item item : Baritone.settings().acceptableThrowawayItems.value) {
+            if (AltoClefSettings.getInstance().isItemProtected(item)) {
+                continue;
+            }
+            if (findThrowaway(item, select)) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    /**
+     * Hotbar first, then offhand, then main inventory slots 9-35.
+     * Selecting the offhand holds an empty or non-block hotbar slot so the place path can try OFF_HAND.
+     */
+    private boolean findThrowaway(Item item, boolean select) {
+        Inventory inv = ctx.player().getInventory();
+        synchronized (inv) {
+            var items = inv.getNonEquipmentItems();
+            int hotbar = Math.min(Inventory.SELECTION_SIZE, items.size());
+            for (int i = 0; i < hotbar; i++) {
+                ItemStack stack = items.get(i);
+                if (!stack.isEmpty() && stack.getItem() == item) {
+                    if (select) {
+                        inv.setSelectedSlot(i);
+                        ctx.playerController().syncHeldItem();
+                    }
+                    return true;
+                }
+            }
+            ItemStack off = inv.getItem(Inventory.SLOT_OFFHAND);
+            if (!off.isEmpty() && off.getItem() == item) {
+                if (!select) {
+                    return true;
+                }
+                for (int i = 0; i < hotbar; i++) {
+                    ItemStack hot = items.get(i);
+                    if (hot.isEmpty() || !(hot.getItem() instanceof BlockItem)) {
+                        inv.setSelectedSlot(i);
+                        ctx.playerController().syncHeldItem();
+                        return true;
+                    }
+                }
+            }
+            if (select) {
+                return false;
+            }
+            for (int i = Inventory.SELECTION_SIZE; i < items.size() && i < Inventory.INVENTORY_SIZE; i++) {
+                ItemStack stack = items.get(i);
+                if (!stack.isEmpty() && stack.getItem() == item) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     @Override

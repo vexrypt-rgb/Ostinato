@@ -4,8 +4,8 @@
  * The common-side IPlayerController: vanilla's MultiPlayerGameMode destroy state machine cut down to
  * the packets a server actually needs, written straight to the bot's connection. START once, progress
  * accumulated client-side with the same BlockState#getDestroyProgress the client uses, STOP when it
- * completes, ABORT when Baritone walks away. Placement and container clicks are not implemented yet:
- * a bot with no blocks planned never asks for them.
+ * completes, ABORT when Baritone walks away. Placement sends ServerboundUseItemOnPacket on the same
+ * pre-incremented block-change sequence and waits for the chunk store before treating it as confirmed.
  */
 package baritone.headless;
 
@@ -13,16 +13,25 @@ import baritone.api.utils.IPlayerController;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
 public final class HeadlessPlayerController implements IPlayerController {
+
+    /** Ticks an in-flight place may wait for an ack or a block update before the prediction is undone. */
+    static final int PLACE_TIMEOUT_TICKS = 40;
 
     private final HeadlessBot bot;
     private final HeadlessPlayer player;
@@ -35,7 +44,10 @@ public final class HeadlessPlayerController implements IPlayerController {
     private BlockPos destroyPos = BlockPos.ZERO;
     private Direction destroySide = Direction.DOWN;
     private float progress;
+    /** Vanilla BlockStatePredictionHandler starts at 0 and pre-increments, so the first action is sequence 1. */
     private int sequence;
+    /** Last hotbar index sent in ServerboundSetCarriedItemPacket. -1 forces the first sync. */
+    private int carriedIndex = -1;
 
     private long startPackets;
     private long stopPackets;
@@ -43,19 +55,40 @@ public final class HeadlessPlayerController implements IPlayerController {
     private BlockPos lastBroken;
     private int lastBrokenSequence = -1;
 
+    private boolean awaitingPlace;
+    private boolean placeRolledBack;
+    private int placeTicks;
+    private int placeSlot = -1;
+    private ItemStack placeSnapshot = ItemStack.EMPTY;
+    private Block expectedBlock;
+    private BlockPos lastPlaced;
+    private int lastPlacedSequence = -1;
+    private volatile boolean lastPlaceAcked;
+    private volatile boolean lastPlaceFailed;
+    private long placePackets;
+
     public HeadlessPlayerController(HeadlessBot bot, HeadlessPlayer player, HeadlessLevel level) {
         this.bot = bot;
         this.player = player;
         this.level = level;
     }
 
-    private void send(ServerboundPlayerActionPacket.Action action, BlockPos pos, Direction side) {
-        bot.send(new ServerboundPlayerActionPacket(action, pos, side, sequence++));
+    /** @return the sequence written on the packet (pre-increment, matching vanilla prediction). */
+    private int send(ServerboundPlayerActionPacket.Action action, BlockPos pos, Direction side) {
+        int seq = ++sequence;
+        bot.send(new ServerboundPlayerActionPacket(action, pos, side, seq));
+        return seq;
     }
 
     @Override
     public void syncHeldItem() {
-        // Vanilla re-sends the held slot here. The headless inventory never changes slot while pathing.
+        // Ostinato: vanilla only resends when the selected hotbar slot changed.
+        int slot = player.getInventory().getSelectedSlot();
+        if (!Inventory.isHotbarSlot(slot) || slot == carriedIndex) {
+            return;
+        }
+        bot.send(new ServerboundSetCarriedItemPacket(slot));
+        carriedIndex = slot;
     }
 
     @Override
@@ -84,10 +117,9 @@ public final class HeadlessPlayerController implements IPlayerController {
             }
             progress += state.getDestroyProgress(player, level, pos);
             if (progress >= 1.0f) {
-                send(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, destroySide);
                 stopPackets++;
                 lastBroken = pos.immutable();
-                lastBrokenSequence = sequence - 1;
+                lastBrokenSequence = send(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, destroySide);
                 destroying = false;
                 awaitingBreak = true;
                 progress = 0f;
@@ -109,7 +141,7 @@ public final class HeadlessPlayerController implements IPlayerController {
             send(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, destroyPos, Direction.DOWN);
             abortPackets++;
         }
-        send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, side);
+        int started = send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, side);
         startPackets++;
         destroying = true;
         destroyPos = pos.immutable();
@@ -120,7 +152,7 @@ public final class HeadlessPlayerController implements IPlayerController {
             destroying = false;
             awaitingBreak = true;
             lastBroken = destroyPos;
-            lastBrokenSequence = sequence - 1;
+            lastBrokenSequence = started;
         }
         return true;
     }
@@ -140,7 +172,7 @@ public final class HeadlessPlayerController implements IPlayerController {
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
-        // No container interaction headlessly.
+        // No container interaction headlessly. Backpack swaps need a hashed click this slice does not send.
     }
 
     @Override
@@ -150,14 +182,138 @@ public final class HeadlessPlayerController implements IPlayerController {
 
     @Override
     public InteractionResult processRightClickBlock(Player player, Level world, InteractionHand hand, BlockHitResult result) {
-        // Placement is planned only when the planner believes there are throwaway blocks; the headless
-        // inventory is empty, so no path asks for one.
+        // Ostinato: one in-flight place. Another click while it is open is not a second packet.
+        synchronized (this.player.getInventory()) {
+            if (awaitingPlace) {
+                return InteractionResult.SUCCESS;
+            }
+            syncHeldItem();
+            int seq = ++sequence;
+            bot.send(new ServerboundUseItemOnPacket(hand, result, seq));
+            placePackets++;
+            if (predictPlace(hand, result, seq)) {
+                return InteractionResult.SUCCESS;
+            }
+        }
+        // Empty hand still sent the packet (vanilla always does) and lets the other hand try.
         return InteractionResult.PASS;
+    }
+
+    /**
+     * Ostinato: decrement locally only. The chunk store stays server-owned; writing the block here
+     * would look like a confirmation the server has not given.
+     */
+    private boolean predictPlace(InteractionHand hand, BlockHitResult result, int seq) {
+        ItemStack held = this.player.getItemInHand(hand);
+        if (held.isEmpty() || !(held.getItem() instanceof BlockItem blockItem)) {
+            return false;
+        }
+        if (this.player.gameMode().isCreative()) {
+            return true;
+        }
+        BlockPos clicked = result.getBlockPos();
+        if (!level.isLoaded(clicked)) {
+            return false;
+        }
+        BlockState clickedState = level.getBlockState(clicked);
+        BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
+        if (!level.isLoaded(dest) || !level.getBlockState(dest).canBeReplaced()) {
+            return false;
+        }
+        placeSnapshot = held.copy();
+        placeSlot = hand == InteractionHand.OFF_HAND ? Inventory.SLOT_OFFHAND : this.player.getInventory().getSelectedSlot();
+        held.shrink(1);
+        awaitingPlace = true;
+        placeRolledBack = false;
+        placeTicks = 0;
+        expectedBlock = blockItem.getBlock();
+        lastPlaced = dest.immutable();
+        lastPlacedSequence = seq;
+        lastPlaceAcked = false;
+        lastPlaceFailed = false;
+        return true;
     }
 
     @Override
     public InteractionResult processRightClick(Player player, Level world, InteractionHand hand) {
         return InteractionResult.PASS;
+    }
+
+    /** Called from the live driver once per tick. Advances the place timeout, then re-checks the world. */
+    public void tickPendingPlace() {
+        synchronized (player.getInventory()) {
+            if (awaitingPlace) {
+                placeTicks++;
+            }
+            pollPlaceLocked();
+        }
+    }
+
+    /** Ack or block update arrived. Does not advance the timeout. */
+    public void pollPlace() {
+        synchronized (player.getInventory()) {
+            pollPlaceLocked();
+        }
+    }
+
+    /** Drop a prediction because pathing was cancelled. A later matching block update still re-applies it. */
+    public void abandonPlace() {
+        synchronized (player.getInventory()) {
+            if (awaitingPlace) {
+                rollbackLocked();
+            }
+        }
+    }
+
+    private void pollPlaceLocked() {
+        if (lastPlaced == null || expectedBlock == null) {
+            return;
+        }
+        boolean shown = level.isLoaded(lastPlaced) && level.getBlockState(lastPlaced).is(expectedBlock);
+        if (awaitingPlace && shown) {
+            awaitingPlace = false;
+            placeRolledBack = false;
+            lastPlaceFailed = false;
+            lastPlaceAcked = true;
+            return;
+        }
+        if (awaitingPlace) {
+            boolean acked = lastPlacedSequence >= 0 && bot.lastBlockChangeSequence() >= lastPlacedSequence;
+            if (acked || placeTicks >= PLACE_TIMEOUT_TICKS) {
+                rollbackLocked();
+            }
+        }
+        if (placeRolledBack && shown) {
+            reapplyLocked();
+        }
+    }
+
+    private void rollbackLocked() {
+        if (!awaitingPlace) {
+            return;
+        }
+        ItemStack current = player.getInventory().getItem(placeSlot);
+        int expectedCount = Math.max(0, placeSnapshot.getCount() - 1);
+        boolean stillPredicted = expectedCount == 0
+                ? current.isEmpty()
+                : !current.isEmpty() && current.getCount() == expectedCount && current.getItem() == placeSnapshot.getItem();
+        if (stillPredicted) {
+            player.getInventory().setItem(placeSlot, placeSnapshot.copy());
+        }
+        awaitingPlace = false;
+        placeRolledBack = true;
+        lastPlaceFailed = true;
+        lastPlaceAcked = false;
+    }
+
+    private void reapplyLocked() {
+        ItemStack current = player.getInventory().getItem(placeSlot);
+        if (!current.isEmpty() && current.getItem() == placeSnapshot.getItem() && current.getCount() == placeSnapshot.getCount()) {
+            current.shrink(1);
+        }
+        placeRolledBack = false;
+        lastPlaceFailed = false;
+        lastPlaceAcked = true;
     }
 
     @Override
@@ -194,5 +350,37 @@ public final class HeadlessPlayerController implements IPlayerController {
     public boolean lastBreakAcked() {
         return lastBrokenSequence >= 0 && bot.lastBlockChangeSequence() >= lastBrokenSequence
                 && level.isLoaded(lastBroken) && level.getBlockState(lastBroken).isAir();
+    }
+
+    public long placePackets() {
+        return placePackets;
+    }
+
+    public BlockPos lastPlaced() {
+        return lastPlaced;
+    }
+
+    public int lastPlacedSequence() {
+        return lastPlacedSequence;
+    }
+
+    public boolean lastPlaceAcked() {
+        return lastPlaceAcked;
+    }
+
+    public boolean lastPlaceFailed() {
+        return lastPlaceFailed;
+    }
+
+    public boolean awaitingPlace() {
+        return awaitingPlace;
+    }
+
+    public boolean placeConfirmed(BlockPos pos) {
+        return lastPlaceAcked && lastPlaced != null && lastPlaced.equals(pos);
+    }
+
+    public boolean placeRejected(BlockPos pos) {
+        return lastPlaceFailed && !lastPlaceAcked && lastPlaced != null && lastPlaced.equals(pos);
     }
 }

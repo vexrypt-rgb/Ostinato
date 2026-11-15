@@ -8,7 +8,8 @@
  *   course <file>       load a scripted PlayerSim course and attach the movement driver
  *   goto <x> <y> <z>    plan with Ostinato A* and walk there
  *   mine <block>        path to the nearest loaded block of that id and break it
- *   cancel              cancel pathing/mining (does not exit)
+ *   place <x> <y> <z>   place one throwaway block into that cell against an adjacent support
+ *   cancel              cancel pathing/mining/placing (does not exit)
  *   stop path           alias of cancel
  *   stop                end the run (quit and exit are aliases)
  *
@@ -200,6 +201,7 @@ public final class HeadlessBotMain {
             case CANCEL -> bot.enqueuePathing("cancel");
             case GOTO -> bot.enqueuePathing("goto " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case MINE -> bot.enqueuePathing("mine " + parsed.text());
+            case PLACE -> bot.enqueuePathing("place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case STATUS -> snapshot(evidence, bot, startedAt, tickerErrors, "command status");
             case PROBE -> probe(probeOut, bot, "probe " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case COURSE -> {

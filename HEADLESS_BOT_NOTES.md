@@ -711,7 +711,8 @@ decoding still uses the bot's own access.
 | `course <file>` | unchanged; a live path pauses the course on its current tick and resumes it afterwards |
 | `goto <x> <y> <z>` | queue `GoalBlock` on the tick thread |
 | `mine <block>` | nearest loaded breakable block in 16×8, path next to it, break it, wait until the cell is air |
-| `cancel` | cancel pathing and mining, clear forced keys. Does **not** exit |
+| `place <x> <y> <z>` | place one throwaway into that cell. See section 16 |
+| `cancel` | cancel pathing, mining, and placing, clear forced keys. Does **not** exit |
 | `stop path` | alias of `cancel` |
 | `stop`, `quit`, `exit` | end the process, same as Phase 1/2 `stop` |
 
@@ -747,11 +748,8 @@ hitch one tick; the search itself does not, and it cannot emit a second movement
 
 ### Placement
 
-Not implemented. The host's inventory is empty, `hasGenericThrowaway()` is false, and
-`processRightClickBlock` returns `PASS`. Constructing the host sets the process-wide
-`Baritone.settings()` flags `allowPlace`, `allowParkourPlace`, `allowGodBridge` and
-`unifiedExecutor` to false (one bot per JVM, still the one settings singleton). Parkour that
-needs a placed block will not plan. A live parkour gap has to be a jump gap.
+Section 16. Constructing the host now turns `allowPlace`, `allowParkour` and `allowParkourPlace`
+on. `allowGodBridge` and `unifiedExecutor` stay false.
 
 ### Safety
 
@@ -763,7 +761,7 @@ needs a placed block will not plan. A live parkour gap has to be a jump gap.
 ### Open
 
 * Live gate (offline 26.3 server, parkour+ladder, confirmed break) is not run in this slice.
-* No block placement, so place-to-cross gaps are out.
+* Block placement itself is section 16. The live gate (give, place, bridge, pillar) is still not run in this slice.
 * `mine` is the nearest loaded block, not the client `#mine` process. It gives up if the block's
   chunk unloads, the path cannot reach it, or 1200 ticks pass.
 * Whisper text is whatever `Component.getString()` flattens to. A server whose tell format matches
@@ -779,3 +777,98 @@ Full Ostinato suite after this slice (`gradlew test --rerun`, 2026-11-15): 2071 
 0 failed, 24 skipped. Phase 2 at 76151d599 was 2062 completed with the same 24 skipped; the 9
 added tests are the command parser, the phase 3 host checks, and the live-driver pause.
 TenorClef `:26.3:test` was not run; this slice does not change shared TenorClef code.
+
+## 16. Phase 3b: inventory mirror and block placement
+
+`HeadlessInventory` keeps the survival hotbar, main inventory, offhand and carried cursor.
+`ClientboundContainerSetContentPacket` and `ClientboundContainerSetSlotPacket` apply when
+`containerId` is `0` (the player menu) or `-1` (the cursor). Menu slots go through
+`InventoryMenu`: hotbar row `USE_ROW_SLOT_START..END` is hotbar `0..8`, `INV_SLOT_START..END`
+is the backpack, `SHIELD_SLOT` is the offhand. `ClientboundSetHeldSlotPacket` selects a hotbar
+slot. `ClientboundSetPlayerInventoryPacket` writes a raw inventory index when one arrives.
+Any other container id (a chest) is left unhandled. Packets that show up before the pathing
+player exists are queued and flushed in `ensureHost`.
+
+`hasGenericThrowaway()` is true when an acceptable throwaway (the existing
+`acceptableThrowawayItems` list, skipping AltoClef-protected items) sits in the hotbar, the
+offhand, or the backpack, and interaction is not paused. `selectThrowawayForLocation(true)`
+selects a hotbar stack and sends `ServerboundSetCarriedItemPacket` when that slot is not the
+one last sent. Offhand is used by selecting an empty or non-block hotbar slot so the right-click
+tries `OFF_HAND`. A backpack-only stack counts for planning (`select(false)` / `hasGenericThrowaway`)
+but is not moved: a survival swap is a hashed `ServerboundContainerClickPacket`, and this slice
+does not send one. `/give` fills the hotbar first, which is what the live gate uses.
+
+### Packets
+
+Destroy and place share one prediction counter. It pre-increments the way vanilla's
+`BlockStatePredictionHandler` does, so the first action packet is sequence `1`.
+
+| packet | when |
+| --- | --- |
+| `ServerboundSetCarriedItemPacket(slot)` | selected hotbar slot changed (`syncHeldItem` / select throwaway) |
+| `ServerboundUseItemOnPacket(hand, BlockHitResult, sequence)` | `processRightClickBlock`. The hit is the caller's (face, block pos, face-center location), not a rebuilt ray |
+| `ServerboundPlayerActionPacket` | unchanged destroy START / STOP / ABORT, now on the same pre-incremented counter |
+
+The place prediction decrements the held `BlockItem` only. It does not write the block into the
+chunk store. A second click while a place is in flight does not send another packet.
+
+### Confirm and rollback
+
+The cell is placed only when the chunk store shows the expected block (`ClientboundBlockUpdatePacket`
+or a section update). `ClientboundBlockChangedAckPacket` for that sequence, or 40 ticks with no
+matching block, rolls the stack back to the pre-click copy when the slot still shows the
+prediction (empty, or count == snapshot − 1). A later update that does show the block re-applies
+the decrement, so the inventory and the chunk store do not disagree. Status mirrors the break
+path: `lastPlaced`, `lastPlacedSequence`, `lastPlaceAcked`, `lastPlaceFailed`, `placeConfirmed(pos)`,
+`placeRejected(pos)`.
+
+Path execution looks at the block, right-clicks (`CLICK_RIGHT`, main hand then off hand, left click
+suppresses the right click), and keeps the movement until the chunk shows the block. `cancel`
+drops an in-flight prediction the same way a rejection does.
+
+### `place <x> <y> <z>`
+
+Accepted from `commands.txt`, stdin, and the same chat parser as `goto`. `stop` still ends the
+run. `cancel` / `stop path` cancel placing as well as pathing and mining.
+
+The target cell is `(x, y, z)`. The bot clicks a sturdy face of an adjacent support: below the
+cell first (the top of the floor), then the four sides, then above. The hit is the center of
+that face. The new block is the neighbor of the clicked face, which is the vanilla place
+contract; a replaceable block at the clicked cell is the cell itself. One tick aims
+(`PosRot` carries the look) and the next tick sends `UseItemOn`. Out of reach, no support,
+no throwaway, or an occupied cell fails with no packet. A rejection is retried a few times,
+then reported. The live gate is: give blocks, `place`, probe the cell.
+
+### Planner flags
+
+| setting | headless value | why |
+| --- | --- | --- |
+| `allowPlace` | true | throwaway select and `UseItemOn` are real |
+| `allowParkour` | true | parkour moves are not generated unless this is on |
+| `allowParkourPlace` | true | a parkour that places under itself can plan and the right-click path executes it |
+| `allowGodBridge` | **false** | planning it is not enough. Execution walks backward off the edge and right-clicks only inside a sub-block window. PlayerSim has not been shown to hit that window, and this slice does not change PlayerSim. Sneak-bridge is the place path the bot can execute |
+| `unifiedExecutor` | false | the legacy path executor is what the live driver ticks |
+
+`gotoGoal` passes `allowPlace && hasGenericThrowaway()` into `CalculationContext`, so a bridge
+and a 5-high pillar plan when the hotbar holds dirt or cobble, and the executor places through
+`tickUse`.
+
+A 5-block gap with a floor on the far side is one parkour extension (`MovementParkour.extensions`
+is 1; kinematic travel is the default, so the 4-block jump after one laid block is allowed).
+The landing already exists, so `Movement.toPlace` is empty for that move. The laid block is
+placed by sneaking to the edge and right-clicking, then the jump runs. A pillar's placed cell
+is `Movement.toPlace` (the feet block it jumps onto). A gap longer than two extensions is a
+chain of sneak-bridge traverses: each step's `Movement.toPlace` is the air under the next
+block, and the executor sneaks, right-clicks, and waits until the chunk shows that block.
+God-bridge stays off.
+
+### Open
+
+* Live gate (give, `place`, bridge, pillar, a goto that has to place) is not run in this slice.
+* God-bridge stays off, as above.
+* Backpack-only blocks let a bridge plan, then `select(true)` cannot move the stack, so the
+  click may use the wrong hand and the place fails or replans. Hotbar `/give` is the supported case.
+* No container clicks, chests, pickup, drop, armor, crafting, or combat.
+* `ClientboundTakeItemEntityPacket` is still unhandled. A break that drops an item does not
+  enter this inventory until a later set-slot / set-content packet.
+* One place prediction is in flight at a time. The chunk store is never written by the prediction.
