@@ -38,6 +38,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private final HeadlessInputOverrideHandler input = new HeadlessInputOverrideHandler();
     private final HeadlessLookBehavior look;
     private final HeadlessBaritone host;
+    private final HeadlessCombat combat;
     private volatile BlockPos mining;
     private int miningTicks;
     private volatile String miningStatus = "idle";
@@ -78,11 +79,12 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         Baritone.settings().allowGodBridge.value = false;
         Baritone.settings().unifiedExecutor.value = false;
         host = new HeadlessBaritone(context, new HeadlessBlockStateInterface(bot.chunks()), input, look);
+        combat = new HeadlessCombat(bot, player, controller, host, bot.entities());
     }
 
     /** True while a goal is queued, a mine is waiting on a break, or a place command is in progress. */
     boolean controlsMovement() {
-        return host.getPathingBehavior().isPathing() || mining != null || placing != null;
+        return host.getPathingBehavior().isPathing() || mining != null || placing != null || combat.active();
     }
 
     HeadlessBaritone baritone() {
@@ -110,7 +112,14 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         host.getPathingBehavior().gotoGoal(new GoalBlock(x, y, z));
     }
 
+    // Ostinato: fight matching monsters (or a type like "zombie") until none remain.
+    void kill(String typeFilter) {
+        cancel();
+        combat.start(typeFilter);
+    }
+
     void cancel() {
+        combat.cancel();
         mining = null;
         miningStatus = "idle";
         placing = null;
@@ -172,20 +181,28 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     public HeadlessMovement.Step tick(HeadlessBot bot, HeadlessMovement movement) {
         sync(movement);
         controller.tickPendingPlace();
-        boolean owns = host.getPathingBehavior().isPathing() || mining != null || placing != null;
+        // Ostinato: Player is never ticked, so the vanilla attack-strength ticker must advance here.
+        player.tickAttackStrength();
+        if (combat.active()) {
+            combat.tick();
+        }
+        boolean owns = host.getPathingBehavior().isPathing() || mining != null || placing != null || combat.active();
         if (!owns) return null;
         try {
             host.getPathingBehavior().tick();
             if (mining != null) tickMining();
             else if (placing != null) tickPlaceCommand();
-            else {
+            else if (combat.active()) {
+                // Look is already on the player from combat.tick(); do not left-click blocks.
+            } else {
                 tickAttack();
                 tickUse();
             }
             holdSneakIfHanging(movement);
+            String why = placing != null ? "place" : combat.active() ? "combat" : "pathing";
             return new HeadlessMovement.Step(1, player.getYRot(), player.getXRot(),
                     key(Input.MOVE_FORWARD) - key(Input.MOVE_BACK), key(Input.MOVE_LEFT) - key(Input.MOVE_RIGHT),
-                    down(Input.SPRINT), down(Input.JUMP), down(Input.SNEAK), placing != null ? "place" : "pathing");
+                    down(Input.SPRINT), down(Input.JUMP), down(Input.SNEAK), why);
         } catch (RuntimeException e) {
             cancel();
             System.err.println("[HeadlessPathing] cancelled after executor error: " + e);
@@ -589,6 +606,11 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     @Override
     public void afterTick(HeadlessMovement movement) { sync(movement); }
 
+    @Override
+    public void afterPackets(HeadlessBot bot) {
+        combat.flushAttack();
+    }
+
     String status() {
         return "pathing=" + host.getPathingBehavior().status() + " mining=" + miningStatus
                 + " destroy(start/stop/abort)=" + controller.startPackets() + "/" + controller.stopPackets()
@@ -596,7 +618,8 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 + " place=" + placeStatus + " throwaway=" + host.hasGenericThrowaway()
                 + " placePackets=" + controller.placePackets()
                 + " placeAcked=" + controller.lastPlaceAcked()
-                + " placeFailed=" + controller.lastPlaceFailed();
+                + " placeFailed=" + controller.lastPlaceFailed()
+                + " combat=" + combat.status() + " combatHits=" + combat.hits();
     }
 
     void close() {

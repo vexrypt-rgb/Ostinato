@@ -31,6 +31,11 @@ public final class HeadlessPlayer extends Player {
         this.gameType = gameType;
     }
 
+    /** Ostinato: the entity is never ticked, so the attack-strength ticker must be advanced by the bot. */
+    public void tickAttackStrength() {
+        this.attackStrengthTicker++;
+    }
+
     // Ostinato: the entity is never ticked, so vanilla dimensions/eyeHeight stay at the
     // standing value after setPose. playerHead(), objectMouseOver and placement rays
     // must see the current pose; otherwise a sneak-bridge look at a face center misses

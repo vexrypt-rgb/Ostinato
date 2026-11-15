@@ -11,7 +11,7 @@ import java.util.Locale;
 public final class HeadlessCommands {
 
     public enum Kind {
-        STOP, CANCEL, GOTO, MINE, PLACE, STATUS, PROBE, COURSE
+        STOP, CANCEL, GOTO, MINE, PLACE, STATUS, PROBE, COURSE, KILL
     }
 
     /** A parsed command. {@code error} is set when the verb was recognized but the arguments were not. */
@@ -86,6 +86,15 @@ public final class HeadlessCommands {
                     yield bad("usage: probe <x> <y> <z> (integers)");
                 }
             }
+            case "kill", "attack" -> {
+                if (parts.length == 1) {
+                    yield new Parsed(Kind.KILL, 0, 0, 0, "", null);
+                }
+                if (parts.length == 2) {
+                    yield new Parsed(Kind.KILL, 0, 0, 0, parts[1].toLowerCase(Locale.ROOT), null);
+                }
+                yield bad("usage: kill [type] | attack [type]");
+            }
             case "course" -> {
                 int space = line.indexOf(' ');
                 if (space < 0) {
@@ -150,7 +159,7 @@ public final class HeadlessCommands {
         }
         String word = body.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         return switch (word) {
-            case "stop", "quit", "exit", "cancel", "goto", "mine", "place", "status", "probe", "course" -> true;
+            case "stop", "quit", "exit", "cancel", "goto", "mine", "place", "status", "probe", "course", "kill", "attack" -> true;
             default -> false;
         };
     }

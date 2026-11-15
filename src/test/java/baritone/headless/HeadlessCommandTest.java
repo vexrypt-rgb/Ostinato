@@ -50,6 +50,11 @@ public class HeadlessCommandTest {
         assertEquals(5, HeadlessCommands.parse("probe 5 6 7").x());
         assertEquals("C:\\courses\\my course.txt", HeadlessCommands.parse("course C:\\courses\\my course.txt").text());
         assertEquals(HeadlessCommands.Kind.STATUS, HeadlessCommands.parse("status").kind());
+        assertEquals(HeadlessCommands.Kind.KILL, HeadlessCommands.parse("kill").kind());
+        assertEquals("zombie", HeadlessCommands.parse("kill zombie").text());
+        assertEquals(HeadlessCommands.Kind.KILL, HeadlessCommands.parse("attack").kind());
+        assertEquals("zombie", HeadlessCommands.parse("ATTACK Zombie").text());
+        assertTrue(HeadlessCommands.parse("kill zombie extra").error().contains("usage: kill"));
         assertTrue(HeadlessCommands.parse("nope").error().contains("unknown command"));
         assertNull(HeadlessCommands.parse(""));
         assertNull(HeadlessCommands.parse("# comment"));
@@ -66,6 +71,8 @@ public class HeadlessCommandTest {
         assertEquals("goto 1 64 1", HeadlessCommands.commandFromChat("goto 1 64 1"));
         assertEquals("place 1 2 3", HeadlessCommands.commandFromChat("Server whispers to you: place 1 2 3"));
         assertEquals("place 4 5 6", HeadlessCommands.commandFromChat("[Server] place 4 5 6"));
+        assertEquals("kill zombie", HeadlessCommands.commandFromChat("Server whispers to you: kill zombie"));
+        assertEquals("attack", HeadlessCommands.commandFromChat("[Server] attack"));
         assertNull(HeadlessCommands.commandFromChat("You whisper to Server: goto 1 2 3"));
         assertNull(HeadlessCommands.commandFromChat("<Bob> goto 1 2 3"));
         assertNull(HeadlessCommands.commandFromChat("Server whispers to you: hello there"));

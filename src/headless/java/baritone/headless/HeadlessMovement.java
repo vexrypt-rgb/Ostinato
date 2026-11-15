@@ -71,6 +71,7 @@ public final class HeadlessMovement {
         // Ostinato: null yields to the course; a Step owns this tick without sending packets.
         Step tick(HeadlessBot bot, HeadlessMovement movement);
         default void afterTick(HeadlessMovement movement) { }
+        default void afterPackets(HeadlessBot bot) { }
         default float[] pollAnalog() { return null; }
     }
 
@@ -332,6 +333,9 @@ public final class HeadlessMovement {
                 sim.x, sim.y, sim.z, step.yaw, step.pitch, sim.onGround, sim.collidedH));
         positionPackets++;
         // Must be last in the client tick: the server clears receivedPositionThisTick here.
+        if (driver != null) {
+            driver.afterPackets(bot);
+        }
         bot.send(ServerboundClientTickEndPacket.INSTANCE);
 
         // Ostinato: pathing pauses the course at its exact current tick.

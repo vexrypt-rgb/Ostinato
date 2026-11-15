@@ -50,6 +50,7 @@ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
 import net.minecraft.network.protocol.game.ClientboundStartConfigurationPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.GameProtocols;
@@ -120,6 +121,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private final HeadlessChunkStore chunks;
     // Ostinato: inventory packets can arrive before the pathing player exists. They queue here.
     private final HeadlessInventory inventory = new HeadlessInventory();
+    // Ostinato: nearby entities, for combat. Packets can arrive before the pathing host exists.
+    private final HeadlessEntityTracker entities = new HeadlessEntityTracker();
     // Ostinato: once spawned, this driver ticks PlayerSim and sends a movement packet every tick,
     // including while idle — a real client does the same, and a frozen mid-air pose is a flying flag.
     private volatile HeadlessMovement movement;
@@ -412,6 +415,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                     corrections.incrementAndGet();
                     event("correction velocity " + lastVelocity);
                 }
+            } else {
+                entities.handle(p, playerId);
             }
             return;
         }
@@ -425,6 +430,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                     corrections.incrementAndGet();
                     event("correction entity sync -> " + end + " (delta^2=" + d + ")");
                 }
+            } else {
+                entities.handle(p, playerId);
             }
             return;
         }
@@ -444,6 +451,18 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (p instanceof ClientboundBlockChangedAckPacket) {
             lastBlockChangeSequence = ((ClientboundBlockChangedAckPacket) p).sequence();
             notePlaceAck();
+            return;
+        }
+        if (p instanceof ClientboundSetHealthPacket health) {
+            HeadlessPlayer body = inventory.player();
+            if (body != null) {
+                body.setHealth(health.getHealth());
+                body.getFoodData().setFoodLevel(health.getFood());
+                body.getFoodData().setSaturation(health.getSaturation());
+            }
+            return;
+        }
+        if (entities.handle(p, playerId)) {
             return;
         }
         if (inventory.handle(p)) {
@@ -782,6 +801,14 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 event("place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
                 System.out.println("[HeadlessPlace] place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             }
+            case KILL -> {
+                ensureHost();
+                ensureMovement();
+                live.sync(movement);
+                live.kill(parsed.text());
+                event("kill " + (parsed.text().isEmpty() ? "(monsters)" : parsed.text()));
+                System.out.println("[HeadlessCombat] kill " + (parsed.text().isEmpty() ? "(monsters)" : parsed.text()));
+            }
             default -> System.err.println("[HeadlessBot] not a pathing command: " + parsed.kind());
         }
     }
@@ -796,6 +823,10 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 movement.start(x, y, z, onGround);
             }
         }
+    }
+
+    public HeadlessEntityTracker entities() {
+        return entities;
     }
 
     public State state() {

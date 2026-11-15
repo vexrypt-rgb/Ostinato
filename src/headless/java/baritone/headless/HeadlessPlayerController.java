@@ -14,8 +14,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -89,6 +90,16 @@ public final class HeadlessPlayerController implements IPlayerController {
         }
         bot.send(new ServerboundSetCarriedItemPacket(slot));
         carriedIndex = slot;
+    }
+
+    // Ostinato: eat or otherwise use the held item. Sequence matches vanilla prediction.
+    public void useHeldItem(InteractionHand hand, float yRot, float xRot) {
+        int seq = ++sequence;
+        bot.send(new ServerboundUseItemPacket(hand, seq, yRot, xRot));
+    }
+
+    public void releaseUseItem() {
+        send(ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM, BlockPos.ZERO, Direction.DOWN);
     }
 
     @Override
