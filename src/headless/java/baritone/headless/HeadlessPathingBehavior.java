@@ -8,6 +8,7 @@ package baritone.headless;
 
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
+import baritone.api.pathing.movement.IMovement;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.utils.interfaces.IGoalRenderPos;
 import baritone.api.pathing.path.IPathExecutor;
@@ -178,6 +179,7 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
                 }
                 executor = new PathExecutor(host, path.get());
                 status = "executing " + goal;
+                System.out.println("[HeadlessPathing] installed " + describePath(path.get()));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 status = "planning interrupted";
@@ -199,6 +201,9 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
             boolean failed = current.failed();
             Goal target = goal;
             boolean arrived = target != null && target.isInGoal(host.getPlayerContext().playerFeet());
+            System.out.println("[HeadlessPathing] segment end failed=" + failed + " arrived=" + arrived
+                    + " finished=" + current.finished() + " feet=" + host.getPlayerContext().playerFeet()
+                    + " goal=" + target);
             if (!failed && !arrived && target != null) {
                 // Ostinato: drop only the finished executor. Keep sneak/keys and the goal
                 // while A* plans the next segment so a 1-wide sneak-bridge does not fall.
@@ -211,6 +216,16 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
                 status = arrived ? "arrived" : "execution failed";
             }
         }
+    }
+
+    private static String describePath(IPath path) {
+        StringBuilder out = new StringBuilder();
+        out.append("nodes=").append(path.length()).append(" dest=").append(path.getDest());
+        for (IMovement movement : path.movements()) {
+            out.append(" | ").append(movement.getClass().getSimpleName())
+                    .append(' ').append(movement.getSrc()).append("->").append(movement.getDest());
+        }
+        return out.toString();
     }
 
     // Ostinato: cancel also invalidates unpublished results, including searches already completing.

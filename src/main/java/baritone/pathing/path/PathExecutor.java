@@ -432,7 +432,16 @@ public class PathExecutor implements IPathExecutor, Helper {
             for (int i = 1; i < Baritone.settings().costVerificationLookahead.value && pathPosition + i < path.length() - 1; i++) {
                 Movement future = (Movement) path.movements().get(pathPosition + i);
                 if (future.calculateCost(host.secretInternalGetCalculationContext()) >= ActionCosts.COST_INF && canCancel) {
-                    logDebug("Something has changed in the world and a future movement has become impossible. Cancelling. " + future.getClass().getSimpleName() + " " + future.getSrc() + " -> " + future.getDest() + " srcState=" + ctx.world().getBlockState(future.getSrc()) + " destState=" + ctx.world().getBlockState(future.getDest()) + " destUp=" + ctx.world().getBlockState(future.getDest().above()) + " player=" + ctx.playerFeet());
+                    // Ostinato: headless has no debug chat; print the silent cost-verification cancel.
+                    String why = "future COST_INF " + future.getClass().getSimpleName() + " " + future.getSrc() + " -> " + future.getDest()
+                            + " srcState=" + ctx.world().getBlockState(future.getSrc())
+                            + " destState=" + ctx.world().getBlockState(future.getDest())
+                            + " destUp=" + ctx.world().getBlockState(future.getDest().above())
+                            + " destBelow=" + ctx.world().getBlockState(future.getDest().below())
+                            + " srcBelow=" + ctx.world().getBlockState(future.getSrc().below())
+                            + " player=" + ctx.playerFeet();
+                    System.out.println("[PathExecutor] " + why);
+                    logDebug("Something has changed in the world and a future movement has become impossible. Cancelling. " + why);
                     // Ostinato: a stored route through it is replayed by the next search as is, and cancelled again, forever
                     baritone.pathing.RouteReuse.forget(future.getSrc(), future.getDest());
                     cancel();
@@ -442,6 +451,11 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         double currentCost = movement.recalculateCost(host.secretInternalGetCalculationContext());
         if (currentCost >= ActionCosts.COST_INF && canCancel) {
+            System.out.println("[PathExecutor] current COST_INF " + movement.getClass().getSimpleName()
+                    + " " + movement.getSrc() + " -> " + movement.getDest()
+                    + " srcBelow=" + ctx.world().getBlockState(movement.getSrc().below())
+                    + " destBelow=" + ctx.world().getBlockState(movement.getDest().below())
+                    + " player=" + ctx.playerFeet() + " cost=" + currentCost);
             logDebug("Something has changed in the world and this movement has become impossible. Cancelling.");
             baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
             cancel();
@@ -450,6 +464,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (!movement.calculatedWhileLoaded() && currentCost - currentMovementOriginalCostEstimate > Baritone.settings().maxCostIncrease.value && canCancel) {
             // don't do this if the movement was calculated while loaded
             // that means that this isn't a cache error, it's just part of the path interfering with a later part
+            System.out.println("[PathExecutor] maxCostIncrease orig=" + currentMovementOriginalCostEstimate + " current=" + currentCost);
             logDebug("Original cost " + currentMovementOriginalCostEstimate + " current cost " + currentCost + ". Cancelling.");
             cancel();
             return true;
@@ -471,6 +486,8 @@ public class PathExecutor implements IPathExecutor, Helper {
             }
         }
         if (movementStatus == UNREACHABLE || movementStatus == FAILED) {
+            System.out.println("[PathExecutor] movement status " + movementStatus + " " + movement.getClass().getSimpleName()
+                    + " " + movement.getSrc() + "->" + movement.getDest() + " player=" + ctx.playerFeet());
             logDebug("Movement returns status " + movementStatus);
             Baritone.settings().movementFault.value.accept("M04", movement.getClass().getSimpleName() + " " + movementStatus + " at " + ctx.playerFeet());
             baritone.pathing.RouteReuse.forget(movement.getSrc(), movement.getDest());
@@ -502,6 +519,9 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // as you break the blocks required, the remaining cost goes down, to the point where
                 // ticksOnCurrent is greater than recalculateCost + 100
                 // this is why we cache cost at the beginning, and don't recalculate for this comparison every tick
+                System.out.println("[PathExecutor] movement timeout ticksOnCurrent=" + ticksOnCurrent
+                        + " est=" + currentMovementOriginalCostEstimate + " " + movement.getClass().getSimpleName()
+                        + " " + movement.getSrc() + "->" + movement.getDest() + " player=" + ctx.player().position());
                 logDebug("This movement has taken too long (" + ticksOnCurrent + " ticks, expected " + currentMovementOriginalCostEstimate + ") " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + ". Cancelling.");
                 Baritone.settings().movementFault.value.accept("M03", movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " took " + ticksOnCurrent + " ticks");
                 legatoFailed(movement);
@@ -1058,7 +1078,18 @@ public class PathExecutor implements IPathExecutor, Helper {
         host.getInputOverrideHandler().clearAllKeys();
     }
 
+    // Ostinato: headless has no debug chat. Print why a path died so a live sneak-bridge
+    // can be diagnosed instead of just "execution failed".
     private void cancel() {
+        if (!failed) {
+            IMovement m = pathPosition < path.movements().size() ? path.movements().get(pathPosition) : null;
+            System.out.println("[PathExecutor] cancel feet=" + ctx.playerFeet()
+                    + " pos=" + ctx.player().position()
+                    + " pathPos=" + pathPosition + "/" + path.length()
+                    + " ticksOnCurrent=" + ticksOnCurrent
+                    + " est=" + currentMovementOriginalCostEstimate
+                    + " move=" + (m == null ? "end" : m.getClass().getSimpleName() + " " + m.getSrc() + "->" + m.getDest()));
+        }
         clearKeys();
         host.blockBreakHelper().stopBreakingBlock();
         if (Baritone.settings().unifiedExecutor.value) {

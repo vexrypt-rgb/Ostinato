@@ -652,6 +652,74 @@ public class HeadlessPlaceTest {
         }
     }
 
+    // Ostinato: the live 12-block void placed 8 then died at z=10.06 after the
+    // plan-ahead segment was installed. Tick all the way to the landing (or fail).
+    @Test
+    public void sneakBridgeTwelveBlockExecutesToLanding() throws Exception {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 2.0, 0.5);
+        try {
+            for (int cx = -1; cx <= 1; cx++) {
+                for (int cz = -1; cz <= 1; cz++) {
+                    bot.chunks().createEmptyChunk(cx, cz);
+                }
+            }
+            for (int x = -2; x <= 2; x++) {
+                bot.chunks().setBlockState(new BlockPos(x, 1, 0), Blocks.STONE.defaultBlockState());
+                bot.chunks().setBlockState(new BlockPos(x, 1, 13), Blocks.STONE.defaultBlockState());
+            }
+            bot.chunks().setBlockState(new BlockPos(-2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
+            bot.ensureHost();
+            bot.tick();
+            bot.enqueuePathing("goto 0 2 13");
+            String status = "";
+            int places = 0;
+            for (int i = 0; i < 2500; i++) {
+                bot.tick();
+                // A* is on a real-time worker; yield so the first search and any
+                // plan-ahead can finish. Ack places on every tick, including the
+                // ones that land while the search is still running.
+                if (i % 2 == 0) {
+                    Thread.sleep(10);
+                }
+                status = bot.pathingStatus();
+                places = packets(transport, ServerboundUseItemOnPacket.class).size();
+                // Confirm each place so the chunk store matches a live server ack.
+                for (ServerboundUseItemOnPacket use : packets(transport, ServerboundUseItemOnPacket.class)) {
+                    BlockPos against = use.hitResult().getBlockPos();
+                    BlockPos into = against.relative(use.hitResult().getDirection());
+                    if (bot.chunks().getBlockState(into.getX(), into.getY(), into.getZ()).isAir()) {
+                        bot.onPacket(new ClientboundBlockUpdatePacket(into, Blocks.DIRT.defaultBlockState()));
+                        bot.onPacket(new ClientboundBlockChangedAckPacket(use.sequence()));
+                    }
+                }
+                var player = bot.liveDriver().player();
+                if ((status.contains("arrived") || (Math.abs(player.getX() - 0.5) < 1.0
+                        && Math.abs(player.getY() - 2.0) < 0.7 && player.getZ() >= 12.8 && player.getZ() <= 14.7))
+                        && !status.contains("execution failed")) {
+                    System.out.println("[HeadlessPlaceTest] arrived ticks=" + i + " places=" + places
+                            + " z=" + player.getZ() + " status=" + status);
+                    return;
+                }
+                if (status.contains("execution failed") || status.contains("no path")
+                        || status.contains("planning failed") || status.contains("cancelled")) {
+                    break;
+                }
+            }
+            var player = bot.liveDriver().player();
+            throw new AssertionError("did not reach landing z=13: status=" + status
+                    + " ticks-or-fail at pos=" + player.position()
+                    + " rot=" + player.getYRot() + "," + player.getXRot()
+                    + " places=" + places
+                    + " path=" + describePath(bot));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
     /**
      * A sneak-bridge, pillar, or parkour-place landing shows up in {@link Movement#toPlace}.
      * A 5-block gap with a floor on the far side is one parkour extension: the landing already

@@ -461,10 +461,81 @@ public class MovementParkour extends Movement {
     public double calculateCost(CalculationContext context) {
         MutableMoveResult res = new MutableMoveResult();
         cost(context, src.x, src.y, src.z, direction, res);
-        if (res.x != dest.x || res.y != dest.y || res.z != dest.z) {
+        if (res.x == dest.x && res.y == dest.y && res.z == dest.z) {
+            return res.cost;
+        }
+        // Ostinato: cost() returns the best jump from this src in the current world.
+        // After earlier path movements place a run-up, kinematicTravel's 4-gap
+        // (maxJump 5) or a newly solid landing can win, and the planned dest would
+        // be reported as COST_INF. PathExecutor then cancels a still-legal sneak-bridge
+        // at the movement boundary (safeToCancel, ticksOnCurrent=0). Keep this dest
+        // if that jump or parkour-place is still legal.
+        return costOfPlannedDest(context);
+    }
+
+    private double costOfPlannedDest(CalculationContext context) {
+        if (!context.allowParkour || disabled) {
             return COST_INF;
         }
-        return res.cost;
+        int xDiff = direction.getStepX();
+        int zDiff = direction.getStepZ();
+        if (dest.x != src.x + dist * xDiff || dest.z != src.z + dist * zDiff) {
+            return COST_INF;
+        }
+        if (dist < 2) {
+            return COST_INF;
+        }
+        for (int i = 1; i <= dist; i++) {
+            int ix = src.x + i * xDiff;
+            int iz = src.z + i * zDiff;
+            if (i < dist || !ascend) {
+                if (!MovementHelper.fullyPassable(context, ix, src.y, iz)
+                        || !MovementHelper.fullyPassable(context, ix, src.y + 1, iz)
+                        || !MovementHelper.fullyPassable(context, ix, src.y + 2, iz)) {
+                    return COST_INF;
+                }
+            }
+        }
+        if (!checkOvershootSafety(context.bsi, dest.x + xDiff, dest.y, dest.z + zDiff)) {
+            return COST_INF;
+        }
+        if (ascend) {
+            if (dest.y != src.y + 1 || dist > 3 || !context.allowParkourAscend) {
+                return COST_INF;
+            }
+            if (!MovementHelper.canWalkOn(context, dest.x, src.y, dest.z)) {
+                return COST_INF;
+            }
+            return dist * SPRINT_ONE_BLOCK_COST + context.jumpPenalty;
+        }
+        BlockState landingOn = context.get(dest.x, dest.y - 1, dest.z);
+        if (landingOn.getBlock() != Blocks.FARMLAND && MovementHelper.canWalkOn(context, dest.x, dest.y - 1, dest.z, landingOn)) {
+            return costFromJumpDistance(Math.min(dist, 5)) + context.jumpPenalty;
+        }
+        if (!context.allowParkourPlace || !context.hasThrowaway || ext > 0) {
+            return COST_INF;
+        }
+        double placeCost = context.costOfPlacingAt(dest.x, dest.y - 1, dest.z, landingOn);
+        if (placeCost >= COST_INF || !MovementHelper.isReplaceable(dest.x, dest.y - 1, dest.z, landingOn, context.bsi)) {
+            return COST_INF;
+        }
+        boolean against = false;
+        for (int j = 0; j < 5; j++) {
+            int againstX = dest.x + HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[j].getStepX();
+            int againstY = dest.y - 1 + HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[j].getStepY();
+            int againstZ = dest.z + HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[j].getStepZ();
+            if (againstX == dest.x - xDiff && againstZ == dest.z - zDiff) {
+                continue;
+            }
+            if (MovementHelper.canPlaceAgainst(context.bsi, againstX, againstY, againstZ)) {
+                against = true;
+                break;
+            }
+        }
+        if (!against) {
+            return COST_INF;
+        }
+        return costFromJumpDistance(dist) + placeCost + context.jumpPenalty;
     }
 
     @Override
