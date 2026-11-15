@@ -186,8 +186,16 @@ public class MovementTraverse extends Movement {
                 if (srcDownBlock == Blocks.SOUL_SAND || (srcDownBlock instanceof SlabBlock && srcDown.getValue(SlabBlock.TYPE) != SlabType.DOUBLE) || MovementHelper.isStandingLantern(srcDown)) {
                     return COST_INF; // can't sneak and backplace against soul sand or half slabs (regardless of whether it's top half or bottom half) =/
                 }
-                if (!standingOnABlock) { // standing on water / swimming
-                    return COST_INF; // this is obviously impossible
+                if (!standingOnABlock) {
+                    // Ostinato: MovementPillar already costs a place on air footing (+0.1)
+                    // because a node over air was reached by a previous place. Stock traverse
+                    // treated that as swimming and returned COST_INF, so an open-void sneak-bridge
+                    // could only extend one block from real terrain. Allow only this backplace,
+                    // and only over replaceable air — never a walk, side-place, or water footing.
+                    if (!(srcDownBlock instanceof AirBlock)) {
+                        return COST_INF; // standing on water / swimming
+                    }
+                    WC += 0.1;
                 }
                 Block blockSrc = context.getBlock(x, y, z);
                 if ((blockSrc == Blocks.LILY_PAD || blockSrc instanceof CarpetBlock) && !srcDown.getFluidState().isEmpty()) {

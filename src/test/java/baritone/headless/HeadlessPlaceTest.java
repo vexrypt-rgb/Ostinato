@@ -460,10 +460,9 @@ public class HeadlessPlaceTest {
     }
 
     /**
-     * Ostinato: confirm why a 12-block place path across a wide void fails or succeeds
-     * under the client's default first-search timeouts (500/2000), then check that
-     * goto still finds a placement path using the same policy (retry / plan-ahead,
-     * without raising those defaults).
+     * Ostinato: a 12-block sneak-bridge across a wide void (no sidewalks) under the
+     * client's default first-search timeouts (500/2000). Chaining uses MovementTraverse's
+     * pillar-style air-footing backplace, not a mid-search BlockState overlay.
      */
     @Test
     public void twelveBlockWideVoidPlacePathDefaultTimeouts() throws Exception {

@@ -30,7 +30,6 @@ import baritone.pathing.calc.openset.BinaryHeapOpenSet;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.legato.LegatoFeasibility;
 import baritone.pathing.legato.LegatoStats;
-import baritone.pathing.movement.MovementHelper;
 import baritone.pathing.movement.Moves;
 import baritone.pathing.movement.movements.MovementTas;
 import baritone.pathing.CostCalibration;
@@ -248,8 +247,6 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 openSet.insert(currentNode);
                 continue;
             }
-            bindAssumedFooting(currentNode);
-            try {
             for (Moves moves : liveMoves) { // Ostinato: hyperopt E7
                 int newX = currentNode.x + moves.xOffset;
                 int newZ = currentNode.z + moves.zOffset;
@@ -385,9 +382,6 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                         failing = false;
                     }
                 }
-            }
-            } finally {
-                calcContext.clearAssumedFooting();
             }
             if (charge > 0) {
                 // Ostinato Cadenza: back in at its cost plus the terminal charge; stops the search when popped again
@@ -530,24 +524,4 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         profile.favored = favored;
         return profile.line();
     }
-
-    /**
-     * Ostinato: if this node stands over replaceable air, A* must have placed there to reach it.
-     * Bind that cell as footing so a subsequent sneak-bridge can be costed. The start node uses the real world.
-     */
-    private void bindAssumedFooting(PathNode node) {
-        calcContext.clearAssumedFooting();
-        if (node == startNode) {
-            return;
-        }
-        int x = node.x;
-        int y = node.y - 1;
-        int z = node.z;
-        net.minecraft.world.level.block.state.BlockState down = calcContext.bsi.get0(x, y, z);
-        if (MovementHelper.isReplaceable(x, y, z, down, calcContext.bsi)
-                && !MovementHelper.canWalkOn(calcContext, x, y, z, down)) {
-            calcContext.assumePlacedFooting(x, y, z);
-        }
-    }
-
 }
