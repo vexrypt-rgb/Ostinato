@@ -93,6 +93,28 @@ public final class PacketLog {
         write("IN", packet);
     }
 
+    /** Ostinato: a diagnostic line in the same tick stream as the packets (place Y/AABB vs dest). */
+    public static void note(String line) {
+        if (!ON || line == null) {
+            return;
+        }
+        synchronized (LOCK) {
+            try {
+                if (out == null) {
+                    Path f = Paths.get(FILE);
+                    if (f.getParent() != null) {
+                        Files.createDirectories(f.getParent());
+                    }
+                    out = Files.newBufferedWriter(f, StandardCharsets.UTF_8);
+                }
+                out.write(String.format(Locale.ROOT, "t=%d NOTE %s%n", tick, line));
+                out.flush();
+            } catch (Exception e) {
+                System.err.println("[PacketLog] " + e);
+            }
+        }
+    }
+
     private static void write(String dir, Packet<?> packet) {
         if (!ON || packet == null) {
             return;

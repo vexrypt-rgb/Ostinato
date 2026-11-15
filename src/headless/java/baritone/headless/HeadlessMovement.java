@@ -320,6 +320,18 @@ public final class HeadlessMovement {
         return lastSentYaw;
     }
 
+    public double lastSentX() {
+        return lastSentX;
+    }
+
+    public double lastSentY() {
+        return lastSentY;
+    }
+
+    public double lastSentZ() {
+        return lastSentZ;
+    }
+
     public float lastSentPitch() {
         return lastSentPitch;
     }

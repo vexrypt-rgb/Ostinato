@@ -100,4 +100,10 @@ public final class BsiWorld implements PlayerSim.World {
     public boolean sticky(int x, int y, int z) {
         return bsi.get0(x, y, z).getBlock() == Blocks.HONEY_BLOCK;
     }
+
+    /** Ostinato: drop this thread's shape memo so a later bot or test starts clean. */
+    public static void releaseThreadLocal() {
+        SHAPES.remove();
+        CLIMB.remove();
+    }
 }

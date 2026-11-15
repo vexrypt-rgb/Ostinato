@@ -74,6 +74,11 @@ public final class PiCheap {
         return c;
     }
 
+    /** Ostinato: drop this thread's block cache so a later search or test starts clean. */
+    public static void releaseThreadLocal() {
+        LOCAL.remove();
+    }
+
     /** 26-bit signed x/z and 12-bit signed y cover a vanilla world. Outside that, skip the cache. */
     static boolean fits(int x, int y, int z) {
         return (x << 6 >> 6) == x && (z << 6 >> 6) == z && (y << 20 >> 20) == y;

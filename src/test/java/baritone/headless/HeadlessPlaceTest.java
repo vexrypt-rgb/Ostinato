@@ -106,6 +106,7 @@ public class HeadlessPlaceTest {
         settings.allowParkourPlace.value = allowParkourPlace;
         settings.allowGodBridge.value = allowGodBridge;
         settings.unifiedExecutor.value = unifiedExecutor;
+        HeadlessBot.resetSharedStateForTests();
     }
 
     @Test
@@ -371,6 +372,71 @@ public class HeadlessPlaceTest {
             bot.closeHost();
         }
     }
+
+    // Ostinato: Paper rejects a place that intersects the player AABB. Standing
+    // in the dest cell must not send UseItemOn, even with a support underfoot
+    // and a rotation already on the wire.
+    @Test
+    public void placeIsWithheldWhileFeetIntersectTheDestCell() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 1.0, 0.5);
+        try {
+            bot.chunks().setBlockState(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 16)));
+            bot.ensureHost();
+            bot.enqueuePathing("place 0 1 0");
+            for (int i = 0; i < 12; i++) {
+                bot.tick();
+            }
+            assertEquals("must not click while the feet AABB intersects dest (0,1,0): status="
+                            + bot.pathingStatus() + " y=" + bot.liveDriver().player().getY()
+                            + " aabb=" + bot.liveDriver().player().getBoundingBox(),
+                    0, transport.count(ServerboundUseItemOnPacket.class));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    // Ostinato: once the feet AABB is clear of the dest and the look packet is
+    // already on the wire, send exactly one UseItemOn (one per layer).
+    @Test
+    public void placeSendsOnceWhenFeetClearDestAndLookIsOnTheWire() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 2.0, 1.5);
+        try {
+            bot.chunks().setBlockState(new BlockPos(0, 1, 1), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 16)));
+            bot.ensureHost();
+            bot.enqueuePathing("place 0 1 0");
+            ServerboundUseItemOnPacket use = null;
+            for (int i = 0; i < 8 && use == null; i++) {
+                bot.tick();
+                List<ServerboundUseItemOnPacket> found = packets(transport, ServerboundUseItemOnPacket.class);
+                if (!found.isEmpty()) {
+                    use = found.get(0);
+                }
+            }
+            assertNotNull("place did not send UseItemOn once feet were clear: " + bot.pathingStatus()
+                    + " y=" + bot.liveDriver().player().getY()
+                    + " aabb=" + bot.liveDriver().player().getBoundingBox(), use);
+            BlockPos against = use.hitResult().getBlockPos();
+            BlockPos into = against.relative(use.hitResult().getDirection());
+            assertEquals("should place into dest (0,1,0): " + use.hitResult(), new BlockPos(0, 1, 0), into);
+            // Already-sent dest must not be clicked again before ack.
+            for (int i = 0; i < 6; i++) {
+                bot.tick();
+            }
+            assertEquals("exactly one UseItemOn per layer before ack, got "
+                            + packets(transport, ServerboundUseItemOnPacket.class),
+                    1, transport.count(ServerboundUseItemOnPacket.class));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
 
     @Test
     public void aimAtPlaceIgnoresANearerWallAndHitsTheIntendedFace() {
@@ -727,10 +793,20 @@ public class HeadlessPlaceTest {
                     + " ticks-or-fail at pos=" + player.position()
                     + " rot=" + player.getYRot() + "," + player.getXRot()
                     + " places=" + places
-                    + " path=" + describePath(bot));
+                    + " path=" + describePath(bot)
+                    + " aim=" + placeAimDebug(bot));
         } finally {
             bot.closeHost();
         }
+    }
+
+    // Ostinato: sneakBridgeTwelve used to fail when run after the default-timeout
+    // 12-block plan (shared static / ThreadLocal / closeHost leak). Both must
+    // pass in one JVM in this order.
+    @Test
+    public void sneakBridgeTwelveBlockExecutesToLandingAfterDefaultTimeoutPlan() throws Exception {
+        twelveBlockWideVoidPlacePathDefaultTimeouts();
+        sneakBridgeTwelveBlockExecutesToLanding();
     }
 
     // Ostinato: after pathing (or with no path at all) the sim must still fall and land.
@@ -841,11 +917,37 @@ public class HeadlessPlaceTest {
         }
     }
 
-    /**
-     * A sneak-bridge, pillar, or parkour-place landing shows up in {@link Movement#toPlace}.
-     * A 5-block gap with a floor on the far side is one parkour extension: the landing already
-     * exists, so {@code toPlace} is empty and the block laid at the edge is {@link MovementParkour#extensions}.
-     */
+    private static String placeAimDebug(HeadlessBot bot) {
+        HeadlessLiveDriver driver = bot.liveDriver();
+        if (driver == null) {
+            return "no host";
+        }
+        var player = driver.player();
+        var level = player.level();
+        Set<BlockPos> want = driver.intendedPlaces();
+        StringBuilder out = new StringBuilder();
+        out.append("want=").append(want);
+        out.append(" sneak=").append(player.isShiftKeyDown());
+        out.append(" pose=").append(player.getPose());
+        out.append(" eyeH=").append(player.getEyeHeight());
+        out.append(" sneakEye=").append(player.getEyeHeight(Pose.CROUCHING));
+        out.append(" aabb=").append(player.getBoundingBox());
+        out.append(" reach=").append(driver.controller().getBlockReachDistance());
+        out.append(" look=").append(driver.context().objectMouseOver());
+        for (BlockPos dest : want) {
+            out.append(" dest=").append(dest).append(" state=").append(level.getBlockState(dest));
+            for (Direction toward : Direction.values()) {
+                BlockPos support = dest.relative(toward);
+                var state = level.getBlockState(support);
+                out.append(" support[").append(toward).append("]=").append(support)
+                        .append(" ").append(state.getBlock())
+                        .append(" sturdy=").append(state.isFaceSturdy(level, support, toward.getOpposite()));
+            }
+        }
+        out.append(" aim=").append(driver.aimAtPlace(want));
+        return out.toString();
+    }
+
     private static boolean pathPlaces(HeadlessBot bot) {
         IPathExecutor executor = bot.liveDriver().baritone().getPathingBehavior().getCurrent();
         if (executor == null) {

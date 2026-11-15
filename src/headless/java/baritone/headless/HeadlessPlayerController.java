@@ -29,7 +29,10 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+
+import java.util.Locale;
 
 public final class HeadlessPlayerController implements IPlayerController {
 
@@ -240,6 +243,11 @@ public final class HeadlessPlayerController implements IPlayerController {
             }
             syncHeldItem();
             int seq = ++sequence;
+            // Ostinato: Paper rejects a place that intersects the player's AABB; Grim
+            // RotationPlace / Simulation can also cancel one and resync AIR. Log the
+            // server-side (last-sent / pre-physics) Y and AABB against the dest cell
+            // so a reject can be classified. AIR BlockUpdates stay authoritative.
+            logUseItemOnAgainstCell(result);
             bot.send(new ServerboundUseItemOnPacket(hand, result, seq));
             placePackets++;
             if (predictPlace(hand, result, seq)) {
@@ -487,5 +495,22 @@ public final class HeadlessPlayerController implements IPlayerController {
 
     public boolean placeRejected(BlockPos pos) {
         return lastPlaceFailed && !lastPlaceAcked && lastPlaced != null && lastPlaced.equals(pos);
+    }
+
+    /** Ostinato: server-side feet Y/AABB (current body at tickUse is last-sent) vs the dest cell. */
+    private void logUseItemOnAgainstCell(BlockHitResult result) {
+        BlockPos clicked = result.getBlockPos();
+        BlockState clickedState = level.getBlockState(clicked);
+        BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
+        AABB feet = this.player.getBoundingBox();
+        AABB cell = new AABB(dest);
+        String line = String.format(Locale.ROOT,
+                "UseItemOn dest=%s y=%.6f aabb=[%.4f,%.4f,%.4f -> %.4f,%.4f,%.4f] cell=[%.1f,%.1f,%.1f -> %.1f,%.1f,%.1f] intersects=%s",
+                dest.toShortString(), this.player.getY(),
+                feet.minX, feet.minY, feet.minZ, feet.maxX, feet.maxY, feet.maxZ,
+                cell.minX, cell.minY, cell.minZ, cell.maxX, cell.maxY, cell.maxZ,
+                feet.intersects(cell));
+        System.out.println("[HeadlessPlace] " + line);
+        baritone.utils.PacketLog.note(line);
     }
 }

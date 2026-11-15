@@ -56,6 +56,15 @@ public final class SearchCache {
         }
     }
 
+    /** Ostinato: drop this thread's mining memo so a later test or bot does not reuse it. */
+    public static void releaseThreadLocal() {
+        MiningBuffers cached = CURRENT.get();
+        if (cached != null) {
+            cached.owner = null;
+        }
+        CURRENT.remove();
+    }
+
     public static final class MiningBuffers {
         public final int bits;
         public final long[] keys;

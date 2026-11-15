@@ -1,6 +1,8 @@
 package baritone.pathing;
 
+import baritone.api.IBaritone;
 import baritone.api.pathing.calc.IPath;
+import baritone.api.pathing.movement.IMovement;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.utils.BetterBlockPos;
 import baritone.pathing.movement.CalculationContext;
@@ -35,8 +37,10 @@ public final class RouteReuse {
         /** Three ids per position: floor, feet, head. */
         final int[] ids;
         final IPath path;
+        /** Ostinato: movements on the stored path are bound to this host. */
+        final IBaritone baritone;
 
-        Entry(Goal goal, long stamp, int[] x, int[] y, int[] z, int[] ids, IPath path) {
+        Entry(Goal goal, long stamp, int[] x, int[] y, int[] z, int[] ids, IPath path, IBaritone baritone) {
             this.goal = goal;
             this.stamp = stamp;
             this.x = x;
@@ -44,6 +48,7 @@ public final class RouteReuse {
             this.z = z;
             this.ids = ids;
             this.path = path;
+            this.baritone = baritone;
         }
     }
 
@@ -99,7 +104,7 @@ public final class RouteReuse {
         if (path == null || context == null) {
             return;
         }
-        remember(path.getGoal(), path.positions(), blocks(context), stamp(context), path);
+        remember(path.getGoal(), path.positions(), blocks(context), stamp(context), path, context.baritone);
     }
 
     /** Ostinato Legato: {@link #stamp()} keyed by the Legato mode too, so a path planned in one mode is not replayed in another. */
@@ -112,6 +117,10 @@ public final class RouteReuse {
     }
 
     public static void remember(Goal goal, List<BetterBlockPos> positions, Blocks blocks, long stamp, IPath path) {
+        remember(goal, positions, blocks, stamp, path, null);
+    }
+
+    public static void remember(Goal goal, List<BetterBlockPos> positions, Blocks blocks, long stamp, IPath path, IBaritone baritone) {
         if (goal == null || positions == null || blocks == null || stamp == Long.MIN_VALUE || positions.size() < 2) {
             return;
         }
@@ -133,7 +142,7 @@ public final class RouteReuse {
             ids[i * 3 + 1] = blocks.id(p.x, p.y, p.z);
             ids[i * 3 + 2] = blocks.id(p.x, p.y + 1, p.z);
         }
-        Entry entry = new Entry(goal, stamp, x, y, z, ids, path);
+        Entry entry = new Entry(goal, stamp, x, y, z, ids, path, baritone);
         synchronized (ENTRIES) {
             ENTRIES[cursor] = entry;
             cursor = (cursor + 1) % MAX;
@@ -145,7 +154,7 @@ public final class RouteReuse {
      * Cells behind the resume point may have changed.
      */
     public static int find(Goal goal, int sx, int sy, int sz, Blocks blocks, long stamp) {
-        Entry entry = locate(goal, sx, sy, sz, blocks, stamp);
+        Entry entry = locate(goal, sx, sy, sz, blocks, stamp, null);
         if (entry == null) {
             return -1;
         }
@@ -164,7 +173,7 @@ public final class RouteReuse {
         Blocks blocks = blocks(context);
         Entry entry;
         synchronized (ENTRIES) {
-            entry = locate(goal, sx, sy, sz, blocks, stamp);
+            entry = locate(goal, sx, sy, sz, blocks, stamp, context.baritone);
         }
         if (entry == null || entry.path == null || entry.path.positions().size() != entry.x.length) {
             return null;
@@ -173,10 +182,16 @@ public final class RouteReuse {
         if (index < 0) {
             return null;
         }
+        // Ostinato: replay starts clean. The stored movements may already have been
+        // ticked by an earlier executor (test-order leak, or a cancelled run).
+        for (IMovement movement : entry.path.movements()) {
+            movement.reset();
+            movement.resetBlockCache();
+        }
         return new CutoffPath(entry.path, index, entry.x.length - 1);
     }
 
-    private static Entry locate(Goal goal, int sx, int sy, int sz, Blocks blocks, long stamp) {
+    private static Entry locate(Goal goal, int sx, int sy, int sz, Blocks blocks, long stamp, IBaritone baritone) {
         if (goal == null || blocks == null || stamp == Long.MIN_VALUE) {
             return null;
         }
@@ -185,6 +200,12 @@ public final class RouteReuse {
                 int slot = (cursor - 1 - n + MAX * 2) % MAX;
                 Entry entry = ENTRIES[slot];
                 if (entry == null || entry.stamp != stamp || !goal.equals(entry.goal)) {
+                    continue;
+                }
+                // Ostinato: movements are bound to the host that planned them. A later
+                // bot in the same JVM must not replay another host's movement objects
+                // (keys and look would go to the closed player).
+                if (entry.baritone != baritone) {
                     continue;
                 }
                 int index = indexOf(entry, sx, sy, sz);

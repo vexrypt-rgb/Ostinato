@@ -26,6 +26,7 @@ import baritone.utils.pathing.Favoring;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 public final class HeadlessPathingBehavior implements IPathingBehavior {
 
@@ -249,6 +250,11 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
     public void close() {
         cancelEverything();
         planner.shutdownNow();
+        try {
+            planner.awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public String status() {

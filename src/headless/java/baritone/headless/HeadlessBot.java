@@ -870,7 +870,23 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         HeadlessLiveDriver current = live;
         if (current != null) {
             current.close();
+            live = null;
         }
+        resetSharedStateForTests();
+    }
+
+    /**
+     * Ostinato: A* on the test thread (and PlayerSim on the tick thread) leave
+     * ThreadLocal memos. A later bot in the same JVM must not reuse them.
+     */
+    public static void resetSharedStateForTests() {
+        baritone.utils.pathing.SearchCache.releaseThreadLocal();
+        baritone.pathing.calc.PiCheap.releaseThreadLocal();
+        baritone.pathing.kinematic.BsiWorld.releaseThreadLocal();
+        baritone.pathing.RouteReuse.clear();
+        baritone.pathing.movement.Movement.breathing = false;
+        baritone.api.utils.RayTraceUtils.fluidHandling = net.minecraft.world.level.ClipContext.Fluid.NONE;
+        Thread.interrupted();
     }
 
     private void drainPathing() {

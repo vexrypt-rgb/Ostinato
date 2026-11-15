@@ -23,10 +23,12 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -59,6 +61,10 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     // and we would re-aim forever without sending UseItemOn.
     private Rotation pendingPlaceLook;
     private Set<BlockPos> pendingPlaceWant;
+    // Ostinato: last-sent body, set in sync() before tickUse. Place uses this AABB.
+    private HeadlessMovement movement;
+    // Ostinato: one UseItemOn per dest until the prediction is rejected or the movement advances.
+    private BlockPos sentPlaceDest;
 
 
     /** Down from the target first (click the top of the floor), then the four sides, then the ceiling. */
@@ -219,6 +225,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeHeldItem = false;
         pendingPlaceLook = null;
         pendingPlaceWant = null;
+        sentPlaceDest = null;
         host.getPathingBehavior().cancelEverything();
         host.getPathingBehavior().noteCancelled();
         controller.resetBlockRemoving();
@@ -238,6 +245,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeHeldItem = false;
         pendingPlaceLook = null;
         pendingPlaceWant = null;
+        sentPlaceDest = null;
         host.getPathingBehavior().cancelEverything();
         host.getPathingBehavior().noteCancelled();
         controller.resetBlockRemoving();
@@ -324,7 +332,15 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 tickAttack();
                 tickUse();
             }
-            if (restoredSentLook) {
+            // Ostinato: a place aim taken this tick must go out on this tick's
+            // movement packet. Step used to keep the pre-tickUse look, so the
+            // rotation never landed and canSendPlace waited forever.
+            if (pendingPlaceLook != null) {
+                desiredLook = pendingPlaceLook;
+                look.updateTarget(pendingPlaceLook, true);
+            } else if (placing != null) {
+                desiredLook = new Rotation(player.getYRot(), player.getXRot());
+            } else if (restoredSentLook) {
                 look.updateTarget(desiredLook, true);
             }
             holdSneakIfHanging(movement);
@@ -358,23 +374,33 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             return;
         }
         Set<BlockPos> want = intendedPlaces();
+        releaseSentPlaceIfLayerAdvanced(want);
         if (pendingPlaceLook != null && pendingPlaceWant != null) {
             look.updateTarget(pendingPlaceLook, true);
             HitResult pendingHit = context.objectMouseOver();
             Set<BlockPos> pendingWant = pendingPlaceWant;
-            pendingPlaceLook = null;
-            pendingPlaceWant = null;
             if (placesInto(pendingHit, pendingWant) && pendingHit instanceof BlockHitResult block
                     && pendingHit.getType() == HitResult.Type.BLOCK) {
-                clickPlace(block);
+                if (canSendPlace(block)) {
+                    pendingPlaceLook = null;
+                    pendingPlaceWant = null;
+                    clickPlace(block);
+                }
+                // Ostinato: keep the pending look while the feet AABB still intersects
+                // the dest (jump toward pre-apex). The rotation is already on the player
+                // and will go out this tick if it has not already.
                 return;
             }
+            pendingPlaceLook = null;
+            pendingPlaceWant = null;
         }
         HitResult hit = context.objectMouseOver();
         if (!want.isEmpty()) {
             if (placesInto(hit, want) && hit instanceof BlockHitResult block
                     && hit.getType() == HitResult.Type.BLOCK) {
-                clickPlace(block);
+                if (canSendPlace(block)) {
+                    clickPlace(block);
+                }
                 return;
             }
             Optional<Rotation> aim = aimAtPlace(want);
@@ -407,10 +433,18 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     }
 
     private void clickPlace(BlockHitResult block) {
-        if (controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, block) == InteractionResult.SUCCESS) {
+        if (!canSendPlace(block)) {
             return;
         }
-        controller.processRightClickBlock(player, level, InteractionHand.OFF_HAND, block);
+        BlockPos dest = placeDest(block);
+        logPlaceGate("send UseItemOn", dest);
+        if (controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, block) == InteractionResult.SUCCESS) {
+            markSentPlace(dest);
+            return;
+        }
+        if (controller.processRightClickBlock(player, level, InteractionHand.OFF_HAND, block) == InteractionResult.SUCCESS) {
+            markSentPlace(dest);
+        }
     }
 
     private void tickPlaceCommand() {
@@ -478,10 +512,16 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             return;
         }
         BlockHitResult at = (BlockHitResult) traced;
+        if (!canSendPlace(at)) {
+            placeStatus = "waiting " + target.toShortString();
+            return;
+        }
+        logPlaceGate("send UseItemOn", target);
         InteractionResult result = controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, at);
         if (result != InteractionResult.SUCCESS) {
             controller.processRightClickBlock(player, level, InteractionHand.OFF_HAND, at);
         }
+        markSentPlace(target);
         placeAttempts++;
         placeStatus = "clicked " + target.toShortString();
     }
@@ -766,6 +806,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
 
     // Ostinato: entity tick is never called; copy the authoritative sim body before AND after execution.
     void sync(HeadlessMovement movement) {
+        this.movement = movement;
         PlayerSim sim = movement.sim();
         player.setPos(sim.x, sim.y, sim.z);
         player.setDeltaMovement(sim.vx, sim.vy, sim.vz);
@@ -799,8 +840,95 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 + " craft=" + craft.status();
     }
 
+    /**
+     * Ostinato: Paper rejects a place whose block would intersect the player's
+     * bounding box, and Grim RotationPlace / Simulation can cancel a place whose
+     * look is not already on the wire. The ground-truth client only places when
+     * the feet AABB already clears the dest (beside the feet, or pre-apex
+     * y approx *.7508 after jumping out of the cell) and only once per layer.
+     * tickUse runs before travel, so the current body is the last-sent / server-side one.
+     */
+    private boolean canSendPlace(BlockHitResult hit) {
+        BlockPos dest = placeDest(hit);
+        if (dest == null) {
+            return false;
+        }
+        if (movement == null || !movement.lookMatchesLastSent(player.getYRot(), player.getXRot())) {
+            logPlaceGate("hold look-not-on-wire", dest);
+            return false;
+        }
+        AABB feet = player.getBoundingBox();
+        AABB cell = new AABB(dest);
+        if (feet.intersects(cell)) {
+            logPlaceGate("hold aabb-intersect", dest);
+            return false;
+        }
+        if (sentPlaceDest != null && sentPlaceDest.getX() == dest.getX()
+                && sentPlaceDest.getY() == dest.getY() && sentPlaceDest.getZ() == dest.getZ()
+                && !controller.placeRejected(dest)) {
+            return false;
+        }
+        return true;
+    }
+
+    private BlockPos placeDest(BlockHitResult hit) {
+        BlockPos clicked = hit.getBlockPos();
+        if (!level.isLoaded(clicked)) {
+            return null;
+        }
+        BlockState clickedState = level.getBlockState(clicked);
+        return clickedState.canBeReplaced() ? clicked : clicked.relative(hit.getDirection());
+    }
+
+    private void markSentPlace(BlockPos dest) {
+        if (dest == null) {
+            return;
+        }
+        if (controller.awaitingPlace() || controller.placeConfirmed(dest)
+                || (level.isLoaded(dest) && !level.getBlockState(dest).canBeReplaced())) {
+            sentPlaceDest = dest.immutable();
+        }
+    }
+
+    private void releaseSentPlaceIfLayerAdvanced(Set<BlockPos> want) {
+        if (sentPlaceDest == null) {
+            return;
+        }
+        if (controller.placeRejected(sentPlaceDest)) {
+            sentPlaceDest = null;
+            return;
+        }
+        if (!want.isEmpty() && !wantHas(want, sentPlaceDest)) {
+            sentPlaceDest = null;
+        }
+    }
+
+    private void logPlaceGate(String reason, BlockPos dest) {
+        if (dest == null) {
+            return;
+        }
+        AABB feet = player.getBoundingBox();
+        AABB cell = new AABB(dest);
+        String last = (movement == null || Double.isNaN(movement.lastSentY()))
+                ? "n/a"
+                : String.format(Locale.ROOT, "x=%.6f y=%.6f z=%.6f",
+                        movement.lastSentX(), movement.lastSentY(), movement.lastSentZ());
+        boolean lookOnWire = movement != null
+                && movement.lookMatchesLastSent(player.getYRot(), player.getXRot());
+        String line = String.format(Locale.ROOT,
+                "%s dest=%s y=%.6f aabb=[%.4f,%.4f,%.4f -> %.4f,%.4f,%.4f] cell=[%.1f,%.1f,%.1f -> %.1f,%.1f,%.1f] intersects=%s lastSent=%s lookOnWire=%s",
+                reason, dest.toShortString(), player.getY(),
+                feet.minX, feet.minY, feet.minZ, feet.maxX, feet.maxY, feet.maxZ,
+                cell.minX, cell.minY, cell.minZ, cell.maxX, cell.maxY, cell.maxZ,
+                feet.intersects(cell), last, lookOnWire);
+        System.out.println("[HeadlessPlace] " + line);
+        baritone.utils.PacketLog.note(line);
+    }
+
     void close() {
         cancel();
         host.getPathingBehavior().close();
+        movement = null;
+        sentPlaceDest = null;
     }
 }
