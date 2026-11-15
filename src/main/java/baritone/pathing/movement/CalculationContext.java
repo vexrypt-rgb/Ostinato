@@ -305,7 +305,8 @@ public class CalculationContext {
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
         this.toolSet = new ToolSet(player);
         this.aquaAffinity = player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SUBMERGED_MINING_SPEED) > 0.5;
-        this.hasThrowaway = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowPlace.value && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
+        this.hasThrowaway = !AltoClefSettings.getInstance().isInteractionPaused() && Baritone.settings().allowPlace.value
+                && baritone instanceof baritone.pathing.IPathingHost host && host.hasGenericThrowaway();
         this.hasWaterBucket = Baritone.settings().allowWaterBucketFall.value && Inventory.isHotbarSlot(player.getInventory().findSlotMatchingItem(BucketHolder.STACK_BUCKET_WATER)) && world.dimension() != Level.NETHER;
         // Ostinato: fastMode behaves as if allowBoats were on. Off, this is allowBoats.
         boolean boats = FastMode.allowBoats() && Baritone.settings().allowBoatFall.value && !AltoClefSettings.getInstance().isInteractionPaused();
@@ -338,7 +339,8 @@ public class CalculationContext {
         this.allowTasJumps = ExperimentalMovement.allowTasJumps() && fullPace;
         this.allowMomentumJumps = ExperimentalMovement.allowMomentumJumps() && fullPace;
         boolean ladderClutch = FastMode.allowLadderClutch(); // Ostinato
-        net.minecraft.world.item.Item clutchItem = ladderClutch ? ((Baritone) baritone).getInventoryBehavior().pickClutchItem(false) : null;
+        net.minecraft.world.item.Item clutchItem = ladderClutch && baritone instanceof baritone.pathing.IPathingHost host
+                ? host.pickClutchItem(false) : null;
         this.hasClutchItem = clutchItem != null;
         this.ladderGrab = ladderClutch;
         this.allowGodBridge = Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value;

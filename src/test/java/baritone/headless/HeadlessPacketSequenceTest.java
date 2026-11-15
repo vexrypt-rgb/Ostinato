@@ -169,7 +169,7 @@ public class HeadlessPacketSequenceTest {
     }
 
     @Test
-    public void onePositionPacketEveryTwentyTicksAndClientTickEndEveryTick() {
+    public void onePositionPacketAndClientTickEndEveryTick() {
         toPlay();
         server.deliver(new ClientboundPlayerPositionPacket(1,
                 new PositionMoveRotation(new Vec3(0, 64, 0), Vec3.ZERO, 0, 0), Set.of()));
@@ -179,11 +179,12 @@ public class HeadlessPacketSequenceTest {
         for (int i = 0; i < 40; i++) {
             bot.tick();
         }
-        // 26.3 kicks for two position packets inside one server tick; StatusOnly is not a position packet.
-        assertEquals(2, server.count(ServerboundMovePlayerPacket.PosRot.class));
-        assertEquals(38, server.count(ServerboundMovePlayerPacket.StatusOnly.class));
+        // Ostinato: once spawned, PlayerSim ticks every tick and one PosRot goes out each tick,
+        // the same as during pathing. Two position packets in one server tick is still forbidden;
+        // ClientTickEnd still ends every client tick.
+        assertEquals(40, server.count(ServerboundMovePlayerPacket.PosRot.class));
+        assertEquals(0, server.count(ServerboundMovePlayerPacket.StatusOnly.class));
         assertEquals(40, server.count(ServerboundClientTickEndPacket.class));
-        // ClientTickEnd must be the last packet of every client tick.
         server.assertEveryNth(2, ServerboundClientTickEndPacket.class);
     }
 

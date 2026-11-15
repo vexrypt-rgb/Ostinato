@@ -834,7 +834,8 @@ public class MovementParkour extends Movement {
         double along = ctx.player().position().x * direction.getStepX() + ctx.player().position().z * direction.getStepZ();
         double edge = (target.x + 0.5) * direction.getStepX() + (target.z + 0.5) * direction.getStepZ() - 0.5; // the near side of the cell to fill
         state.setInput(Input.SNEAK, true);
-        ((baritone.Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, target.getX(), target.getY(), target.getZ());
+        // Ostinato: route through IPathingHost so a headless bot can lay parkour extensions.
+        MovementHelper.selectThrowaway(baritone, true, target.getX(), target.getY(), target.getZ());
         BetterBlockPos against = target.relative(direction, -1);
         Direction face = direction;
         Vec3 eye = RayTraceUtils.inferSneakingEyePosition(ctx.player());

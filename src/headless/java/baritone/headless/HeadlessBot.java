@@ -120,12 +120,10 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private final HeadlessChunkStore chunks;
     // Ostinato: inventory packets can arrive before the pathing player exists. They queue here.
     private final HeadlessInventory inventory = new HeadlessInventory();
-    // Ostinato: Phase 2. When a course is still running, or Phase 3 pathing/mining owns the keys,
-    // this driver sends the one movement packet. Otherwise the idle path below stays the Phase 1
-    // StatusOnly + 20-tick position reminder.
+    // Ostinato: once spawned, this driver ticks PlayerSim and sends a movement packet every tick,
+    // including while idle — a real client does the same, and a frozen mid-air pose is a flying flag.
     private volatile HeadlessMovement movement;
-    // Ostinato: the pathing host, built once the bot has spawned. Null until then, including in tests
-    // that only exercise the idle reminder.
+    // Ostinato: the pathing host, built once the bot has spawned. Null until then.
     private volatile HeadlessLiveDriver live;
     private final Object hostLock = new Object();
     private final ConcurrentLinkedQueue<String> pathingLines = new ConcurrentLinkedQueue<>();
@@ -548,10 +546,14 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         }
         // Ostinato: pathing commands run here, before the single movement packet, so A* is only queued.
         drainPathing();
+        // Ostinato: a real client ticks physics and sends a movement packet every tick, even standing
+        // still. After a pillar or jump lands in pathing=idle, skipping PlayerSim left the last
+        // mid-air pose frozen at onGround=false, which Grim/NCP treat as flying.
+        if (movement == null) {
+            ensureMovement();
+        }
         HeadlessMovement driver = movement;
-        HeadlessLiveDriver pathing = live;
-        boolean drive = driver != null && ((pathing != null && pathing.controlsMovement()) || driver.courseRunning());
-        if (drive) {
+        if (driver != null) {
             try {
                 driver.tick(this);
             } catch (RuntimeException e) {
@@ -690,8 +692,8 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     }
 
     /**
-     * Ostinato: build the pathing body from the live connection. Idempotent. Does not attach movement,
-     * so an idle bot keeps the Phase 1 position reminder until a course or a path actually runs.
+     * Ostinato: build the pathing body from the live connection. Idempotent. Movement is attached
+     * on the next tick so idle physics keep running.
      */
     public void ensureHost() {
         if (live != null) {

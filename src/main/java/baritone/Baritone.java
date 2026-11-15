@@ -469,6 +469,11 @@ public class Baritone implements IBaritone, baritone.pathing.IPathingHost {
         return this.inventoryBehavior.selectThrowawayForLocation(select, x, y, z);
     }
 
+    @Override
+    public net.minecraft.world.item.Item pickClutchItem(boolean select) {
+        return this.inventoryBehavior.pickClutchItem(select);
+    }
+
     public static Settings settings() {
         return BaritoneAPI.getSettings();
     }

@@ -40,6 +40,7 @@ import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.InteractionHand;
@@ -714,6 +715,111 @@ public class HeadlessPlaceTest {
                     + " ticks-or-fail at pos=" + player.position()
                     + " rot=" + player.getYRot() + "," + player.getXRot()
                     + " places=" + places
+                    + " path=" + describePath(bot));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    // Ostinato: after pathing (or with no path at all) the sim must still fall and land.
+    // A frozen mid-air pose at onGround=false is a flying flag.
+    @Test
+    public void idlePhysicsLandsWhenLeftMidAir() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 4.0, 0.5);
+        try {
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    bot.chunks().setBlockState(new BlockPos(x, 1, z), Blocks.STONE.defaultBlockState());
+                }
+            }
+            assertEquals(4.0, bot.y(), 1.0E-6);
+            double previous = bot.y();
+            boolean descended = false;
+            for (int i = 0; i < 80; i++) {
+                bot.tick();
+                if (bot.y() < previous - 1.0E-4) {
+                    descended = true;
+                }
+                previous = bot.y();
+                if (bot.onGround() && bot.y() >= 1.9 && bot.y() <= 2.2) {
+                    assertTrue("must have fallen before landing, y=" + bot.y(), descended);
+                    assertTrue("idle ticks must keep sending PosRot",
+                            transport.count(ServerboundMovePlayerPacket.PosRot.class) >= i);
+                    return;
+                }
+            }
+            throw new AssertionError("did not land: y=" + bot.y() + " onGround=" + bot.onGround()
+                    + " descended=" + descended);
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    // Ostinato: a 6-block gap onto an existing landing is an extended parkour. The first
+    // tick used to ClassCast HeadlessBaritone to Baritone in MovementParkour.extend.
+    @Test
+    public void extendedParkourExtensionDoesNotCast() throws Exception {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 2.0, 0.5);
+        try {
+            for (int cx = -1; cx <= 1; cx++) {
+                for (int cz = -1; cz <= 1; cz++) {
+                    bot.chunks().createEmptyChunk(cx, cz);
+                }
+            }
+            for (int x = -2; x <= 2; x++) {
+                bot.chunks().setBlockState(new BlockPos(x, 1, 0), Blocks.STONE.defaultBlockState());
+                bot.chunks().setBlockState(new BlockPos(x, 1, 7), Blocks.STONE.defaultBlockState());
+            }
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
+            bot.ensureHost();
+            bot.tick();
+            bot.enqueuePathing("goto 0 2 7");
+            String status = "";
+            boolean sawExtended = false;
+            for (int i = 0; i < 1500; i++) {
+                bot.tick();
+                if (i % 2 == 0) {
+                    Thread.sleep(10);
+                }
+                status = bot.pathingStatus();
+                if (status.contains("path error") || status.contains("cancelled after executor")
+                        || status.contains("ClassCastException")) {
+                    throw new AssertionError("extended parkour crashed: " + status + " path=" + describePath(bot));
+                }
+                IPathExecutor executor = bot.liveDriver().baritone().getPathingBehavior().getCurrent();
+                if (executor != null) {
+                    for (IMovement movement : executor.getPath().movements()) {
+                        if (movement instanceof MovementParkour parkour && parkour.extensions() > 0) {
+                            sawExtended = true;
+                        }
+                    }
+                }
+                for (ServerboundUseItemOnPacket use : packets(transport, ServerboundUseItemOnPacket.class)) {
+                    BlockPos against = use.hitResult().getBlockPos();
+                    BlockPos into = against.relative(use.hitResult().getDirection());
+                    if (bot.chunks().getBlockState(into.getX(), into.getY(), into.getZ()).isAir()) {
+                        bot.onPacket(new ClientboundBlockUpdatePacket(into, Blocks.DIRT.defaultBlockState()));
+                        bot.onPacket(new ClientboundBlockChangedAckPacket(use.sequence()));
+                    }
+                }
+                var player = bot.liveDriver().player();
+                if (status.contains("execution failed") || status.contains("no path")
+                        || status.contains("planning failed")
+                        || status.contains("arrived")
+                        || (Math.abs(player.getX() - 0.5) < 1.0
+                                && Math.abs(player.getY() - 2.0) < 0.8 && player.getZ() >= 6.3 && player.getZ() <= 8.7)) {
+                    // The ClassCast was on the first extend tick. Landing the jump is a later problem;
+                    // this test only requires that extend() ran on a HeadlessBaritone without crashing.
+                    assertTrue("path must include a parkour extension, got " + describePath(bot)
+                            + " status=" + status, sawExtended);
+                    return;
+                }
+            }
+            throw new AssertionError("extended parkour never started: status=" + status
+                    + " sawExtended=" + sawExtended + " pos=" + bot.liveDriver().player().position()
                     + " path=" + describePath(bot));
         } finally {
             bot.closeHost();

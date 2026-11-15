@@ -38,7 +38,6 @@ import baritone.pathing.movement.MovementState.MovementTarget;
 import baritone.utils.AirDrift;
 import baritone.utils.pathing.MutableMoveResult;
 import baritone.Baritone;
-import baritone.behavior.InventoryBehavior;
 import baritone.utils.BlockStateInterface;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -662,12 +661,11 @@ public class MovementFall extends Movement {
         if (player.onGround() || player.getDeltaMovement().y >= 0) {
             return false;
         }
-        // Ostinato: a headless host has no inventory behaviour, so it never picks a clutch item.
-        if (!(baritone instanceof Baritone client)) {
+        // Ostinato: clutch items go through IPathingHost. Headless returns null.
+        if (!(baritone instanceof baritone.pathing.IPathingHost host)) {
             return false;
         }
-        InventoryBehavior inv = client.getInventoryBehavior();
-        Item item = inv.pickClutchItem(false);
+        Item item = host.pickClutchItem(false);
         if (item == null) {
             return false; // the last one's already in the wall, or somebody ate the vines
         }
@@ -692,7 +690,7 @@ public class MovementFall extends Movement {
             LadderClutch.Plan now = LadderClutch.pick(pos.y, mot.y, player.fallDistance, dest.y, 1 << aimed, 0, reach);
             boolean roomy = item != Items.LADDER || gap(dest.above(aimed), hit.getDirection().getOpposite(), pos) >= LadderClutch.LADDER_CLEARANCE + 0.01;
             if (now != null && now.place() == 0 && roomy) {
-                inv.pickClutchItem(true);
+                host.pickClutchItem(true);
                 if (item == Items.LADDER && !ladderIn) {
                     BlockPos placed = dest.above(aimed);
                     ladder = new BlockPos(placed.getX(), placed.getY(), placed.getZ()); // no BetterBlockPos in vanilla's hands
@@ -719,7 +717,7 @@ public class MovementFall extends Movement {
             }
             return ladder; // a vine doesn't care where we are, the plain centering is fine
         }
-        inv.pickClutchItem(true);
+        host.pickClutchItem(true);
         return aim(state, bsi, cell, ladder, pos, mot, reach);
     }
 

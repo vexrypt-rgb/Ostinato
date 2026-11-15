@@ -962,18 +962,13 @@ public interface MovementHelper extends ActionCosts, Helper {
      * placement step only asks when it plans to place, which a bot with no blocks never does.
      */
     public static boolean hasGenericThrowaway(IBaritone baritone) {
-        if (baritone instanceof baritone.pathing.IPathingHost host) {
-            return host.hasGenericThrowaway();
-        }
-        return ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
+        return baritone instanceof baritone.pathing.IPathingHost host && host.hasGenericThrowaway();
     }
 
     /** Ostinato: {@link #hasGenericThrowaway}'s selection half, on either host kind. */
     public static boolean selectThrowaway(IBaritone baritone, boolean select, int x, int y, int z) {
-        if (baritone instanceof baritone.pathing.IPathingHost host) {
-            return host.selectThrowawayForLocation(select, x, y, z);
-        }
-        return ((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(select, x, y, z);
+        return baritone instanceof baritone.pathing.IPathingHost host
+                && host.selectThrowawayForLocation(select, x, y, z);
     }
 
     /** Ostinato: the host's world view (client cache or headless chunk store), on either host kind. */
@@ -981,7 +976,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (baritone instanceof baritone.pathing.IPathingHost host) {
             return host.bsi();
         }
-        return ((Baritone) baritone).bsi;
+        return null;
     }
 
     /**

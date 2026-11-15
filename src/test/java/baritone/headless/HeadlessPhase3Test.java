@@ -235,7 +235,7 @@ public class HeadlessPhase3Test {
     }
 
     @Test
-    public void gotoPlansOnTheWorkerAndCancelReturnsToThePositionReminder() throws Exception {
+    public void gotoPlansOnTheWorkerAndCancelKeepsTickingPhysics() throws Exception {
         RecordingTransport transport = new RecordingTransport();
         HeadlessBot bot = new HeadlessBot(transport, "127.0.0.1", 25565, "HBot1",
                 UUID.randomUUID(), access);
@@ -264,8 +264,8 @@ public class HeadlessPhase3Test {
             tickOnce(bot, transport);
         }
         assertFalse(bot.hostAttached());
-        assertEquals(2, transport.count(ServerboundMovePlayerPacket.PosRot.class));
-        assertEquals(38, transport.count(ServerboundMovePlayerPacket.StatusOnly.class));
+        assertEquals(40, transport.count(ServerboundMovePlayerPacket.PosRot.class));
+        assertEquals(0, transport.count(ServerboundMovePlayerPacket.StatusOnly.class));
         assertEquals(40, transport.count(ServerboundClientTickEndPacket.class));
 
         bot.enqueuePathing("goto 0 2 4");
@@ -294,8 +294,11 @@ public class HeadlessPhase3Test {
                     movement = packet;
                 }
             }
-            assertTrue(movement instanceof ServerboundMovePlayerPacket.StatusOnly);
+            assertTrue("cancel must still send a movement packet, got " + movement,
+                    movement instanceof ServerboundMovePlayerPacket.PosRot);
             assertTrue(bot.pathingStatus().contains("pathing=idle"));
+            assertTrue("idle physics must stay on the floor after cancel, y=" + bot.y()
+                    + " onGround=" + bot.onGround(), bot.onGround() && bot.y() >= 1.9 && bot.y() <= 2.1);
         } finally {
             bot.closeHost();
         }

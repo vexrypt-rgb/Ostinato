@@ -215,9 +215,13 @@ public final class HeadlessMovement {
 
     private Step current() {
         if (stepIndex >= steps.size()) {
-            return IDLE;
+            return idleStep();
         }
         return steps.get(stepIndex);
+    }
+
+    private Step idleStep() {
+        return new Step(Integer.MAX_VALUE, yaw, pitch, 0, 0, false, false, false, "idle");
     }
 
     /** Seed the sim from the server-confirmed spawn position before the first tick. */
@@ -271,7 +275,9 @@ public final class HeadlessMovement {
         }
         // Ostinato: live intent is selected before the one shared simulation/packet path.
         Step live = driver == null ? null : driver.tick(bot, this);
-        Step step = live == null ? current() : live;
+        // When pathing is idle, keep the last look and apply gravity — do not snap to the
+        // placeholder IDLE yaw/pitch of 0, and do not skip the sim.
+        Step step = live != null ? live : (courseRunning() ? current() : idleStep());
         yaw = step.yaw;
         pitch = step.pitch;
         shift = step.shift;
@@ -299,8 +305,12 @@ public final class HeadlessMovement {
                 keys = new float[]{(float) (analog[0] / length * scale), (float) (analog[1] / length * scale)};
             }
             sim.tickImpulse(step.yaw, keys[0], keys[1], step.forward > 0, step.sprint, step.jump, step.shift);
-        } else {
+        } else if (courseRunning()) {
             sim.tick(step.yaw, step.forward, step.strafe, step.sprint, step.jump);
+        } else {
+            // Ostinato: no keys, but still fall and land. Skipping this after a finished pillar
+            // left the last mid-air pose frozen at onGround=false.
+            sim.tickImpulse(step.yaw, 0, 0, false, false, false, false);
         }
         simTicks++;
         // Ostinato: publish the stepped body before readers see the next tick.

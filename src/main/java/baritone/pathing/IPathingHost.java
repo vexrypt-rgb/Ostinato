@@ -41,6 +41,14 @@ public interface IPathingHost extends IBaritone {
     /** Selects a throwaway block for a placement at the given position. */
     boolean selectThrowawayForLocation(boolean select, int x, int y, int z);
 
+    /**
+     * A vine or ladder to clutch a fall, or {@code null}. Headless has no clutch inventory
+     * policy yet, so the default is {@code null}.
+     */
+    default net.minecraft.world.item.Item pickClutchItem(boolean select) {
+        return null;
+    }
+
     /** The physics driver's input ownership, null when that driver is off (a headless bot never creates one). */
     UnifiedExecutor getUnifiedExecutor();
 
