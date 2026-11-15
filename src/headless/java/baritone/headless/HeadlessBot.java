@@ -138,6 +138,16 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private final Object hostLock = new Object();
     private final ConcurrentLinkedQueue<String> pathingLines = new ConcurrentLinkedQueue<>();
     private volatile Consumer<String> chatCommands;
+    // Ostinato: Grim Post flags a block-place (or slot change) that arrives while
+    // sentFlying is still set and then sees the answering pong before the tick's
+    // movement packet. The netty thread used to write that pong the moment the
+    // ping arrived, which can fall in the gap after UseItemOn and before Pos.
+    // Queue those pongs for the end of the client tick. A ping that arrives
+    // between ticks is still answered immediately, which is what the login tests
+    // expect and what a vanilla client does between ticks.
+    private final Object pongLock = new Object();
+    private final ConcurrentLinkedQueue<Integer> deferredPongs = new ConcurrentLinkedQueue<>();
+    private boolean deferPongs;
 
     private final ClientLoginPacketListener loginListener;
     private final ClientConfigurationPacketListener configurationListener;
@@ -256,7 +266,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         if (p instanceof ClientboundPingPacket) {
-            send(new ServerboundPongPacket(((ClientboundPingPacket) p).getId()));
+            answerPing(((ClientboundPingPacket) p).getId());
             return;
         }
         if (p instanceof ClientboundUpdateTagsPacket) {
@@ -639,6 +649,42 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
      * the server never sees two position packets inside one of its own ticks.
      */
     public void tick() {
+        // Hold deferral across the whole tick, including the early returns, so a
+        // ping cannot be written between UseItemOn and the movement packet.
+        synchronized (pongLock) {
+            deferPongs = true;
+        }
+        try {
+            tickOnce();
+        } finally {
+            flushDeferredPongs();
+        }
+    }
+
+    private void answerPing(int id) {
+        // The send stays inside the lock. Releasing the lock before the write
+        // lets the tick thread start UseItemOn while this pong is still unsent,
+        // which is the same Post window.
+        synchronized (pongLock) {
+            if (deferPongs) {
+                deferredPongs.add(id);
+                return;
+            }
+            send(new ServerboundPongPacket(id));
+        }
+    }
+
+    private void flushDeferredPongs() {
+        synchronized (pongLock) {
+            deferPongs = false;
+            Integer id;
+            while ((id = deferredPongs.poll()) != null) {
+                send(new ServerboundPongPacket(id));
+            }
+        }
+    }
+
+    private void tickOnce() {
         long n = ticks.incrementAndGet();
         if (baritone.utils.PacketLog.ON) {
             baritone.utils.PacketLog.tick((int) n);
