@@ -9,6 +9,7 @@
 package baritone.headless;
 
 import com.mojang.authlib.GameProfile;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -28,5 +29,18 @@ public final class HeadlessPlayer extends Player {
 
     public void setGameType(GameType gameType) {
         this.gameType = gameType;
+    }
+
+    // Ostinato: the entity is never ticked, so vanilla dimensions/eyeHeight stay at the
+    // standing value after setPose. playerHead(), objectMouseOver and placement rays
+    // must see the current pose; otherwise a sneak-bridge look at a face center misses
+    // and READY_TO_PLACE / isLookingAt never fire.
+    @Override
+    public void setPose(Pose pose) {
+        Pose previous = getPose();
+        super.setPose(pose);
+        if (previous != pose) {
+            refreshDimensions();
+        }
     }
 }

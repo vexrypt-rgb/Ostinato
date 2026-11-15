@@ -72,9 +72,12 @@ public final class HeadlessPlayerContext implements IPlayerContext {
 
     @Override
     public HitResult objectMouseOver() {
-        // Vanilla picks the crosshair target once per tick from the player's own eye and rotation.
+        // Ostinato: same as client BaritonePlayerContext — trace from the player's own
+        // eye and rotation. Passing isShiftKeyDown() used a sneaked-eye start while
+        // playerHead() still read the standing cache, so a stock sneak-bridge look
+        // never satisfied isLookingAt / READY_TO_PLACE.
         return RayTraceUtils.rayTraceTowards(player, playerRotations(),
-                controller.getBlockReachDistance(), player.isShiftKeyDown());
+                controller.getBlockReachDistance());
     }
 
     @Override

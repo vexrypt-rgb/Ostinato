@@ -49,6 +49,11 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     // Ostinato: stay crouched across a partial-path A* wait and while hanging off a
     // placed 1-wide block. Clearing sneak on SUCCESS drops the bot into the gap.
     private boolean bridgeHold;
+    // Ostinato: look packet is written after tickUse. Remember a re-aim so the next
+    // tick can click it; Movement.update() would otherwise overwrite the look first
+    // and we would re-aim forever without sending UseItemOn.
+    private Rotation pendingPlaceLook;
+    private Set<BlockPos> pendingPlaceWant;
 
 
     /** Down from the target first (click the top of the floor), then the four sides, then the ceiling. */
@@ -112,6 +117,8 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeStatus = "idle";
         placeAimed = false;
         placeAttempts = 0;
+        pendingPlaceLook = null;
+        pendingPlaceWant = null;
         host.getPathingBehavior().cancelEverything();
         host.getPathingBehavior().noteCancelled();
         controller.resetBlockRemoving();
@@ -191,31 +198,58 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
      * Ostinato: path-executor right click. Aim at the intended toPlace support face and
      * only click when the raytrace actually hits it. A nearer wall must never win just
      * because it is first on the crosshair. Left click wins, matching the client place helper.
+     *
+     * Ostinato: Movement Traverse ATTEMPTING can leave the look on the air cell
+     * (almost straight down) without ever setting CLICK_RIGHT. When toPlace is
+     * non-empty, aim the nearest support face that actually exists and click on
+     * the following tick, after the look packet has gone out. Re-apply that look
+     * before the click so this tick's movement update cannot wipe it.
      */
     private void tickUse() {
-        if (!down(Input.CLICK_RIGHT) || down(Input.CLICK_LEFT)) {
+        if (down(Input.CLICK_LEFT)) {
+            pendingPlaceLook = null;
+            pendingPlaceWant = null;
             return;
         }
         Set<BlockPos> want = intendedPlaces();
+        if (pendingPlaceLook != null && pendingPlaceWant != null) {
+            look.updateTarget(pendingPlaceLook, true);
+            HitResult pendingHit = context.objectMouseOver();
+            Set<BlockPos> pendingWant = pendingPlaceWant;
+            pendingPlaceLook = null;
+            pendingPlaceWant = null;
+            if (placesInto(pendingHit, pendingWant) && pendingHit instanceof BlockHitResult block
+                    && pendingHit.getType() == HitResult.Type.BLOCK) {
+                clickPlace(block);
+                return;
+            }
+        }
         HitResult hit = context.objectMouseOver();
         if (!want.isEmpty()) {
-            if (!placesInto(hit, want)) {
-                Optional<Rotation> aim = aimAtPlace(want);
-                if (aim.isEmpty()) {
-                    return;
-                }
-                look.updateTarget(aim.get(), true);
-                hit = context.objectMouseOver();
-                if (!placesInto(hit, want)) {
-                    return;
-                }
+            if (placesInto(hit, want) && hit instanceof BlockHitResult block
+                    && hit.getType() == HitResult.Type.BLOCK) {
+                clickPlace(block);
+                return;
             }
-        } else if (!(hit instanceof BlockHitResult) || hit.getType() != HitResult.Type.BLOCK) {
+            Optional<Rotation> aim = aimAtPlace(want);
+            if (aim.isEmpty()) {
+                return;
+            }
+            look.updateTarget(aim.get(), true);
+            pendingPlaceLook = aim.get();
+            pendingPlaceWant = Set.copyOf(want);
+            return;
+        }
+        if (!down(Input.CLICK_RIGHT)) {
             return;
         }
         if (!(hit instanceof BlockHitResult block) || hit.getType() != HitResult.Type.BLOCK) {
             return;
         }
+        clickPlace(block);
+    }
+
+    private void clickPlace(BlockHitResult block) {
         if (controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, block) == InteractionResult.SUCCESS) {
             return;
         }
@@ -339,10 +373,22 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             return false;
         }
         BlockPos pos = block.getBlockPos();
-        if (want.contains(pos.relative(block.getDirection()))) {
+        // Ostinato: PathExecutor.toPlace is a HashSet of BetterBlockPos, whose hashCode
+        // is not BlockPos.hashCode. Set.contains(pos.relative(...)) therefore misses
+        // the intended cell even when the ray is already on the support face.
+        if (wantHas(want, pos.relative(block.getDirection()))) {
             return true;
         }
-        return want.contains(pos) && level.getBlockState(pos).canBeReplaced();
+        return wantHas(want, pos) && level.getBlockState(pos).canBeReplaced();
+    }
+
+    private static boolean wantHas(Set<BlockPos> want, BlockPos pos) {
+        for (BlockPos w : want) {
+            if (w.getX() == pos.getX() && w.getY() == pos.getY() && w.getZ() == pos.getZ()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -356,12 +402,17 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         Vec3 eye = sneaking ? RayTraceUtils.inferSneakingEyePosition(player) : player.getEyePosition(1.0F);
         Rotation current = new Rotation(player.getYRot(), player.getXRot());
         Rotation best = null;
+        double bestDestDist = Double.MAX_VALUE;
         double bestYaw = Double.MAX_VALUE;
+        // Ostinato: only a dest with a real support in the current world, and the
+        // closest such dest first. Future toPlace cells over air have no support yet;
+        // aiming at them looks nearly straight down and never becomes a click.
         for (BlockPos dest : want) {
             BlockState cell = level.getBlockState(dest);
             if (!cell.isAir() && !cell.canBeReplaced()) {
                 continue;
             }
+            double destDist = player.position().distanceToSqr(Vec3.atCenterOf(dest));
             for (Direction towardSupport : SUPPORT_ORDER) {
                 BlockPos support = dest.relative(towardSupport);
                 if (!level.isLoaded(support)) {
@@ -385,7 +436,9 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                         continue;
                     }
                     double err = Math.abs(Mth.wrapDegrees(rot.getYaw() - current.getYaw()));
-                    if (err < bestYaw) {
+                    if (destDist < bestDestDist - 1.0E-6
+                            || (Math.abs(destDist - bestDestDist) < 1.0E-6 && err < bestYaw)) {
+                        bestDestDist = destDist;
                         bestYaw = err;
                         best = rot;
                     }

@@ -8,6 +8,9 @@ import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.movement.IMovement;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.Rotation;
+import baritone.api.utils.RotationUtils;
+import baritone.api.utils.input.Input;
 import baritone.api.utils.PathCalculationResult;
 import baritone.pathing.calc.AStarPathFinder;
 import baritone.api.pathing.path.IPathExecutor;
@@ -40,6 +43,7 @@ import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.ItemStack;
@@ -527,6 +531,122 @@ public class HeadlessPlaceTest {
             assertFalse("12-block wide-void place path failed: " + status + " | " + diag, status.contains("no path")
                     || status.contains("failed") || status.contains("planning") || status.contains("cancelled"));
             assertTrue("12-block path has no placement: " + status + " | " + describePath(bot), pathPlaces(bot));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    // Ostinato: live hang pose — slightly past the pad's south face, sneaking, looking
+    // at the face center the way MovementTraverse does. Without a pose-driven eye,
+    // this ray misses and isLookingAt never becomes true.
+    @Test
+    public void sneakBridgeHangLooksAtSupportFace() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 1.0, 1.093);
+        try {
+            bot.chunks().setBlockState(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+            bot.ensureHost();
+            var player = bot.liveDriver().player();
+            player.setPos(0.5, 1.0, 1.093);
+            player.setOnGround(true);
+            player.setShiftKeyDown(true);
+            player.setPose(Pose.CROUCHING);
+            float standing = player.getEyeHeight(Pose.STANDING);
+            float crouching = player.getEyeHeight(Pose.CROUCHING);
+            assertEquals("setPose must refresh dimensions so playerHead sees sneak height",
+                    crouching, player.getEyeHeight(), 1.0E-4);
+            assertTrue("crouch eye (" + crouching + ") should be lower than standing (" + standing + ")",
+                    crouching < standing - 0.2f);
+            var face = new Vec3(0.5, 0.5, 1.0);
+            Rotation look = RotationUtils.calcRotationFromVec3d(
+                    bot.liveDriver().context().playerHead(), face, new Rotation(0f, 0f));
+            bot.liveDriver().look().updateTarget(look, true);
+            var hit = bot.liveDriver().context().objectMouseOver();
+            assertTrue("sneak-bridge hang must see the pad's south face, got " + hit
+                    + " eye=" + player.getEyeHeight() + " rot=" + look
+                    + " head=" + bot.liveDriver().context().playerHead(),
+                    hit instanceof BlockHitResult);
+            assertEquals(new BlockPos(0, 0, 0), ((BlockHitResult) hit).getBlockPos());
+            assertEquals(Direction.SOUTH, ((BlockHitResult) hit).getDirection());
+            assertTrue(bot.liveDriver().context().isLookingAt(new BlockPos(0, 0, 0)));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    // Ostinato: tick the first backplace click on a 12-block void (too far to parkour).
+    @Test
+    public void sneakBridgeBackplaceSendsUseItemOn() throws Exception {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 2.0, 0.5);
+        try {
+            for (int cx = -1; cx <= 1; cx++) {
+                for (int cz = -1; cz <= 1; cz++) {
+                    bot.chunks().createEmptyChunk(cx, cz);
+                }
+            }
+            for (int x = -2; x <= 2; x++) {
+                bot.chunks().setBlockState(new BlockPos(x, 1, 0), Blocks.STONE.defaultBlockState());
+                bot.chunks().setBlockState(new BlockPos(x, 1, 13), Blocks.STONE.defaultBlockState());
+            }
+            bot.chunks().setBlockState(new BlockPos(-2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
+            bot.ensureHost();
+            bot.tick();
+            bot.enqueuePathing("goto 0 2 13");
+            String status = waitUntilPlanned(bot, TimeUnit.SECONDS.toNanos(8));
+            assertFalse("backplace path failed: " + status, status.contains("no path")
+                    || status.contains("failed") || status.contains("planning") || status.contains("cancelled"));
+            ServerboundUseItemOnPacket use = null;
+            String hang = "";
+            for (int i = 0; i < 400 && use == null; i++) {
+                bot.tick();
+                var player = bot.liveDriver().player();
+                if (player.getZ() > 1.02 && hang.isEmpty()) {
+                    var look = bot.liveDriver().context().objectMouseOver();
+                    String lookDesc = String.valueOf(look);
+                    if (look instanceof BlockHitResult block) {
+                        lookDesc = block.getBlockPos() + " " + block.getDirection() + " at " + block.getLocation();
+                    }
+                    var in = bot.liveDriver().baritone().getInputOverrideHandler();
+                    var want = bot.liveDriver().intendedPlaces();
+                    hang = "tick=" + i
+                            + " pos=" + player.position()
+                            + " rot=" + player.getYRot() + "," + player.getXRot()
+                            + " eye=" + player.getEyeHeight()
+                            + " sneak=" + player.isShiftKeyDown()
+                            + " crouch=" + player.isCrouching()
+                            + " pose=" + player.getPose()
+                            + " clickR=" + in.isInputForcedDown(Input.CLICK_RIGHT)
+                            + " clickL=" + in.isInputForcedDown(Input.CLICK_LEFT)
+                            + " sneakKey=" + in.isInputForcedDown(Input.SNEAK)
+                            + " back=" + in.isInputForcedDown(Input.MOVE_BACK)
+                            + " lookingAtPad=" + bot.liveDriver().context().isLookingAt(new BlockPos(0, 1, 0))
+                            + " look=" + lookDesc
+                            + " want=" + want
+                            + " aim=" + bot.liveDriver().aimAtPlace(want)
+                            + " status=" + bot.pathingStatus();
+                    System.out.println("[HeadlessPlaceTest] hang " + hang);
+                }
+                List<ServerboundUseItemOnPacket> found = packets(transport, ServerboundUseItemOnPacket.class);
+                if (!found.isEmpty()) {
+                    use = found.get(0);
+                }
+            }
+            assertNotNull("first backplace did not send UseItemOn: hang=" + hang
+                    + " final=" + bot.pathingStatus()
+                    + " pos=" + bot.liveDriver().player().position()
+                    + " rot=" + bot.liveDriver().player().getYRot() + "," + bot.liveDriver().player().getXRot()
+                    + " eye=" + bot.liveDriver().player().getEyeHeight()
+                    + " sneak=" + bot.liveDriver().player().isShiftKeyDown()
+                    + " pose=" + bot.liveDriver().player().getPose()
+                    + " look=" + bot.liveDriver().context().objectMouseOver(), use);
+            BlockPos against = use.hitResult().getBlockPos();
+            BlockPos into = against.relative(use.hitResult().getDirection());
+            assertEquals("should place against the pad: " + use.hitResult(), new BlockPos(0, 1, 0), against);
+            assertEquals(new BlockPos(0, 1, 1), into);
         } finally {
             bot.closeHost();
         }
