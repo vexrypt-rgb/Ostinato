@@ -200,4 +200,32 @@ public class HeadlessCraftTest {
             return true;
         }
     }
+
+    @Test
+    public void autoCollectAfterDropUsesPreDropBaseline() {
+        // Vanilla scooped the throw: inventory already restored, no entity left.
+        assertEquals(7, HeadlessCraft.pickupStartAfterAutoCollect(
+                8, Items.DIRT, Items.DIRT, 8, 1, 100, 150, false));
+        // Item still on the ground (pickup delay): keep the current (post-drop) count.
+        assertEquals(7, HeadlessCraft.pickupStartAfterAutoCollect(
+                7, Items.DIRT, Items.DIRT, 8, 1, 100, 120, true));
+        // Drop window expired; this is just "nothing to pick up".
+        assertEquals(8, HeadlessCraft.pickupStartAfterAutoCollect(
+                8, Items.DIRT, Items.DIRT, 8, 1, 100, 100 + 20 * 7, false));
+        // A different item's drop must not rewrite the dirt baseline.
+        assertEquals(3, HeadlessCraft.pickupStartAfterAutoCollect(
+                3, Items.DIRT, Items.COBBLESTONE, 8, 1, 100, 150, false));
+    }
+
+    @Test
+    public void inRangeItemDoesNotNeedGoalBlock() {
+        // Player at 3.5,-60,3.5, width 0.6: box [3.2..3.8] x [-60..-58.2] x [3.2..3.8].
+        var player = new net.minecraft.world.phys.AABB(3.2, -60.0, 3.2, 3.8, -58.2, 3.8);
+        // Item at the feet — must be auto-collectable without pathing.
+        var atFeet = new net.minecraft.world.phys.AABB(3.375, -60.0, 3.375, 3.625, -59.75, 3.625);
+        assertTrue(HeadlessCraft.inVanillaItemPickupRange(player, atFeet));
+        // Item ~1.45m away (the earlier live miss) is outside the inflate(1.0) volume.
+        var short_ = new net.minecraft.world.phys.AABB(3.375, -60.0, 1.925, 3.625, -59.75, 2.175);
+        assertFalse(HeadlessCraft.inVanillaItemPickupRange(player, short_));
+    }
 }

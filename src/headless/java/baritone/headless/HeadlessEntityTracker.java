@@ -13,6 +13,7 @@ import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
+import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.network.protocol.game.VecDeltaCodec;
@@ -166,7 +167,29 @@ public final class HeadlessEntityTracker {
             }
             return true;
         }
+        if (packet instanceof ClientboundTakeItemEntityPacket take) {
+            // Ostinato: vanilla auto-collect (and explicit pickup) arrives as TakeItemEntity.
+            // Drop the item entity so pickup does not keep pathing at a ghost, and remember
+            // the take so a command started after the scoop can still succeed.
+            lastTakeEntityId = take.getItemId();
+            lastTakePlayerId = take.getPlayerId();
+            lastTakeAmount = take.getAmount();
+            lastTakeAtNanos = System.nanoTime();
+            entities.remove(take.getItemId());
+            return true;
+        }
         return false;
+    }
+
+    private int lastTakeEntityId = -1;
+    private int lastTakePlayerId = -1;
+    private int lastTakeAmount;
+    private long lastTakeAtNanos;
+
+    boolean tookItemRecently(int playerId, long windowNanos) {
+        return lastTakePlayerId == playerId
+                && lastTakeEntityId != -1
+                && System.nanoTime() - lastTakeAtNanos <= windowNanos;
     }
 
     private void add(ClientboundAddEntityPacket packet) {

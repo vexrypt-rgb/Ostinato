@@ -77,6 +77,10 @@ final class HeadlessCraft {
     private int remainingDrops;
     private int pickupStartCount;
     private int pickupEntityId = -1;
+    private Item lastDroppedItem;
+    private int lastDropPreCount;
+    private int lastDropAmount;
+    private long lastDropTick = -1;
 
     HeadlessCraft(HeadlessBot bot, HeadlessPlayer player, HeadlessPlayerController controller,
                   HeadlessBaritone host, HeadlessLiveDriver driver) {
@@ -122,9 +126,20 @@ final class HeadlessCraft {
 
     void startPickup(Item item) {
         begin(Mode.PICKUP, item, 1, PICKUP_WAIT_TICKS + 20 * 15);
-        pickupStartCount = item == null ? totalItems() : have(item);
+        int haveNow = item == null ? totalItems() : have(item);
+        boolean entityVisible = nearestItem() != null;
+        // Ostinato: vanilla auto-collects a throw that is already in pickup range
+        // once the 40-tick pickup delay expires. If that happens before this
+        // command starts, have() already includes the item and no entity remains,
+        // which used to fail "no item entity".
+        pickupStartCount = pickupStartAfterAutoCollect(
+                haveNow, item, lastDroppedItem, lastDropPreCount, lastDropAmount,
+                lastDropTick, bot.ticks(), entityVisible);
         pickupEntityId = -1;
         status = item == null ? "pickup" : "pickup " + HeadlessRecipes.idOf(item);
+        if (!entityVisible && haveNow > pickupStartCount) {
+            finish(true, item == null ? "picked up item" : "picked up " + HeadlessRecipes.idOf(item));
+        }
     }
 
     void startEquip(Item item) {
@@ -582,7 +597,12 @@ final class HeadlessCraft {
         }
         boolean all = remainingDrops >= player.getMainHandItem().getCount();
         int dropped = all ? player.getMainHandItem().getCount() : 1;
+        int before = have(target);
         controller.dropHeld(all);
+        lastDroppedItem = target;
+        lastDropPreCount = before;
+        lastDropAmount = dropped;
+        lastDropTick = bot.ticks();
         remainingDrops -= dropped;
         status = "dropping " + remainingDrops + " left";
         pause(CLICK_COOLDOWN);
@@ -613,11 +633,11 @@ final class HeadlessCraft {
             return;
         }
         pickupEntityId = item.id;
-        // Ostinato: vanilla ItemEntity pickup is roughly a 1-block inflate of the
-        // player AABB. GoalGetToBlock is already satisfied from an adjacent block
-        // (~1.45m away), so walk onto the item's block instead of stopping short.
-        double distSq = player.position().distanceToSqr(item.position());
-        if (distSq > 1.0) {
+        // Ostinato: vanilla ItemEntity pickup is a 1-block inflate of the player
+        // AABB. Items already in that range must be left for auto-collect; do not
+        // path with GoalBlock. Walk onto the item only when it is out of range
+        // (GoalGetToBlock is already complete from an adjacent tile).
+        if (!inVanillaItemPickupRange(player.getBoundingBox(), item.box())) {
             BlockPos pos = BlockPos.containing(item.x, item.y, item.z);
             driver.requestStandOn(pos);
             status = "approaching drop " + pos.toShortString();
@@ -918,6 +938,32 @@ final class HeadlessCraft {
             }
         }
         return target == null ? filled >= 4 : filled >= 1;
+    }
+
+    // Ostinato: if vanilla already scooped our throw, start the pickup baseline
+    // at the pre-drop count so have() > baseline still reports success.
+    static int pickupStartAfterAutoCollect(int haveNow, Item wanted, Item lastDropped,
+                                           int lastDropPreCount, int lastDropAmount,
+                                           long lastDropTick, long nowTick, boolean entityVisible) {
+        if (entityVisible || lastDropped == null || lastDropTick < 0 || lastDropAmount <= 0) {
+            return haveNow;
+        }
+        if (wanted != null && wanted != lastDropped) {
+            return haveNow;
+        }
+        if (nowTick - lastDropTick > 20L * 6) {
+            return haveNow;
+        }
+        if (haveNow >= lastDropPreCount) {
+            return lastDropPreCount - lastDropAmount;
+        }
+        return haveNow;
+    }
+
+    // Ostinato: matches ItemEntity's player-AABB inflate(1.0) pickup volume.
+    static boolean inVanillaItemPickupRange(net.minecraft.world.phys.AABB playerBox,
+                                            net.minecraft.world.phys.AABB itemBox) {
+        return playerBox.inflate(1.0).intersects(itemBox);
     }
 
     private static String BuiltInId(Block block) {
