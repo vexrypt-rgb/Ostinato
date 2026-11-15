@@ -15,6 +15,7 @@ import baritone.api.pathing.path.IPathExecutor;
 import baritone.api.pathing.calc.IPathFinder;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.input.Input;
 import baritone.api.utils.PathCalculationResult;
 import baritone.pathing.calc.AStarPathFinder;
 import baritone.pathing.movement.CalculationContext;
@@ -47,6 +48,8 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
     private java.util.concurrent.Future<PathCalculationResult> pending;
     private AStarPathFinder finder;
     private volatile String status = "idle";
+    private int executionFailRetries;
+
 
     // Ostinato: same start-retry map and timeout policy as client PathingBehavior.findPathInNewThread.
     private final HashMap<BetterBlockPos, Long> plannedStarts = new HashMap<>();
@@ -204,16 +207,30 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
             System.out.println("[HeadlessPathing] segment end failed=" + failed + " arrived=" + arrived
                     + " finished=" + current.finished() + " feet=" + host.getPlayerContext().playerFeet()
                     + " goal=" + target);
-            if (!failed && !arrived && target != null) {
-                // Ostinato: drop only the finished executor. Keep sneak/keys and the goal
+            if (arrived) {
+                cancelEverything();
+                finished = true;
+                status = "arrived";
+            } else if (target != null && (!failed || executionFailRetries < 3)) {
+                // Ostinato: drop only the finished executor. Keep sneak (and only sneak)
                 // while A* plans the next segment so a 1-wide sneak-bridge does not fall.
-                // Use the client's plan-ahead timeouts for this next-segment search.
+                // Leaving sprint/forward held overshoots the dest on solid ground, the
+                // next path is calculated from the old feet, and the executor fails.
+                // If we did already drift off the new path, replan from current feet.
+                if (failed) {
+                    executionFailRetries++;
+                    System.out.println("[HeadlessPathing] execution failed, replan "
+                            + executionFailRetries + "/3 from " + host.getPlayerContext().playerFeet());
+                } else {
+                    executionFailRetries = 0;
+                }
                 executor = null;
+                releaseTravelKeysKeepSneak();
                 startSearch(target, true);
             } else {
                 cancelEverything();
                 finished = true;
-                status = arrived ? "arrived" : "execution failed";
+                status = "execution failed";
             }
         }
     }
@@ -284,7 +301,18 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
         planAhead = false;
         host.getInputOverrideHandler().clearAllKeys();
         host.getPlayerContext().playerController().resetBlockRemoving();
+        executionFailRetries = 0;
         return was;
+    }
+
+    /** Keep sneak only, so inter-segment planning does not sprint off the dest. */
+    private void releaseTravelKeysKeepSneak() {
+        var in = host.getInputOverrideHandler();
+        boolean sneak = in.isInputForcedDown(Input.SNEAK);
+        in.clearAllKeys();
+        if (sneak) {
+            in.setInputForceState(Input.SNEAK, true);
+        }
     }
 
     /** Ostinato: operator cancel. Planning failures set their own status after {@link #cancelEverything()}. */
