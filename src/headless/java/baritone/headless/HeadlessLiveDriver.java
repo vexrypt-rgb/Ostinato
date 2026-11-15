@@ -4,10 +4,13 @@ import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalGetToBlock;
+import baritone.api.utils.RayTraceUtils;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.RotationUtils;
 import baritone.api.utils.input.Input;
 import baritone.pathing.kinematic.PlayerSim;
+import baritone.pathing.path.PathExecutor;
+import net.minecraft.util.Mth;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -22,6 +25,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Optional;
+import java.util.Set;
 
 // Ostinato: tick-owned bridge between the protocol body, path executor and PlayerSim intents.
 final class HeadlessLiveDriver implements HeadlessMovement.Driver {
@@ -40,6 +46,10 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private int placeAttempts;
     private boolean placeAimed;
     private volatile String placeStatus = "idle";
+    // Ostinato: stay crouched across a partial-path A* wait and while hanging off a
+    // placed 1-wide block. Clearing sneak on SUCCESS drops the bot into the gap.
+    private boolean bridgeHold;
+
 
     /** Down from the target first (click the top of the floor), then the four sides, then the ceiling. */
     private static final Direction[] SUPPORT_ORDER = {
@@ -80,6 +90,14 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
 
     HeadlessPlayer player() {
         return player;
+    }
+
+    HeadlessPlayerContext context() {
+        return context;
+    }
+
+    HeadlessLookBehavior look() {
+        return look;
     }
 
     void gotoBlock(int x, int y, int z) {
@@ -157,6 +175,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 tickAttack();
                 tickUse();
             }
+            holdSneakIfHanging(movement);
             return new HeadlessMovement.Step(1, player.getYRot(), player.getXRot(),
                     key(Input.MOVE_FORWARD) - key(Input.MOVE_BACK), key(Input.MOVE_LEFT) - key(Input.MOVE_RIGHT),
                     down(Input.SPRINT), down(Input.JUMP), down(Input.SNEAK), placing != null ? "place" : "pathing");
@@ -168,12 +187,32 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         }
     }
 
-    /** Right click from the path executor. Left click wins, matching the client place helper. */
+    /**
+     * Ostinato: path-executor right click. Aim at the intended toPlace support face and
+     * only click when the raytrace actually hits it. A nearer wall must never win just
+     * because it is first on the crosshair. Left click wins, matching the client place helper.
+     */
     private void tickUse() {
         if (!down(Input.CLICK_RIGHT) || down(Input.CLICK_LEFT)) {
             return;
         }
+        Set<BlockPos> want = intendedPlaces();
         HitResult hit = context.objectMouseOver();
+        if (!want.isEmpty()) {
+            if (!placesInto(hit, want)) {
+                Optional<Rotation> aim = aimAtPlace(want);
+                if (aim.isEmpty()) {
+                    return;
+                }
+                look.updateTarget(aim.get(), true);
+                hit = context.objectMouseOver();
+                if (!placesInto(hit, want)) {
+                    return;
+                }
+            }
+        } else if (!(hit instanceof BlockHitResult) || hit.getType() != HitResult.Type.BLOCK) {
+            return;
+        }
         if (!(hit instanceof BlockHitResult block) || hit.getType() != HitResult.Type.BLOCK) {
             return;
         }
@@ -235,7 +274,14 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             placeStatus = "waiting " + target.toShortString();
             return;
         }
-        BlockHitResult at = new BlockHitResult(hit, face, support, false);
+        // Ostinato: click only the raytrace that actually hits this support face. A wall
+        // closer along the look must not be clicked, and we do not invent a hit the ray missed.
+        HitResult traced = context.objectMouseOver();
+        if (!placesInto(traced, target)) {
+            placeStatus = "aiming " + target.toShortString();
+            return;
+        }
+        BlockHitResult at = (BlockHitResult) traced;
         InteractionResult result = controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, at);
         if (result != InteractionResult.SUCCESS) {
             controller.processRightClickBlock(player, level, InteractionHand.OFF_HAND, at);
@@ -271,7 +317,130 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         return Direction.UP;
     }
 
+    // Ostinato: cells the path executor (or the operator place command) wants this click to fill.
+    Set<BlockPos> intendedPlaces() {
+        if (placing != null) {
+            return Set.of(placing);
+        }
+        var exec = host.getPathingBehavior().getCurrent();
+        if (exec instanceof PathExecutor path) {
+            return path.toPlace();
+        }
+        return Set.of();
+    }
+
+    /** True when this hit would place into one of the intended cells, not merely whatever the crosshair sees first. */
+    boolean placesInto(HitResult hit, BlockPos want) {
+        return placesInto(hit, Set.of(want));
+    }
+
+    boolean placesInto(HitResult hit, Set<BlockPos> want) {
+        if (want.isEmpty() || !(hit instanceof BlockHitResult block) || hit.getType() != HitResult.Type.BLOCK) {
+            return false;
+        }
+        BlockPos pos = block.getBlockPos();
+        if (want.contains(pos.relative(block.getDirection()))) {
+            return true;
+        }
+        return want.contains(pos) && level.getBlockState(pos).canBeReplaced();
+    }
+
+    /**
+     * Ostinato: rotation onto a ray-traceable support face that places into {@code want}.
+     * Prefers the face whose yaw is closest to the current look so a 1-wide bridge stays
+     * on the previous block instead of snapping at a side wall.
+     */
+    Optional<Rotation> aimAtPlace(Set<BlockPos> want) {
+        boolean sneaking = player.isShiftKeyDown();
+        double reach = controller.getBlockReachDistance();
+        Vec3 eye = sneaking ? RayTraceUtils.inferSneakingEyePosition(player) : player.getEyePosition(1.0F);
+        Rotation current = new Rotation(player.getYRot(), player.getXRot());
+        Rotation best = null;
+        double bestYaw = Double.MAX_VALUE;
+        for (BlockPos dest : want) {
+            BlockState cell = level.getBlockState(dest);
+            if (!cell.isAir() && !cell.canBeReplaced()) {
+                continue;
+            }
+            for (Direction towardSupport : SUPPORT_ORDER) {
+                BlockPos support = dest.relative(towardSupport);
+                if (!level.isLoaded(support)) {
+                    continue;
+                }
+                Direction face = towardSupport.getOpposite();
+                BlockState state = level.getBlockState(support);
+                if (!state.isFaceSturdy(level, support, face)) {
+                    continue;
+                }
+                // Ostinato: the geometric face center is often hidden under the top of the
+                // support (the player stands on it). Try the center, then the closest visible
+                // point on the face, so a sneak-bridge hang can still see the vertical face.
+                for (Vec3 at : facePoints(support, face, eye)) {
+                    if (eye.distanceToSqr(at) > reach * reach) {
+                        continue;
+                    }
+                    Rotation rot = RotationUtils.calcRotationFromVec3d(eye, at, current);
+                    HitResult traced = RayTraceUtils.rayTraceTowards(player, rot, reach, sneaking);
+                    if (!placesInto(traced, dest)) {
+                        continue;
+                    }
+                    double err = Math.abs(Mth.wrapDegrees(rot.getYaw() - current.getYaw()));
+                    if (err < bestYaw) {
+                        bestYaw = err;
+                        best = rot;
+                    }
+                }
+            }
+        }
+        return Optional.ofNullable(best);
+    }
+
+    /**
+     * Ostinato: a partial sneak-bridge path ends by clearing keys, then A* runs for the rest.
+     * Releasing sneak while the box still hangs over the next air cell walks off the 1-wide
+     * line (the last live gate drifted after three correct places). Hold sneak until the
+     * player is fully supported again, or a jump is requested.
+     */
+    private void holdSneakIfHanging(HeadlessMovement movement) {
+        if (down(Input.JUMP)) {
+            bridgeHold = false;
+            return;
+        }
+        PlayerSim sim = movement.sim();
+        if (!intendedPlaces().isEmpty() || host.getPathingBehavior().planning()) {
+            bridgeHold = true;
+        }
+        if (!bridgeHold) {
+            return;
+        }
+        boolean hanging = sim.onGround && hanging(sim);
+        if (!hanging && intendedPlaces().isEmpty() && !host.getPathingBehavior().planning()) {
+            bridgeHold = false;
+            return;
+        }
+        input.setInputForceState(Input.SNEAK, true);
+    }
+
+    private static boolean hanging(PlayerSim sim) {
+        double step = 0.05;
+        return sim.wouldWalkOff(step, 0.0) || sim.wouldWalkOff(-step, 0.0)
+                || sim.wouldWalkOff(0.0, step) || sim.wouldWalkOff(0.0, -step);
+    }
+
+    private static Vec3[] facePoints(BlockPos support, Direction face, Vec3 eye) {
+        double cx = support.getX() + 0.5 + face.getStepX() * 0.5;
+        double cy = support.getY() + 0.5 + face.getStepY() * 0.5;
+        double cz = support.getZ() + 0.5 + face.getStepZ() * 0.5;
+        // Closest point on the face, inset so clip classifies the face not an adjacent one.
+        double ix = face.getAxis() == Direction.Axis.X ? cx : Math.max(support.getX() + 0.05, Math.min(support.getX() + 0.95, eye.x));
+        double iy = face.getAxis() == Direction.Axis.Y ? cy : Math.max(support.getY() + 0.05, Math.min(support.getY() + 0.95, eye.y));
+        double iz = face.getAxis() == Direction.Axis.Z ? cz : Math.max(support.getZ() + 0.05, Math.min(support.getZ() + 0.95, eye.z));
+        return new Vec3[]{new Vec3(cx, cy, cz), new Vec3(ix, iy, iz)};
+    }
+
     private boolean alreadyHolding(BlockPos target) {
+
+
         BlockState cell = level.getBlockState(target);
         ItemStack main = player.getMainHandItem();
         if (main.getItem() instanceof BlockItem block && cell.is(block.getBlock())) {

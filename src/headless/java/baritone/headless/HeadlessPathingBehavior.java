@@ -47,6 +47,15 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
     /** Ostinato: queue A*; true means accepted, not that a path has already been found. */
     public boolean gotoGoal(Goal goal) {
         cancelEverything();
+        startSearch(goal);
+        return true;
+    }
+
+    /**
+     * Ostinato: start A* without clearing keys. A partial sneak-bridge must keep sneak
+     * held through the wait; cancelEverything() would drop the bot off the 1-wide edge.
+     */
+    private void startSearch(Goal goal) {
         this.finished = false;
         this.goal = goal;
         BetterBlockPos start = host.getPlayerContext().playerFeet();
@@ -62,7 +71,6 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
         long failure = Baritone.settings().failureTimeoutMS.value;
         pending = planner.submit(() -> search.calculate(primary, failure));
         status = "planning " + goal;
-        return true;
     }
 
     /** Ostinato: hand off a completed search and advance exactly one executor tick. */
@@ -101,11 +109,14 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
         if (current.finished() || current.failed()) {
             boolean failed = current.failed();
             Goal target = goal;
-            boolean arrived = target.isInGoal(host.getPlayerContext().playerFeet());
-            cancelEverything();
-            if (!failed && !arrived) {
-                gotoGoal(target); // continue a partial search segment, still on the worker
+            boolean arrived = target != null && target.isInGoal(host.getPlayerContext().playerFeet());
+            if (!failed && !arrived && target != null) {
+                // Ostinato: drop only the finished executor. Keep sneak/keys and the goal
+                // while A* plans the next segment so a 1-wide sneak-bridge does not fall.
+                executor = null;
+                startSearch(target);
             } else {
+                cancelEverything();
                 finished = true;
                 status = arrived ? "arrived" : "execution failed";
             }
@@ -120,6 +131,11 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
 
     public String status() {
         return status;
+    }
+
+    /** Ostinato: true while A* is running (including the wait between partial path segments). */
+    public boolean planning() {
+        return pending != null && !pending.isDone();
     }
 
     public boolean finished() {

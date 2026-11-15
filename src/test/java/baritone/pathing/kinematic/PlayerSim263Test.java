@@ -227,5 +227,7 @@ public class PlayerSim263Test {
             assertTrue("fell off at tick " + t + " z=" + sneak.z, sneak.z - PlayerSim.HALF_WIDTH <= 1.0 + 1e-6);
         }
         assertTrue("should have reached the edge, z=" + sneak.z, sneak.z > 0.5);
+        assertTrue("hanging off the +z edge", sneak.wouldWalkOff(0.0, 0.05));
+        assertFalse("still supported the other way", sneak.wouldWalkOff(0.0, -0.05));
     }
 }

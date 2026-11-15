@@ -472,6 +472,14 @@ public final class PlayerSim {
      * Ostinato: 26.3 `Player.canFallAtLeast`. True when a slab under the feet, shifted by
      * `(dx, dz)` and extending down by `drop`, has no collision (the move would walk off).
      */
+    /**
+     * Ostinato: true when a sneak-edge clamp would have to shrink this horizontal step
+     * to stay on the current floor. Used to keep sneak held on a 1-wide bridge.
+     */
+    public boolean wouldWalkOff(double dx, double dz) {
+        return onGround && canFallAtLeast(dx, dz, STEP);
+    }
+
     private boolean canFallAtLeast(double dx, double dz, double drop) {
         double pad = 1.0E-7d;
         double minX = x - HALF_WIDTH + pad + dx;

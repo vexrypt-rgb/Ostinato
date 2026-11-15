@@ -328,9 +328,10 @@ public class HeadlessPlaceTest {
             assertNotNull("place did not send UseItemOn: " + bot.pathingStatus(), use);
             assertEquals(new BlockPos(1, 0, 0), use.hitResult().getBlockPos());
             assertEquals(Direction.UP, use.hitResult().getDirection());
-            assertEquals(1.5, use.hitResult().getLocation().x, 1.0E-6);
+            // Ostinato: the click is the raytrace onto this face, not a reconstructed face center.
             assertEquals(1.0, use.hitResult().getLocation().y, 1.0E-6);
-            assertEquals(0.5, use.hitResult().getLocation().z, 1.0E-6);
+            assertTrue("hit x=" + use.hitResult().getLocation().x, use.hitResult().getLocation().x > 1.0 && use.hitResult().getLocation().x < 2.0);
+            assertTrue("hit z=" + use.hitResult().getLocation().z, use.hitResult().getLocation().z > 0.0 && use.hitResult().getLocation().z < 1.0);
             assertEquals(1, use.sequence());
             assertEquals(1, transport.count(ServerboundSetCarriedItemPacket.class));
             assertEquals(15, bot.liveDriver().player().getInventory().getItem(0).getCount());
@@ -348,7 +349,42 @@ public class HeadlessPlaceTest {
     }
 
     @Test
-    public void placeCommandRefusesOutOfReachAndAnEmptyHand() {
+    public void aimAtPlaceIgnoresANearerWallAndHitsTheIntendedFace() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 1.0, 1.2);
+        try {
+            bot.chunks().setBlockState(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+            // Wall to the east of a sneak-bridge hang (feet at z=1.2, still on the floor at z=0).
+            // A level east look hits the wall first; the click must still target the floor's south face.
+            bot.chunks().setBlockState(new BlockPos(1, 1, 1), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(1, 2, 1), Blocks.STONE.defaultBlockState());
+            bot.ensureHost();
+            var player = bot.liveDriver().player();
+            player.setPos(0.5, 1.0, 1.2);
+            player.setOnGround(true);
+            player.setYRot(-90f); // east, into the wall
+            player.setXRot(0f);
+
+            var hit = bot.liveDriver().context().objectMouseOver();
+            assertTrue("expected a block hit, got " + hit, hit instanceof BlockHitResult);
+            assertEquals("east look should hit the wall first", new BlockPos(1, 2, 1), ((BlockHitResult) hit).getBlockPos());
+
+            BlockPos want = new BlockPos(0, 0, 1);
+            assertFalse("the wall must not count as the place target", bot.liveDriver().placesInto(hit, want));
+
+            var aim = bot.liveDriver().aimAtPlace(Set.of(want));
+            assertTrue("should see the floor's south face beside the wall", aim.isPresent());
+            bot.liveDriver().look().updateTarget(aim.get(), true);
+            var placed = bot.liveDriver().context().objectMouseOver();
+            assertTrue("aimed look missed the intended face: " + placed, bot.liveDriver().placesInto(placed, want));
+            assertEquals(new BlockPos(0, 0, 0), ((BlockHitResult) placed).getBlockPos());
+            assertEquals(Direction.SOUTH, ((BlockHitResult) placed).getDirection());
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+        public void placeCommandRefusesOutOfReachAndAnEmptyHand() {
         RecordingTransport transport = new RecordingTransport();
         HeadlessBot bot = spawned(transport, 0.5, 1.0, 0.5);
         try {
