@@ -862,9 +862,18 @@ chain of sneak-bridge traverses: each step's `Movement.toPlace` is the air under
 block, and the executor sneaks, right-clicks, and waits until the chunk shows that block.
 God-bridge stays off.
 
+Sneak-bridge needs 26.3 `Player.maybeBackOffFromEdge` in PlayerSim. Sneak speed
+alone still walks the box off the edge; the movement packet then reports
+`onGround=false`, and a vanilla server (`allow-flight=false`) kicks "floating too
+long". The clamp is implemented. Do not turn on `allow-flight` to hide that. Live
+evidence 2026-11-15 02:46 MST: A* planned a 17-block sneak-bridge, two dirt blocks
+were placed, then a kick at -0.55,-60.42,23.35 (SIM delta=0).
+
 ### Open
 
-* Live gate (give, `place`, bridge, pillar, a goto that has to place) is not run in this slice.
+* Live gate: (a) `place 1 -60 16` PASS 02:45 MST (probe dirt, placeAcked, no kick).
+  (b) sneak-bridge first run kicked as above; PlayerSim clamp is in, rerunning with
+  `allow-flight=false`. (c) pillar and (d) goto-that-places are pending that rerun.
 * God-bridge stays off, as above.
 * Backpack-only blocks let a bridge plan, then `select(true)` cannot move the stack, so the
   click may use the wrong hand and the place fails or replans. Hotbar `/give` is the supported case.

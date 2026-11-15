@@ -9,8 +9,9 @@ import java.util.List;
  * LivingEntity.aiStep and travelInAir / travelInWater, Entity.move with its step-up candidates, supporting block and
  * collision restitution, and the block effects applied after the travel. Covers walking, sprinting, jumping, step-up,
  * block collision, ladders/vines and still water via {@link #tickWater}, and the blocks that slow a walker or a jump
- * (soul sand, honey, with honey's slide down its sides) or bounce a landing (slime, beds); no lava, currents, sneaking
- * or the swimming pose's lower box. Of the potion effects it follows Speed, Slowness and Jump Boost
+ * (soul sand, honey, with honey's slide down its sides) or bounce a landing (slime, beds); no lava, currents,
+ * or the swimming pose's lower box. Sneak speed (modifyInput's 0.3) and 26.3 Player.maybeBackOffFromEdge
+ * (stay on the block edge while sneaking) are covered. Of the potion effects it follows Speed, Slowness and Jump Boost
  * ({@link #speedScale}, {@link #jumpBoost}); nothing that changes gravity. Vanilla's floats stay floats and every
  * rotation goes through vanilla's sine table, so in the cases it covers a tick aims at vanilla's bits rather than a close
  * double (checked against PPE and decompiled values, not yet against a live client).
@@ -117,6 +118,8 @@ public final class PlayerSim {
     public boolean minorCollision;
     /** Entity.mainSupportingBlockPos (at supX/Y/Z when {@link #supported}) and Entity.onGroundNoBlocks. */
     public boolean supported, onGroundNoBlocks;
+    /** Set for this tick by {@link #tickImpulse}; 26.3 Player.isStayingOnGroundSurface is just shift. */
+    private boolean sneaking;
     public int supX, supY, supZ;
     /** Vanilla's jump cooldown: holding jump re-jumps only every 10 ticks. */
     public int jumpTicks;
@@ -232,6 +235,16 @@ public final class PlayerSim {
      * impulse. A server-side bot (VexBot) sprints while it strafes; a vanilla client stops.
      */
     public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump) {
+        tickImpulse(yawDeg, strafeImpulse, forwardImpulse, forward, sprint, jump, false);
+    }
+
+    /**
+     * Ostinato: as above, with sneaking. 26.3 Player.maybeBackOffFromEdge runs inside {@link #move} when
+     * this is true and the player is on the ground, so a sneak-bridge does not walk off and report
+     * onGround=false (a vanilla server kicks that as flying).
+     */
+    public void tickImpulse(float yawDeg, double strafeImpulse, double forwardImpulse, boolean forward, boolean sprint, boolean jump, boolean sneaking) {
+        this.sneaking = sneaking;
         // LivingEntity.aiStep: a player's horizontal speed under 0.003 stops as a whole, the vertical on its own
         if (vx * vx + vz * vz < 9.0E-6) {
             vx = 0;
@@ -427,12 +440,70 @@ public final class PlayerSim {
         return world.climbable(floor(x), floor(y), floor(z));
     }
 
+
+    /**
+     * Ostinato: 26.3 `Player.maybeBackOffFromEdge`. Shrinks the horizontal move by 0.05 until
+     * `canFallAtLeast` is false, first on X, then Z, then both. Caller already checked flying,
+     * vertical rise, mover type, sneak, and on-ground.
+     */
+    private double[] maybeBackOffFromEdge(double dx, double dz) {
+        double step = 0.05d;
+        double xSign = Math.signum(dx) * step;
+        double zSign = Math.signum(dz) * step;
+        double drop = (double) STEP;
+        while (dx != 0.0 && canFallAtLeast(dx, 0.0, drop)) {
+            if (Math.abs(dx) <= step) dx = 0.0;
+            else dx -= xSign;
+        }
+        while (dz != 0.0 && canFallAtLeast(0.0, dz, drop)) {
+            if (Math.abs(dz) <= step) dz = 0.0;
+            else dz -= zSign;
+        }
+        while (dx != 0.0 && dz != 0.0 && canFallAtLeast(dx, dz, drop)) {
+            if (Math.abs(dx) <= step) dx = 0.0;
+            else dx -= xSign;
+            if (Math.abs(dz) <= step) dz = 0.0;
+            else dz -= zSign;
+        }
+        return new double[]{dx, dz};
+    }
+
+    /**
+     * Ostinato: 26.3 `Player.canFallAtLeast`. True when a slab under the feet, shifted by
+     * `(dx, dz)` and extending down by `drop`, has no collision (the move would walk off).
+     */
+    private boolean canFallAtLeast(double dx, double dz, double drop) {
+        double pad = 1.0E-7d;
+        double minX = x - HALF_WIDTH + pad + dx;
+        double minY = y - drop - pad;
+        double minZ = z - HALF_WIDTH + pad + dz;
+        double maxX = x + HALF_WIDTH - pad + dx;
+        double maxY = y;
+        double maxZ = z + HALF_WIDTH - pad + dz;
+        boxes.clear();
+        world.collect(minX, minY, minZ, maxX, maxY, maxZ, boxes);
+        for (double[] b : boxes) {
+            if (b[0] < maxX && b[3] > minX && b[1] < maxY && b[4] > minY && b[2] < maxZ && b[5] > minZ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Entity.move. */
     private void move(double dx, double dy, double dz) {
         fromX = x;
         fromY = y;
         fromZ = z;
         zFirst = Math.abs(dx) < Math.abs(dz);
+        // Ostinato: 26.3 Player.maybeBackOffFromEdge. Sneak speed alone is not enough: without this
+        // clamp, sneak-bridge walks off the edge, the movement packet reports onGround=false, and
+        // a vanilla server (allow-flight=false) kicks "floating too long".
+        if (sneaking && onGround && dy <= 0.0) {
+            double[] back = maybeBackOffFromEdge(dx, dz);
+            dx = back[0];
+            dz = back[1];
+        }
         double[] r = collideStep(dx, dy, dz);
         double mLen = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
         if (mLen > 1.0E-7 || dx * dx + dy * dy + dz * dz - mLen < 1.0E-7) {

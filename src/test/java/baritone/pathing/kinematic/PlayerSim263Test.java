@@ -201,4 +201,31 @@ public class PlayerSim263Test {
         assertEquals(64.0, sim.y, 0.0);
         assertEquals(3 - PlayerSim.HALF_WIDTH, sim.z, 1e-9);
     }
+
+    /**
+     * 26.3 Player.maybeBackOffFromEdge. Walking off a 1-block floor falls. Sneaking on the same
+     * floor must stay onGround at y=64, with the box still overlapping the top face. This is what
+     * keeps a sneak-bridge's movement packets from reporting onGround=false (vanilla fly kick).
+     */
+    @Test
+    public void sneakStaysOnTheBlockEdge() {
+        BoxWorld floor = new BoxWorld().fill(0, 63, 0, 0, 63, 0, BoxWorld.FULL);
+        PlayerSim walk = standing(floor, 0.5, 64, 0.5);
+        for (int t = 0; t < 80; t++) {
+            walk.tick(0, 1, false, false);
+        }
+        assertFalse("walking off the edge must eventually fall, y=" + walk.y + " z=" + walk.z, walk.onGround);
+        assertTrue("walked off but y still 64: z=" + walk.z, walk.y < 64.0);
+
+        PlayerSim sneak = standing(floor, 0.5, 64, 0.5);
+        float[] keys = PlayerSim.keyInput(1, 0, false, true);
+        for (int t = 0; t < 80; t++) {
+            sneak.tickImpulse(0, keys[0], keys[1], true, false, false, true);
+            assertTrue("tick " + t + " y=" + sneak.y + " z=" + sneak.z + " onGround=" + sneak.onGround, sneak.onGround);
+            assertEquals("tick " + t, 64.0, sneak.y, 0.0);
+            // The box may hang past the top face until minZ reaches the edge (~z = 1 + HALF_WIDTH).
+            assertTrue("fell off at tick " + t + " z=" + sneak.z, sneak.z - PlayerSim.HALF_WIDTH <= 1.0 + 1e-6);
+        }
+        assertTrue("should have reached the edge, z=" + sneak.z, sneak.z > 0.5);
+    }
 }

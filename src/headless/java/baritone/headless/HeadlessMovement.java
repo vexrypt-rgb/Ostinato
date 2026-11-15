@@ -298,7 +298,7 @@ public final class HeadlessMovement {
                 float scale = step.shift ? 0.294f : 0.98f;
                 keys = new float[]{(float) (analog[0] / length * scale), (float) (analog[1] / length * scale)};
             }
-            sim.tickImpulse(step.yaw, keys[0], keys[1], step.forward > 0, step.sprint, step.jump);
+            sim.tickImpulse(step.yaw, keys[0], keys[1], step.forward > 0, step.sprint, step.jump, step.shift);
         } else {
             sim.tick(step.yaw, step.forward, step.strafe, step.sprint, step.jump);
         }
