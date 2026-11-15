@@ -36,6 +36,7 @@ import net.minecraft.network.protocol.configuration.ServerboundSelectKnownPacks;
 import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket;
@@ -226,6 +227,14 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     }
 
     private void dispatch(Object p) {
+        // Ostinato: 26.3 wraps entity spawn/move (and other play packets) in a bundle.
+        // Without unwrapping, combat never sees AddEntity and cannot find its target.
+        if (p instanceof ClientboundBundlePacket bundle) {
+            for (var sub : bundle.subPackets()) {
+                dispatch(sub);
+            }
+            return;
+        }
         // ---- shared by LOGIN / CONFIGURATION / PLAY --------------------------
         if (p instanceof ClientboundKeepAlivePacket) {
             send(new ServerboundKeepAlivePacket(((ClientboundKeepAlivePacket) p).getId()));
