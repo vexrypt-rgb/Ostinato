@@ -5,7 +5,9 @@
  * the packets a server actually needs, written straight to the bot's connection. START once, progress
  * accumulated client-side with the same BlockState#getDestroyProgress the client uses, STOP when it
  * completes, ABORT when Baritone walks away. Placement sends ServerboundUseItemOnPacket on the same
- * pre-incremented block-change sequence and waits for the chunk store before treating it as confirmed.
+ * pre-incremented block-change sequence, writes the predicted block into the chunk store immediately
+ * (vanilla BlockStatePredictionHandler / ClientLevel.setBlock while predicting), and waits for
+ * BlockChangedAck (with BlockUpdate as the server-verified snapshot) before treating it as confirmed.
  */
 package baritone.headless;
 
@@ -67,6 +69,8 @@ public final class HeadlessPlayerController implements IPlayerController {
     private volatile boolean lastPlaceAcked;
     private volatile boolean lastPlaceFailed;
     private long placePackets;
+    /** Vanilla ServerVerifiedState.blockState for the in-flight place cell. */
+    private BlockState predictedServerState;
 
     public HeadlessPlayerController(HeadlessBot bot, HeadlessPlayer player, HeadlessLevel level) {
         this.bot = bot;
@@ -221,19 +225,17 @@ public final class HeadlessPlayerController implements IPlayerController {
             if (awaitingPlace) {
                 return InteractionResult.SUCCESS;
             }
-            // Ostinato: the real client sends one UseItemOn per pillar layer. After the
-            // server (or prediction) has accepted a cell, do not click it again every
-            // tick of the jump. Repeating it is Grim Simulation 0.075 / Post placement.
-            BlockPos already = lastPlaced;
-            if (already != null && lastPlaceAcked && !lastPlaceFailed) {
-                ItemStack held = this.player.getItemInHand(hand);
-                if (!held.isEmpty() && held.getItem() instanceof BlockItem) {
-                    BlockPos clicked = result.getBlockPos();
-                    BlockState clickedState = level.getBlockState(clicked);
-                    BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
-                    if (already.equals(dest)) {
-                        return InteractionResult.SUCCESS;
-                    }
+            // Ostinato: the real client sends one UseItemOn per pillar layer. After
+            // predictPlace has written the block (or the server has filled the cell),
+            // do not click that dest again. If the cell is empty once more, a new
+            // place is allowed.
+            ItemStack held = this.player.getItemInHand(hand);
+            if (!held.isEmpty() && held.getItem() instanceof BlockItem) {
+                BlockPos clicked = result.getBlockPos();
+                BlockState clickedState = level.getBlockState(clicked);
+                BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
+                if (!level.getBlockState(dest).canBeReplaced()) {
+                    return InteractionResult.SUCCESS;
                 }
             }
             syncHeldItem();
@@ -249,16 +251,15 @@ public final class HeadlessPlayerController implements IPlayerController {
     }
 
     /**
-     * Ostinato: decrement locally only. The chunk store stays server-owned; writing the block here
-     * would look like a confirmation the server has not given.
+     * Ostinato: vanilla MultiPlayerGameMode places inside BlockStatePredictionHandler.startPredicting():
+     * ClientLevel.setBlock writes the new state immediately and retainKnownServerState snapshots the
+     * previous one. PlayerSim reads this same store, so the jump lands on the predicted block. The
+     * write is not a confirmation; only BlockChangedAck (endPredictionsUpTo) acks or rolls it back.
      */
     private boolean predictPlace(InteractionHand hand, BlockHitResult result, int seq) {
         ItemStack held = this.player.getItemInHand(hand);
         if (held.isEmpty() || !(held.getItem() instanceof BlockItem blockItem)) {
             return false;
-        }
-        if (this.player.gameMode().isCreative()) {
-            return true;
         }
         BlockPos clicked = result.getBlockPos();
         if (!level.isLoaded(clicked)) {
@@ -268,6 +269,17 @@ public final class HeadlessPlayerController implements IPlayerController {
         BlockPos dest = clickedState.canBeReplaced() ? clicked : clicked.relative(result.getDirection());
         if (!level.isLoaded(dest) || !level.getBlockState(dest).canBeReplaced()) {
             return false;
+        }
+        BlockState predicted = blockItem.getBlock().defaultBlockState();
+        predictedServerState = level.getBlockState(dest);
+        level.chunks().setBlockState(dest, predicted);
+        if (this.player.gameMode().isCreative()) {
+            lastPlaced = dest.immutable();
+            lastPlacedSequence = seq;
+            lastPlaceAcked = true;
+            lastPlaceFailed = false;
+            awaitingPlace = false;
+            return true;
         }
         placeSnapshot = held.copy();
         placeSlot = hand == InteractionHand.OFF_HAND ? Inventory.SLOT_OFFHAND : this.player.getInventory().getSelectedSlot();
@@ -281,6 +293,21 @@ public final class HeadlessPlayerController implements IPlayerController {
         lastPlaceAcked = false;
         lastPlaceFailed = false;
         return true;
+    }
+
+    /**
+     * Ostinato: vanilla ClientLevel.setServerVerifiedBlockState. A BlockUpdate for an in-flight
+     * prediction updates the server snapshot only; the predicted world block stays until ack.
+     * @return true if the update was absorbed and must not be written into the store.
+     */
+    public boolean absorbServerBlockUpdate(BlockPos pos, BlockState state) {
+        synchronized (player.getInventory()) {
+            if (awaitingPlace && lastPlaced != null && lastPlaced.equals(pos)) {
+                predictedServerState = state;
+                return true;
+            }
+            return false;
+        }
     }
 
     @Override
@@ -318,22 +345,48 @@ public final class HeadlessPlayerController implements IPlayerController {
         if (lastPlaced == null || expectedBlock == null) {
             return;
         }
+        boolean acked = lastPlacedSequence >= 0 && bot.lastBlockChangeSequence() >= lastPlacedSequence;
+        if (awaitingPlace && acked) {
+            endPredictionLocked();
+            return;
+        }
+        if (awaitingPlace && placeTicks >= PLACE_TIMEOUT_TICKS) {
+            rollbackLocked();
+            return;
+        }
         boolean shown = level.isLoaded(lastPlaced) && level.getBlockState(lastPlaced).is(expectedBlock);
-        if (awaitingPlace && shown) {
+        if (placeRolledBack && shown) {
+            reapplyLocked();
+        }
+    }
+
+    /**
+     * Ostinato: vanilla endPredictionsUpTo / ClientLevel.syncBlockState. The world is forced to the
+     * latest server-verified snapshot. Matching the expected block is an accept; anything else rolls
+     * the inventory back with the block.
+     */
+    private void endPredictionLocked() {
+        BlockState server = predictedServerState != null
+                ? predictedServerState
+                : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        syncToServerStateLocked(server);
+        if (server.is(expectedBlock)) {
             awaitingPlace = false;
             placeRolledBack = false;
             lastPlaceFailed = false;
             lastPlaceAcked = true;
+        } else {
+            rollbackLocked();
+        }
+    }
+
+    private void syncToServerStateLocked(BlockState server) {
+        if (lastPlaced == null || server == null || !level.isLoaded(lastPlaced)) {
             return;
         }
-        if (awaitingPlace) {
-            boolean acked = lastPlacedSequence >= 0 && bot.lastBlockChangeSequence() >= lastPlacedSequence;
-            if (acked || placeTicks >= PLACE_TIMEOUT_TICKS) {
-                rollbackLocked();
-            }
-        }
-        if (placeRolledBack && shown) {
-            reapplyLocked();
+        BlockState current = level.getBlockState(lastPlaced);
+        if (!current.equals(server)) {
+            level.chunks().setBlockState(lastPlaced, server);
         }
     }
 
@@ -348,6 +401,9 @@ public final class HeadlessPlayerController implements IPlayerController {
                 : !current.isEmpty() && current.getCount() == expectedCount && current.getItem() == placeSnapshot.getItem();
         if (stillPredicted) {
             player.getInventory().setItem(placeSlot, placeSnapshot.copy());
+        }
+        if (predictedServerState != null) {
+            syncToServerStateLocked(predictedServerState);
         }
         awaitingPlace = false;
         placeRolledBack = true;

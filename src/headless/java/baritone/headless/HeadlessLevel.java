@@ -157,6 +157,11 @@ public final class HeadlessLevel extends Level {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
+    /** Ostinato: the same store PlayerSim reads and placement prediction writes. */
+    public HeadlessChunkStore chunks() {
+        return store;
+    }
+
     @Override
     public BlockState getBlockState(BlockPos pos) {
         int y = pos.getY();

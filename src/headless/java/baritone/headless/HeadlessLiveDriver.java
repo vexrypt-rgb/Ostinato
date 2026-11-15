@@ -696,6 +696,10 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         controller.pollPlace();
     }
 
+    boolean absorbServerBlockUpdate(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state) {
+        return controller.absorbServerBlockUpdate(pos, state);
+    }
+
     private void tickMining() {
         if (!level.isLoaded(mining)) {
             finishMining("target chunk unloaded");

@@ -373,13 +373,19 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         if (p instanceof ClientboundSectionBlocksUpdatePacket) {
-            chunks.applySectionUpdate((ClientboundSectionBlocksUpdatePacket) p);
+            ((ClientboundSectionBlocksUpdatePacket) p).runUpdates((pos, state) -> {
+                if (!absorbPredictedUpdate(pos, state)) {
+                    chunks.setBlockState(pos, state);
+                }
+            });
             notePlaceWorld();
             return;
         }
         if (p instanceof ClientboundBlockUpdatePacket) {
             ClientboundBlockUpdatePacket u = (ClientboundBlockUpdatePacket) p;
-            chunks.setBlockState(u.getPos(), u.getBlockState());
+            if (!absorbPredictedUpdate(u.getPos(), u.getBlockState())) {
+                chunks.setBlockState(u.getPos(), u.getBlockState());
+            }
             notePlaceWorld();
             return;
         }
@@ -806,6 +812,12 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (current != null) {
             current.noteAck();
         }
+    }
+
+    /** Ostinato: a BlockUpdate for an open place prediction updates the server snapshot only. */
+    private boolean absorbPredictedUpdate(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state) {
+        HeadlessLiveDriver current = live;
+        return current != null && current.absorbServerBlockUpdate(pos, state);
     }
 
     /** Where stdin, commands.txt, and accepted whispers deliver operator lines that are not pathing. */

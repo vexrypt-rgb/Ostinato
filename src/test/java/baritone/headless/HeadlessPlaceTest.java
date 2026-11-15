@@ -225,7 +225,9 @@ public class HeadlessPlaceTest {
         assertFalse(use.hitResult().isInside());
         assertEquals(1, use.sequence());
         assertEquals(9, player.getInventory().getItem(0).getCount());
-        assertTrue("prediction must not write the chunk", level.getBlockState(dest).isAir());
+        assertTrue("prediction must write the block into the PlayerSim world", level.getBlockState(dest).is(Blocks.DIRT));
+        assertFalse("the local write is not a server confirmation", controller.placeConfirmed(dest));
+        assertFalse(controller.lastPlaceAcked());
         assertEquals(dest, controller.lastPlaced());
         assertEquals(1, controller.lastPlacedSequence());
 
@@ -260,20 +262,29 @@ public class HeadlessPlaceTest {
         BlockHitResult hit = new BlockHitResult(new Vec3(1.5, 1.0, 0.5), Direction.UP, support, false);
         controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, hit);
         assertEquals(9, player.getInventory().getItem(0).getCount());
+        assertTrue("prediction writes dirt immediately", level.getBlockState(dest).is(Blocks.DIRT));
+        controller.pollPlace();
+        assertFalse("shown predicted state is not an ack", controller.placeConfirmed(dest));
 
-        store.setBlockState(dest, Blocks.DIRT.defaultBlockState());
+        assertTrue(controller.absorbServerBlockUpdate(dest, Blocks.DIRT.defaultBlockState()));
+        assertTrue("absorb keeps the predicted world block", level.getBlockState(dest).is(Blocks.DIRT));
+        controller.pollPlace();
+        assertFalse(controller.placeConfirmed(dest));
+
+        bot.onPacket(new ClientboundBlockChangedAckPacket(controller.lastPlacedSequence()));
         controller.pollPlace();
         assertTrue(controller.placeConfirmed(dest));
         assertTrue(controller.lastPlaceAcked());
         assertFalse(controller.lastPlaceFailed());
         assertEquals(9, player.getInventory().getItem(0).getCount());
+        assertTrue(level.getBlockState(dest).is(Blocks.DIRT));
 
         // A different block at the cell is a rejection, and the chunk is left as the server wrote it.
         store.setBlockState(dest, Blocks.AIR.defaultBlockState());
         player.getInventory().setItem(0, new ItemStack(Items.DIRT, 10));
         controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND, hit);
         assertEquals(9, player.getInventory().getItem(0).getCount());
-        store.setBlockState(dest, Blocks.STONE.defaultBlockState());
+        assertTrue(controller.absorbServerBlockUpdate(dest, Blocks.STONE.defaultBlockState()));
         bot.onPacket(new ClientboundBlockChangedAckPacket(controller.lastPlacedSequence()));
         controller.pollPlace();
         assertEquals(10, player.getInventory().getItem(0).getCount());
@@ -301,6 +312,7 @@ public class HeadlessPlaceTest {
         controller.processRightClickBlock(player, level, InteractionHand.MAIN_HAND,
                 new BlockHitResult(new Vec3(1.5, 1.0, 0.5), Direction.UP, new BlockPos(1, 0, 0), false));
         assertEquals(1, player.getInventory().getItem(0).getCount());
+        assertTrue(level.getBlockState(new BlockPos(1, 1, 0)).is(Blocks.DIRT));
         for (int i = 0; i < HeadlessPlayerController.PLACE_TIMEOUT_TICKS - 1; i++) {
             controller.tickPendingPlace();
         }
@@ -692,7 +704,7 @@ public class HeadlessPlaceTest {
                 for (ServerboundUseItemOnPacket use : packets(transport, ServerboundUseItemOnPacket.class)) {
                     BlockPos against = use.hitResult().getBlockPos();
                     BlockPos into = against.relative(use.hitResult().getDirection());
-                    if (bot.chunks().getBlockState(into.getX(), into.getY(), into.getZ()).isAir()) {
+                    if (bot.lastBlockChangeSequence() < use.sequence()) {
                         bot.onPacket(new ClientboundBlockUpdatePacket(into, Blocks.DIRT.defaultBlockState()));
                         bot.onPacket(new ClientboundBlockChangedAckPacket(use.sequence()));
                     }
@@ -803,7 +815,7 @@ public class HeadlessPlaceTest {
                 for (ServerboundUseItemOnPacket use : packets(transport, ServerboundUseItemOnPacket.class)) {
                     BlockPos against = use.hitResult().getBlockPos();
                     BlockPos into = against.relative(use.hitResult().getDirection());
-                    if (bot.chunks().getBlockState(into.getX(), into.getY(), into.getZ()).isAir()) {
+                    if (bot.lastBlockChangeSequence() < use.sequence()) {
                         bot.onPacket(new ClientboundBlockUpdatePacket(into, Blocks.DIRT.defaultBlockState()));
                         bot.onPacket(new ClientboundBlockChangedAckPacket(use.sequence()));
                     }
