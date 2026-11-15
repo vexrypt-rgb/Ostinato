@@ -108,6 +108,32 @@ publishing {
 // courses, the regression suite's live stages). The launcher passes its own -Xmx2G and the last -Xmx wins, so it is
 // added when the task starts. Also read from gradle.properties as ostinato_client_xmx. Unset: the launcher's heap.
 tasks.matching { it.name == 'runClient' }.configureEach { t ->
+    // Ostinato: Gradle -Dostinato.* stays on the Gradle JVM unless forwarded into the client process.
+    System.properties.each { k, v ->
+        if (k.toString().startsWith("ostinato.")) {
+            t.systemProperty(k.toString(), v.toString())
+            println "ostinato: runClient systemProperty " + k + "=" + v
+        }
+    }
+
+    // Ostinato: -Postinato_packetLog / _windowPos / _commandInbox also reach the child JVM
+    // (command-line -D may stay on the Gradle client when a single-use daemon is forked).
+    ["packetLog", "windowPos", "commandInbox", "trace", "runMode"].each { key ->
+        def v = project.findProperty("ostinato_" + key) ?: project.findProperty("ostinato." + key)
+        if (v) {
+            t.systemProperty("ostinato." + key, v.toString())
+            println "ostinato: runClient -P ostinato." + key + "=" + v
+        }
+    }
+
+    // Ostinato: -PclientArgs="--username HBotAc --quickPlayMultiplayer 127.0.0.1:25572"
+    if (project.hasProperty("clientArgs")) {
+        def extra = project.property("clientArgs").toString().trim()
+        if (!extra.isEmpty()) {
+            t.args extra.split(/\s+/) as List
+            println "ostinato: runClient clientArgs " + extra
+        }
+    }
     t.doFirst {
         def xmx = project.findProperty('clientXmx') ?: project.findProperty('ostinato_client_xmx')
         if (xmx) {

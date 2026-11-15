@@ -180,6 +180,7 @@ public class Baritone implements IBaritone, baritone.pathing.IPathingHost {
             baritone.process.SimBench.install(this);
             baritone.utils.Lockstep.install(this); // Ostinato: -Dostinato.lockstep (before the trace, so a traced tick is one the server has answered)
             baritone.utils.ParityTrace.install(this); // Ostinato: -Dostinato.trace
+            baritone.utils.PacketLog.install(this); // Ostinato: -Dostinato.packetLog
         }
 
         this.worldProvider = new WorldProvider(this);

@@ -181,6 +181,21 @@ tasks.register('runHeadlessBot', JavaExec) {
     // The bot targets -server; keep the JVM small so Phase 4 memory numbers are meaningful.
     maxHeapSize = project.findProperty('botXmx') ?: '256m'
     jvmArgs '--enable-native-access=ALL-UNNAMED'
+    // Ostinato: Gradle -Dostinato.* stays on the Gradle JVM unless forwarded into the bot process.
+    System.properties.each { k, v ->
+        if (k.toString().startsWith("ostinato.")) {
+            systemProperty k.toString(), v.toString()
+            println "ostinato: runHeadlessBot systemProperty " + k + "=" + v
+        }
+    }
+    ["packetLog", "windowPos", "commandInbox", "trace", "runMode"].each { key ->
+        def v = project.findProperty("ostinato_" + key) ?: project.findProperty("ostinato." + key)
+        if (v) {
+            systemProperty "ostinato." + key, v.toString()
+            println "ostinato: runHeadlessBot -P ostinato." + key + "=" + v
+        }
+    }
+
 }
 
 jar {

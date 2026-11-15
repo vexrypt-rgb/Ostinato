@@ -208,6 +208,9 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     /** Package-private so the movement driver sends through the same observable path. */
     void send(net.minecraft.network.protocol.Packet<?> packet) {
         packetsOut.incrementAndGet();
+        if (baritone.utils.PacketLog.ON) {
+            baritone.utils.PacketLog.outbound(packet);
+        }
         transport.send(packet);
     }
 
@@ -219,6 +222,9 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         packetsIn.incrementAndGet();
+        if (baritone.utils.PacketLog.ON) {
+            baritone.utils.PacketLog.inbound((net.minecraft.network.protocol.Packet<?>) packet);
+        }
         try {
             dispatch(packet);
         } catch (RuntimeException e) {
@@ -628,6 +634,9 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
      */
     public void tick() {
         long n = ticks.incrementAndGet();
+        if (baritone.utils.PacketLog.ON) {
+            baritone.utils.PacketLog.tick((int) n);
+        }
         transport.tick();
         maybeMarkPlayerLoaded();
         if (state != State.PLAY || !spawnKnown || !loadedSent) {
