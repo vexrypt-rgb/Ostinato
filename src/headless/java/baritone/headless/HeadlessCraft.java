@@ -44,6 +44,8 @@ final class HeadlessCraft {
     private static final int OPEN_WAIT_TICKS = 40;
     private static final int SMELT_WAIT_TICKS = 20 * 30;
     private static final int PICKUP_WAIT_TICKS = 20 * 20;
+    /** Match the auto-collect baseline window: TakeItemEntity may beat inventory sync. */
+    private static final long TAKE_ITEM_SUCCESS_WINDOW_NANOS = 6_000_000_000L;
 
     private final HeadlessBot bot;
     private final HeadlessPlayer player;
@@ -139,6 +141,10 @@ final class HeadlessCraft {
         status = item == null ? "pickup" : "pickup " + HeadlessRecipes.idOf(item);
         if (!entityVisible && haveNow > pickupStartCount) {
             finish(true, item == null ? "picked up item" : "picked up " + HeadlessRecipes.idOf(item));
+        } else if (pickupSucceededViaTakeItem(bot.entities().tookItemRecently(bot.playerId(), -1,
+                TAKE_ITEM_SUCCESS_WINDOW_NANOS), haveNow, pickupStartCount)) {
+            finish(true, item == null ? "picked up item via TakeItemEntity"
+                    : "picked up " + HeadlessRecipes.idOf(item) + " via TakeItemEntity");
         }
     }
 
@@ -617,6 +623,13 @@ final class HeadlessCraft {
             finish(true, "picked up item");
             return;
         }
+        if (pickupSucceededViaTakeItem(bot.entities().tookItemRecently(bot.playerId(), pickupEntityId,
+                TAKE_ITEM_SUCCESS_WINDOW_NANOS),
+                target == null ? totalItems() : have(target), pickupStartCount)) {
+            finish(true, target == null ? "picked up item via TakeItemEntity"
+                    : "picked up " + HeadlessRecipes.idOf(target) + " via TakeItemEntity");
+            return;
+        }
         HeadlessEntityTracker.Tracked item = nearestItem();
         if (item == null) {
             waited++;
@@ -942,6 +955,12 @@ final class HeadlessCraft {
 
     // Ostinato: if vanilla already scooped our throw, start the pickup baseline
     // at the pre-drop count so have() > baseline still reports success.
+    // Ostinato: TakeItemEntity is the success signal when inventory has not
+    // yet caught up (or the item entity has already been removed).
+    static boolean pickupSucceededViaTakeItem(boolean tookRecently, int haveNow, int baseline) {
+        return tookRecently && haveNow >= baseline;
+    }
+
     static int pickupStartAfterAutoCollect(int haveNow, Item wanted, Item lastDropped,
                                            int lastDropPreCount, int lastDropAmount,
                                            long lastDropTick, long nowTick, boolean entityVisible) {

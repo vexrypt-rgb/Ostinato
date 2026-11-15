@@ -187,8 +187,13 @@ public final class HeadlessEntityTracker {
     private long lastTakeAtNanos;
 
     boolean tookItemRecently(int playerId, long windowNanos) {
+        return tookItemRecently(playerId, -1, windowNanos);
+    }
+
+    boolean tookItemRecently(int playerId, int entityId, long windowNanos) {
         return lastTakePlayerId == playerId
                 && lastTakeEntityId != -1
+                && (entityId < 0 || lastTakeEntityId == entityId)
                 && System.nanoTime() - lastTakeAtNanos <= windowNanos;
     }
 

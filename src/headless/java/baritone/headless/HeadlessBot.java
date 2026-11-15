@@ -45,6 +45,7 @@ import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
+import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
@@ -473,6 +474,12 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         if (entities.handle(p, playerId)) {
+            if (p instanceof ClientboundTakeItemEntityPacket take && take.getPlayerId() == playerId) {
+                // Ostinato: TakeItemEntity is the authoritative vanilla pickup signal.
+                event("TakeItemEntity itemId=" + take.getItemId()
+                        + " playerId=" + take.getPlayerId()
+                        + " amount=" + take.getAmount());
+            }
             return;
         }
         if (inventory.handle(p)) {
@@ -667,18 +674,21 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         return spawnKnown;
     }
 
-    // Ostinato: vanilla announces the first chunk batch with ChunkBatchFinished.
-    // Paper 26.3 can stream LevelChunkWithLight without that packet, leaving
-    // loadedSent false so the pathing host never attaches and PlayerSim never
-    // starts (Grim/NCP would also never see a ticking client). Once a
-    // neighborhood of chunks is already on disk, send PlayerLoaded the same
-    // way the batch path does.
+    // Ostinato: vanilla 26.3 (protocol 777) wraps each send with ChunkBatchStart
+    // (play id 12) and ChunkBatchFinished (play id 11). Paper 26.3-252 is the same
+    // protocol, but Moonrise's RegionizedPlayerChunkLoader calls
+    // PlayerChunkSender.sendChunk() per column and never emits those batch
+    // packets. Waiting for ChunkBatchFinished would leave loadedSent false, so
+    // the pathing host never attaches and PlayerSim never starts. Send
+    // PlayerLoaded after the first decoded chunk, the same way the vanilla batch
+    // path does after the first finished packet.
     private void maybeMarkPlayerLoaded() {
         if (loadedSent || state != State.PLAY || !spawnKnown) {
             return;
         }
-        // Paper holds the rest of the view until the client acknowledges the first
-        // chunk; waiting for a 3x3 neighborhood deadlocks at chunks=1.
+        // Do not wait for a 3x3: Moonrise may have only the spawn column so far,
+        // and the vanilla batch path also fires PlayerLoaded after the first
+        // finished packet rather than a full neighborhood.
         if (chunks.chunkCount() < 1) {
             return;
         }

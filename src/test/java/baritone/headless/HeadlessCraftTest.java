@@ -228,4 +228,13 @@ public class HeadlessCraftTest {
         var short_ = new net.minecraft.world.phys.AABB(3.375, -60.0, 1.925, 3.625, -59.75, 2.175);
         assertFalse(HeadlessCraft.inVanillaItemPickupRange(player, short_));
     }
+
+    @Test
+    public void takeItemEntitySignalsPickupWithoutInventorySync() {
+        // Inventory still at the pre-pickup baseline; the take packet is enough.
+        assertTrue(HeadlessCraft.pickupSucceededViaTakeItem(true, 7, 7));
+        assertTrue(HeadlessCraft.pickupSucceededViaTakeItem(true, 8, 7));
+        assertFalse(HeadlessCraft.pickupSucceededViaTakeItem(false, 7, 7));
+        assertFalse(HeadlessCraft.pickupSucceededViaTakeItem(false, 8, 7));
+    }
 }
