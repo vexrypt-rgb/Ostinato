@@ -571,6 +571,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     public void tick() {
         long n = ticks.incrementAndGet();
         transport.tick();
+        maybeMarkPlayerLoaded();
         if (state != State.PLAY || !spawnKnown || !loadedSent) {
             return;
         }
@@ -664,6 +665,25 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
 
     public boolean spawnKnown() {
         return spawnKnown;
+    }
+
+    // Ostinato: vanilla announces the first chunk batch with ChunkBatchFinished.
+    // Paper 26.3 can stream LevelChunkWithLight without that packet, leaving
+    // loadedSent false so the pathing host never attaches and PlayerSim never
+    // starts (Grim/NCP would also never see a ticking client). Once a
+    // neighborhood of chunks is already on disk, send PlayerLoaded the same
+    // way the batch path does.
+    private void maybeMarkPlayerLoaded() {
+        if (loadedSent || state != State.PLAY || !spawnKnown) {
+            return;
+        }
+        if (chunks.chunkCount() < 9) {
+            return;
+        }
+        send(new ServerboundPlayerLoadedPacket());
+        send(new ServerboundPlayerInputPacket(Input.EMPTY));
+        loadedSent = true;
+        event("player loaded (" + chunks.chunkCount() + " chunks, no ChunkBatchFinished)");
     }
 
     public boolean playerLoaded() {
