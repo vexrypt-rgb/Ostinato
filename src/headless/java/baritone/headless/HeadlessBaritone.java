@@ -178,6 +178,61 @@ public final class HeadlessBaritone implements IPathingHost {
         }
     }
 
+    /** Ostinato: count of acceptable throwaway blocks in the inventory mirror (hotbar, offhand, main 9-35). */
+    int countGenericThrowaway() {
+        if (AltoClefSettings.getInstance().isInteractionPaused()) {
+            return 0;
+        }
+        int n = 0;
+        Inventory inv = ctx.player().getInventory();
+        synchronized (inv) {
+            var items = inv.getNonEquipmentItems();
+            for (int i = 0; i < items.size() && i < Inventory.INVENTORY_SIZE; i++) {
+                ItemStack stack = items.get(i);
+                if (isCountedThrowaway(stack)) {
+                    n += stack.getCount();
+                }
+            }
+            ItemStack off = inv.getItem(Inventory.SLOT_OFFHAND);
+            if (isCountedThrowaway(off)) {
+                n += off.getCount();
+            }
+        }
+        return n;
+    }
+
+    /** Ostinato: selected slot, hotbar, and offhand for A* diagnostics. */
+    String describeHotbar() {
+        Inventory inv = ctx.player().getInventory();
+        synchronized (inv) {
+            var items = inv.getNonEquipmentItems();
+            StringBuilder sb = new StringBuilder("sel=").append(inv.getSelectedSlot());
+            int hotbar = Math.min(Inventory.SELECTION_SIZE, items.size());
+            for (int i = 0; i < hotbar; i++) {
+                ItemStack stack = items.get(i);
+                if (!stack.isEmpty()) {
+                    sb.append(" [").append(i).append(']').append(stack.getCount()).append('x').append(stack.getItem());
+                }
+            }
+            ItemStack off = inv.getItem(Inventory.SLOT_OFFHAND);
+            if (!off.isEmpty()) {
+                sb.append(" off=").append(off.getCount()).append('x').append(off.getItem());
+            }
+            return sb.toString();
+        }
+    }
+
+    private static boolean isCountedThrowaway(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        Item item = stack.getItem();
+        if (AltoClefSettings.getInstance().isItemProtected(item)) {
+            return false;
+        }
+        return Baritone.settings().acceptableThrowawayItems.value.contains(item);
+    }
+
     @Override
     public UnifiedExecutor getUnifiedExecutor() {
         return null;

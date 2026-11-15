@@ -4,12 +4,19 @@
 package baritone.headless;
 
 import baritone.Baritone;
+import baritone.api.pathing.calc.IPath;
+import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.movement.IMovement;
+import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.PathCalculationResult;
+import baritone.pathing.calc.AStarPathFinder;
 import baritone.api.pathing.path.IPathExecutor;
 import baritone.pathing.movement.CalculationContext;
 import baritone.pathing.movement.Movement;
 import baritone.pathing.movement.movements.MovementParkour;
 import baritone.utils.BlockStateInterface;
+import baritone.utils.ToolSet;
+import baritone.utils.pathing.Favoring;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
@@ -453,6 +460,80 @@ public class HeadlessPlaceTest {
     }
 
     /**
+     * Ostinato: confirm why a 12-block place path across a wide void fails or succeeds
+     * under the client's default first-search timeouts (500/2000), then check that
+     * goto still finds a placement path using the same policy (retry / plan-ahead,
+     * without raising those defaults).
+     */
+    @Test
+    public void twelveBlockWideVoidPlacePathDefaultTimeouts() throws Exception {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = spawned(transport, 0.5, 2.0, 0.5);
+        try {
+            // A* stops once pathingMaxChunkBorderFetch (50) moves would enter an unloaded chunk.
+            // The pad sits on the edge of chunk (0,0); load a 3x3 neighborhood so a 12-block
+            // sneak-bridge is not abandoned as a chunk-border failure.
+            for (int cx = -1; cx <= 1; cx++) {
+                for (int cz = -1; cz <= 1; cz++) {
+                    bot.chunks().createEmptyChunk(cx, cz);
+                }
+            }
+            // Pad at z=0, landing at z=13, void z=1..12 and x=-4..4 so there is no sidewalk.
+            for (int x = -2; x <= 2; x++) {
+                bot.chunks().setBlockState(new BlockPos(x, 1, 0), Blocks.STONE.defaultBlockState());
+                bot.chunks().setBlockState(new BlockPos(x, 1, 13), Blocks.STONE.defaultBlockState());
+            }
+            // Walls near the pad, like the live (b) course.
+            bot.chunks().setBlockState(new BlockPos(-2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(2, 2, 0), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(-2, 3, 0), Blocks.STONE.defaultBlockState());
+            bot.chunks().setBlockState(new BlockPos(2, 3, 0), Blocks.STONE.defaultBlockState());
+            bot.onPacket(new ClientboundContainerSetSlotPacket(
+                    InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
+            bot.ensureHost();
+            bot.tick();
+
+            HeadlessBaritone host = bot.liveDriver().baritone();
+            assertTrue("dirt must be visible to A* at plan time", host.hasGenericThrowaway());
+            assertEquals(64, host.countGenericThrowaway());
+            assertTrue(Baritone.settings().allowPlace.value);
+            assertEquals(Long.valueOf(500L), Baritone.settings().primaryTimeoutMS.value);
+            assertEquals(Long.valueOf(2000L), Baritone.settings().failureTimeoutMS.value);
+
+            boolean hasThrowaway = Baritone.settings().allowPlace.value && host.hasGenericThrowaway();
+            CalculationContext context = new CalculationContext(host, host.bsi(),
+                    new ToolSet(host.getPlayerContext().player()), hasThrowaway, host.bsi().minY(), host.bsi().height());
+            BetterBlockPos start = host.getPlayerContext().playerFeet();
+            GoalBlock goal = new GoalBlock(0, 2, 13);
+            AStarPathFinder first = new AStarPathFinder(start, start.x, start.y, start.z, goal,
+                    new Favoring(null, context), context, 1);
+            PathCalculationResult firstResult = first.calculate(
+                    Baritone.settings().primaryTimeoutMS.value,
+                    Baritone.settings().failureTimeoutMS.value);
+            IPath firstPath = firstResult.getPath().orElse(null);
+            String diag = "type=" + firstResult.getType()
+                    + " timedOut=" + first.timedOut()
+                    + " pathLength=" + (firstPath == null ? 0 : firstPath.length())
+                    + " dest=" + (firstPath == null ? "none" : firstPath.getDest())
+                    + " start=" + start
+                    + " hasThrowaway=" + context.hasThrowaway
+                    + " throwawayCount=" + host.countGenericThrowaway()
+                    + " " + host.describeHotbar();
+            System.out.println("[HeadlessPlaceTest] first-search " + diag);
+            assertFalse("default 500/2000 first search found no place path: " + diag,
+                    firstResult.getType() == PathCalculationResult.Type.FAILURE);
+
+            bot.enqueuePathing("goto 0 2 13");
+            String status = waitUntilPlanned(bot, TimeUnit.SECONDS.toNanos(25));
+            assertFalse("12-block wide-void place path failed: " + status + " | " + diag, status.contains("no path")
+                    || status.contains("failed") || status.contains("planning") || status.contains("cancelled"));
+            assertTrue("12-block path has no placement: " + status + " | " + describePath(bot), pathPlaces(bot));
+        } finally {
+            bot.closeHost();
+        }
+    }
+
+    /**
      * A sneak-bridge, pillar, or parkour-place landing shows up in {@link Movement#toPlace}.
      * A 5-block gap with a floor on the far side is one parkour extension: the landing already
      * exists, so {@code toPlace} is empty and the block laid at the edge is {@link MovementParkour#extensions}.
@@ -498,7 +579,11 @@ public class HeadlessPlaceTest {
     }
 
     private static String waitUntilPlanned(HeadlessBot bot) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+        return waitUntilPlanned(bot, TimeUnit.SECONDS.toNanos(8));
+    }
+
+    private static String waitUntilPlanned(HeadlessBot bot, long nanos) throws InterruptedException {
+        long deadline = System.nanoTime() + nanos;
         String status = "";
         while (System.nanoTime() < deadline) {
             bot.tick();

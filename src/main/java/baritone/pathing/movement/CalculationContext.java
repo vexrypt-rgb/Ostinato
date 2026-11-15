@@ -41,6 +41,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.enchantment.*;
 import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.level.Level;
@@ -82,6 +83,14 @@ public class CalculationContext {
     public final int maxFallHeightBoat;
     public final boolean aquaAffinity;
     public final boolean hasThrowaway;
+    /**
+     * Ostinato: A* has no per-node world overlay. While expanding a reached node
+     * that stands over replaceable air, this cell is treated as a placed throwaway
+     * so a sneak-bridge can be chained. Integer.MIN_VALUE means none.
+     */
+    public int assumedFootingX = Integer.MIN_VALUE;
+    public int assumedFootingY = Integer.MIN_VALUE;
+    public int assumedFootingZ = Integer.MIN_VALUE;
     public final boolean canSprint;
     protected final double placeBlockCost; // protected because you should call the function instead
     public final boolean allowBreak;
@@ -481,11 +490,29 @@ public class CalculationContext {
     }
 
     public BlockState get(int x, int y, int z) {
+        // Ostinato: assumed footing is checked first so a cached air cell cannot hide a planned place.
+        if (x == assumedFootingX && y == assumedFootingY && z == assumedFootingZ) {
+            return Blocks.DIRT.defaultBlockState();
+        }
         PiCheap.BlockCache c = piBlocks;
         if (c != null && c.owner == Thread.currentThread()) {
             return c.read(x, y, z, bsi); // Ostinato: piCheapPathing block cache
         }
         return bsi.get0(x, y, z); // laughs maniacally
+    }
+
+    /** Ostinato: stand on a planned throwaway at (x, y, z) while this node is expanded. */
+    public void assumePlacedFooting(int x, int y, int z) {
+        assumedFootingX = x;
+        assumedFootingY = y;
+        assumedFootingZ = z;
+    }
+
+    /** Ostinato: clear {@link #assumePlacedFooting(int, int, int)}. */
+    public void clearAssumedFooting() {
+        assumedFootingX = Integer.MIN_VALUE;
+        assumedFootingY = Integer.MIN_VALUE;
+        assumedFootingZ = Integer.MIN_VALUE;
     }
 
     public boolean isLoaded(int x, int z) {
