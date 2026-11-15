@@ -79,4 +79,46 @@ public class HeadlessCommandTest {
         assertNull(HeadlessCommands.commandFromChat("HBot1 joined the game"));
         assertNull(HeadlessCommands.commandFromChat(null));
     }
+
+    @Test
+    public void craftSmeltChestDropPickupAndEquipParse() {
+        HeadlessCommands.Parsed craft = HeadlessCommands.parse("craft crafting_table");
+        assertEquals(HeadlessCommands.Kind.CRAFT, craft.kind());
+        assertEquals("crafting_table", craft.text());
+        assertEquals(1, craft.x());
+        assertNull(craft.error());
+
+        HeadlessCommands.Parsed planks = HeadlessCommands.parse("craft oak_planks 4");
+        assertEquals(HeadlessCommands.Kind.CRAFT, planks.kind());
+        assertEquals("oak_planks", planks.text());
+        assertEquals(4, planks.x());
+
+        HeadlessCommands.Parsed smelt = HeadlessCommands.parse("smelt raw_iron");
+        assertEquals(HeadlessCommands.Kind.SMELT, smelt.kind());
+        assertEquals("raw_iron", smelt.text());
+
+        HeadlessCommands.Parsed deposit = HeadlessCommands.parse("chest deposit dirt 8");
+        assertEquals(HeadlessCommands.Kind.CHEST, deposit.kind());
+        assertEquals("dirt", deposit.text());
+        assertEquals(8, deposit.x());
+        assertEquals(0, deposit.y());
+
+        HeadlessCommands.Parsed withdraw = HeadlessCommands.parse("chest withdraw diamond");
+        assertEquals(HeadlessCommands.Kind.CHEST, withdraw.kind());
+        assertEquals(1, withdraw.y());
+        assertEquals("diamond", withdraw.text());
+
+        HeadlessCommands.Parsed drop = HeadlessCommands.parse("drop stick 3");
+        assertEquals(HeadlessCommands.Kind.DROP, drop.kind());
+        assertEquals(3, drop.x());
+
+        assertEquals(HeadlessCommands.Kind.PICKUP, HeadlessCommands.parse("pickup").kind());
+        assertEquals("oak_log", HeadlessCommands.parse("pickup oak_log").text());
+        assertEquals(HeadlessCommands.Kind.EQUIP, HeadlessCommands.parse("equip").kind());
+        assertEquals("iron_helmet", HeadlessCommands.parse("equip iron_helmet").text());
+
+        assertTrue(HeadlessCommands.parse("craft").error().contains("usage: craft"));
+        assertTrue(HeadlessCommands.parse("chest open dirt").error().contains("usage: chest"));
+    }
+
 }

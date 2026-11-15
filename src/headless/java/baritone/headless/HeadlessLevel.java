@@ -54,7 +54,9 @@ import net.minecraft.world.level.storage.WritableLevelData;
 import net.minecraft.world.clock.ClockManager;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.client.multiplayer.ClientRecipeContainer;
 import net.minecraft.world.item.crafting.RecipeAccess;
+import net.minecraft.world.item.crafting.SelectableRecipe;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Scoreboard;
@@ -71,6 +73,8 @@ public final class HeadlessLevel extends Level {
     private final RegistryAccess registryAccess;
     private final TickRateManager tickRateManager = new TickRateManager();
     private final Scoreboard scoreboard = new Scoreboard();
+    // Ostinato: furnace menus read property sets from this on construction. Empty until UpdateRecipes.
+    private RecipeAccess recipes = new ClientRecipeContainer(java.util.Map.of(), SelectableRecipe.SingleInputSet.empty());
     private final LevelEntityGetter<Entity> entities = new LevelEntityGetter<>() {
         @Override
         public Entity get(int id) {
@@ -295,7 +299,13 @@ public final class HeadlessLevel extends Level {
 
     @Override
     public RecipeAccess recipeAccess() {
-        return null;
+        return recipes;
+    }
+
+    void setRecipeAccess(RecipeAccess recipes) {
+        if (recipes != null) {
+            this.recipes = recipes;
+        }
     }
 
     @Override

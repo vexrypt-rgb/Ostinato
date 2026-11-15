@@ -11,7 +11,7 @@ import java.util.Locale;
 public final class HeadlessCommands {
 
     public enum Kind {
-        STOP, CANCEL, GOTO, MINE, PLACE, STATUS, PROBE, COURSE, KILL
+        STOP, CANCEL, GOTO, MINE, PLACE, STATUS, PROBE, COURSE, KILL, CRAFT, SMELT, CHEST, DROP, PICKUP, EQUIP
     }
 
     /** A parsed command. {@code error} is set when the verb was recognized but the arguments were not. */
@@ -86,6 +86,49 @@ public final class HeadlessCommands {
                     yield bad("usage: probe <x> <y> <z> (integers)");
                 }
             }
+            case "craft" -> itemCount(Kind.CRAFT, parts, "usage: craft <item> [count]");
+            case "smelt" -> itemCount(Kind.SMELT, parts, "usage: smelt <item> [count]");
+            case "drop" -> itemCount(Kind.DROP, parts, "usage: drop <item> [count]");
+            case "pickup" -> {
+                if (parts.length == 1) {
+                    yield new Parsed(Kind.PICKUP, 1, 0, 0, "", null);
+                }
+                if (parts.length == 2) {
+                    yield new Parsed(Kind.PICKUP, 1, 0, 0, parts[1].toLowerCase(Locale.ROOT), null);
+                }
+                yield bad("usage: pickup [item]");
+            }
+            case "equip" -> {
+                if (parts.length == 1) {
+                    yield new Parsed(Kind.EQUIP, 1, 0, 0, "", null);
+                }
+                if (parts.length == 2) {
+                    yield new Parsed(Kind.EQUIP, 1, 0, 0, parts[1].toLowerCase(Locale.ROOT), null);
+                }
+                yield bad("usage: equip [item]");
+            }
+            case "chest" -> {
+                if (parts.length < 3 || parts.length > 4) {
+                    yield bad("usage: chest <deposit|withdraw> <item> [count]");
+                }
+                String action = parts[1].toLowerCase(Locale.ROOT);
+                if (!action.equals("deposit") && !action.equals("withdraw")) {
+                    yield bad("usage: chest <deposit|withdraw> <item> [count]");
+                }
+                int count = 1;
+                if (parts.length == 4) {
+                    try {
+                        count = Integer.parseInt(parts[3]);
+                    } catch (NumberFormatException e) {
+                        yield bad("usage: chest <deposit|withdraw> <item> [count]");
+                    }
+                }
+                if (count < 1) {
+                    yield bad("count must be at least 1");
+                }
+                yield new Parsed(Kind.CHEST, count, action.equals("withdraw") ? 1 : 0, 0,
+                        parts[2].toLowerCase(Locale.ROOT), null);
+            }
             case "kill", "attack" -> {
                 if (parts.length == 1) {
                     yield new Parsed(Kind.KILL, 0, 0, 0, "", null);
@@ -159,9 +202,27 @@ public final class HeadlessCommands {
         }
         String word = body.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         return switch (word) {
-            case "stop", "quit", "exit", "cancel", "goto", "mine", "place", "status", "probe", "course", "kill", "attack" -> true;
+            case "stop", "quit", "exit", "cancel", "goto", "mine", "place", "status", "probe", "course", "kill", "attack", "craft", "smelt", "chest", "drop", "pickup", "equip" -> true;
             default -> false;
         };
+    }
+
+    private static Parsed itemCount(Kind kind, String[] parts, String usage) {
+        if (parts.length != 2 && parts.length != 3) {
+            return bad(usage);
+        }
+        int count = 1;
+        if (parts.length == 3) {
+            try {
+                count = Integer.parseInt(parts[2]);
+            } catch (NumberFormatException e) {
+                return bad(usage);
+            }
+        }
+        if (count < 1) {
+            return bad("count must be at least 1");
+        }
+        return new Parsed(kind, count, 0, 0, parts[1].toLowerCase(Locale.ROOT), null);
     }
 
     private static Parsed ok(Kind kind) {

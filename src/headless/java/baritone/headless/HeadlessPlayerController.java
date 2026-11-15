@@ -183,7 +183,30 @@ public final class HeadlessPlayerController implements IPlayerController {
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
-        // No container interaction headlessly. Backpack swaps need a hashed click this slice does not send.
+        // Ostinato: hashed ServerboundContainerClick, same path MultiPlayerGameMode.handleContainerInput uses.
+        bot.inventory().windowClick(windowId, slotId, mouseButton, type, player);
+    }
+
+    /** Right-click a block without predicting a placement (opening a table, furnace, or chest). */
+    void interactBlock(BlockHitResult result) {
+        syncHeldItem();
+        int seq = ++sequence;
+        bot.send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, result, seq));
+    }
+
+    void dropHeld(boolean all) {
+        ServerboundPlayerActionPacket.Action action = all
+                ? ServerboundPlayerActionPacket.Action.DROP_ALL_ITEMS
+                : ServerboundPlayerActionPacket.Action.DROP_ITEM;
+        send(action, BlockPos.ZERO, Direction.DOWN);
+        ItemStack held = player.getMainHandItem();
+        if (!held.isEmpty()) {
+            if (all) {
+                player.getInventory().setItem(player.getInventory().getSelectedSlot(), ItemStack.EMPTY);
+            } else {
+                held.shrink(1);
+            }
+        }
     }
 
     @Override

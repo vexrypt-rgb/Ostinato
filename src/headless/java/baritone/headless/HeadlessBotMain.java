@@ -11,6 +11,12 @@
  *   place <x> <y> <z>   place one throwaway block into that cell against an adjacent support
  *   kill [type]          fight monsters (or a type such as zombie) with vanilla melee
  *   attack [type]        alias of kill
+ *   craft <item> [count]  2x2 / table crafting via real container clicks or the recipe book
+ *   smelt <item> [count]  place/open a furnace, smelt the item with coal, take the output
+ *   chest deposit|withdraw <item> [count]
+ *   drop <item> [count]   drop from the hotbar
+ *   pickup [item]         walk over a nearby dropped item
+ *   equip [item]          shift-click armor into the armor slots
  *   cancel              cancel pathing/mining/placing (does not exit)
  *   stop path           alias of cancel
  *   stop                end the run (quit and exit are aliases)
@@ -205,6 +211,13 @@ public final class HeadlessBotMain {
             case MINE -> bot.enqueuePathing("mine " + parsed.text());
             case PLACE -> bot.enqueuePathing("place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case KILL -> bot.enqueuePathing(parsed.text().isEmpty() ? "kill" : "kill " + parsed.text());
+            case CRAFT -> bot.enqueuePathing("craft " + parsed.text() + (parsed.x() != 1 ? " " + parsed.x() : ""));
+            case SMELT -> bot.enqueuePathing("smelt " + parsed.text() + (parsed.x() != 1 ? " " + parsed.x() : ""));
+            case DROP -> bot.enqueuePathing("drop " + parsed.text() + (parsed.x() != 1 ? " " + parsed.x() : ""));
+            case PICKUP -> bot.enqueuePathing(parsed.text().isEmpty() ? "pickup" : "pickup " + parsed.text());
+            case EQUIP -> bot.enqueuePathing(parsed.text().isEmpty() ? "equip" : "equip " + parsed.text());
+            case CHEST -> bot.enqueuePathing("chest " + (parsed.y() == 1 ? "withdraw " : "deposit ") + parsed.text()
+                    + (parsed.x() != 1 ? " " + parsed.x() : ""));
             case STATUS -> snapshot(evidence, bot, startedAt, tickerErrors, "command status");
             case PROBE -> probe(probeOut, bot, "probe " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case COURSE -> {

@@ -21,6 +21,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -39,6 +40,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private final HeadlessLookBehavior look;
     private final HeadlessBaritone host;
     private final HeadlessCombat combat;
+    private final HeadlessCraft craft;
     private volatile BlockPos mining;
     private int miningTicks;
     private volatile String miningStatus = "idle";
@@ -80,11 +82,13 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         Baritone.settings().unifiedExecutor.value = false;
         host = new HeadlessBaritone(context, new HeadlessBlockStateInterface(bot.chunks()), input, look);
         combat = new HeadlessCombat(bot, player, controller, host, bot.entities());
+        craft = new HeadlessCraft(bot, player, controller, host, this);
     }
 
     /** True while a goal is queued, a mine is waiting on a break, or a place command is in progress. */
     boolean controlsMovement() {
-        return host.getPathingBehavior().isPathing() || mining != null || placing != null || combat.active();
+        return host.getPathingBehavior().isPathing() || mining != null || placing != null
+                || combat.active() || craft.active();
     }
 
     HeadlessBaritone baritone() {
@@ -118,7 +122,81 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         combat.start(typeFilter);
     }
 
+    void container(HeadlessCommands.Parsed parsed) {
+        switch (parsed.kind()) {
+            case CRAFT -> {
+                var item = HeadlessRecipes.resolve(parsed.text());
+                if (item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startCraft(item, parsed.x());
+            }
+            case SMELT -> {
+                var item = HeadlessRecipes.resolve(parsed.text());
+                if (item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startSmelt(item, Items.COAL, parsed.x());
+            }
+            case CHEST -> {
+                var item = HeadlessRecipes.resolve(parsed.text());
+                if (item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startChest(parsed.y() == 0, item, parsed.x());
+            }
+            case DROP -> {
+                var item = HeadlessRecipes.resolve(parsed.text());
+                if (item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startDrop(item, parsed.x());
+            }
+            case PICKUP -> {
+                var item = parsed.text().isEmpty() ? null : HeadlessRecipes.resolve(parsed.text());
+                if (!parsed.text().isEmpty() && item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startPickup(item);
+            }
+            case EQUIP -> {
+                var item = parsed.text().isEmpty() ? null : HeadlessRecipes.resolve(parsed.text());
+                if (!parsed.text().isEmpty() && item == null) {
+                    throw new IllegalArgumentException("unknown item " + parsed.text());
+                }
+                cancelMovement();
+                craft.startEquip(item);
+            }
+            default -> throw new IllegalArgumentException("not a container command: " + parsed.kind());
+        }
+        System.out.println("[HeadlessCraft] " + parsed.kind().name().toLowerCase() + " " + parsed.text());
+    }
+
+    void requestGoto(BlockPos pos) {
+        host.getPathingBehavior().gotoGoal(new GoalGetToBlock(pos));
+    }
+
+    void requestPlace(BlockPos pos) {
+        mining = null;
+        miningStatus = "idle";
+        placing = pos;
+        placeWait = 0;
+        placeAttempts = 0;
+        placeAimed = false;
+        placeStatus = "placing " + placing;
+    }
+
+    boolean isPlacing() {
+        return placing != null;
+    }
+
     void cancel() {
+        craft.cancel();
         combat.cancel();
         mining = null;
         miningStatus = "idle";
@@ -132,6 +210,23 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         host.getPathingBehavior().noteCancelled();
         controller.resetBlockRemoving();
         controller.abandonPlace();
+        input.clearAllKeys();
+    }
+
+    /** Stop pathing, mining, placing and combat, but leave a running craft/smelt/chest task. */
+    private void cancelMovement() {
+        combat.cancel();
+        mining = null;
+        miningStatus = "idle";
+        placing = null;
+        placeStatus = "idle";
+        placeAimed = false;
+        placeAttempts = 0;
+        pendingPlaceLook = null;
+        pendingPlaceWant = null;
+        host.getPathingBehavior().cancelEverything();
+        host.getPathingBehavior().noteCancelled();
+        controller.resetBlockRemoving();
         input.clearAllKeys();
     }
 
@@ -186,20 +281,24 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         if (combat.active()) {
             combat.tick();
         }
-        boolean owns = host.getPathingBehavior().isPathing() || mining != null || placing != null || combat.active();
+        if (craft.active()) {
+            craft.tick();
+        }
+        boolean owns = host.getPathingBehavior().isPathing() || mining != null || placing != null
+                || combat.active() || craft.active();
         if (!owns) return null;
         try {
             host.getPathingBehavior().tick();
             if (mining != null) tickMining();
             else if (placing != null) tickPlaceCommand();
-            else if (combat.active()) {
-                // Look is already on the player from combat.tick(); do not left-click blocks.
+            else if (combat.active() || craft.active()) {
+                // Look is already on the player; do not left-click blocks during combat or container use.
             } else {
                 tickAttack();
                 tickUse();
             }
             holdSneakIfHanging(movement);
-            String why = placing != null ? "place" : combat.active() ? "combat" : "pathing";
+            String why = placing != null ? "place" : craft.active() ? "craft" : combat.active() ? "combat" : "pathing";
             return new HeadlessMovement.Step(1, player.getYRot(), player.getXRot(),
                     key(Input.MOVE_FORWARD) - key(Input.MOVE_BACK), key(Input.MOVE_LEFT) - key(Input.MOVE_RIGHT),
                     down(Input.SPRINT), down(Input.JUMP), down(Input.SNEAK), why);
@@ -619,7 +718,8 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 + " placePackets=" + controller.placePackets()
                 + " placeAcked=" + controller.lastPlaceAcked()
                 + " placeFailed=" + controller.lastPlaceFailed()
-                + " combat=" + combat.status() + " combatHits=" + combat.hits();
+                + " combat=" + combat.status() + " combatHits=" + combat.hits()
+                + " craft=" + craft.status();
     }
 
     void close() {

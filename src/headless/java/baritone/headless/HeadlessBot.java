@@ -185,6 +185,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 ClientConfigurationPacketListener.class, ConnectionProtocol.CONFIGURATION, this);
         this.gameListener = HeadlessPacketListeners.create(
                 ClientGamePacketListener.class, ConnectionProtocol.PLAY, this);
+        inventory.attach(this);
     }
 
     // ------------------------------------------------------------------ startup
@@ -510,6 +511,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             try {
                 RegistryAccess.Frozen built = registries.build();
                 registryAccess = built;
+                inventory.invalidateHasher();
                 event("rebuilt " + built.listRegistryKeys().count() + " registries from configuration");
             } catch (RuntimeException e) {
                 event("registry reconstruction FAILED: " + e + " - PLAY decode may fail");
@@ -686,6 +688,10 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         return inventory;
     }
 
+    RegistryAccess.Frozen registryAccess() {
+        return registryAccess;
+    }
+
     HeadlessLiveDriver liveDriver() {
         return live;
     }
@@ -818,6 +824,13 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 event("kill " + (parsed.text().isEmpty() ? "(monsters)" : parsed.text()));
                 System.out.println("[HeadlessCombat] kill " + (parsed.text().isEmpty() ? "(monsters)" : parsed.text()));
             }
+            case CRAFT, SMELT, CHEST, DROP, PICKUP, EQUIP -> {
+                ensureHost();
+                ensureMovement();
+                live.sync(movement);
+                live.container(parsed);
+                event(parsed.kind().name().toLowerCase() + " " + parsed.text());
+            }
             default -> System.err.println("[HeadlessBot] not a pathing command: " + parsed.kind());
         }
     }
@@ -932,7 +945,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         return sb.toString();
     }
 
-    private void event(String text) {
+    void event(String text) {
         synchronized (events) {
             events.add(text);
         }
