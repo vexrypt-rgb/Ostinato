@@ -483,10 +483,27 @@ final class HeadlessCraft {
                     inventory.click(src, 0, ContainerInput.PICKUP);
                 }
                 pause(CLICK_COOLDOWN);
+                waited = 0;
                 status = "loaded fuel";
                 return;
             }
-            finish(false, "no fuel");
+            // Ostinato: one coal is consumed into burn time immediately, so the fuel
+            // slot goes empty while raw iron is still smelting. A stale SetContent can
+            // also make both the fuel slot and the player inventory look empty mid-click.
+            // Wait for the next sync (or the output) instead of aborting.
+            if (!inputSlot.isEmpty()) {
+                waited++;
+                status = "smelting " + waited;
+                if (waited > SMELT_WAIT_TICKS) {
+                    finish(false, "smelt timed out");
+                }
+                return;
+            }
+            waited++;
+            status = "waiting for fuel sync " + waited;
+            if (waited > 40) {
+                finish(false, "no fuel");
+            }
             return;
         }
         waited++;
@@ -596,9 +613,13 @@ final class HeadlessCraft {
             return;
         }
         pickupEntityId = item.id;
-        BlockPos pos = BlockPos.containing(item.x, item.y, item.z);
-        if (player.position().distanceToSqr(item.position()) > 1.5) {
-            driver.requestGoto(pos);
+        // Ostinato: vanilla ItemEntity pickup is roughly a 1-block inflate of the
+        // player AABB. GoalGetToBlock is already satisfied from an adjacent block
+        // (~1.45m away), so walk onto the item's block instead of stopping short.
+        double distSq = player.position().distanceToSqr(item.position());
+        if (distSq > 1.0) {
+            BlockPos pos = BlockPos.containing(item.x, item.y, item.z);
+            driver.requestStandOn(pos);
             status = "approaching drop " + pos.toShortString();
             return;
         }

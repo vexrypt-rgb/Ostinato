@@ -183,6 +183,15 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         host.getPathingBehavior().gotoGoal(new GoalGetToBlock(pos));
     }
 
+    // Ostinato: stand on the block itself. Used for item pickup, where GoalGetToBlock
+    // succeeds from an adjacent tile that is still outside vanilla pickup range.
+    void requestStandOn(BlockPos pos) {
+        if (host.getPathingBehavior().isPathing() || host.getPathingBehavior().planning()) {
+            return;
+        }
+        host.getPathingBehavior().gotoGoal(new GoalBlock(pos.getX(), pos.getY(), pos.getZ()));
+    }
+
     void requestPlace(BlockPos pos) {
         mining = null;
         miningStatus = "idle";
