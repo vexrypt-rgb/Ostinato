@@ -49,6 +49,8 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
     private int placeAttempts;
     private boolean placeAimed;
     private volatile String placeStatus = "idle";
+    /** When true, tickPlaceCommand keeps the already selected hotbar block instead of a throwaway. */
+    private boolean placeHeldItem;
     // Ostinato: stay crouched across a partial-path A* wait and while hanging off a
     // placed 1-wide block. Clearing sneak on SUCCESS drops the bot into the gap.
     private boolean bridgeHold;
@@ -188,6 +190,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeWait = 0;
         placeAttempts = 0;
         placeAimed = false;
+        placeHeldItem = true;
         placeStatus = "placing " + placing;
     }
 
@@ -204,6 +207,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeStatus = "idle";
         placeAimed = false;
         placeAttempts = 0;
+        placeHeldItem = false;
         pendingPlaceLook = null;
         pendingPlaceWant = null;
         host.getPathingBehavior().cancelEverything();
@@ -222,6 +226,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         placeStatus = "idle";
         placeAimed = false;
         placeAttempts = 0;
+        placeHeldItem = false;
         pendingPlaceLook = null;
         pendingPlaceWant = null;
         host.getPathingBehavior().cancelEverything();
@@ -403,7 +408,12 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             finishPlace("out of reach " + target.toShortString());
             return;
         }
-        if (!host.selectThrowawayForLocation(true, target.getX(), target.getY(), target.getZ())) {
+        if (placeHeldItem) {
+            if (!(player.getMainHandItem().getItem() instanceof BlockItem)) {
+                finishPlace("no held block " + target.toShortString());
+                return;
+            }
+        } else if (!host.selectThrowawayForLocation(true, target.getX(), target.getY(), target.getZ())) {
             finishPlace("no throwaway " + target.toShortString());
             return;
         }
