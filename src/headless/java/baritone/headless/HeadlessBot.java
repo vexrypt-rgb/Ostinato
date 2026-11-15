@@ -72,8 +72,12 @@ import net.minecraft.network.protocol.login.ServerboundHelloPacket;
 import net.minecraft.network.protocol.login.ServerboundLoginAcknowledgedPacket;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ParticleStatus;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.player.Input;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.player.ChatVisiblity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -82,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -148,6 +153,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private volatile int chunkRadius = -1;
     private volatile boolean loadedSent;
     private volatile boolean spawnKnown;
+    private final AtomicInteger movementSuppressedUntilTick = new AtomicInteger(-1);
     private volatile int spawnTeleports;
     private volatile int positionReminder;
     private volatile boolean onGround = true;
@@ -346,6 +352,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             }
             spawnKnown = false;
             loadedSent = false;
+            chunkRadius = login.chunkRadius();
             event("play login id=" + playerId + " dim=" + dimension
                     + " view=" + login.chunkRadius() + " sim=" + login.simulationDistance()
                     + " secureChat=" + login.enforcesSecureChat());
@@ -393,10 +400,19 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (p instanceof ClientboundSetChunkCacheCenterPacket) {
             chunkCenterX = ((ClientboundSetChunkCacheCenterPacket) p).getX();
             chunkCenterZ = ((ClientboundSetChunkCacheCenterPacket) p).getZ();
+            int dropped = chunks.retainAround(chunkCenterX, chunkCenterZ, chunkRadius);
+            if (dropped > 0) {
+                event("chunk center " + chunkCenterX + "," + chunkCenterZ
+                        + " radius=" + chunkRadius + " dropped=" + dropped
+                        + " remain=" + chunks.chunkCount());
+            }
             return;
         }
         if (p instanceof ClientboundSetChunkCacheRadiusPacket) {
             chunkRadius = ((ClientboundSetChunkCacheRadiusPacket) p).getRadius();
+            int dropped = chunks.retainAround(chunkCenterX, chunkCenterZ, chunkRadius);
+            event("chunk radius " + chunkRadius
+                    + (dropped > 0 ? " dropped=" + dropped + " remain=" + chunks.chunkCount() : ""));
             return;
         }
         if (p instanceof ClientboundStartConfigurationPacket) {
@@ -423,8 +439,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                     driver.applyVelocity(lastVelocity);
                 }
                 if (lastVelocity.lengthSqr() > 1.0E-12) {
-                    corrections.incrementAndGet();
-                    event("correction velocity " + lastVelocity);
+                    event("SetEntityMotion " + lastVelocity);
                 }
             } else {
                 entities.handle(p, playerId);
@@ -437,6 +452,17 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 Vec3 end = sync.position().endPosition();
                 double d = (end.x - x) * (end.x - x) + (end.y - y) * (end.y - y)
                         + (end.z - z) * (end.z - z);
+                x = end.x;
+                y = end.y;
+                z = end.z;
+                yRot = Mth.wrapDegrees(sync.yRot());
+                xRot = Mth.wrapDegrees(sync.xRot());
+                onGround = sync.onGround();
+                HeadlessMovement driver = movement;
+                if (driver != null) {
+                    driver.rotation(yRot, xRot);
+                    driver.resync(x, y, z, onGround);
+                }
                 if (d > 1.0E-12) {
                     corrections.incrementAndGet();
                     event("correction entity sync -> " + end + " (delta^2=" + d + ")");
@@ -454,8 +480,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 if (driver != null) {
                     driver.applyVelocity(v);
                 }
-                corrections.incrementAndGet();
-                event("correction explosion knockback " + v);
+                event("explosion knockback " + v);
             }
             return;
         }
@@ -507,7 +532,11 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         }
         transport.setupOutbound(ConfigurationProtocols.SERVERBOUND);
         send(new ServerboundCustomPayloadPacket(new BrandPayload("vanilla")));
-        send(new ServerboundClientInformationPacket(ClientInformation.createDefault()));
+        // Ostinato: createDefault() uses viewDistance=2 (a dummy server-side player).
+        // A real client advertises its render distance; 12 is vanilla's options default.
+        // Paper/Moonrise will otherwise forget columns down to a 2-chunk window as we
+        // walk, and a bot with no chunks rubberbands and flags Simulation.
+        send(new ServerboundClientInformationPacket(vanillaClientInformation()));
         event("entered configuration" + (fromPlay ? " (re-entry)" : ""));
     }
 
@@ -541,24 +570,46 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         PositionMoveRotation current = new PositionMoveRotation(new Vec3(x, y, z), Vec3.ZERO, yRot, xRot);
         PositionMoveRotation absolute = PositionMoveRotation.calculateAbsolute(current, p.change(), p.relatives());
         Vec3 pos = absolute.position();
+        float yaw = Mth.wrapDegrees(absolute.yRot());
+        float pitch = Mth.wrapDegrees(absolute.xRot());
+        // Accept first, then publish spawnKnown, so a racing tick cannot emit a
+        // MovePlayer packet the server would see as a move from 0,0,0 to spawn
+        // ("moved too quickly") before the teleport is confirmed.
+        send(new ServerboundAcceptTeleportationPacket(p.id(), pos.x, pos.y, pos.z, yaw, pitch));
         x = pos.x;
         y = pos.y;
         z = pos.z;
-        yRot = absolute.yRot();
-        xRot = absolute.xRot();
+        yRot = yaw;
+        xRot = pitch;
         spawnKnown = true;
         spawnTeleports++;
-        send(new ServerboundAcceptTeleportationPacket(p.id(), x, y, z, yRot, xRot));
+        // Do not send our own position in this tick; wait for the accepted pose.
+        movementSuppressedUntilTick.set((int) ticks.get());
+        HeadlessMovement driver = movement;
+        if (driver != null) {
+            driver.rotation(yRot, xRot);
+            driver.resync(x, y, z, onGround);
+        }
         if (spawnTeleports > 1) {
             corrections.incrementAndGet();
-            HeadlessMovement driver = movement;
-            if (driver != null) {
-                driver.resync(x, y, z, onGround);
-            }
             event("correction teleport #" + (spawnTeleports - 1) + " id=" + p.id() + " -> " + pos);
         } else {
             event("spawn teleport id=" + p.id() + " -> " + pos);
         }
+    }
+
+    /** Vanilla options default: 12-chunk render distance, all model layers, listing allowed. */
+    private static ClientInformation vanillaClientInformation() {
+        return new ClientInformation(
+                "en_us",
+                12,
+                ChatVisiblity.FULL,
+                true,
+                127,
+                HumanoidArm.RIGHT,
+                false,
+                true,
+                ParticleStatus.ALL);
     }
 
     /** Common-side replacement for the client-only RegistryDataCollector tag path. */
@@ -593,7 +644,13 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         HeadlessMovement driver = movement;
         if (driver != null) {
             try {
-                driver.tick(this);
+                if (n <= movementSuppressedUntilTick.get()) {
+                    // Ostinato: AcceptTeleportation just went out. Vanilla does not
+                    // send a MovePlayer in the same tick; doing so is "moved too quickly".
+                    send(ServerboundClientTickEndPacket.INSTANCE);
+                } else {
+                    driver.tick(this);
+                }
             } catch (RuntimeException e) {
                 event("ERROR movement tick: " + e);
                 e.printStackTrace(System.err);

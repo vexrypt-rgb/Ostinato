@@ -16,6 +16,7 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.world.entity.player.Input;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -82,7 +83,10 @@ public final class HeadlessMovement {
     public float yaw() { return yaw; }
     public float pitch() { return pitch; }
     public boolean shift() { return shift; }
-    public void rotation(float yaw, float pitch) { this.yaw = yaw; this.pitch = pitch; }
+    public void rotation(float yaw, float pitch) {
+        this.yaw = Mth.wrapDegrees(yaw);
+        this.pitch = Mth.wrapDegrees(pitch);
+    }
 
     public void setDriver(Driver driver) {
         this.driver = driver;
@@ -282,12 +286,31 @@ public final class HeadlessMovement {
         log.add(String.format("resync #%d -> (%.9f,%.9f,%.9f) onGround=%s", resyncs, x, y, z, onGround));
     }
 
+    // Ostinato: SetEntityMotion / explosion knockback arrives on the Netty thread.
+    // Queue it and apply at the start of the next sim tick so travel() uses the
+    // same delta movement a vanilla client would, instead of racing mid-tick.
+    private final Object velocityLock = new Object();
+    private Vec3 pendingVelocity;
+
     /** Knockback: the server owns velocity, so write it straight into the sim. */
     public void applyVelocity(Vec3 v) {
-        sim.vx = v.x;
-        sim.vy = v.y;
-        sim.vz = v.z;
+        synchronized (velocityLock) {
+            pendingVelocity = v;
+        }
         log.add("velocity -> " + v);
+    }
+
+    private void applyPendingVelocity() {
+        Vec3 v;
+        synchronized (velocityLock) {
+            v = pendingVelocity;
+            pendingVelocity = null;
+        }
+        if (v != null) {
+            sim.vx = v.x;
+            sim.vy = v.y;
+            sim.vz = v.z;
+        }
     }
 
     /** Exactly one movement packet and one ClientTickEnd per 20 TPS tick. */
@@ -297,6 +320,7 @@ public final class HeadlessMovement {
             rotation(bot.yRot(), bot.xRot());
             start(bot.x(), bot.y(), bot.z(), bot.onGround());
         }
+        applyPendingVelocity();
         // Ostinato: live intent is selected before the one shared simulation/packet path.
         Step live = driver == null ? null : driver.tick(bot, this);
         // When pathing is idle, keep the last look and apply gravity — do not snap to the
@@ -378,6 +402,8 @@ public final class HeadlessMovement {
     // Ostinato: match LocalPlayer.sendPosition(). Repeating PosRot with an
     // unchanged look is not what a vanilla client does and trips AimDuplicateLook.
     private void sendMovementPacket(HeadlessBot bot, float yaw, float pitch) {
+        yaw = Mth.wrapDegrees(yaw);
+        pitch = Mth.wrapDegrees(pitch);
         positionReminder++;
         double dx = sim.x - lastSentX;
         double dy = sim.y - lastSentY;

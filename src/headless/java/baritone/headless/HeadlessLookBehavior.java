@@ -26,7 +26,7 @@ public final class HeadlessLookBehavior implements ILookBehavior {
     public void updateTarget(Rotation rotation, boolean blockInteract) {
         // Vanilla applies the target at the start of the next tick; the headless tick applies it now, before
         // the movement packet is written, so the server sees the same yaw the movement was computed for.
-        player.setYRot(rotation.getYaw());
+        player.setYRot(Mth.wrapDegrees(rotation.getYaw()));
         player.setXRot(Mth.clamp(rotation.getPitch(), -90f, 90f));
     }
 

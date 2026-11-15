@@ -175,6 +175,25 @@ public final class HeadlessChunkStore {
         }
     }
 
+    /** Drop columns outside the current cache window. Vanilla ClientChunkCache does this on a center/radius update. */
+    public int retainAround(int centerX, int centerZ, int radius) {
+        if (radius < 0) {
+            return 0;
+        }
+        int dropped = 0;
+        for (Long k : chunks.keySet()) {
+            int cx = (int) (k >> 32);
+            int cz = k.intValue();
+            if (Math.abs(cx - centerX) > radius || Math.abs(cz - centerZ) > radius) {
+                if (chunks.remove(k) != null) {
+                    forgottenChunks++;
+                    dropped++;
+                }
+            }
+        }
+        return dropped;
+    }
+
     public void clear() {
         chunks.clear();
     }
