@@ -215,62 +215,117 @@ final class HeadlessRecipes {
 
     /**
      * Craft goals in dependency order (ingredients first). Empty when the inventory already has
-     * {@code count} of the concrete result.
+     * {@code count} of the concrete result. A running inventory simulation reserves ingredients
+     * so a later sibling (sticks after a pickaxe head) cannot spend planks already promised.
      */
     static List<Recipe> plan(Item wanted, int count, Inventory inventory) {
         List<Recipe> steps = new ArrayList<>();
-        planInto(wanted, count, inventory, steps, 0);
+        Map<Item, Integer> sim = snapshot(inventory);
+        planInto(wanted, count, inventory, steps, sim, 0);
         return steps;
     }
 
-    private static boolean planInto(Item wanted, int count, Inventory inventory, List<Recipe> steps, int depth) {
+    private static boolean planInto(Item wanted, int count, Inventory inventory, List<Recipe> steps,
+                                    Map<Item, Integer> sim, int depth) {
         if (depth > 8) {
             return false;
         }
         Item concrete = concreteResult(wanted, inventory);
-        int have = countIncludingPlanned(concrete, inventory, steps);
-        if (isPlanks(wanted) || wanted == Items.OAK_PLANKS) {
-            have = Math.max(have, countMatching(inventory, HeadlessRecipes::isPlanks) + countPlannedPlanks(steps));
-            if (have >= count) {
-                return true;
-            }
-        } else if (have >= count) {
+        if (available(sim, wanted, inventory) >= count) {
             return true;
         }
         Recipe recipe = recipeFor(concrete, inventory);
         if (recipe == null) {
             return false;
         }
-        int missing = count - have;
-        int crafts = (missing + recipe.resultCount - 1) / recipe.resultCount;
-        for (Ingredient ingredient : recipe.ingredients) {
-            int need = ingredient.count * crafts;
-            if (ingredient.anyLogs) {
-                int logs = countMatching(inventory, HeadlessRecipes::isLog);
-                if (logs < need) {
+        while (available(sim, wanted, inventory) < count) {
+            for (Ingredient ingredient : recipe.ingredients) {
+                int need = ingredient.count;
+                if (ingredient.anyLogs) {
+                    if (countMatchingSim(sim, HeadlessRecipes::isLog) < need) {
+                        return false;
+                    }
+                    Item log = firstMatching(inventory, HeadlessRecipes::isLog);
+                    if (log == null || !debit(sim, log, need)) {
+                        return false;
+                    }
+                    continue;
+                }
+                Item item = ingredient.anyPlanks
+                        ? (firstMatching(inventory, HeadlessRecipes::isPlanks) != null
+                            ? firstMatching(inventory, HeadlessRecipes::isPlanks)
+                            : concreteResult(Items.OAK_PLANKS, inventory))
+                        : ingredient.item;
+                if (item == null) {
                     return false;
                 }
-                continue;
+                if (!planInto(item, need, inventory, steps, sim, depth + 1)) {
+                    return false;
+                }
+                if (!debit(sim, item, need)) {
+                    return false;
+                }
             }
-            Item item = ingredient.anyPlanks
-                    ? (firstMatching(inventory, HeadlessRecipes::isPlanks) != null
-                        ? firstMatching(inventory, HeadlessRecipes::isPlanks)
-                        : concreteResult(Items.OAK_PLANKS, inventory))
-                    : ingredient.item;
-            if (item == null) {
-                return false;
-            }
-            int present = countIncludingPlanned(item, inventory, steps);
-            if (isPlanks(item)) {
-                present = Math.max(present, countMatching(inventory, HeadlessRecipes::isPlanks) + countPlannedPlanks(steps));
-            }
-            if (present < need && !planInto(item, need, inventory, steps, depth + 1)) {
-                return false;
-            }
-        }
-        for (int i = 0; i < crafts; i++) {
+            sim.merge(recipe.result, recipe.resultCount, Integer::sum);
             steps.add(recipe);
         }
+        return true;
+    }
+
+    private static Map<Item, Integer> snapshot(Inventory inventory) {
+        Map<Item, Integer> sim = new LinkedHashMap<>();
+        for (ItemStack stack : inventory.getNonEquipmentItems()) {
+            if (!stack.isEmpty()) {
+                sim.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        }
+        return sim;
+    }
+
+    private static int available(Map<Item, Integer> sim, Item wanted, Inventory inventory) {
+        if (wanted == Items.OAK_PLANKS || isPlanks(wanted)) {
+            int n = 0;
+            for (Map.Entry<Item, Integer> e : sim.entrySet()) {
+                if (isPlanks(e.getKey())) {
+                    n += e.getValue();
+                }
+            }
+            return n;
+        }
+        return sim.getOrDefault(wanted, 0);
+    }
+
+    private static int countMatchingSim(Map<Item, Integer> sim, java.util.function.Predicate<Item> pred) {
+        int n = 0;
+        for (Map.Entry<Item, Integer> e : sim.entrySet()) {
+            if (pred.test(e.getKey())) {
+                n += e.getValue();
+            }
+        }
+        return n;
+    }
+
+    private static boolean debit(Map<Item, Integer> sim, Item item, int need) {
+        if (isPlanks(item)) {
+            int left = need;
+            for (Map.Entry<Item, Integer> e : sim.entrySet()) {
+                if (left <= 0) {
+                    break;
+                }
+                if (!isPlanks(e.getKey()) || e.getValue() <= 0) {
+                    continue;
+                }
+                int take = Math.min(left, e.getValue());
+                e.setValue(e.getValue() - take);
+                left -= take;
+            }
+            return left == 0;
+        }
+        int have = sim.getOrDefault(item, 0);
+        if (have < need) {
+            return false;
+        }
+        sim.put(item, have - need);
         return true;
     }
 

@@ -72,6 +72,11 @@ public class HeadlessCraftTest {
         assertNotNull(pick);
         assertTrue(pick.needsTable());
         assertEquals(3, pick.width());
+        int plankCrafts = (int) plan.stream().filter(step -> HeadlessRecipes.isPlanks(step.result())).count();
+        int planksProduced = plan.stream().filter(step -> HeadlessRecipes.isPlanks(step.result()))
+                .mapToInt(HeadlessRecipes.Recipe::resultCount).sum();
+        assertTrue("pickaxe needs 5 planks (3 head + 2 for sticks); produced=" + planksProduced, planksProduced >= 5);
+        assertTrue(plankCrafts >= 2);
     }
 
     @Test
