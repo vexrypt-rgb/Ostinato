@@ -605,11 +605,11 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         positionReminder++;
+        // Ostinato: the movement driver is the normal path. If we get here, still
+        // do not repeat look on the 20-tick reminder — vanilla sends Pos, not PosRot.
         if (positionReminder >= POSITION_REMINDER_TICKS) {
-            send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot, onGround, false));
+            send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, false));
             positionReminder = 0;
-        } else {
-            send(new ServerboundMovePlayerPacket.StatusOnly(onGround, false));
         }
         // Must be the last packet of the client tick: the server clears its per-tick movement
         // flags in ServerGamePacketListenerImpl.handleClientTickEnd.

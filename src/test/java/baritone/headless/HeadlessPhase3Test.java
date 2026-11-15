@@ -264,8 +264,8 @@ public class HeadlessPhase3Test {
             tickOnce(bot, transport);
         }
         assertFalse(bot.hostAttached());
-        assertEquals(40, transport.count(ServerboundMovePlayerPacket.PosRot.class));
-        assertEquals(0, transport.count(ServerboundMovePlayerPacket.StatusOnly.class));
+        assertEquals("idle must not repeat look", 1, transport.count(ServerboundMovePlayerPacket.PosRot.class));
+        assertEquals(0, transport.count(ServerboundMovePlayerPacket.Rot.class));
         assertEquals(40, transport.count(ServerboundClientTickEndPacket.class));
 
         bot.enqueuePathing("goto 0 2 4");
@@ -294,8 +294,10 @@ public class HeadlessPhase3Test {
                     movement = packet;
                 }
             }
-            assertTrue("cancel must still send a movement packet, got " + movement,
-                    movement instanceof ServerboundMovePlayerPacket.PosRot);
+            assertTrue("cancel must still end the client tick",
+                    transport.sent.get(transport.sent.size() - 1) instanceof ServerboundClientTickEndPacket);
+            assertTrue("cancel movement if any is a MovePlayerPacket, got " + movement,
+                    movement == null || movement instanceof ServerboundMovePlayerPacket);
             assertTrue(bot.pathingStatus().contains("pathing=idle"));
             assertTrue("idle physics must stay on the floor after cancel, y=" + bot.y()
                     + " onGround=" + bot.onGround(), bot.onGround() && bot.y() >= 1.9 && bot.y() <= 2.1);
@@ -318,7 +320,7 @@ public class HeadlessPhase3Test {
                 ends++;
             }
         }
-        assertEquals("one movement packet per tick", 1, moves);
+        assertTrue("at most one movement packet per tick, got " + moves, moves <= 1);
         assertEquals("one ClientTickEnd per tick", 1, ends);
         assertTrue(transport.sent.get(transport.sent.size() - 1) instanceof ServerboundClientTickEndPacket);
     }

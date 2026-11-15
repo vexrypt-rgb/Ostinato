@@ -744,8 +744,11 @@ public class HeadlessPlaceTest {
                 previous = bot.y();
                 if (bot.onGround() && bot.y() >= 1.9 && bot.y() <= 2.2) {
                     assertTrue("must have fallen before landing, y=" + bot.y(), descended);
-                    assertTrue("idle ticks must keep sending PosRot",
-                            transport.count(ServerboundMovePlayerPacket.PosRot.class) >= i);
+                    int movePackets = transport.count(ServerboundMovePlayerPacket.Pos.class)
+                            + transport.count(ServerboundMovePlayerPacket.PosRot.class)
+                            + transport.count(ServerboundMovePlayerPacket.Rot.class);
+                    assertTrue("falling must keep sending position packets, got " + movePackets,
+                            movePackets >= i);
                     return;
                 }
             }

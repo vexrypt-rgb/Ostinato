@@ -179,13 +179,14 @@ public class HeadlessPacketSequenceTest {
         for (int i = 0; i < 40; i++) {
             bot.tick();
         }
-        // Ostinato: once spawned, PlayerSim ticks every tick and one PosRot goes out each tick,
-        // the same as during pathing. Two position packets in one server tick is still forbidden;
-        // ClientTickEnd still ends every client tick.
-        assertEquals(40, server.count(ServerboundMovePlayerPacket.PosRot.class));
-        assertEquals(0, server.count(ServerboundMovePlayerPacket.StatusOnly.class));
+        // Ostinato: once spawned, PlayerSim ticks every tick and ClientTickEnd ends
+        // every client tick. Idle look is not repeated: vanilla sends PosRot once
+        // (to establish look), then Pos only on the 20-tick reminder.
+        int posRot = server.count(ServerboundMovePlayerPacket.PosRot.class);
+        int pos = server.count(ServerboundMovePlayerPacket.Pos.class);
+        assertEquals("idle must not repeat look, posRot=" + posRot + " pos=" + pos, 1, posRot);
+        assertEquals(0, server.count(ServerboundMovePlayerPacket.Rot.class));
         assertEquals(40, server.count(ServerboundClientTickEndPacket.class));
-        server.assertEveryNth(2, ServerboundClientTickEndPacket.class);
     }
 
     @Test

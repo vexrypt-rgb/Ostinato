@@ -99,6 +99,17 @@ public final class HeadlessMovement {
     private boolean lastSprinting;
     private long simTicks;
     private long positionPackets;
+    // Ostinato: last values actually written to a movement packet. Vanilla only
+    // includes look in PosRot/Rot when yaw or pitch changed; repeating the same
+    // look every tick is what Grim flags as AimDuplicateLook.
+    private double lastSentX = Double.NaN;
+    private double lastSentY = Double.NaN;
+    private double lastSentZ = Double.NaN;
+    private float lastSentYaw = Float.NaN;
+    private float lastSentPitch = Float.NaN;
+    private boolean lastSentOnGround;
+    private boolean lastSentCollidedH;
+    private int positionReminder;
     private long inputPackets;
     private long sprintPackets;
     private long resyncs;
@@ -239,6 +250,12 @@ public final class HeadlessMovement {
         reportedX = x;
         reportedY = y;
         reportedZ = z;
+        lastSentX = Double.NaN;
+        lastSentY = Double.NaN;
+        lastSentZ = Double.NaN;
+        lastSentYaw = Float.NaN;
+        lastSentPitch = Float.NaN;
+        positionReminder = 20;
         started = true;
         log.add(String.format("start sim=(%.9f,%.9f,%.9f) onGround=%s steps=%d", x, y, z, onGround, steps.size()));
     }
@@ -255,6 +272,12 @@ public final class HeadlessMovement {
         reportedX = x;
         reportedY = y;
         reportedZ = z;
+        lastSentX = Double.NaN;
+        lastSentY = Double.NaN;
+        lastSentZ = Double.NaN;
+        lastSentYaw = Float.NaN;
+        lastSentPitch = Float.NaN;
+        positionReminder = 20;
         resyncs++;
         log.add(String.format("resync #%d -> (%.9f,%.9f,%.9f) onGround=%s", resyncs, x, y, z, onGround));
     }
@@ -329,9 +352,7 @@ public final class HeadlessMovement {
         reportedY = sim.y;
         reportedZ = sim.z;
         bot.setReportedPosition(sim.x, sim.y, sim.z, sim.onGround, step.yaw, step.pitch);
-        bot.send(new ServerboundMovePlayerPacket.PosRot(
-                sim.x, sim.y, sim.z, step.yaw, step.pitch, sim.onGround, sim.collidedH));
-        positionPackets++;
+        sendMovementPacket(bot, step.yaw, step.pitch);
         // Must be last in the client tick: the server clears receivedPositionThisTick here.
         if (driver != null) {
             driver.afterPackets(bot);
@@ -352,6 +373,47 @@ public final class HeadlessMovement {
                         simTicks, sim.x, sim.y, sim.z));
             }
         }
+    }
+
+    // Ostinato: match LocalPlayer.sendPosition(). Repeating PosRot with an
+    // unchanged look is not what a vanilla client does and trips AimDuplicateLook.
+    private void sendMovementPacket(HeadlessBot bot, float yaw, float pitch) {
+        positionReminder++;
+        double dx = sim.x - lastSentX;
+        double dy = sim.y - lastSentY;
+        double dz = sim.z - lastSentZ;
+        boolean posChanged = Double.isNaN(lastSentX)
+                || dx * dx + dy * dy + dz * dz > 2.0E-4
+                || positionReminder >= 20;
+        boolean rotChanged = Float.isNaN(lastSentYaw) || yaw != lastSentYaw || pitch != lastSentPitch;
+        boolean statusChanged = sim.onGround != lastSentOnGround || sim.collidedH != lastSentCollidedH;
+        if (posChanged && rotChanged) {
+            bot.send(new ServerboundMovePlayerPacket.PosRot(
+                    sim.x, sim.y, sim.z, yaw, pitch, sim.onGround, sim.collidedH));
+        } else if (posChanged) {
+            bot.send(new ServerboundMovePlayerPacket.Pos(
+                    sim.x, sim.y, sim.z, sim.onGround, sim.collidedH));
+        } else if (rotChanged) {
+            bot.send(new ServerboundMovePlayerPacket.Rot(
+                    yaw, pitch, sim.onGround, sim.collidedH));
+        } else if (statusChanged) {
+            bot.send(new ServerboundMovePlayerPacket.StatusOnly(sim.onGround, sim.collidedH));
+        }
+        if (posChanged || rotChanged || statusChanged) {
+            positionPackets++;
+        }
+        if (posChanged) {
+            lastSentX = sim.x;
+            lastSentY = sim.y;
+            lastSentZ = sim.z;
+            positionReminder = 0;
+        }
+        if (rotChanged) {
+            lastSentYaw = yaw;
+            lastSentPitch = pitch;
+        }
+        lastSentOnGround = sim.onGround;
+        lastSentCollidedH = sim.collidedH;
     }
 
     /**
