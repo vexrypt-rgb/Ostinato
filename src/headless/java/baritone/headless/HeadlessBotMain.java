@@ -9,6 +9,8 @@
  *   goto <x> <y> <z>    plan with Ostinato A* and walk there
  *   mine <block>        path to the nearest loaded block of that id and break it
  *   place <x> <y> <z>   place one throwaway block into that cell against an adjacent support
+ *   kill [type]          fight monsters (or a type such as zombie) with vanilla melee
+ *   attack [type]        alias of kill
  *   cancel              cancel pathing/mining/placing (does not exit)
  *   stop path           alias of cancel
  *   stop                end the run (quit and exit are aliases)
@@ -202,6 +204,7 @@ public final class HeadlessBotMain {
             case GOTO -> bot.enqueuePathing("goto " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case MINE -> bot.enqueuePathing("mine " + parsed.text());
             case PLACE -> bot.enqueuePathing("place " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+            case KILL -> bot.enqueuePathing(parsed.text().isEmpty() ? "kill" : "kill " + parsed.text());
             case STATUS -> snapshot(evidence, bot, startedAt, tickerErrors, "command status");
             case PROBE -> probe(probeOut, bot, "probe " + parsed.x() + " " + parsed.y() + " " + parsed.z());
             case COURSE -> {
