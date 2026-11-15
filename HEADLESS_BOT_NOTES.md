@@ -881,3 +881,59 @@ were placed, then a kick at -0.55,-60.42,23.35 (SIM delta=0).
 * `ClientboundTakeItemEntityPacket` is still unhandled. A break that drops an item does not
   enter this inventory until a later set-slot / set-content packet.
 * One place prediction is in flight at a time. The chunk store is never written by the prediction.
+
+## 17. Later the same day (15 Nov 2026), after section 16
+
+Section 16's open list is the state at the place-slice commit. Later local commits, still not pushed, changed it. Tip when this section was written: `1fcb2b571`.
+
+Passed on vanilla offline 26.3 with `allow-flight=false` and 0 kicks: sneak-bridge, 5-high pillar, void bridge, idle landing (no hover), one zombie, three zombies, crafting table, wooden pickaxe, furnace ingot, chest deposit and withdraw, drop, pickup, armor equip. Two protocol bots were about 383 MB and 330 MB private, with the server about 608 MB.
+
+Paper 26.3-252 never sends `ChunkBatchFinished`. The bot sends `PlayerLoaded` after the first solid chunk. Grim 2.3.75 idle join was clean once movement packets matched `LocalPlayer.sendPosition`. The 08:30 MST pillar still flagged Simulation (about 0.075 and 0.077, alternating) and one RotationPlace. `1fcb2b571` holds the click until the last-sent feet box clears the dest and the look is already on the wire. That commit was unit-tested. The live Grim retest, Updated NoCheatPlus, and Spartan were still open.
+
+God-bridge stays off. `Baritone.settings()` is still one JVM singleton. The prediction now writes the block into the chunk store immediately and rolls it back on ack or timeout. The last bullet of section 16 is stale on that point.
+
+## 18. Grim pillar, same day, uncommitted on 1fcb2b571
+
+The 14:39 MST live run of `1fcb2b571` arrived at `5 -54 -4` and still drew Grim Simulation x12, alternating 0.075444 and 0.076891. No RotationPlace, no Post, no kick. The click went out at the first tick the feet cleared the cell (`*.998664`), before travel, so the position packet was the next pose.
+
+The real client clicks at the jump apex (`*.750813`, about 0.249 above the dest top) and sends UseItemOn, then the position of that same pose. An uncommitted change arms the click before physics and flushes it after, and waits for that apex while airborne. A sneak bridge occupies the dest column too, but it is on the ground, so the apex window does not apply there. `HeadlessPlaceTest` 18 tests, 0 failures.
+
+That apex click was live at 14:56 MST. It still flagged Simulation x12. The tick after the apex only moves about +0.003. Vanilla's `2.0E-4` squared threshold drops that packet when the look is unchanged. Grim has already simulated the tick, so the next packet is 0.075444 ahead, then 0.076891. The client sends the small tick because its yaw changes. The movement packet now goes out for any real vertical change.
+
+The 15:02 MST retest arrived at 5.5,-54.0,-3.5, onGround, corrections=1 (the operator teleport only). Simulation 0, RotationPlace 0, 0 kicks, `allow-flight=false`. Grim Post x1 remained, "player block placement v26.3", on the first place only. The other five places were quiet. Updated NoCheatPlus and Spartan were not started. Not committed, not pushed.
+
+## 19. Grim Post, same day, still uncommitted
+
+Grim 2.3.75 Post queues `PLAYER_BLOCK_PLACEMENT` when it arrives while `sentFlying` is still set, then flags on the next valid pong if that queue is not empty. A flying packet clears the queue. Our place tick already sent UseItemOn and then Pos. The pong was the packet that could land in the gap: the netty thread answered `ClientboundPing` immediately, and the first place does enough work after the UseItemOn write (`predictPlace`) for that pong to go out before Pos. Later places were the same shape and happened to miss the window. The 15:02 flag text was the queued packet name plus the client release, "player block placement v26.3".
+
+Pings that arrive during `tick()` are now queued and written after that tick's `ClientTickEnd`. A ping that arrives between ticks is still answered immediately. `HeadlessPacketSequenceTest` still sees the immediate pong.
+
+The 15:48 MST retest used that change. Same pillar, `goto 5 -54 -4`, `allow-flight=false`. Arrived and stayed at 5.5,-54.0,-3.5, onGround, corrections=1 (the operator teleport only). Six UseItemOn, one per layer, each at the apex (`*.750813`) and each followed by that pose's Pos. Server log has no Simulation, no RotationPlace, and no Post for that join. 0 kicks. Updated NoCheatPlus and Spartan had not been started yet. Not committed, not pushed.
+
+## 20. Updated NoCheatPlus pillar, same day, still uncommitted
+
+Updated-NoCheatPlus 3.17.1-SNAPSHOT-Updated-b286 was the only plugin. Grim's jar was in `plugins-off`. ProtocolLib was not installed, so NCP logged "Packet level access: ProtocolLib is not available" and force-disabled FastHeal, FastConsume, PacketFrequency, and InstantBow. `allow-flight=false`. Same pillar, `goto 5 -54 -4`.
+
+The join at 15:52:42 disconnected itself at 15:56:01. It arrived and stayed at 5.5,-54.0,-3.5, onGround, corrections=1 (the operator teleport only). 0 kicks. That is not a pass. Eleven UseItemOn went out, all at the apex. Sequences 1, 3, 5, 7, 9, and 11 became dirt. Sequences 2, 4, 6, 8, and 10 came back as air, the bot fell, and the next jump placed that layer. `ncp info HBotAc` after those places showed only `blockplace.noswing`: sum 5 VL, triggered 5 times, average 1, max 1. The console and `nocheatplus.log` stayed quiet because the configured action is `cancel vl>10 log:noswing:2:5:i cancel`. A clean log only means the violation level stayed under 10.
+
+`blockplace.NoSwing.check` adds one to `noSwingCount` on every place. A count of one decays the violation level by 0.9 and allows the place. A count above one resets the counter, adds 1 VL, and cancels. `onPlayerAnimation` is the only decrement (`max(0, count - 1)`). Paper 26.3 never fires `PlayerAnimationEvent`: the server jar does not reference that class, and 26.3 has no `ServerboundSwingPacket`. `ServerboundPunchPacket` is an empty left-click packet, not an arm swing. A successful place does call `ServerPlayer.swingAndResetAttackStrength`, and that path does not emit the Bukkit event, which is why the five accepted places did not clear the counter either. No swing packet was added. Spartan ran next, alone. Not committed, not pushed.
+
+## 21. Spartan pillar, same day, still uncommitted
+
+Spartan 4.0.9.0 was the only plugin. NCP's jar was in `plugins-off`. ProtocolLib was not installed, and every Spartan log line says `Packets: false`. `allow-flight=false`. Same pillar, `goto 5 -54 -4`.
+
+The join at 16:04:20 disconnected itself at 16:07:38. It arrived and stayed at 5.5,-54.0,-3.5, onGround, corrections=1 (the operator teleport only). Six UseItemOn, one per layer, each accepted as dirt. 0 kicks. That is not a pass. `plugins/Spartan/logs/log20261115.yml` recorded 15 `gravity-simulation` detections during the climb and none while it stood on top. The level reached 12. The check notifies at 20, prevents at 27, and the punishment command is a kick at 40, so the console stayed quiet. No other check is in that log.
+
+The logged `y` / `ry` pair is one number written two ways: `abs(|observed dy| - |predicted dy|)`, scaled to six digits, then the raw double. The values were about 0.024, 0.069, 0.168, and 0.171. The violation path requires that difference to be above 0.009, and `advanced.yml` sets `minimum_gravity_difference` to 0.0. The predictor's drag constant is `0.9800000190734863` (the float `0.98`). The position packets on this climb were the same vanilla fractions that Grim accepted at 15:48. PlayerSim was not changed to chase Spartan's predictor. Not committed, not pushed.
+
+## 22. LightAntiCheat pillar, same day, still uncommitted
+
+LightAntiCheat 1.2.9.5 was the only plugin. Spartan's jar was in `plugins-off`. The jar's newest named version is `V1_21`. Its parser takes a major version other than 1 as the minor it understands, and `fromMinorVersion(26)` selects `V1_21` because 26 is at least 21. It enabled on Paper 26.3 with no version error. That is the 1.21 check path, not a 26.3 movement model. `allow-flight=false`. Same pillar, `goto 5 -54 -4`.
+
+The join at 16:13:42 disconnected itself at 16:17:01. It arrived and stayed at 5.5,-54.0,-3.5, onGround, corrections=1 (the operator teleport only). Six UseItemOn, one per layer, each accepted as dirt. 0 kicks. `plugins/LightAntiCheat/logs/2026-11-15.log` stayed empty, and the console had no LightAntiCheat failure line. Default punishments are `punishable: false`, so this plugin would not have kicked even if it had logged a violation. The empty violation log is the result for this one join. Not committed, not pushed.
+
+## 23. Committed (15 Nov 2026, 16:45 MST)
+
+The working tree behind sections 18-22 is now committed. Apex click and vertical-change packet: `d1435df7c`. Pong held until tick end: `38bcb92d0`. These notes are in the commit after them. The code is the same code that ran live at 15:48 (Grim), 15:52 (NCP), 16:04 (Spartan), and 16:13 (LightAntiCheat). Before committing: `HeadlessPlaceTest` 18 tests, `HeadlessPacketSequenceTest` 5 tests, and the full `baritone.headless.*` set 74 tests, all 0 failures and 0 skipped. Logs are in `headless-bot-logs\commit-20261115\`.
+
+Correction to section 18. Vanilla 26.3 `LocalPlayer.sendPosition` (`LocalPlayer.java:417`) tests `lengthSquared(dx,dy,dz) > Mth.square(2.0E-4)`, which is 4e-8. Section 3 already says this. `HeadlessMovement.sendMovementPacket` tests the squared distance against `2.0E-4` itself, so it needs a move of about 0.014 blocks, not 0.0002. A vanilla client would send the +0.003 tick after the apex whatever the look does. The `|dy| > 1e-4` clause covers the vertical case that showed up live. It still drops horizontal moves between 0.0002 and 0.014 that vanilla sends, and it sends vertical moves between 0.0001 and 0.0002 that vanilla does not. The vanilla-faithful fix is to use `Mth.square(2.0E-4)` and drop the extra clause. That fix needs a live run on Grim before it replaces the tested code.
