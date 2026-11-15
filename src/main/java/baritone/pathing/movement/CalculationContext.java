@@ -33,7 +33,7 @@ import baritone.utils.MountUtil;
 import baritone.utils.ToolSet;
 import baritone.utils.pathing.BetterWorldBorder;
 import baritone.utils.pathing.SearchCache;
-import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -185,15 +185,44 @@ public class CalculationContext {
     }
 
     /**
+     * Ostinato: the context a driver re-costs a movement with. On the client this is the player-derived context, exactly
+     * as before. A headless host has no client world or inventory to derive from, so it answers with the context its own
+     * search was planned with.
+     */
+    public static CalculationContext of(IBaritone baritone) {
+        if (baritone instanceof baritone.pathing.IPathingHost host && baritone.getPlayerContext().minecraft() == null) {
+            CalculationContext context = host.secretInternalGetCalculationContext();
+            if (context != null) {
+                return context;
+            }
+        }
+        return new CalculationContext(baritone);
+    }
+
+    /**
      * Ostinato: a headless context over a synthetic or snapshot {@link BlockStateInterface}, with no player, inventory or
      * client world, for the pathfinding benchmark and cost-equality tests. Player-derived inputs take the values of a
      * fresh full-health player with an empty hotbar (bare hands via {@code toolSet}); everything else is read from
      * settings exactly as the normal constructor does. New, replaces nothing.
      */
     public CalculationContext(BlockStateInterface bsi, ToolSet toolSet, boolean hasThrowaway, int minY, int height) {
+        this(null, bsi, toolSet, hasThrowaway, minY, height, true);
+    }
+
+    /**
+     * Ostinato: the same context over a caller-supplied {@link BlockStateInterface}, carrying the {@link IBaritone} the
+     * movements are built against. A headless bot plans through this: it has no client world, player or inventory to
+     * derive from, but its movements still need their host when they execute. New, replaces nothing.
+     */
+    public CalculationContext(IBaritone baritone, BlockStateInterface bsi, ToolSet toolSet, boolean hasThrowaway, int minY, int height) {
+        this(baritone, bsi, toolSet, hasThrowaway, minY, height, false);
+    }
+
+    private CalculationContext(IBaritone baritone, BlockStateInterface bsi, ToolSet toolSet, boolean hasThrowaway,
+                               int minY, int height, boolean safeForThreadedUse) {
         this.precomputedData = new PrecomputedData();
-        this.safeForThreadedUse = true;
-        this.baritone = null;
+        this.safeForThreadedUse = safeForThreadedUse;
+        this.baritone = baritone;
         this.world = null;
         this.worldData = null;
         this.bsi = bsi;
@@ -270,7 +299,7 @@ public class CalculationContext {
         this.precomputedData = new PrecomputedData();
         this.safeForThreadedUse = forUseOnAnotherThread;
         this.baritone = baritone;
-        LocalPlayer player = baritone.getPlayerContext().player();
+        Player player = baritone.getPlayerContext().player();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);

@@ -86,7 +86,7 @@ public final class BaritonePlayerController implements IPlayerController {
     }
 
     @Override
-    public InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
+    public InteractionResult processRightClickBlock(Player player, Level world, InteractionHand hand, BlockHitResult result) {
         // primaryplayercontroller is always in a ClientWorld so this is ok
         // Ostinato: no place/use-on-block on an invalid lease. Phase 2b: opening a container is checked at the
         // container, a placement at the block it lands in.
@@ -97,12 +97,14 @@ public final class BaritonePlayerController implements IPlayerController {
                 at.getX(), at.getY(), at.getZ())) {
             return InteractionResult.PASS;
         }
-        return mc.gameMode.useItemOn(player, hand, result);
+        // Ostinato: IPlayerController now takes the common Player; the client controller is only ever
+        // reached with its own LocalPlayer.
+        return mc.gameMode.useItemOn((LocalPlayer) player, hand, result);
     }
 
     @Override
-    public InteractionResult processRightClick(LocalPlayer player, Level world, InteractionHand hand) {
-        return mc.gameMode.useItem(player, hand);
+    public InteractionResult processRightClick(Player player, Level world, InteractionHand hand) {
+        return mc.gameMode.useItem((LocalPlayer) player, hand);
     }
 
     @Override

@@ -23,6 +23,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.phys.BlockHitResult;
@@ -41,7 +42,22 @@ public interface IPlayerContext {
 
     Minecraft minecraft();
 
-    LocalPlayer player();
+    /**
+     * Ostinato: the player seen through the common {@link Player} surface. The client returns its
+     * {@code LocalPlayer}; a headless bot returns its own {@code Player} over its protocol-owned world.
+     * Anything that needs client-only members ({@code input}, {@code connection}) goes through
+     * {@link #localPlayer()} so the headless path never reaches them.
+     */
+    Player player();
+
+    /**
+     * Ostinato: the client's {@code LocalPlayer}, for the few client-only call sites. Headless contexts
+     * have no such object and return null.
+     */
+    default LocalPlayer localPlayer() {
+        // Ostinato: common-side players are not LocalPlayer instances.
+        return player() instanceof LocalPlayer lp ? lp : null;
+    }
 
     IPlayerController playerController();
 

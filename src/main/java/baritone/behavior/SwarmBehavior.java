@@ -1,5 +1,7 @@
 package baritone.behavior;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.event.events.TickEvent;
@@ -172,7 +174,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private SwarmSample baseSample() {
         int ping = -1;
         try {
-            LocalPlayer p = ctx.player();
+            LocalPlayer p = ctx.localPlayer();
             if (p != null && p.connection != null) {
                 net.minecraft.client.multiplayer.PlayerInfo info = p.connection.getPlayerInfo(p.getUUID());
                 ping = info == null ? -1 : info.getLatency();
@@ -277,7 +279,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
         link.control.tick();
         logLinkRate(link); // Ostinato:
         coordinatorTick(s); // Ostinato:
-        LocalPlayer player = ctx.player();
+        LocalPlayer player = ctx.localPlayer();
         link.transport.flush(nowMs(), line -> send(player, line));
     }
 
@@ -547,7 +549,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
     private Set<String> onlinePlayerNames() {
         Set<String> online = new HashSet<>();
         try {
-            var connection = ctx.player().connection;
+            var connection = ctx.localPlayer().connection;
             if (connection == null) {
                 return online;
             }

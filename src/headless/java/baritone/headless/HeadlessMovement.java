@@ -66,6 +66,27 @@ public final class HeadlessMovement {
 
     private static final Step IDLE = new Step(Integer.MAX_VALUE, 0f, 0, 0, false, false, false, "idle");
 
+    /** Ostinato Phase 3: what ticks a movement when a live executor, not a scripted course, owns the keys. */
+    public interface Driver {
+        // Ostinato: null yields to the course; a Step owns this tick without sending packets.
+        Step tick(HeadlessBot bot, HeadlessMovement movement);
+        default void afterTick(HeadlessMovement movement) { }
+        default float[] pollAnalog() { return null; }
+    }
+
+    private Driver driver;
+    // Ostinato: PlayerSim keeps no rotation; retain the orientation of its latest input.
+    private float yaw, pitch;
+    private boolean shift;
+    public float yaw() { return yaw; }
+    public float pitch() { return pitch; }
+    public boolean shift() { return shift; }
+    public void rotation(float yaw, float pitch) { this.yaw = yaw; this.pitch = pitch; }
+
+    public void setDriver(Driver driver) {
+        this.driver = driver;
+    }
+
     private final HeadlessBlockStateInterface bsi;
     private final PlayerSim sim;
     private final List<Step> steps;
@@ -138,6 +159,20 @@ public final class HeadlessMovement {
 
     public boolean finished() {
         return finished;
+    }
+
+    public boolean started() {
+        return started;
+    }
+
+    /** True while a scripted course still has steps left. An empty course never runs. */
+    public boolean courseRunning() {
+        return !steps.isEmpty() && !finished && stepIndex < steps.size();
+    }
+
+    /** Ticks already consumed in the current course step. A live path does not consume these. */
+    public int courseStepTick() {
+        return stepTick;
     }
 
     public long simTicks() {
@@ -230,9 +265,17 @@ public final class HeadlessMovement {
     /** Exactly one movement packet and one ClientTickEnd per 20 TPS tick. */
     public void tick(HeadlessBot bot) {
         if (!started) {
+            // Ostinato: seed the look the spawn packet confirmed before a live driver reads the body.
+            rotation(bot.yRot(), bot.xRot());
             start(bot.x(), bot.y(), bot.z(), bot.onGround());
         }
-        Step step = current();
+        // Ostinato: live intent is selected before the one shared simulation/packet path.
+        Step live = driver == null ? null : driver.tick(bot, this);
+        Step step = live == null ? current() : live;
+        yaw = step.yaw;
+        pitch = step.pitch;
+        shift = step.shift;
+        float[] analog = live == null ? null : driver.pollAnalog();
         Input input = new Input(step.forward > 0, step.forward < 0, step.strafe > 0,
                 step.strafe < 0, step.jump, step.shift, step.sprint);
         if (!input.equals(lastInput)) {
@@ -247,10 +290,21 @@ public final class HeadlessMovement {
         boolean inFluid = sim.inWater() || sim.swimming;
         if (inFluid) {
             sim.tickWater(step.yaw, step.pitch, step.forward > 0, step.sprint, step.jump, step.shift);
+        } else if (live != null) {
+            // Ostinato: retain PlayerSim physics; use its existing sneak/impulse entry point.
+            float[] keys = PlayerSim.keyInput(step.forward, step.strafe, false, step.shift);
+            if (analog != null) {
+                double length = Math.max(1.0, Math.hypot(analog[0], analog[1]));
+                float scale = step.shift ? 0.294f : 0.98f;
+                keys = new float[]{(float) (analog[0] / length * scale), (float) (analog[1] / length * scale)};
+            }
+            sim.tickImpulse(step.yaw, keys[0], keys[1], step.forward > 0, step.sprint, step.jump);
         } else {
             sim.tick(step.yaw, step.forward, step.strafe, step.sprint, step.jump);
         }
         simTicks++;
+        // Ostinato: publish the stepped body before readers see the next tick.
+        if (driver != null) driver.afterTick(this);
 
         if (sim.sprinting != lastSprinting) {
             bot.send(playerCommand(bot.playerId(), sim.sprinting
@@ -263,13 +317,15 @@ public final class HeadlessMovement {
         reportedX = sim.x;
         reportedY = sim.y;
         reportedZ = sim.z;
-        bot.setReportedPosition(sim.x, sim.y, sim.z, sim.onGround);
+        bot.setReportedPosition(sim.x, sim.y, sim.z, sim.onGround, step.yaw, step.pitch);
         bot.send(new ServerboundMovePlayerPacket.PosRot(
                 sim.x, sim.y, sim.z, step.yaw, step.pitch, sim.onGround, sim.collidedH));
         positionPackets++;
         // Must be last in the client tick: the server clears receivedPositionThisTick here.
         bot.send(ServerboundClientTickEndPacket.INSTANCE);
 
+        // Ostinato: pathing pauses the course at its exact current tick.
+        if (live != null) return;
         stepTick++;
         if (stepTick >= step.ticks && step != IDLE) {
             stepIndex++;

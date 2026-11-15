@@ -239,7 +239,11 @@ public final class RotationUtils {
         Vec3 eyes = wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.player().getEyePosition(1.0F);
         Rotation rotation = calcRotationFromVec3d(eyes, offsetPos, ctx.playerRotations());
         // Ostinato: peekAim, not peekRotation. The turn cap made every block more than one tick off the view unreachable.
-        Rotation actualRotation = BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()).getLookBehavior().getAimProcessor().peekAim(rotation);
+        // A headless context has no provider registration (the provider builds a client Baritone) and aims instantly,
+        // so the requested rotation is already the one the next look tick applies.
+        Rotation actualRotation = ctx.minecraft() == null
+                ? rotation
+                : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()).getLookBehavior().getAimProcessor().peekAim(rotation);
         HitResult result = RayTraceUtils.rayTraceTowards(ctx.player(), actualRotation, blockReachDistance, wouldSneak);
         //System.out.println(result);
         if (result != null && result.getType() == HitResult.Type.BLOCK) {

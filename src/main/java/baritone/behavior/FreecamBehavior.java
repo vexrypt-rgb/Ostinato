@@ -17,6 +17,8 @@
 
 package baritone.behavior;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.api.BaritoneAPI;
 import baritone.Baritone;
 import baritone.api.event.events.RenderEvent;
@@ -131,7 +133,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
 
     private void sparTest(TickEvent event) {
         String kit = System.getProperty("ostinato.spar.test");
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         if (kit == null || event.getType() != TickEvent.Type.IN || p == null) return;
         sparTestTicks++;
         if (sparTestTicks == 100) {
@@ -188,7 +190,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     private LocalPlayer owner;
 
     public void enable() {
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         if (camera != null || p == null || baritone != BaritoneAPI.getProvider().getPrimaryBaritone()) {
             return;
         }
@@ -218,7 +220,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         if (camera == null) {
             return;
         }
-        logDirect(canvas.startFlat(camera, ctx.player()));
+        logDirect(canvas.startFlat(camera, ctx.localPlayer()));
         canvasLine = canvas.hud();
     }
 
@@ -309,7 +311,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
             sparLine = null;
             logDirect("Spar off");
         } else {
-            LocalPlayer p = ctx.player();
+            LocalPlayer p = ctx.localPlayer();
             if (p == null) {
                 return;
             }
@@ -332,7 +334,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         camera = null;
         active = null;
         owner = null;
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         if (p != null) {
             mc.setCameraEntity(p);
             if (p.input.getClass() == ClientInput.class) {
@@ -365,7 +367,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         if (camera == null) {
             return;
         }
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         // death/respawn replaces the LocalPlayer in the same level: drop freecam rather than drive a dead player
         if (p != null && p != owner && p.isAlive() && camera.level() == p.level() && event.getType() != TickEvent.Type.OUT) {
             disable(); // respawned: rebuild freecam around the new player
@@ -566,7 +568,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private Entity entityUnderCrosshair() {
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         Vec3 start = camera.getEyePosition(1);
         Vec3 end = start.add(camera.getViewVector(1).scale(renderRadius() * 2));
         HitResult block = p.level().clip(new ClipContext(start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, camera));
@@ -586,7 +588,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
     }
 
     private void select() {
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         Vec3 start = camera.getEyePosition(1);
         Vec3 end = start.add(camera.getViewVector(1).scale(renderRadius() * 2));
         HitResult block = p.level().clip(new ClipContext(start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, camera));

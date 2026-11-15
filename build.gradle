@@ -173,6 +173,8 @@ tasks.register('runHeadlessBot', JavaExec) {
     description = 'Run one or more fully headless 26.3 protocol bots (no Minecraft client JVM).'
     classpath = sourceSets.headless.runtimeClasspath
     mainClass = 'baritone.headless.HeadlessBotMain'
+    // Ostinato: forward console input to the operator command reader.
+    standardInput = System.in
     if (project.hasProperty('botArgs')) {
         args project.property('botArgs').toString().split(/\s+/) as List
     }

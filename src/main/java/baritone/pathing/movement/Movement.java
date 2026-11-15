@@ -126,7 +126,7 @@ public abstract class Movement implements IMovement, MovementHelper {
     }
 
     protected boolean playerInValidPosition() {
-        return getValidPositions().contains(ctx.playerFeet()) || getValidPositions().contains(((PathingBehavior) baritone.getPathingBehavior()).pathStart());
+        return getValidPositions().contains(ctx.playerFeet()) || getValidPositions().contains(baritone.getPathingBehavior().pathStart());
     }
 
     /**

@@ -54,7 +54,7 @@ import java.util.function.Function;
  * @author Brady
  * @since 7/31/2018
  */
-public class Baritone implements IBaritone {
+public class Baritone implements IBaritone, baritone.pathing.IPathingHost {
 
     private static final ThreadPoolExecutor threadPool;
 
@@ -435,6 +435,38 @@ public class Baritone implements IBaritone {
 
     public Path getDirectory() {
         return this.directory;
+    }
+
+    // ----------------------------- Ostinato: the host surface PathExecutor and its drivers use
+
+    @Override
+    public baritone.utils.BlockStateInterface bsi() {
+        return this.bsi;
+    }
+
+    @Override
+    public baritone.pathing.movement.CalculationContext secretInternalGetCalculationContext() {
+        return this.pathingBehavior.secretInternalGetCalculationContext();
+    }
+
+    @Override
+    public java.util.Optional<baritone.pathing.calc.AbstractNodeCostSearch> getInProgress() {
+        return this.pathingBehavior.getInProgress();
+    }
+
+    @Override
+    public baritone.utils.BlockBreakHelper blockBreakHelper() {
+        return this.inputOverrideHandler.getBlockBreakHelper();
+    }
+
+    @Override
+    public boolean hasGenericThrowaway() {
+        return this.inventoryBehavior.hasGenericThrowaway();
+    }
+
+    @Override
+    public boolean selectThrowawayForLocation(boolean select, int x, int y, int z) {
+        return this.inventoryBehavior.selectThrowawayForLocation(select, x, y, z);
     }
 
     public static Settings settings() {

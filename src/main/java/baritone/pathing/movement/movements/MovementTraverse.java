@@ -519,7 +519,7 @@ public class MovementTraverse extends Movement {
         if (MovementHelper.isWater(head) || MovementHelper.isWater(feetCell) || MovementHelper.isLava(head) || MovementHelper.isLava(feetCell)) {
             return false;
         }
-        BlockStateInterface bsi = ((Baritone) baritone).bsi;
+        BlockStateInterface bsi = MovementHelper.bsi(baritone);
         if (bsi == null || sidePlace(bsi, positionToPlace)) {
             return false;
         }
@@ -557,7 +557,7 @@ public class MovementTraverse extends Movement {
         } else {
             aim = new Rotation(back, (float) GodBridge.pitchDegrees(GodBridge.AIM_PAST));
         }
-        if (!((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, positionToPlace.getX(), positionToPlace.getY(), positionToPlace.getZ())) {
+        if (!MovementHelper.selectThrowaway(baritone, true, positionToPlace.getX(), positionToPlace.getY(), positionToPlace.getZ())) {
             state.setStatus(MovementStatus.UNREACHABLE);
             return true;
         }

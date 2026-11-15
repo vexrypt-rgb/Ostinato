@@ -58,7 +58,8 @@ public class MixinNetworkManager {
         }
 
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
-            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection.getConnection() == (Connection) (Object) this) {
+            // Ostinato: a headless context has a Player but no LocalPlayer connection.
+            if (ibaritone.getPlayerContext().localPlayer() != null && ibaritone.getPlayerContext().localPlayer().connection.getConnection() == (Connection) (Object) this) {
                 ibaritone.getGameEventHandler().onSendPacket(new PacketEvent((Connection) (Object) this, EventState.PRE, packet));
             }
         }
@@ -74,7 +75,8 @@ public class MixinNetworkManager {
         }
 
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
-            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection.getConnection() == (Connection) (Object) this) {
+            // Ostinato: a headless context has a Player but no LocalPlayer connection.
+            if (ibaritone.getPlayerContext().localPlayer() != null && ibaritone.getPlayerContext().localPlayer().connection.getConnection() == (Connection) (Object) this) {
                 ibaritone.getGameEventHandler().onSendPacket(new PacketEvent((Connection) (Object) this, EventState.POST, packet));
             }
         }
@@ -92,7 +94,8 @@ public class MixinNetworkManager {
             return;
         }
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
-            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection.getConnection() == (Connection) (Object) this) {
+            // Ostinato: a headless context has a Player but no LocalPlayer connection.
+            if (ibaritone.getPlayerContext().localPlayer() != null && ibaritone.getPlayerContext().localPlayer().connection.getConnection() == (Connection) (Object) this) {
                 ibaritone.getGameEventHandler().onReceivePacket(new PacketEvent((Connection) (Object) this, EventState.PRE, packet));
             }
         }
@@ -107,7 +110,8 @@ public class MixinNetworkManager {
             return;
         }
         for (IBaritone ibaritone : BaritoneAPI.getProvider().getAllBaritones()) {
-            if (ibaritone.getPlayerContext().player() != null && ibaritone.getPlayerContext().player().connection.getConnection() == (Connection) (Object) this) {
+            // Ostinato: a headless context has a Player but no LocalPlayer connection.
+            if (ibaritone.getPlayerContext().localPlayer() != null && ibaritone.getPlayerContext().localPlayer().connection.getConnection() == (Connection) (Object) this) {
                 ibaritone.getGameEventHandler().onReceivePacket(new PacketEvent((Connection) (Object) this, EventState.POST, packet));
             }
         }

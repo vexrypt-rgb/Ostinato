@@ -28,6 +28,26 @@ import baritone.api.utils.Rotation;
 public interface ILookBehavior extends IBehavior {
 
     /**
+     * Ostinato: mark the next requested rotation as a hand's mouse move rather than a silent server-only turn.
+     * The client's {@code LookBehavior} implements it; a headless bot has no hand and needs no override.
+     */
+    default void human() {}
+
+    /**
+     * Ostinato: the yaw velocity of the camera, in degrees per tick, used by the kinetic jump controller.
+     * A headless bot's aim is set directly, so it has none.
+     */
+    default float yawVelocity() {
+        return 0f;
+    }
+
+    /**
+     * Ostinato: for this tick only, let the look turn up to {@code deg} degrees instead of the client's usual cap. A
+     * headless look applies each target outright, so it has no cap and ignores this.
+     */
+    default void turnCap(float deg) {}
+
+    /**
      * Updates the current {@link ILookBehavior} target to target the specified rotations on the next tick. If any sort
      * of block interaction is required, {@code blockInteract} should be {@code true}. It is not guaranteed that the
      * rotations set by the caller will be the exact rotations expressed by the client (This is due to settings like

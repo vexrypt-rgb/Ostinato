@@ -353,7 +353,8 @@ public class InputArbiterTest {
         assertTrue(cancel >= 0);
         int release = executor.indexOf("releaseInputLeases();", cancel);
         assertTrue(release > cancel && release < executor.indexOf("\n    }", cancel));
-        assertTrue(executor.contains("fall.release(behavior.baritone);"));
+        // Ostinato: the executor is retargeted at IPathingHost, which is the client Baritone or the headless host.
+        assertTrue(executor.contains("fall.release(host);"));
         String behavior = read("src/main/java/baritone/behavior/PathingBehavior.java").replace("\r\n", "\n");
         int segment = behavior.indexOf("public void secretInternalSegmentCancel()");
         int segRelease = behavior.indexOf("current.releaseInputLeases();", segment);

@@ -37,7 +37,8 @@ public final class BlockBreakHelper {
     private boolean wasHitting;
     private int breakDelayTimer = 0;
 
-    BlockBreakHelper(IPlayerContext ctx) {
+    // Ostinato: public so a headless host (which lives in its own package) can drive the same break state machine.
+    public BlockBreakHelper(IPlayerContext ctx) {
         this.ctx = ctx;
     }
 
@@ -72,7 +73,10 @@ public final class BlockBreakHelper {
                     // break delay timer only applies for multi-tick block breaks like vanilla
                     breakDelayTimer = BaritoneAPI.getSettings().blockBreakSpeed.value - BASE_BREAK_DELAY;
                     // must reset controller's destroy delay to prevent the client from delaying itself unnecessarily
-                    ((IPlayerControllerMP) ctx.minecraft().gameMode).setDestroyDelay(0);
+                    // Ostinato: there is no client game mode on a headless host; its controller owns the delay itself.
+                    if (ctx.minecraft() != null) {
+                        ((IPlayerControllerMP) ctx.minecraft().gameMode).setDestroyDelay(0);
+                    }
                 }
             }
             // if true, we're breaking a block. if false, we broke the block this tick

@@ -682,5 +682,100 @@ Cross-checks:
 
 Caveats: still one bot, one dimension, still (non-flowing) water, no entities, mobs, inventory or
 damage; the course exercises walk, sprint, sprint-jump, 0.5 slab step-up, ladder climb across 7
-blocks of height and 2-deep water, which is the Phase 2 scope. Phase 3 (headless `IPlayerContext`,
-A* execution, `PathExecutor`) is still open.
+blocks of height and 2-deep water, which is the Phase 2 scope. Phase 3 wiring is section 15. This
+paragraph is the Phase 2 gate record and is left as it was written.
+
+## 15. Phase 3: pathing host, live driver, goto / cancel / mine
+
+The protocol bot is unchanged through login, configuration and the idle play tick. After spawn the
+process builds one pathing host (`HeadlessLevel`, `HeadlessPlayer`, `HeadlessPlayerContext`,
+`HeadlessPlayerController`, `HeadlessLookBehavior`, `HeadlessInputOverrideHandler`,
+`HeadlessBaritone`, `HeadlessPathingBehavior`) inside `HeadlessLiveDriver`. `HeadlessBotMain`
+does that once `PLAY` has a spawn position and the player-loaded packet has been sent. Unit tests
+that never ask for a path do not build it, so the Phase 1 reminder counts stay put.
+
+`Level`'s constructor needs real biome and damage-type registries. After configuration the bot
+already has those from `HeadlessRegistries.build()`, and the level uses that access. A unit test
+(or a session that never received registry packets) does not, so `HeadlessLevel.create` fills
+them from `VanillaRegistries.createWorldLookup()` and keeps the built-in registries. Packet
+decoding still uses the bot's own access.
+
+### Commands
+
+`commands.txt` (append-only), stdin, and system chat all use the same parser (`HeadlessCommands`).
+
+| line | effect |
+| --- | --- |
+| `probe <x> <y> <z>` | unchanged |
+| `status` | unchanged, and the snapshot now includes `pathing: ...` |
+| `course <file>` | unchanged; a live path pauses the course on its current tick and resumes it afterwards |
+| `goto <x> <y> <z>` | queue `GoalBlock` on the tick thread |
+| `mine <block>` | nearest loaded breakable block in 16×8, path next to it, break it, wait until the cell is air |
+| `cancel` | cancel pathing and mining, clear forced keys. Does **not** exit |
+| `stop path` | alias of `cancel` |
+| `stop`, `quit`, `exit` | end the process, same as Phase 1/2 `stop` |
+
+Chat acceptance (local offline server, console whispers to `HBot1` / `HBot2`):
+
+* `... whispers to you: <command>`
+* `... -> me]` / `... -> you] <command>`
+* `[Server] <command>` and `<Server> <command>`
+* a system-chat line whose whole text is itself a command
+
+Public chat (`<Bob> goto ...`) and `You whisper to ...` are ignored. `stop` from an accepted
+whisper still ends the run. There is no inventory-click or signed-chat command channel.
+
+### Movement packets
+
+`HeadlessBot.tick` still sends exactly one movement packet and then `ClientTickEnd`.
+
+* Nothing queued and no course left: `StatusOnly`, plus a `PosRot` every 20 ticks (Phase 1).
+* A course still has steps, or a goto/mine owns the keys: `HeadlessMovement` sends one `PosRot`.
+  Pathing does not advance the course. After the course finishes, the bot returns to the reminder.
+* `gotoGoal` is not on the command thread. The tick drains the queue, then sends the one packet.
+  A partial path's next search is queued the same way, from `HeadlessPathingBehavior.tick`.
+
+Before `PathExecutor` runs, and again after `PlayerSim` steps, `HeadlessLiveDriver.sync` copies
+position, velocity, onGround, yaw, pitch, sprint and pose into `HeadlessPlayer`.
+
+### A*
+
+`AStarPathFinder.calculate` runs on the daemon thread `headless-astar`. The tick thread only builds
+the `CalculationContext` and installs the `PathExecutor` when the future is done. That setup can
+hitch one tick; the search itself does not, and it cannot emit a second movement packet.
+`primaryTimeoutMS` / `failureTimeoutMS` are the existing settings (500 ms primary).
+
+### Placement
+
+Not implemented. The host's inventory is empty, `hasGenericThrowaway()` is false, and
+`processRightClickBlock` returns `PASS`. Constructing the host sets the process-wide
+`Baritone.settings()` flags `allowPlace`, `allowParkourPlace`, `allowGodBridge` and
+`unifiedExecutor` to false (one bot per JVM, still the one settings singleton). Parkour that
+needs a placed block will not plan. A live parkour gap has to be a jump gap.
+
+### Safety
+
+* `IPlayerContext.localPlayer()` is `player() instanceof LocalPlayer lp ? lp : null`.
+  `HeadlessPlayerContext` overrides it to return null.
+* `MixinNetworkManager` null-checks `localPlayer()` at all four packet sites before touching
+  `connection`. `MixinClientPlayNetHandler` already did the same.
+
+### Open
+
+* Live gate (offline 26.3 server, parkour+ladder, confirmed break) is not run in this slice.
+* No block placement, so place-to-cross gaps are out.
+* `mine` is the nearest loaded block, not the client `#mine` process. It gives up if the block's
+  chunk unloads, the path cannot reach it, or 1200 ticks pass.
+* Whisper text is whatever `Component.getString()` flattens to. A server whose tell format matches
+  none of the patterns above will not take chat commands; stdin and `commands.txt` still work.
+* `cancelRequested` on the A* search is the existing non-volatile flag. Cancel is queued onto the
+  tick thread and then calls `finder.cancel()`, same as the client.
+* Building the host flips four process-wide settings. A second Baritone in the same JVM would see
+  them. The headless process is one bot.
+* Respawn and play→configuration enqueue `cancel` for the next loaded tick. A position correction
+  still only resyncs `PlayerSim`, as in Phase 2.
+
+Full Ostinato suite after this slice (`gradlew test --rerun`, 2026-11-15): 2071 tests completed,
+0 failed, 24 skipped. Phase 2 at 76151d599 was 2062 completed with the same 24 skipped; the 9
+added tests are the command parser, the phase 3 host checks, and the live-driver pause.
+TenorClef `:26.3:test` was not run; this slice does not change shared TenorClef code.

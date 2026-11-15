@@ -21,6 +21,7 @@ import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.calc.IPathFinder;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.path.IPathExecutor;
+import baritone.api.utils.BetterBlockPos;
 
 import java.util.Optional;
 
@@ -29,6 +30,17 @@ import java.util.Optional;
  * @since 9/23/2018
  */
 public interface IPathingBehavior extends IBehavior {
+
+    /**
+     * Ostinato: where the current segment started, as the executor sees it. The client's {@code PathingBehavior}
+     * overrides this with its segment start; a headless bot overrides it with the player's feet. Used by movement
+     * validity checks instead of casting to the client implementation.
+     *
+     * @return the segment start, or {@code null} when there is none
+     */
+    default BetterBlockPos pathStart() {
+        return null;
+    }
 
     /**
      * Returns the estimated remaining ticks in the current pathing

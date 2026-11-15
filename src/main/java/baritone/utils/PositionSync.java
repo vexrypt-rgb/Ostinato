@@ -1,6 +1,7 @@
 package baritone.utils;
 
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
 
 import java.lang.reflect.Field;
 
@@ -54,12 +55,16 @@ public final class PositionSync {
      * a packet of our own: a second position packet can reach the server inside one server tick when the client catches up
      * after a slow tick, and the server kicks for that.
      */
-    public static void sync(LocalPlayer p) {
-        if (REMINDER == null || clientWillReport(p)) {
+    public static void sync(Player p) {
+        // Ostinato: a headless player has no client end-of-tick sendPosition to hurry along; the bot sends its own.
+        if (!(p instanceof LocalPlayer local)) {
+            return;
+        }
+        if (REMINDER == null || clientWillReport(local)) {
             return;
         }
         try {
-            REMINDER.setInt(p, 19);
+            REMINDER.setInt(local, 19);
         } catch (IllegalAccessException ignored) {
         }
     }

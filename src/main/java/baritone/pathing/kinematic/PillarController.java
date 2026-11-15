@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -40,7 +42,7 @@ public final class PillarController {
     }
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
@@ -52,7 +54,7 @@ public final class PillarController {
         return !ctx.world().getBlockState(p).getCollisionShape(ctx.world(), p).isEmpty();
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
@@ -76,7 +78,7 @@ public final class PillarController {
         if (feet.equals(dest) && player.onGround() && solid(dest.below())) {
             return pathPosition + 1;
         }
-        if (player.getY() < src.y - 0.01 || !baritone.getInventoryBehavior().selectThrowawayForLocation(true, src.x, src.y, src.z)) {
+        if (player.getY() < src.y - 0.01 || !baritone.selectThrowawayForLocation(true, src.x, src.y, src.z)) {
             if (trace) {
                 System.out.printf("PIL skip @%s y %.2f%n", src, player.getY());
             }

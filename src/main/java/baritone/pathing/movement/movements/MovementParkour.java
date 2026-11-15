@@ -17,6 +17,8 @@
 
 package baritone.pathing.movement.movements;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.pathing.kinematic.BsiWorld;
 import baritone.pathing.kinematic.JumpTemplates;
 
@@ -644,7 +646,7 @@ public class MovementParkour extends Movement {
         } else if (!feet.equals(from)) {
             if (feet.equals(from.relative(direction)) || ctx.player().position().y - src.y > 0.0001) {
                 if (Baritone.settings().allowPlace.value // see PR #3775
-                        && ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway()
+                        && MovementHelper.hasGenericThrowaway(baritone)
                         && !MovementHelper.canWalkOn(ctx, dest.below())
                         && !ctx.player().onGround()
                         && MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), true, false) == PlaceResult.READY_TO_PLACE
@@ -710,7 +712,7 @@ public class MovementParkour extends Movement {
             sim = new PlayerSim(simWorld);
         }
         simWorld.reset(); // it remembers collision boxes, and blocks are laid and broken while this movement runs
-        LocalPlayer p = ctx.player();
+        Player p = ctx.player();
         sim.x = p.getX(); sim.y = p.getY(); sim.z = p.getZ();
         sim.vx = p.getDeltaMovement().x; sim.vy = p.getDeltaMovement().y; sim.vz = p.getDeltaMovement().z;
         sim.onGround = p.onGround();

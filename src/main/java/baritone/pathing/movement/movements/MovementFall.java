@@ -17,6 +17,8 @@
 
 package baritone.pathing.movement.movements;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.utils.BoatUtil;
 import baritone.utils.FastMode;
 import baritone.utils.MountUtil;
@@ -188,7 +190,7 @@ public class MovementFall extends Movement {
     }
 
     private boolean willPlaceBucket() {
-        CalculationContext context = new CalculationContext(baritone);
+        CalculationContext context = CalculationContext.of(baritone);
         MutableMoveResult result = new MutableMoveResult();
         return MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, fx, fz, 0, context.get(fx, src.y - 2, fz), result);
     }
@@ -238,7 +240,7 @@ public class MovementFall extends Movement {
     }
 
     private FallMode fallMode() {
-        CalculationContext context = new CalculationContext(baritone);
+        CalculationContext context = CalculationContext.of(baritone);
         MutableMoveResult result = new MutableMoveResult();
         if (MovementDescend.dynamicFallCost(context, src.x, src.y, src.z, fx, fz, 0, context.get(fx, src.y - 2, fz), result)) {
             return FallMode.BUCKET;
@@ -261,7 +263,7 @@ public class MovementFall extends Movement {
 
     // the same question the planner asked, with the health we have right now
     private boolean stillPossible() {
-        CalculationContext context = new CalculationContext(baritone);
+        CalculationContext context = CalculationContext.of(baritone);
         MutableMoveResult result = new MutableMoveResult();
         MovementDescend.cost(context, src.x, src.y, src.z, fx, fz, result);
         return landsHere(result) && result.cost < COST_INF;
@@ -275,7 +277,7 @@ public class MovementFall extends Movement {
         }
 
         if (boatMode == null) {
-            CalculationContext c = new CalculationContext(baritone);
+            CalculationContext c = CalculationContext.of(baritone);
             boatMode = willPlaceBucket() && !(c.hasWaterBucket && src.y - dest.y <= c.maxFallHeightBucket + 1)
                     && !MovementHelper.isWater(ctx.world().getBlockState(dest));
         }
@@ -656,11 +658,15 @@ public class MovementFall extends Movement {
     // and the aim goes on the tick before that, pointed from where our eye is going to be
     // returns true if it took over the inputs this tick
     private boolean clutch(MovementState state) {
-        LocalPlayer player = ctx.player();
+        Player player = ctx.player();
         if (player.onGround() || player.getDeltaMovement().y >= 0) {
             return false;
         }
-        InventoryBehavior inv = ((Baritone) baritone).getInventoryBehavior();
+        // Ostinato: a headless host has no inventory behaviour, so it never picks a clutch item.
+        if (!(baritone instanceof Baritone client)) {
+            return false;
+        }
+        InventoryBehavior inv = client.getInventoryBehavior();
         Item item = inv.pickClutchItem(false);
         if (item == null) {
             return false; // the last one's already in the wall, or somebody ate the vines

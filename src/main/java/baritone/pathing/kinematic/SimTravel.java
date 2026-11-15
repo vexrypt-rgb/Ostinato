@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.utils.BetterBlockPos;
@@ -54,7 +56,7 @@ public final class SimTravel {
     private boolean pressed;
 
     /** @return the path position to continue from, or -1 when this layer does not take the tick */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         boolean held = pressed;
         pressed = false;
         int r = tick0(baritone, path, pathPosition);
@@ -75,7 +77,7 @@ public final class SimTravel {
         return heldBefore && !pressedNow;
     }
 
-    private int tick0(Baritone baritone, IPath path, int pathPosition) {
+    private int tick0(IPathingHost baritone, IPath path, int pathPosition) {
         if (!Baritone.settings().simTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
                 || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
             return drop();
@@ -163,7 +165,7 @@ public final class SimTravel {
         return press(baritone, path, pathPosition, body);
     }
 
-    private int press(Baritone baritone, IPath path, int pathPosition, PlayerSim body) {
+    private int press(IPathingHost baritone, IPath path, int pathPosition, PlayerSim body) {
         pressed = true;
         pressedAt = ctx.player().tickCount;
         traceStep = step;

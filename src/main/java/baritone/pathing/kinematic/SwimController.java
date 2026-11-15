@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -71,7 +73,7 @@ public final class SwimController {
     /**
      * @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run
      */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
@@ -79,7 +81,7 @@ public final class SwimController {
         return r;
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !(player.isInWater() || breathing && nearWater(player)) || player.isInLava()
                 || player.isFallFlying() || player.isPassenger()) {
@@ -175,7 +177,7 @@ public final class SwimController {
         return newPos;
     }
 
-    private void press(Baritone baritone, float yaw, float pitch, boolean sprint, boolean sneak, boolean jump) {
+    private void press(IPathingHost baritone, float yaw, float pitch, boolean sprint, boolean sneak, boolean jump) {
         baritone.getLookBehavior().human(); // steer with the mouse: a bounded, mouse-stepped camera turn, not a snap
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, Math.max(-85f, Math.min(85f, pitch))), true);
         var in = baritone.getInputOverrideHandler();

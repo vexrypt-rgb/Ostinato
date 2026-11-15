@@ -17,6 +17,8 @@
 
 package baritone.behavior;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.utils.HumanInputCaps;
 import baritone.utils.OstinatoRandom;
 import baritone.utils.PhysicalInput;
@@ -141,7 +143,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     public void frame() {
         if (!Baritone.settings().frameLook.value) return;
-        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        net.minecraft.client.player.LocalPlayer p = ctx.localPlayer();
         if (frameGoal == null || frameFrom == null || frameTo == null || p == null) return;
         if (p.tickCount - frameGoalTick > 2 || ctx.minecraft().gui.screen() != null) return; // tickStart drops it
         double frac = Math.max(0.0, Math.min(1.0, (System.nanoTime() - frameFromNanos) / 50_000_000.0));
@@ -186,7 +188,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             frameGoal = null;
             return;
         }
-        net.minecraft.client.player.LocalPlayer p = ctx.player();
+        net.minecraft.client.player.LocalPlayer p = ctx.localPlayer();
         if (frameGoal == null || p == null) return;
         if (frameTo != null) {
             float my = net.minecraft.util.Mth.wrapDegrees(frameTo.getYaw() - p.getYRot()), mp = frameTo.getPitch() - p.getXRot();
@@ -210,7 +212,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     }
 
     /** Ostinato: from the current view, this tick's step toward the goal: 60% of the gap in whole mouse counts. */
-    private void planFrameStep(net.minecraft.client.player.LocalPlayer p) {
+    private void planFrameStep(net.minecraft.world.entity.player.Player p) {
         float cy = p.getYRot(), cp = p.getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(frameGoal.getYaw() - cy), dp = frameGoal.getPitch() - cp;
         float step = mouseStep();
@@ -225,7 +227,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         return (float) (f * f * f * 8.0 * 0.15);
     }
 
-    private static void turnBy(net.minecraft.client.player.LocalPlayer p, float my, float mp) {
+    private static void turnBy(net.minecraft.world.entity.player.Player p, float my, float mp) {
         p.setYRot(p.getYRot() + my);
         p.setXRot(net.minecraft.util.Mth.clamp(p.getXRot() + mp, -90f, 90f));
         p.yRotO += my;

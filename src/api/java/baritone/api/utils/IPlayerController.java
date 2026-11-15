@@ -28,7 +28,6 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
-
 /**
  * @author Brady
  * @since 12/14/2018
@@ -47,9 +46,9 @@ public interface IPlayerController {
 
     GameType getGameType();
 
-    InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result);
+    InteractionResult processRightClickBlock(Player player, Level world, InteractionHand hand, BlockHitResult result);
 
-    InteractionResult processRightClick(LocalPlayer player, Level world, InteractionHand hand);
+    InteractionResult processRightClick(Player player, Level world, InteractionHand hand);
 
     boolean clickBlock(BlockPos loc, Direction face);
 

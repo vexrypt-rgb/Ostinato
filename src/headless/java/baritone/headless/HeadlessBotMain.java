@@ -6,7 +6,14 @@
  *   probe <x> <y> <z>   append the block state held in the bot's chunk store to probe-out.txt
  *   status              write a status snapshot to the evidence file
  *   course <file>       load a scripted PlayerSim course and attach the movement driver
- *   stop                end the run early
+ *   goto <x> <y> <z>    plan with Ostinato A* and walk there
+ *   mine <block>        path to the nearest loaded block of that id and break it
+ *   cancel              cancel pathing/mining (does not exit)
+ *   stop path           alias of cancel
+ *   stop                end the run (quit and exit are aliases)
+ *
+ * The same lines are accepted from commands.txt, from stdin, and from an owner whisper / server
+ * system chat (see {@link HeadlessCommands#commandFromChat}).
  */
 package baritone.headless;
 
@@ -26,9 +33,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -70,6 +80,11 @@ public final class HeadlessBotMain {
 
         HeadlessBot bot = new HeadlessBot(new HeadlessTransport.ConnectionTransport(connection),
                 host, port, username, UUIDUtil.createOfflinePlayerUUID(username), access);
+        ConcurrentLinkedQueue<String> inbox = new ConcurrentLinkedQueue<>();
+        bot.setChatCommandListener(inbox::add);
+        Thread stdin = new Thread(() -> readStdin(inbox), "headless-bot-stdin");
+        stdin.setDaemon(true);
+        stdin.start();
         long startedAt = System.nanoTime();
         bot.start();
 
@@ -89,35 +104,33 @@ public final class HeadlessBotMain {
         long nextSnapshot = startedAt;
         List<String> commandLines = readLines(commands);
         boolean stop = false;
+        boolean hostFailed = false;
         int exit = 0;
         try {
             while (System.nanoTime() < deadline && !stop) {
                 Thread.sleep(250);
-                List<String> now = readLines(commands);
-                for (int i = commandLines.size(); i < now.size(); i++) {
-                    String line = now.get(i).trim();
-                    if (line.isEmpty() || line.startsWith("#")) {
-                        continue;
-                    }
-                    System.out.println("[HeadlessBotMain] command: " + line);
-                    if (line.equals("stop")) {
-                        stop = true;
-                    } else if (line.equals("status")) {
-                        snapshot(evidence, bot, startedAt, tickerErrors.get(), "command status");
-                    } else if (line.startsWith("probe ")) {
-                        probe(probeOut, bot, line);
-                    } else if (line.startsWith("course ")) {
-                        Path course = Path.of(line.substring("course ".length()).trim());
-                        List<String> spec = Files.readAllLines(course, StandardCharsets.UTF_8);
-                        HeadlessBlockStateInterface bsi = new HeadlessBlockStateInterface(bot.chunks());
-                        HeadlessMovement driver = new HeadlessMovement(bsi, HeadlessMovement.parse(spec));
-                        bot.setMovement(driver);
-                        snapshot(evidence, bot, startedAt, tickerErrors.get(), "course attached " + course);
-                    } else {
-                        System.err.println("[HeadlessBotMain] unknown command: " + line);
+                if (!hostFailed && bot.hostReady() && bot.playerLoaded() && !bot.hostAttached()) {
+                    try {
+                        bot.ensureHost();
+                        System.out.println("[HeadlessBotMain] pathing host attached");
+                    } catch (RuntimeException e) {
+                        hostFailed = true;
+                        System.err.println("[HeadlessBotMain] pathing host failed: " + e);
+                        e.printStackTrace(System.err);
                     }
                 }
+                List<String> now = readLines(commands);
+                for (int i = commandLines.size(); i < now.size() && !stop; i++) {
+                    stop = handle(now.get(i), bot, evidence, probeOut, startedAt, tickerErrors.get());
+                }
                 commandLines = now;
+                String extra;
+                while (!stop && (extra = inbox.poll()) != null) {
+                    stop = handle(extra, bot, evidence, probeOut, startedAt, tickerErrors.get());
+                }
+                if (stop) {
+                    break;
+                }
                 if (System.nanoTime() >= nextSnapshot) {
                     snapshot(evidence, bot, startedAt, tickerErrors.get(), "periodic");
                     nextSnapshot = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
@@ -131,6 +144,12 @@ public final class HeadlessBotMain {
         } finally {
             snapshot(evidence, bot, startedAt, tickerErrors.get(), "final");
             ticker.shutdownNow();
+            try {
+                ticker.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            bot.closeHost();
             try {
                 connection.disconnect(Component.literal("headless bot finished"));
             } catch (RuntimeException ignored) {
@@ -160,6 +179,58 @@ public final class HeadlessBotMain {
         System.out.print(summary);
         // Everything we created is shut down; exit explicitly so no Netty thread keeps the JVM alive.
         System.exit(exit);
+    }
+
+    /** @return true when the process should exit ({@code stop}, {@code quit}, {@code exit}) */
+    private static boolean handle(String raw, HeadlessBot bot, Path evidence, Path probeOut,
+                                  long startedAt, int tickerErrors) throws IOException {
+        HeadlessCommands.Parsed parsed = HeadlessCommands.parse(raw);
+        if (parsed == null) {
+            return false;
+        }
+        System.out.println("[HeadlessBotMain] command: " + raw.trim());
+        if (parsed.error() != null) {
+            System.err.println("[HeadlessBotMain] " + parsed.error());
+            return false;
+        }
+        switch (parsed.kind()) {
+            case STOP -> {
+                return true;
+            }
+            case CANCEL -> bot.enqueuePathing("cancel");
+            case GOTO -> bot.enqueuePathing("goto " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+            case MINE -> bot.enqueuePathing("mine " + parsed.text());
+            case STATUS -> snapshot(evidence, bot, startedAt, tickerErrors, "command status");
+            case PROBE -> probe(probeOut, bot, "probe " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+            case COURSE -> {
+                if (bot.hostReady()) {
+                    try {
+                        bot.ensureHost();
+                    } catch (RuntimeException e) {
+                        System.err.println("[HeadlessBotMain] pathing host failed: " + e.getMessage());
+                    }
+                }
+                Path course = Path.of(parsed.text());
+                List<String> spec = Files.readAllLines(course, StandardCharsets.UTF_8);
+                HeadlessBlockStateInterface bsi = new HeadlessBlockStateInterface(bot.chunks());
+                HeadlessMovement driver = new HeadlessMovement(bsi, HeadlessMovement.parse(spec));
+                bot.setMovement(driver);
+                snapshot(evidence, bot, startedAt, tickerErrors, "course attached " + course);
+            }
+            default -> System.err.println("[HeadlessBotMain] unknown command: " + raw.trim());
+        }
+        return false;
+    }
+
+    private static void readStdin(ConcurrentLinkedQueue<String> inbox) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                inbox.add(line);
+            }
+        } catch (IOException e) {
+            System.err.println("[HeadlessBotMain] stdin closed: " + e.getMessage());
+        }
     }
 
     private static void probe(Path probeOut, HeadlessBot bot, String line) throws IOException {

@@ -24,6 +24,7 @@ import baritone.api.schematic.ISchematicSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
 import java.util.Objects;
@@ -59,7 +60,7 @@ public interface IBaritoneProvider {
      * @param player The player
      * @return The {@link IBaritone} instance.
      */
-    default IBaritone getBaritoneForPlayer(LocalPlayer player) {
+    default IBaritone getBaritoneForPlayer(Player player) {
         for (IBaritone baritone : this.getAllBaritones()) {
             if (Objects.equals(player, baritone.getPlayerContext().player())) {
                 return baritone;
@@ -91,7 +92,7 @@ public interface IBaritoneProvider {
      */
     default IBaritone getBaritoneForConnection(ClientPacketListener connection) {
         for (IBaritone baritone : this.getAllBaritones()) {
-            final LocalPlayer player = baritone.getPlayerContext().player();
+            final LocalPlayer player = baritone.getPlayerContext().localPlayer();
             if (player != null && player.connection == connection) {
                 return baritone;
             }

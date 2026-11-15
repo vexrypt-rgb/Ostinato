@@ -1,5 +1,9 @@
 package baritone.pathing.kinematic;
 
+import baritone.api.utils.IInputOverrideHandler;
+
+import baritone.pathing.IPathingHost;
+
 import baritone.utils.ExperimentalMovement;
 import baritone.Baritone;
 import baritone.api.gracenote.IGraceNote;
@@ -149,7 +153,7 @@ public final class KinematicController {
      * Ostinato Presto: the landing audit, run every client tick (from PathingBehavior) whoever is driving: a jump that
      * goes wrong usually ends with the path abandoned and this controller no longer called.
      */
-    public static void audit(Baritone baritone) {
+    public static void audit(IPathingHost baritone) {
         IPlayerContext ctx = baritone.getPlayerContext();
         Presto p;
         synchronized (PRESTO) {
@@ -157,7 +161,7 @@ public final class KinematicController {
         }
         if (p == null) return;
         boolean eligible = Baritone.settings().presto.value && ctx.player() != null && ctx.player().isAlive()
-                && versionSupported() && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.getPvpProcess().isActive();
+                && versionSupported() && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.pvpActive();
         if (p.auditContext(ctx.world(), ctx.player(), eligible) && p.armed()) {
             p.landing(ctx.player().tickCount, ctx.player().getY(), ctx.player().onGround());
         }
@@ -198,7 +202,7 @@ public final class KinematicController {
     /**
      * @return the path position to continue from if the controller drove this tick, or -1 to let Baritone run the movement
      */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         narrowEnd = false;
         traceDelay = Integer.MIN_VALUE;
         traceJump = false;
@@ -247,10 +251,10 @@ public final class KinematicController {
     public double traceGain = Double.NaN;
     public String traceWhy;
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         checkedLanding = null;
         prestoOn = Baritone.settings().presto.value && versionSupported() && ctx.player().isAlive()
-                && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.getPvpProcess().isActive();
+                && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.pvpActive();
         if (!prestoOn) {
             presto.invalidate();
             prestoDefers = 0;
@@ -275,7 +279,7 @@ public final class KinematicController {
         int tick = ctx.player().tickCount;
         if (prestoOn) {
             long h0 = System.nanoTime();
-            baritone.getPredictivePhysics().warmUp(); // Presto v4: the first takeoff check is not the cold one
+            baritone.physicsWarmUp(); // Presto v4: the first takeoff check is not the cold one
             presto.begin(ctx.world(), ctx.player(), path, tick);
             boolean was = presto.trusted();
             Presto.Reason miss = presto.observe(tick, real.x, real.y, real.z, real.vx, real.vz, real.onGround);
@@ -608,14 +612,9 @@ public final class KinematicController {
     private boolean prestoOn;
 
     /** Grace Note owns emergencies: while it has an episode open Presto keeps out, and what it expected no longer holds. */
-    private static boolean graceNoteBusy(Baritone baritone) {
-        GraceNote gn = baritone.getGraceNote();
-        if (gn.holdsControl()) {
-            return true;
-        }
-        IGraceNote.Phase p = gn.status().phase();
-        return p != IGraceNote.Phase.MONITORING && p != IGraceNote.Phase.COMPLETED
-                && p != IGraceNote.Phase.FAILED;
+    private static boolean graceNoteBusy(IPathingHost baritone) {
+        // Ostinato: the host answers this; a headless bot has no Grace Note and never owns movement.
+        return baritone.graceNoteBusy();
     }
 
     /**
@@ -671,7 +670,7 @@ public final class KinematicController {
      * where PlayerSim lands it. Its first landing is compared with PlayerSim's (see {@link Presto#judge}). Inline: one
      * call on a gap jump's takeoff tick, SCREENING, horizon {@link #PRESTO_HORIZON} at most.
      */
-    private Presto.Verdict takeoffCheck(Baritone baritone, boolean sprint, int tick) {
+    private Presto.Verdict takeoffCheck(IPathingHost baritone, boolean sprint, int tick) {
         if (bestLandT <= 0 || bestLandT > PRESTO_HORIZON) {
             presto.checked(Presto.Verdict.UNAVAILABLE, 0);
             return Presto.Verdict.UNAVAILABLE; // the plan lands past the rollout: nothing to compare with
@@ -681,6 +680,11 @@ public final class KinematicController {
         PredictionResult r = null;
         try {
             IPredictivePhysics ppe = baritone.getPredictivePhysics();
+            if (ppe == null) {
+                // Ostinato: a host without the predictor has no opinion; the controller decides alone.
+                presto.checked(Presto.Verdict.UNAVAILABLE, 0);
+                return Presto.Verdict.UNAVAILABLE;
+            }
             float toLand = (float) Math.toDegrees(Math.atan2(-(bestLandX - real.x), bestLandZ - real.z));
             r = ppe.predict(PredictionRequest.trajectory(ppe.capture(ctx.player()), Math.min(PRESTO_HORIZON, bestLandT + 12))
                     .input(new PredictionRequest.Input(1, 0, true, sprint, false, toLand, Float.NaN))
@@ -735,7 +739,7 @@ public final class KinematicController {
      * only if the feet land on the real support top overlapping its collision shape by at least {@link #NARROW_OVERLAP}.
      * Acts on the first tick of the first plan found (fewest ticks, walking before sprinting), searched again each tick.
      */
-    private int narrowTakeoff(Baritone baritone, int newPos, double[] to) {
+    private int narrowTakeoff(IPathingHost baritone, int newPos, double[] to) {
         double top = to[1] - to[4];
         double[] n = narrowTarget(to);
         double cx = n[0], cz = n[1];
@@ -776,7 +780,7 @@ public final class KinematicController {
             // walk toward the next one stepped off it (cubed level 1). Sneak back toward its middle instead, the edge
             // guard keeps the feet on it, and plan again from there.
             double hx = h[0] - real.x, hz = h[1] - real.z;
-            InputOverrideHandler in = baritone.getInputOverrideHandler();
+            IInputOverrideHandler in = baritone.getInputOverrideHandler();
             in.clearAllKeys();
             in.setInputForceState(Input.SNEAK, true);
             float hy = (float) Math.toDegrees(Math.atan2(-hx, hz));
@@ -788,7 +792,7 @@ public final class KinematicController {
         int back = pick, sp = pickSp, delay = pickDelay;
         float yaw = (float) Math.toDegrees(Math.atan2(-(cx - real.x), cz - real.z));
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
-        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         lastDrivenTick = ctx.player().tickCount;
         if (Baritone.settings().kinematicTrace.value) {
@@ -911,12 +915,12 @@ public final class KinematicController {
     }
 
     /** Ostinato: mid-air onto a narrow landing whose middle is (cx, cz): the arrival steering of {@link #arrive}. */
-    private int steerAir(Baritone baritone, int newPos, double cx, double cz) {
+    private int steerAir(IPathingHost baritone, int newPos, double cx, double cz) {
         double dx = cx - real.x, dz = cz - real.z;
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         baritone.getLookBehavior().human();
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
-        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         int a = airArrive(Math.hypot(dx, dz), Math.hypot(real.vx, real.vz));
         in.setInputForceState(Input.MOVE_FORWARD, a > 0 && Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot())) < 60);
@@ -926,7 +930,7 @@ public final class KinematicController {
     }
 
     /** Stretch end: ease onto the last point (slow, no sprint) so the next movement starts from rest. */
-    private int arrive(Baritone baritone, int newPos, double[] to) {
+    private int arrive(IPathingHost baritone, int newPos, double[] to) {
         double[] n = narrowEnd ? narrowTarget(to) : null;
         double dx = (n != null ? n[0] : to[0]) - real.x, dz = (n != null ? n[1] : to[2]) - real.z;
         double d = Math.hypot(dx, dz);
@@ -935,7 +939,7 @@ public final class KinematicController {
         baritone.getLookBehavior().human();
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
         double want = Math.min(0.22, 0.04 + d * 0.3);
-        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot()));
         if (narrowEnd && !real.onGround) {

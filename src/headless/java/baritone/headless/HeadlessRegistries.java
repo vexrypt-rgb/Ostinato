@@ -11,9 +11,14 @@ package baritone.headless;
 
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.LayeredRegistryAccess;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.RegistrySynchronization;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.network.protocol.common.ClientboundUpdateTagsPacket;
 import net.minecraft.network.protocol.configuration.ClientboundRegistryDataPacket;
 import net.minecraft.resources.Identifier;
@@ -134,6 +139,62 @@ public final class HeadlessRegistries {
      * client init, so without this every ItemStack decoded from a packet throws
      * "Components not bound yet" (for example an item entity's tracked DATA_ITEM in SetEntityData).
      */
+    /**
+     * Ostinato: {@code Level}'s constructor calls {@code PalettedContainerFactory.create} and
+     * {@code DamageSources}, which need real {@code Registry} objects for biome and damage_type.
+     * Bootstrap's access does not have those datapack registries. A live bot already rebuilt them
+     * from configuration packets; that access is kept. Otherwise the vanilla data-gen world
+     * registries are copied into {@code MappedRegistry}s and merged over the built-in access.
+     * Packet decoding keeps using the bot's own access either way.
+     */
+    public static RegistryAccess forLevel(RegistryAccess access) {
+        if (access != null
+                && access.lookup(Registries.BIOME).isPresent()
+                && access.lookup(Registries.DAMAGE_TYPE).isPresent()) {
+            return access;
+        }
+        RegistryAccess.Frozen cached = vanillaBody;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (HeadlessRegistries.class) {
+            if (vanillaBody != null) {
+                return vanillaBody;
+            }
+            Map<ResourceKey<? extends Registry<?>>, Registry<?>> map = new LinkedHashMap<>();
+            RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY).registries()
+                    .forEach(entry -> map.put(entry.key(), entry.value()));
+            // Only the two registries Level's constructor looks up. Copying every worldgen
+            // registry re-registers values that are already in a built-in registry.
+            HolderLookup.Provider world = VanillaRegistries.createWorldLookup();
+            copyLookup(map, world, Registries.BIOME);
+            copyLookup(map, world, Registries.DAMAGE_TYPE);
+            vanillaBody = new RegistryAccess.ImmutableRegistryAccess(map).freeze();
+            return vanillaBody;
+        }
+    }
+
+    private static volatile RegistryAccess.Frozen vanillaBody;
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private static <T> void copyLookup(Map<ResourceKey<? extends Registry<?>>, Registry<?>> map,
+                                       HolderLookup.Provider provider,
+                                       ResourceKey<? extends Registry<T>> key) {
+        HolderLookup.RegistryLookup<T> lookup = provider.lookupOrThrow(key);
+        if (lookup instanceof Registry<?> registry) {
+            map.put(registry.key(), registry);
+            return;
+        }
+        MappedRegistry<T> materialized = new MappedRegistry<>(key, lookup.registryLifecycle());
+        lookup.listElements().forEach(ref -> {
+            if (materialized.get(ref.key()).isEmpty()) {
+                materialized.register(ref.key(), ref.value(), RegistrationInfo.BUILT_IN);
+            }
+        });
+        materialized.freeze();
+        map.put(key, materialized);
+    }
+
     public static void bindDefaultComponents(HolderLookup.Provider access) {
         for (var pending : net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(access)) {
             pending.apply();

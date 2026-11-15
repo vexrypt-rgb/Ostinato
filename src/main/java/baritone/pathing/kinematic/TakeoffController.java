@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.utils.ExperimentalMovement;
 import baritone.utils.PositionSync;
 import baritone.Baritone;
@@ -39,7 +41,7 @@ public final class TakeoffController {
     }
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         inPlay = false;
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
@@ -118,7 +120,7 @@ public final class TakeoffController {
         settle = ticks = 0;
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         boolean slowMode = Baritone.settings().slowKinematic.value;
         if (!slowMode && !ExperimentalMovement.kinematicTravel() || player.isInWater() || player.isInLava() || player.onClimbable()

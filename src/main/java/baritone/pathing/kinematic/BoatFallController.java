@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.utils.BetterBlockPos;
@@ -37,7 +39,7 @@ public final class BoatFallController {
     }
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
@@ -47,7 +49,7 @@ public final class BoatFallController {
         return r;
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || player.isInLava() || player.isFallFlying() || player.getAbilities().flying
                 || pathPosition >= path.movements().size() || !(path.movements().get(pathPosition) instanceof MovementFall fall)) {
@@ -59,7 +61,7 @@ public final class BoatFallController {
         }
         BetterBlockPos src = fall.getSrc(), dest = fall.getDest();
         int drop = src.y - dest.y;
-        CalculationContext cc = new CalculationContext(baritone);
+        CalculationContext cc = CalculationContext.of(baritone);
         boolean destWater = MovementHelper.isWater(ctx.world().getBlockState(dest));
         boolean bucket = drop > cc.maxFallHeightNoWater && !destWater;
         if (drop < 2 || !bucket || cc.hasWaterBucket && drop <= cc.maxFallHeightBucket + 1) {

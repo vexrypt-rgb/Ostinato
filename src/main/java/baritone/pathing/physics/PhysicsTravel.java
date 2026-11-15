@@ -8,6 +8,8 @@
  */
 package baritone.pathing.physics;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.utils.BetterBlockPos;
@@ -82,7 +84,7 @@ public final class PhysicsTravel {
     }
 
     /** @return the path position to continue from if this drove the tick, or -1 to let the next layer run it */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         return tick(baritone, path, pathPosition, false);
     }
 
@@ -90,7 +92,7 @@ public final class PhysicsTravel {
      * Ostinato: {@code stackAsked} means the travel stack already chose physics, so {@code physicsTravel} is not
      * required. The stack tries this only after the kinematic family declines the spot.
      */
-    public int tick(Baritone baritone, IPath path, int pathPosition, boolean stackAsked) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition, boolean stackAsked) {
         // Ostinato 2.0 Phase 06: null while unifiedExecutor is off, and every use below is behind that null.
         UnifiedExecutor ux = Baritone.settings().unifiedExecutor.value ? baritone.getUnifiedExecutor() : null;
         if (ctx.player().isInWater() || ctx.player().isInLava()

@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -42,7 +44,7 @@ public final class ExtensionController {
     }
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
@@ -50,7 +52,7 @@ public final class ExtensionController {
         return r;
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
@@ -85,7 +87,7 @@ public final class ExtensionController {
         if (player.getY() < src.y - 0.5) {
             return -1; // fell
         }
-        if (!baritone.getInventoryBehavior().selectThrowawayForLocation(true, dest.x, dest.y - 1, dest.z)) {
+        if (!baritone.selectThrowawayForLocation(true, dest.x, dest.y - 1, dest.z)) {
             return -1; // nothing to lay the jump with: Baritone's own movement knows what it can still do
         }
         if (++ticks > 600) {
@@ -193,7 +195,7 @@ public final class ExtensionController {
      * swing sideways mid-jump) and click once the ray hits. The movement keys are re-derived in the camera frame so the
      * push along the jump stays the same wherever the camera points.
      */
-    private void placeMidAir(Baritone baritone, BetterBlockPos dest, int ext, int sx, int sz, float travelYaw) {
+    private void placeMidAir(IPathingHost baritone, BetterBlockPos dest, int ext, int sx, int sz, float travelYaw) {
         Player player = ctx.player();
         BetterBlockPos target = null;
         for (int j = 0; j <= ext && target == null; j++) { // the cell next to the far platform first, each next one against the last
@@ -210,7 +212,7 @@ public final class ExtensionController {
         net.minecraft.world.phys.AABB box = player.getBoundingBox();
         boolean inTheWay = box.expandTowards(mv.x, Math.max(0, mv.y), mv.z).inflate(0.02, 0, 0.02).setMinY(box.minY + 0.01)
                 .intersects(new net.minecraft.world.phys.AABB(target.x, target.y, target.z, target.x + 1, target.y + 1, target.z + 1));
-        baritone.getInventoryBehavior().selectThrowawayForLocation(true, target.x, target.y, target.z);
+        baritone.selectThrowawayForLocation(true, target.x, target.y, target.z);
         Vec3 eye = ctx.playerHead();
         Rotation pre = null; // where the camera heads while the face is still out of reach, so it is there in time
         Rotation best = null; // the point of a reachable face the camera has the least turning to do for

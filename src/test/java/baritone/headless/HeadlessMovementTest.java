@@ -323,6 +323,48 @@ public class HeadlessMovementTest {
         assertTrue("swimming forward must advance z, z=" + sim.z, sim.z > 0.6);
     }
 
+    @Test
+    public void liveDriverPausesTheCourseWithoutSkippingOrDoubleSending() {
+        RecordingTransport transport = new RecordingTransport();
+        HeadlessBot bot = new HeadlessBot(transport, "127.0.0.1", 25570, "HBot1",
+                UUID.randomUUID(), access);
+        HeadlessMovement movement = new HeadlessMovement(flatWorld(), HeadlessMovement.parse(List.of(
+                "10 0 1 0 0 0 0 #walk")));
+        int[] holds = {3};
+        movement.setDriver((ignored, current) -> {
+            if (holds[0] > 0) {
+                holds[0]--;
+                return new HeadlessMovement.Step(1, 90f, 0f, 0, 0, false, false, false, "hold");
+            }
+            return null;
+        });
+        movement.start(0.5, -60.0, 0.5, true);
+        for (int i = 0; i < 13; i++) {
+            int before = transport.sent.size();
+            movement.tick(bot);
+            int movementPackets = 0;
+            int tickEnds = 0;
+            for (int s = before; s < transport.sent.size(); s++) {
+                Packet<?> packet = transport.sent.get(s);
+                if (packet instanceof ServerboundMovePlayerPacket) {
+                    movementPackets++;
+                }
+                if (packet instanceof ServerboundClientTickEndPacket) {
+                    tickEnds++;
+                }
+            }
+            assertEquals("tick " + i + " must send one movement packet", 1, movementPackets);
+            assertEquals("tick " + i + " must send one ClientTickEnd", 1, tickEnds);
+            assertTrue(transport.sent.get(transport.sent.size() - 1) instanceof ServerboundClientTickEndPacket);
+            if (i < 3) {
+                assertEquals("pathing must not consume the course", 0, movement.courseStepTick());
+            }
+        }
+        assertTrue(movement.finished());
+        assertEquals(13, movement.positionPackets());
+        assertEquals(13, transport.count(ServerboundClientTickEndPacket.class));
+    }
+
     private static final class RecordingTransport implements HeadlessTransport {
         final List<Packet<?>> sent = new ArrayList<>();
 

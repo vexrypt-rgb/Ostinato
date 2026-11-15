@@ -19,7 +19,7 @@ package baritone.utils;
 
 import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
-import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
@@ -59,7 +59,7 @@ public class ToolSet {
      */
     private final Function<Block, Double> backendCalculation;
 
-    private final LocalPlayer player;
+    private final Player player;
 
     /**
      * Used for evaluating the material cost of a tool.
@@ -75,7 +75,7 @@ public class ToolSet {
         ItemTags.NETHERITE_TOOL_MATERIALS
     );
 
-    public ToolSet(LocalPlayer player) {
+    public ToolSet(Player player) {
         breakStrengthCache = new HashMap<>();
         this.player = player;
 

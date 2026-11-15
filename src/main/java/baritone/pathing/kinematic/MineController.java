@@ -1,5 +1,7 @@
 package baritone.pathing.kinematic;
 
+import baritone.pathing.IPathingHost;
+
 import baritone.Baritone;
 import baritone.api.pathing.calc.IPath;
 import baritone.api.pathing.movement.IMovement;
@@ -42,7 +44,7 @@ public final class MineController {
     }
 
     /** @return the path position to continue from if the controller drove this tick, or -1 to let the next driver run */
-    public int tick(Baritone baritone, IPath path, int pathPosition) {
+    public int tick(IPathingHost baritone, IPath path, int pathPosition) {
         int r = drive(baritone, path, pathPosition);
         if (r >= 0) {
             drivenTicks++;
@@ -57,7 +59,7 @@ public final class MineController {
     }
 
     /** The dig-down: the block underfoot is gone, so centre over the hole with the camera down the shaft and drop. */
-    private int drop(Baritone baritone, Movement m, int pathPosition) {
+    private int drop(IPathingHost baritone, Movement m, int pathPosition) {
         var in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         if (ctx.playerFeet().equals(m.getDest()) && ctx.player().onGround()) {
@@ -72,7 +74,7 @@ public final class MineController {
         return pathPosition;
     }
 
-    private int drive(Baritone baritone, IPath path, int pathPosition) {
+    private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         Player player = ctx.player();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowBreak.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()

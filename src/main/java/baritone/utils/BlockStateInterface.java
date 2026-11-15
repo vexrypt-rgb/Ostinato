@@ -59,6 +59,9 @@ public class BlockStateInterface {
     private final int legitChunkX;
     private final int legitChunkZ;
     private final int legitChunks;
+    /** Ostinato: no client chunk cache, world cache or Minecraft; reads go straight to {@link #world}. */
+    private final boolean headless;
+    private final BlockPos.MutableBlockPos headlessPos = new BlockPos.MutableBlockPos();
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
@@ -69,6 +72,24 @@ public class BlockStateInterface {
     public BlockStateInterface(IPlayerContext ctx, boolean copyLoadedChunks) {
         this.world = ctx.world();
         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
+        this.headless = ctx.minecraft() == null;
+        if (this.headless) {
+            // Ostinato: a headless context has a real Level over the bot's protocol-owned chunks but no client
+            // chunk cache, no world cache and no Minecraft. Reads go straight to the level; nothing is "cached only"
+            // and there is no legit-clip horizon.
+            this.worldData = null;
+            this.provider = null;
+            this.useTheRealWorld = true;
+            this.legitClip = false;
+            this.legitChunkX = 0;
+            this.legitChunkZ = 0;
+            this.legitChunks = 0;
+            this.headlessMinY = world.getMinY();
+            this.headlessHeight = world.getHeight();
+            this.isPassableBlockPos = new BlockPos.MutableBlockPos();
+            this.access = new BlockStateInterfaceAccessWrapper(this);
+            return;
+        }
         this.worldData = (WorldData) ctx.worldData();
         if (copyLoadedChunks) {
             this.provider = ((IClientChunkProvider) world.getChunkSource()).createThreadSafeCopy();
@@ -110,6 +131,7 @@ public class BlockStateInterface {
         this.legitChunkX = 0;
         this.legitChunkZ = 0;
         this.legitChunks = 0;
+        this.headless = true;
         this.headlessMinY = minY;
         this.headlessHeight = height;
         this.isPassableBlockPos = new BlockPos.MutableBlockPos();
@@ -133,6 +155,9 @@ public class BlockStateInterface {
         if (legitClip) {
             return legitLoaded(blockX, blockZ);
         }
+        if (headless) {
+            return world != null && world.hasChunk(blockX >> 4, blockZ >> 4);
+        }
         return provider.hasChunk(blockX >> 4, blockZ >> 4);
     }
 
@@ -154,6 +179,9 @@ public class BlockStateInterface {
         // Ostinato: one branch. Off, the body below is the full-information lookup.
         if (legitClip) {
             return legitBlock(x, y, z);
+        }
+        if (headless) {
+            return world == null ? AIR : world.getBlockState(headlessPos.set(x, y, z));
         }
         int worldY = y;
         y -= world.dimensionType().minY();
@@ -208,6 +236,9 @@ public class BlockStateInterface {
         if (legitClip) {
             return legitLoaded(x, z);
         }
+        if (headless) {
+            return isKnown(x, z);
+        }
         return isKnown(x, z) || SeedPlan.covers(x, z);
     }
 
@@ -219,6 +250,9 @@ public class BlockStateInterface {
         // Ostinato: legit track does not answer from the world cache.
         if (legitClip) {
             return legitLoaded(x, z);
+        }
+        if (headless) {
+            return world != null && world.hasChunk(x >> 4, z >> 4);
         }
         LevelChunk prevChunk = prev;
         if (prevChunk != null && prevChunk.getPos().x() == x >> 4 && prevChunk.getPos().z() == z >> 4) {

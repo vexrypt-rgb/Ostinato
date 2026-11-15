@@ -3,6 +3,8 @@
  */
 package baritone.gracenote;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
 import baritone.api.event.events.TickEvent;
@@ -169,7 +171,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
         PathingBehavior pathing = baritone.getPathingBehavior();
         boolean heldLastTick = pathing.emergencyHeldThisTick(); // the executor has not ticked yet this tick
         boolean changed = false;
-        LocalPlayer p = inWorld ? ctx.player() : null;
+        LocalPlayer p = inWorld ? ctx.localPlayer() : null;
         if (inWorld) {
             Object dim = ctx.world().dimension();
             changed = world != null && (world != ctx.world() || !dim.equals(dimension));
@@ -438,7 +440,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
 
     private void late() {
         if (!core.holdsControl() || ctx.player() == null || ctx.world() == null) return;
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         boolean recovering = core.phase() == Phase.RECOVERING;
         boolean foreign = false;
         for (Input in : Input.values()) foreign |= baritone.getInputOverrideHandler().isInputForcedDown(in);
@@ -493,7 +495,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
         if (phase == Phase.MONITORING || phase == Phase.COMPLETED || phase == Phase.FAILED) return;
         long t0 = System.nanoTime();
         try {
-            LocalPlayer p = ctx.player();
+            LocalPlayer p = ctx.localPlayer();
             if (event.getType() != TickEvent.Type.IN || p == null || ctx.world() == null) return;
             Hand hand = p.getMainHandItem().is(Items.WATER_BUCKET) ? Hand.WATER_BUCKET : p.getMainHandItem().is(Items.BUCKET) ? Hand.BUCKET : Hand.OTHER;
             core.post(tick, new GraceNoteCore.Post(p.isAlive(), p.onGround(), p.isInWater(), p.fallDistance,

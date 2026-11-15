@@ -89,7 +89,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
 
     public GetToBlockProcess(Baritone baritone) {
         super(baritone);
-        containers = new ClientContainers(ctx::player);
+        containers = new ClientContainers(ctx::localPlayer);
     }
 
     @Override

@@ -943,6 +943,11 @@ public interface MovementHelper extends ActionCosts, Helper {
      * (presto-v4-fix7 lap 22). A 90° corner peeks to 58° and walks on; only a reversal waits, two or three ticks.
      */
     static boolean turningAway(IPlayerContext ctx, Rotation to) {
+        // Ostinato: a headless host has no provider registration and aims instantly, so its player yaw already is the
+        // yaw this tick's move uses. Asking the provider headlessly would build a client Baritone.
+        if (ctx.minecraft() == null) {
+            return walkGate(ctx.playerRotations().getYaw(), to.getYaw());
+        }
         IBaritone b = ctx.player() == null ? null : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
         float moving = b == null ? ctx.playerRotations().getYaw() : b.getLookBehavior().getAimProcessor().peekRotation(to).getYaw();
         return walkGate(moving, to.getYaw());
@@ -950,6 +955,33 @@ public interface MovementHelper extends ActionCosts, Helper {
 
     static boolean walkGate(float movingYaw, float toYaw) {
         return Math.abs(Mth.wrapDegrees(movingYaw - toYaw)) > WALK_GATE;
+    }
+
+    /**
+     * Ostinato: the host's throwaway-block answers, on both a client Baritone and a headless host. A movement's
+     * placement step only asks when it plans to place, which a bot with no blocks never does.
+     */
+    public static boolean hasGenericThrowaway(IBaritone baritone) {
+        if (baritone instanceof baritone.pathing.IPathingHost host) {
+            return host.hasGenericThrowaway();
+        }
+        return ((Baritone) baritone).getInventoryBehavior().hasGenericThrowaway();
+    }
+
+    /** Ostinato: {@link #hasGenericThrowaway}'s selection half, on either host kind. */
+    public static boolean selectThrowaway(IBaritone baritone, boolean select, int x, int y, int z) {
+        if (baritone instanceof baritone.pathing.IPathingHost host) {
+            return host.selectThrowawayForLocation(select, x, y, z);
+        }
+        return ((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(select, x, y, z);
+    }
+
+    /** Ostinato: the host's world view (client cache or headless chunk store), on either host kind. */
+    public static BlockStateInterface bsi(IBaritone baritone) {
+        if (baritone instanceof baritone.pathing.IPathingHost host) {
+            return host.bsi();
+        }
+        return ((Baritone) baritone).bsi;
     }
 
     /**
@@ -1124,7 +1156,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         for (int i = 0; i < 5; i++) {
             BlockPos against1 = placeAt.relative(HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP[i]);
             if (MovementHelper.canPlaceAgainst(ctx, against1)) {
-                if (!((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(false, placeAt.getX(), placeAt.getY(), placeAt.getZ())) { // get ready to place a throwaway block
+                if (!selectThrowaway(baritone, false, placeAt.getX(), placeAt.getY(), placeAt.getZ())) { // get ready to place a throwaway block
                     Helper.HELPER.logDebug("bb pls get me some blocks. dirt, netherrack, cobble");
                     state.setStatus(MovementStatus.UNREACHABLE);
                     return PlaceResult.NO_OPTION;
@@ -1155,7 +1187,7 @@ public interface MovementHelper extends ActionCosts, Helper {
                 if (wouldSneak) {
                     state.setInput(Input.SNEAK, true);
                 }
-                ((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, placeAt.getX(), placeAt.getY(), placeAt.getZ());
+                selectThrowaway(baritone, true, placeAt.getX(), placeAt.getY(), placeAt.getZ());
                 return PlaceResult.READY_TO_PLACE;
             }
         }
@@ -1163,7 +1195,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (wouldSneak) {
                 state.setInput(Input.SNEAK, true);
             }
-            ((Baritone) baritone).getInventoryBehavior().selectThrowawayForLocation(true, placeAt.getX(), placeAt.getY(), placeAt.getZ());
+            selectThrowaway(baritone, true, placeAt.getX(), placeAt.getY(), placeAt.getZ());
             return PlaceResult.ATTEMPTING;
         }
         return PlaceResult.NO_OPTION;

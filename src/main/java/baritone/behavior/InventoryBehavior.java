@@ -17,6 +17,8 @@
 
 package baritone.behavior;
 
+import net.minecraft.world.entity.player.Player;
+
 import baritone.utils.OstinatoRandom;
 import baritone.Baritone;
 import baritone.altoclef.AltoClefSettings;
@@ -228,7 +230,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
     public boolean throwaway(boolean select, Predicate<? super ItemStack> desired, boolean allowInventory) {
         if (AltoClefSettings.getInstance().isInteractionPaused()) return false;
 
-        LocalPlayer p = ctx.player();
+        LocalPlayer p = ctx.localPlayer();
         NonNullList<ItemStack> inv = p.getInventory().getNonEquipmentItems();
         for (int i = 0; i < 9; i++) {
             ItemStack item = inv.get(i);

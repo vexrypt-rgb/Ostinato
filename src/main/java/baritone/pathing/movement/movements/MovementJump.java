@@ -1326,7 +1326,7 @@ public class MovementJump extends Movement {
         MovementState s = update0(state);
         if (running && s.getStatus() == MovementStatus.RUNNING) {
             // the plan's yaw assumes the look keeps up with it
-            ((Baritone) baritone).getLookBehavior().turnCap(Baritone.settings().parkourTurnCap.value);
+            baritone.getLookBehavior().turnCap(Baritone.settings().parkourTurnCap.value);
         }
         if (trace != null && s.getStatus() != MovementStatus.RUNNING) {
             trace.finish(s.getStatus() == MovementStatus.SUCCESS);

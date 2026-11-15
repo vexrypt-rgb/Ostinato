@@ -817,7 +817,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
             PathCalculationResult calcResult = pathfinder.calculate(primary, failure);
             synchronized (pathPlanLock) {
-                Optional<PathExecutor> executor = calcResult.getPath().map(p -> new PathExecutor(PathingBehavior.this, p));
+                Optional<PathExecutor> executor = calcResult.getPath().map(p -> new PathExecutor(baritone, p));
                 // An over-long route is not walked: from here on it is a calculation that found nothing.
                 int cap = Baritone.settings().maxPathLengthBlocks.value;
                 if (cap > 0 && executor.isPresent() && executor.get().getPath().length() > cap) {

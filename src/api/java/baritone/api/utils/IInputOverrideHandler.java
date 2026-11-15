@@ -37,4 +37,12 @@ public interface IInputOverrideHandler extends IBehavior {
      * each in [-1, 1]. Used only while {@link baritone.api.Settings#analogMovement} is on; cleared by {@link #clearAllKeys}.
      */
     default void setAnalog(float left, float forward) {}
+
+    /**
+     * Ostinato: takes the analog stick requested since the last call, or {@code null}. The client hands it to its
+     * movement input; a headless bot hands it to {@code PlayerSim} directly.
+     */
+    default float[] pollAnalog() {
+        return null;
+    }
 }

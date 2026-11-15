@@ -67,6 +67,7 @@ import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
 import net.minecraft.network.protocol.login.ServerboundHelloPacket;
 import net.minecraft.network.protocol.login.ServerboundLoginAcknowledgedPacket;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.player.Input;
@@ -77,7 +78,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * One bot connection. All clientbound packets funnel through {@link #onPacket(Object)}; all
@@ -115,9 +118,16 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     private volatile RegistryAccess.Frozen registryAccess;
     private final HeadlessRegistries registries = new HeadlessRegistries();
     private final HeadlessChunkStore chunks;
-    // Ostinato: Phase 2. When set, the PlayerSim driver owns movement packets for every tick;
-    // the idle path below stays byte-for-byte the Phase 1 behaviour when it is not set.
+    // Ostinato: Phase 2. When a course is still running, or Phase 3 pathing/mining owns the keys,
+    // this driver sends the one movement packet. Otherwise the idle path below stays the Phase 1
+    // StatusOnly + 20-tick position reminder.
     private volatile HeadlessMovement movement;
+    // Ostinato: the pathing host, built once the bot has spawned. Null until then, including in tests
+    // that only exercise the idle reminder.
+    private volatile HeadlessLiveDriver live;
+    private final Object hostLock = new Object();
+    private final ConcurrentLinkedQueue<String> pathingLines = new ConcurrentLinkedQueue<>();
+    private volatile Consumer<String> chatCommands;
 
     private final ClientLoginPacketListener loginListener;
     private final ClientConfigurationPacketListener configurationListener;
@@ -247,7 +257,17 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         if (p instanceof ClientboundSystemChatPacket) {
-            event("chat: " + ((ClientboundSystemChatPacket) p).content().getString());
+            String text = ((ClientboundSystemChatPacket) p).content().getString();
+            event("chat: " + text);
+            // Ostinato: owner whispers and server-console system chat. Public player chat is a different packet.
+            String command = HeadlessCommands.commandFromChat(text);
+            if (command != null) {
+                event("chat command: " + command);
+                Consumer<String> sink = chatCommands;
+                if (sink != null) {
+                    sink.accept(command);
+                }
+            }
             return;
         }
 
@@ -364,6 +384,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             return;
         }
         if (p instanceof ClientboundStartConfigurationPacket) {
+            pathingLines.add("cancel");
             enterConfiguration(true);
             return;
         }
@@ -373,6 +394,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             dimension = respawn.commonPlayerSpawnInfo().dimension().identifier().toString();
             spawnKnown = false;
             loadedSent = false;
+            pathingLines.add("cancel");
             event("respawn into " + dimension);
             return;
         }
@@ -516,8 +538,12 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         if (state != State.PLAY || !spawnKnown || !loadedSent) {
             return;
         }
+        // Ostinato: pathing commands run here, before the single movement packet, so A* is only queued.
+        drainPathing();
         HeadlessMovement driver = movement;
-        if (driver != null) {
+        HeadlessLiveDriver pathing = live;
+        boolean drive = driver != null && ((pathing != null && pathing.controlsMovement()) || driver.courseRunning());
+        if (drive) {
             try {
                 driver.tick(this);
             } catch (RuntimeException e) {
@@ -555,7 +581,12 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
     /** Attach the PlayerSim driver. Called after spawn so the sim can be seeded from the real position. */
     public void setMovement(HeadlessMovement driver) {
         this.movement = driver;
+        if (live != null) {
+            driver.setDriver(live);
+        }
         if (spawnKnown) {
+            // Ostinato: the course step overwrites this yaw before the packet; a live driver reads it first.
+            driver.rotation(yRot, xRot);
             driver.start(x, y, z, onGround);
         }
         event("movement driver attached (" + driver.status().trim().replace('\n', ' ') + ")");
@@ -565,11 +596,14 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
         return movement;
     }
 
-    void setReportedPosition(double nx, double ny, double nz, boolean ground) {
+    void setReportedPosition(double nx, double ny, double nz, boolean ground, float yaw, float pitch) {
         this.x = nx;
         this.y = ny;
         this.z = nz;
         this.onGround = ground;
+        // Ostinato: the idle reminder repeats the look the last movement packet actually sent.
+        this.yRot = yaw;
+        this.xRot = pitch;
     }
 
     public int playerId() {
@@ -578,6 +612,148 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
 
     public boolean onGround() {
         return onGround;
+    }
+
+    public float yRot() {
+        return yRot;
+    }
+
+    public float xRot() {
+        return xRot;
+    }
+
+    public boolean spawnKnown() {
+        return spawnKnown;
+    }
+
+    public boolean playerLoaded() {
+        return loadedSent;
+    }
+
+    public boolean hostAttached() {
+        return live != null;
+    }
+
+    /** Play session with a confirmed spawn. Chunks may still be arriving. */
+    public boolean hostReady() {
+        return state == State.PLAY && spawnKnown;
+    }
+
+    public int lastBlockChangeSequence() {
+        return lastBlockChangeSequence;
+    }
+
+    /** Where stdin, commands.txt, and accepted whispers deliver operator lines that are not pathing. */
+    public void setChatCommandListener(Consumer<String> listener) {
+        this.chatCommands = listener;
+    }
+
+    /** Queue a goto / cancel / mine line for the tick thread. Never plans on the caller. */
+    public void enqueuePathing(String line) {
+        pathingLines.add(line);
+    }
+
+    public String pathingStatus() {
+        HeadlessLiveDriver current = live;
+        return current == null ? "not attached" : current.status();
+    }
+
+    /**
+     * Ostinato: build the pathing body from the live connection. Idempotent. Does not attach movement,
+     * so an idle bot keeps the Phase 1 position reminder until a course or a path actually runs.
+     */
+    public void ensureHost() {
+        if (live != null) {
+            return;
+        }
+        synchronized (hostLock) {
+            if (live != null) {
+                return;
+            }
+            if (state != State.PLAY || !spawnKnown) {
+                throw new IllegalStateException("pathing host requires a spawned play session");
+            }
+            HeadlessLevel level = HeadlessLevel.create(chunks, registryAccess);
+            HeadlessPlayer player = new HeadlessPlayer(level, new GameProfile(uuid, username));
+            player.setPos(x, y, z);
+            player.setYRot(yRot);
+            player.setXRot(xRot);
+            player.setOnGround(onGround);
+            HeadlessLiveDriver created = new HeadlessLiveDriver(this, player, level);
+            if (movement != null) {
+                movement.setDriver(created);
+            }
+            live = created;
+            event("pathing host attached at " + x + "," + y + "," + z);
+        }
+    }
+
+    public void closeHost() {
+        HeadlessLiveDriver current = live;
+        if (current != null) {
+            current.close();
+        }
+    }
+
+    private void drainPathing() {
+        String line;
+        while ((line = pathingLines.poll()) != null) {
+            try {
+                HeadlessCommands.Parsed parsed = HeadlessCommands.parse(line);
+                if (parsed == null) {
+                    continue;
+                }
+                if (parsed.error() != null) {
+                    System.err.println("[HeadlessBot] " + parsed.error());
+                    event("pathing command rejected: " + parsed.error());
+                    continue;
+                }
+                applyPathing(parsed);
+            } catch (RuntimeException e) {
+                System.err.println("[HeadlessBot] pathing command failed: " + e.getMessage());
+                event("pathing command failed: " + e.getMessage());
+            }
+        }
+    }
+
+    private void applyPathing(HeadlessCommands.Parsed parsed) {
+        switch (parsed.kind()) {
+            case CANCEL -> {
+                if (live != null) {
+                    live.cancel();
+                    event("pathing cancelled");
+                }
+            }
+            case GOTO -> {
+                ensureHost();
+                ensureMovement();
+                live.sync(movement);
+                live.gotoBlock(parsed.x(), parsed.y(), parsed.z());
+                event("goto " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+                System.out.println("[HeadlessPathing] goto " + parsed.x() + " " + parsed.y() + " " + parsed.z());
+            }
+            case MINE -> {
+                ensureHost();
+                ensureMovement();
+                live.sync(movement);
+                live.mine(parsed.text());
+                event("mine " + parsed.text());
+                System.out.println("[HeadlessPathing] mine " + parsed.text() + " " + live.status());
+            }
+            default -> System.err.println("[HeadlessBot] not a pathing command: " + parsed.kind());
+        }
+    }
+
+    private void ensureMovement() {
+        if (movement == null) {
+            setMovement(new HeadlessMovement(new HeadlessBlockStateInterface(chunks), List.of()));
+        } else if (live != null) {
+            movement.setDriver(live);
+            if (!movement.started() && spawnKnown) {
+                movement.rotation(yRot, xRot);
+                movement.start(x, y, z, onGround);
+            }
+        }
     }
 
     public State state() {
@@ -661,6 +837,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
                 sb.append("  ").append(events.get(i)).append('\n');
             }
         }
+        sb.append("pathing: ").append(pathingStatus()).append('\n');
         HeadlessMovement driver = movement;
         if (driver != null) {
             sb.append("movement:\n").append(driver.status());
