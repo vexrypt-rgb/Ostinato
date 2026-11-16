@@ -1319,6 +1319,12 @@ public final class KinematicController {
                 endsAtPlace |= mv instanceof MovementParkour && ((MovementParkour) mv).extensions() > 0;
                 break;
             }
+            if (mv instanceof MovementAscend && climbableAt(mv.getDest())) {
+                // Ostinato: an ascend onto a ladder or vine is Baritone's. Driven here it was taken as a sprint jump
+                // (+0.2 boost, 0.47 blocks in one tick) into the climbable cell; NoCheatPlus set that back to the
+                // apex every two ticks and kicked (parity runs, 16 Nov 2026). MovementAscend drops sprint and jumps.
+                break;
+            }
             Movement movement = (Movement) mv;
             if (movement.toBreakCached == null || movement.toPlaceCached == null) {
                 if (bsi == null) {
@@ -1358,6 +1364,11 @@ public final class KinematicController {
             straightAhead |= mv instanceof MovementStraight;
         }
         return line.size() >= 2;
+    }
+
+    private boolean climbableAt(BetterBlockPos feet) {
+        return ctx.world().getBlockState(feet).is(net.minecraft.tags.BlockTags.CLIMBABLE)
+                || ctx.world().getBlockState(feet.above()).is(net.minecraft.tags.BlockTags.CLIMBABLE);
     }
 
     private boolean minedOut(Movement movement) {

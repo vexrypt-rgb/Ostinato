@@ -1062,3 +1062,20 @@ packet type. It did not remove the ladder kick (cause 1 is the kinematic driver,
 **Revised bot-only anticheat list:** none proven. Open: the void-bridge scaffold (no real comparison) and the look model
 (the bot snaps; the real client's LookBehavior hand model turns at most ~32 degrees per tick in mouse steps with a
 seeded tremor). Porting that look model is the largest remaining difference.
+
+## 26. Ladder sprint jump fixed in the shared code (16 Nov 2026, 04:15-04:40 MST)
+
+Owner: skip the real-client turning model; fix the jump. The fix is in Ostinato main (e322dba0a, merged as fd0f76f93)
+and copied here: KinematicController.buildLine ends the kinematic stretch before a MovementAscend whose destination
+(feet or head) is a ladder or vine, so Baritone's MovementAscend drops sprint and jumps. Main unit suite 2033 tests,
+0 failures; `baritone.headless.*` 74, 0 failures.
+
+Live, Paper 26.3 + NCP alone (`parity/runs/*-fix*`): the visible real client and the bot now both jump onto the ladder
+without the sprint boost (0.227 and 0.214 blocks), and neither is kicked. The real client reached the top
+(survivalfly 10 VL, was 2072 and a kick). The bot stalled at about y -58.9 on setbacks (625 VL, no kick); vanilla
+still reaches the top for both. NCP with ProtocolLib still rejects some vanilla-legal ladder moves for the real client
+too: one run held mid-ladder (crouching+v_air+v_climbable, 819 VL), one kicked at the top dismount. Grim and vanilla
+accept the same climbs. That is NCP's ladder model, left alone.
+
+The silent startup exit (section 24) also happened to a visible real client, with PROCESS-EXIT-NONZERO and no hs_err:
+not hidden-mode specific.
