@@ -1079,3 +1079,20 @@ accept the same climbs. That is NCP's ladder model, left alone.
 
 The silent startup exit (section 24) also happened to a visible real client, with PROCESS-EXIT-NONZERO and no hs_err:
 not hidden-mode specific.
+
+## 27. The bot's NoCheatPlus movement hits came from its sneak pulse (16 Nov 2026)
+
+After section 26 the bot still stalled mid-ladder under NCP alone (625 VL) while the visible real client climbed clean.
+With both started facing the ladder (`ladderfacing` scenario), their first four movement packets were bit-identical
+(x 0.627400, 0.824360, 1.059301, 1.314978), yet NCP set only the bot back on the fourth. The one difference before
+them: the bot's `PlayerInput shift=true` held for about five ticks, released as the sprint started. It came from
+`holdSneakIfHanging`, which crouched whenever A* was planning, even on firm ground, so every command began with a
+sneak pulse (difference 1 of section 24). NCP then judged the sprint start against a sneak speed limit, set the bot
+back, and on the ladder the recovery ran into a setback loop.
+
+Fix: hold sneak through an A* wait only when the body really hangs over an edge (the case the hold was written for).
+`baritone.headless.*` 74 tests, 0 failures. Live, bot only, Paper 26.3 + NCP: walk survivalfly 79 -> 0, bridge
+19 -> 0, ladder and ladderfacing clean and at the top, ladder + ProtocolLib kick -> clean and at the top. Vanilla
+bridge, void bridge, pillar and walk still succeed. Remaining on the void bridge: blockplace.scaffold 5 and noswing 4
+(noswing also hits the real client; scaffold is most likely the one-tick 180 degree turn, which the owner chose to
+leave).

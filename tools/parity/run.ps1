@@ -56,6 +56,9 @@ $Scen = @{
   # 6-high stone column with ladders on its west face; goal on top.
   ladder = @{ fixture = @("clear PBot", "fill 4 -60 0 4 -55 0 stone", "fill 3 -60 0 3 -55 0 ladder[facing=west]", "tp PBot 0.5 -60 0.5 0 0"); command = "goto 4 -54 0"; wait = 40;
               check = @("data get entity PBot Pos") }
+  # Same ladder, but both start already facing it (yaw -90 = +x): a straight sprint from standstill, no turn.
+  ladderfacing = @{ fixture = @("clear PBot", "fill 4 -60 0 4 -55 0 stone", "fill 3 -60 0 3 -55 0 ladder[facing=west]", "tp PBot 0.5 -60 0.5 -90 0"); command = "goto 4 -54 0"; wait = 40;
+              check = @("data get entity PBot Pos") }
   # 5-wide, 3-deep trench across z -40..40 with dirt in hand: bridge (or walk around).
   bridge = @{ fixture = @("clear PBot", "give PBot dirt 64", "fill 2 -63 -40 6 -61 40 air", "tp PBot 0.5 -60 0.5 0 0"); command = "goto 9 -60 0"; wait = 60;
               check = @("data get entity PBot Pos", "execute if block 2 -61 0 minecraft:dirt run say CHECK dirt_2_-61_0", "execute if block 4 -61 0 minecraft:dirt run say CHECK dirt_4_-61_0") }

@@ -743,14 +743,18 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
             return;
         }
         PlayerSim sim = movement.sim();
-        if (!intendedPlaces().isEmpty() || host.getPathingBehavior().planning()) {
+        boolean hanging = sim.onGround && hanging(sim);
+        // Ostinato parity: an A* wait alone is no reason to crouch. The real client bot never sneaks while it plans on
+        // firm ground; the bot's sneak pulse before every command left NoCheatPlus applying a sneak speed limit to the
+        // sprint start that followed (setback, then a setback loop on the ladder; notes section 27). Only a body that
+        // actually hangs over an edge keeps sneak through the wait.
+        if (!intendedPlaces().isEmpty() || host.getPathingBehavior().planning() && hanging) {
             bridgeHold = true;
         }
         if (!bridgeHold) {
             return;
         }
-        boolean hanging = sim.onGround && hanging(sim);
-        if (!hanging && intendedPlaces().isEmpty() && !host.getPathingBehavior().planning()) {
+        if (!hanging && intendedPlaces().isEmpty()) {
             bridgeHold = false;
             return;
         }
