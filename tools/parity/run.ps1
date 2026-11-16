@@ -4,7 +4,7 @@
 # Same username (PBot), same restored world, same console fixture, same command text for both bots.
 # PacketLog on both. Server-observed state is read back through the console at the end.
 param([switch]$Gen, [ValidateSet("real","proto")][string]$Bot = "real", [string]$Scenario = "pillar", [string]$Tag = "",
-      [string]$Server = "vanilla", [int]$HoldSec = 0, [string[]]$Plugins = @())
+      [string]$Server = "vanilla", [int]$HoldSec = 0, [string[]]$Plugins = @(), [switch]$Visible, [switch]$KTrace)
 $ErrorActionPreference = "Stop"
 $Root = "C:\Users\redfa\Documents\MinecraftDev\parity"
 $Srv = Join-Path $Root $Server
@@ -97,7 +97,9 @@ $port = (Select-String "$Srv\server.properties" -Pattern "^server-port=(\d+)").M
 if ($Bot -eq "real") {
   $inst = Join-Path $Root "inst\PBot"; if (Test-Path $inst) { Remove-Item $inst -Recurse -Force }
   Copy-Item (Join-Path $Root "inst-template") $inst -Recurse; Copy-Item (Join-Path $Root "launch.cfg.template") (Join-Path $inst "launch.cfg")
-  $props = "-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.commandInbox=true -Dostinato.runMode=hidden -Dostinato.packetLog=$plog -Dostinato.trace=$($plog.Replace('packetlog.txt','trace.txt'))"
+  if ($KTrace) { New-Item -ItemType Directory -Force (Join-Path $inst "baritone") | Out-Null; Set-Content (Join-Path $inst "baritone\settings.txt") "kinematicTrace true" }
+  $props = "-Dostinato.noMouseGrab=true -Dostinato.windowPos=2600,40 -Dostinato.commandInbox=true -Dostinato.packetLog=$plog -Dostinato.trace=$($plog.Replace('packetlog.txt','trace.txt'))"
+  if (-not $Visible) { $props += " -Dostinato.runMode=hidden" }; Log "real client mode: $(if ($Visible) { "visible" } else { "hidden" })"
   $xx = "-XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=8M -XX:MaxMetaspaceSize=384M -XX:ReservedCodeCacheSize=128M"
   $base = "`"$Java`" -Dfabric.dli.config=$inst\launch.cfg -Dfabric.dli.env=client -Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient @$Root\runClient.args --sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED -Dfile.encoding=UTF-8 -Duser.country=US -Duser.language=en -Duser.variant net.fabricmc.devlaunchinjector.Main"
   $env1 = "set JAVA_TOOL_OPTIONS=-Xmx768M -Xms256M $props $xx&&"
@@ -106,7 +108,7 @@ if ($Bot -eq "real") {
   $cp = (Get-Content (Join-Path $Root "bot-classpath.txt") -Raw).Trim()
   Set-Content (Join-Path $Root "bot-cp.args") ("-cp `"" + $cp.Replace("\", "/") + "`"")
   $cmdFile = Join-Path $script:RunDir "commands.txt"; Set-Content $cmdFile "" -NoNewline
-  $line = "`"$Java`" -Xmx256m --enable-native-access=ALL-UNNAMED -Dostinato.packetLog=$plog @$Root\bot-cp.args baritone.headless.HeadlessBotMain 127.0.0.1 25573 PBot 240 `"$script:RunDir\evidence.txt`" `"$cmdFile`""
+  $line = "`"$Java`" -Xmx256m --enable-native-access=ALL-UNNAMED -Dostinato.botTrace=true -Dostinato.packetLog=$plog @$Root\bot-cp.args baritone.headless.HeadlessBotMain 127.0.0.1 25573 PBot 240 `"$script:RunDir\evidence.txt`" `"$cmdFile`""
   $proc = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "cmd.exe /c `"$line > `"$script:RunDir\client.log`" 2>&1`""; CurrentDirectory = $script:RunDir; ProcessStartupInformation = $si }
 }
 $botCmd = [int]$proc.ProcessId; Log "bot cmdpid=$botCmd"

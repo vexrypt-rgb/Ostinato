@@ -35,6 +35,7 @@ import java.util.Set;
 
 // Ostinato: tick-owned bridge between the protocol body, path executor and PlayerSim intents.
 final class HeadlessLiveDriver implements HeadlessMovement.Driver {
+    private static final boolean BOT_TRACE = Boolean.getBoolean("ostinato.botTrace");
     private final HeadlessPlayer player;
     private final HeadlessLevel level;
     private final HeadlessPlayerController controller;
@@ -85,6 +86,7 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         // Ostinato parity: the same Baritone settings the real 26.3 client bot runs with, i.e. Ostinato defaults
         // plus TenorClef's AltoClef.initializeBaritoneSettings (TenorClef-swarm-beta @ 5c18e626). No parkour.
         applyClientBotSettings();
+        if (BOT_TRACE) Baritone.settings().kinematicTrace.value = true; // Ostinato parity diagnostics only
         host = new HeadlessBaritone(context, new HeadlessBlockStateInterface(bot.chunks()), input, look);
         combat = new HeadlessCombat(bot, player, controller, host, bot.entities());
         craft = new HeadlessCraft(bot, player, controller, host, this);
@@ -344,7 +346,30 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
                 || combat.active() || craft.active();
         if (!owns) return null;
         try {
+            boolean sprintBefore = player.isSprinting();
             host.getPathingBehavior().tick();
+            if (BOT_TRACE) {
+                // Ostinato parity diagnostics (-Dostinato.botTrace=true): what the executor did this tick.
+                var cur = host.getPathingBehavior().getCurrent();
+                String pos = "-", mv = "-", drv = "-";
+                if (cur instanceof PathExecutor pe) {
+                    pos = String.valueOf(pe.getPosition());
+                    int i = pe.getPosition();
+                    mv = i < pe.getPath().movements().size() ? pe.getPath().movements().get(i).getClass().getSimpleName() : "end";
+                    drv = String.valueOf(pe.getLastDriver());
+                }
+                System.out.println(String.format(java.util.Locale.ROOT,
+                        "[BotTrace] sim=%.6f,%.6f,%.6f pathPos=%s move=%s driver=%s sprintBefore=%b sprintAfterExec=%b simSprint=%b fwd=%b sprintKey=%b jump=%b",
+                        movement.sim().x, movement.sim().y, movement.sim().z, pos, mv, drv, sprintBefore, player.isSprinting(),
+                        movement.sim().sprinting, down(Input.MOVE_FORWARD), down(Input.SPRINT), down(Input.JUMP)));
+            }
+            // Ostinato parity: PathExecutor stops sprint with player.setSprinting(false) before a movement that must
+            // not sprint (LocalPlayer.setSprinting on the real client; aiStep then travels without sprint and
+            // sendPosition sends STOP_SPRINTING). sync() only copies sim -> player, so carry that stop back to the sim.
+            // Without it the bot sprint-jumped (+0.2 boost) into a ladder and NCP kicked it (notes section 25).
+            if (!player.isSprinting() && movement.sim().sprinting) {
+                movement.sim().sprinting = false;
+            }
             // Ostinato: vanilla/Baritone apply look at tick HEAD, place in handleKeybinds
             // against that look (already on the wire from last tick's sendChanges, or the
             // pre-place Rot), then may update look again before PosRot. Pathing.tick()

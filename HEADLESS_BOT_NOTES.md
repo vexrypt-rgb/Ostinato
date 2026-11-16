@@ -1022,3 +1022,43 @@ copies hs_err and crash reports; no cause yet.
 **Verdict.** Parity not met: every scenario differs tick for tick, four bot-only anticheat results remain, and the
 non-movement capabilities have no shared command. Nothing found so far traces to PlayerSim; the differences sit in the
 bot's own controller, look and task code, plus a real-client reference that is itself frame-timing dependent.
+
+## 25. Why the bot set off the anticheats (16 Nov 2026, 03:40-04:10 MST)
+
+The four bot-only results of section 24 were re-checked, this time also against a **visible** real client
+(`run.ps1 -Visible`). Section 24 used a hidden real client as the reference, and that turned out to matter.
+
+**Hidden and headless clients load late.** Visible sends `ServerboundPlayerLoadedPacket` at t=24-28. Hidden and headless
+(Phase 0 runs, parity runs) send it only at about t=580, roughly 29 s after the join, and send no movement packets until
+then. The server treats them as still loading. Until that is fixed, a hidden client is not a faithful reference.
+
+1. **Ladder, NCP survivalfly kick: not bot-only.** The visible real client gets the same kick ("Moved unexpectedly",
+   survivalfly 2072 VL; `ladder-realvis-ncp`). Cause, from `kinematicTrace` and a bot per-tick trace
+   (`-Dostinato.botTrace=true`): the path is Traverse, Traverse, Ascend (2,-60)->(3,-59), Pillar... on the ladder. On a
+   loaded client the KINEMATIC driver keeps driving into the Ascend (`narrow ... why=arrive` at p=2) with sprint still
+   on, and jumps at x 2.69 with the +0.2 sprint boost: 0.467 blocks in one tick, into the ladder cell. NCP rejects the
+   move (v_air+v_climbable+vdistrel), sets it back to the jump apex, and the same plan repeats every two ticks until the
+   kick. The hidden real client escaped only because its kinematic controller spent ~170 ticks failing rollouts while
+   not loaded (og=false at spawn), went into cooldown, and so Baritone's own MovementAscend drove the jump without
+   sprint. This is shared Ostinato behaviour (KinematicController / sprint into an ascend onto a climbable), to fix in
+   main for both bots, not a protocol-bot difference.
+2. **Pillar, Spartan + ProtocolLib speed-simulation: not bot-only.** The visible real client trips it too
+   (`pillar-realvis-spartan+pl`, level 0, diff 5.54 at the fixture teleport). A loaded client sends PosRot right after
+   AcceptTeleport; the hidden one sent nothing.
+3. **Void bridge, NCP blockplace.scaffold 5: not comparable.** The real client fell into the void and died in all three
+   NCP void-bridge runs (hidden with and without ProtocolLib, visible); the bot crossed every time. Section 24 misread
+   the real client's end position (0.5,-60,0.5) as "stayed at start": it was the respawn. The bot's 180 degree look snap
+   before the first place (the real client turns 31.95 degrees per tick) is the likely trigger, unproven.
+4. **Pillar, LAC + ProtocolLib "Internal server error" kick:** LAC 1.2.9.5 reads attributes off the main thread and
+   corrupts the attribute map; it throws on real-client runs too.
+
+**One real bot difference found and fixed (this commit):** PathExecutor stops sprint with
+`ctx.player().setSprinting(false)`. On the real client that is LocalPlayer and sticks; the bot's `sync()` copied the
+sim's sprint flag back over it every tick, so the stop never reached PlayerSim. The driver now carries a stop made by
+the executor into the sim before the physics step, and the existing sprint-change path sends STOP_SPRINTING. No new
+packet type. It did not remove the ladder kick (cause 1 is the kinematic driver, as on the visible client).
+`baritone.headless.*` 74 tests, 0 failures.
+
+**Revised bot-only anticheat list:** none proven. Open: the void-bridge scaffold (no real comparison) and the look model
+(the bot snaps; the real client's LookBehavior hand model turns at most ~32 degrees per tick in mouse steps with a
+seeded tremor). Porting that look model is the largest remaining difference.
