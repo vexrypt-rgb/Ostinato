@@ -335,9 +335,10 @@ public class HeadlessPlaceTest {
                     InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 16)));
             bot.ensureHost();
             var settings = Baritone.settings();
+            // Ostinato parity: the real 26.3 client bot's settings (Ostinato defaults plus TenorClef).
             assertTrue(settings.allowPlace.value);
-            assertTrue(settings.allowParkour.value);
-            assertTrue(settings.allowParkourPlace.value);
+            assertFalse(settings.allowParkour.value);
+            assertFalse(settings.allowParkourPlace.value);
             assertFalse(settings.allowGodBridge.value);
             assertFalse(settings.unifiedExecutor.value);
 
@@ -512,6 +513,12 @@ public class HeadlessPlaceTest {
             }
             bot.onPacket(new ClientboundContainerSetSlotPacket(
                     InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
+            // Ostinato parity: the client-bot settings (TenorClef) plan no parkour, and this narrow void gap only plans
+            // with parkour-place. Turn it on here to keep exercising that code path; the live parity runs cover the
+            // client-bot settings (bridge and voidbridge on a flat world).
+            bot.ensureHost();
+            Baritone.settings().allowParkour.value = true;
+            Baritone.settings().allowParkourPlace.value = true;
             bot.enqueuePathing("goto 9 2 0");
             String status = waitUntilPlanned(bot);
             assertFalse("bridge did not plan: " + status, status.contains("no path") || status.contains("failed")
@@ -866,6 +873,9 @@ public class HeadlessPlaceTest {
             bot.onPacket(new ClientboundContainerSetSlotPacket(
                     InventoryMenu.CONTAINER_ID, 1, InventoryMenu.USE_ROW_SLOT_START, new ItemStack(Items.DIRT, 64)));
             bot.ensureHost();
+            // Ostinato parity: client-bot settings plan no parkour; this test covers the parkour-extension executor path.
+            Baritone.settings().allowParkour.value = true;
+            Baritone.settings().allowParkourPlace.value = true;
             bot.tick();
             bot.enqueuePathing("goto 0 2 7");
             String status = "";
