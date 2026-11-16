@@ -150,7 +150,7 @@ public class MovementPillar extends Movement {
             // stay centered while swimming up a water column
             state.setTarget(new MovementState.MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(dest), ctx.playerRotations()), false));
             Vec3 destCenter = VecUtils.getBlockPosCenter(dest);
-            if (Math.abs(ctx.player().position().x - destCenter.x) > 0.2 || Math.abs(ctx.player().position().z - destCenter.z) > 0.2) {
+            if (Math.abs(ctx.entity().position().x - destCenter.x) > 0.2 || Math.abs(ctx.entity().position().z - destCenter.z) > 0.2) {
                 state.setInput(Input.MOVE_FORWARD, true);
             }
             if (ctx.playerFeet().equals(dest)) {
@@ -175,8 +175,8 @@ public class MovementPillar extends Movement {
 
             // dest is straight above us: re-aiming at it every tick makes the yaw flip back and forth. Only steer
             // when we have drifted off the ladder's column.
-            double ox = ctx.player().position().x - (dest.getX() + 0.5);
-            double oz = ctx.player().position().z - (dest.getZ() + 0.5);
+            double ox = ctx.entity().position().x - (dest.getX() + 0.5);
+            double oz = ctx.entity().position().z - (dest.getZ() + 0.5);
             if (ox * ox + oz * oz > 0.25 * 0.25) {
                 MovementHelper.moveTowards(ctx, state, dest);
             }
@@ -191,10 +191,10 @@ public class MovementPillar extends Movement {
             state.setInput(Input.SNEAK, true);
             // since (lower down) we only right click once player.isSneaking, and that happens the tick after we request to sneak
 
-            double diffX = ctx.player().position().x - (dest.getX() + 0.5);
-            double diffZ = ctx.player().position().z - (dest.getZ() + 0.5);
+            double diffX = ctx.entity().position().x - (dest.getX() + 0.5);
+            double diffZ = ctx.entity().position().z - (dest.getZ() + 0.5);
             double dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
-            double flatMotion = Math.sqrt(ctx.player().getDeltaMovement().x * ctx.player().getDeltaMovement().x + ctx.player().getDeltaMovement().z * ctx.player().getDeltaMovement().z);
+            double flatMotion = Math.sqrt(ctx.entity().getDeltaMovement().x * ctx.entity().getDeltaMovement().x + ctx.entity().getDeltaMovement().z * ctx.entity().getDeltaMovement().z);
             if (dist > 0.17) {//why 0.17? because it seemed like a good number, that's why
                 //[explanation added after baritone port lol] also because it needs to be less than 0.2 because of the 0.3 sneak limit
                 //and 0.17 is reasonably less than 0.2
@@ -206,7 +206,7 @@ public class MovementPillar extends Movement {
                 state.setTarget(new MovementState.MovementTarget(rotation, true));
             } else if (flatMotion < 0.05) {
                 // If our Y coordinate is above our goal, stop jumping
-                state.setInput(Input.JUMP, ctx.player().position().y < dest.getY());
+                state.setInput(Input.JUMP, ctx.entity().position().y < dest.getY());
             }
 
 
@@ -221,7 +221,7 @@ public class MovementPillar extends Movement {
                     state.setInput(Input.JUMP, false); // breaking is like 5x slower when you're jumping
                     state.setInput(Input.CLICK_LEFT, true);
                     blockIsThere = false;
-                } else if (ctx.player().isCrouching() && (ctx.isLookingAt(src.below()) || ctx.isLookingAt(src)) && ctx.player().position().y > dest.getY() + 0.1) {
+                } else if (ctx.entity().isCrouching() && (ctx.isLookingAt(src.below()) || ctx.isLookingAt(src)) && ctx.entity().position().y > dest.getY() + 0.1) {
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }

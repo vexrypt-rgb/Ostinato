@@ -107,7 +107,7 @@ public final class SecondoProcess extends BaritoneProcessHelper implements ISeco
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        Player self = ctx.player();
+        Player self = ctx.entity();
         Player primo = findPrimo();
         if (self == null || primo == null) {
             last = Decision.off();
@@ -166,20 +166,20 @@ public final class SecondoProcess extends BaritoneProcessHelper implements ISeco
     }
 
     private Player findPrimo() {
-        if (ctx.player() == null || !(ctx.world() instanceof ClientLevel)) {
+        if (ctx.entity() == null || !(ctx.world() instanceof ClientLevel)) {
             return null;
         }
         String want = primoName;
         Player best = null;
         double bestD = Double.MAX_VALUE;
         for (var e : ctx.entities()) {
-            if (!(e instanceof Player p) || p == ctx.player() || !p.isAlive()) {
+            if (!(e instanceof Player p) || p == ctx.entity() || !p.isAlive()) {
                 continue;
             }
             if (want != null && !p.getName().getString().equalsIgnoreCase(want)) {
                 continue;
             }
-            double d = p.distanceToSqr(ctx.player());
+            double d = p.distanceToSqr(ctx.entity());
             if (d < bestD) {
                 bestD = d;
                 best = p;

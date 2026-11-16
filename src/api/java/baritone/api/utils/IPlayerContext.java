@@ -45,10 +45,18 @@ public interface IPlayerContext {
     /**
      * Ostinato: the player seen through the common {@link Player} surface. The client returns its
      * {@code LocalPlayer}; a headless bot returns its own {@code Player} over its protocol-owned world.
-     * Anything that needs client-only members ({@code input}, {@code connection}) goes through
-     * {@link #localPlayer()} so the headless path never reaches them.
+     * Shared pathing and movement code reads the player through this. Anything that needs client-only
+     * members ({@code input}, {@code connection}) goes through {@link #localPlayer()}.
      */
-    Player player();
+    Player entity();
+
+    /**
+     * The client's {@code LocalPlayer}, with main's exact signature, so mods compiled against main (TenorClef)
+     * link against this jar. Headless contexts return null.
+     */
+    default LocalPlayer player() {
+        return localPlayer();
+    }
 
     /**
      * Ostinato: the client's {@code LocalPlayer}, for the few client-only call sites. Headless contexts
@@ -56,7 +64,7 @@ public interface IPlayerContext {
      */
     default LocalPlayer localPlayer() {
         // Ostinato: common-side players are not LocalPlayer instances.
-        return player() instanceof LocalPlayer lp ? lp : null;
+        return entity() instanceof LocalPlayer lp ? lp : null;
     }
 
     IPlayerController playerController();
@@ -78,7 +86,7 @@ public interface IPlayerContext {
 
     default BetterBlockPos playerFeet() {
         // TODO find a better way to deal with soul sand!!!!!
-        BetterBlockPos feet = new BetterBlockPos(player().position().x, player().position().y + 0.1251, player().position().z);
+        BetterBlockPos feet = new BetterBlockPos(entity().position().x, entity().position().y + 0.1251, entity().position().z);
 
         // sometimes when calling this from another thread or while world is null, it'll throw a NullPointerException
         // that causes the game to immediately crash
@@ -98,7 +106,7 @@ public interface IPlayerContext {
             var shape = state.getCollisionShape(world(), feet);
             if (!shape.isEmpty()) {
                 double top = shape.max(net.minecraft.core.Direction.Axis.Y);
-                if (top >= 0.25 && top <= 1.0 && player().position().y >= feet.y + top - 0.01) {
+                if (top >= 0.25 && top <= 1.0 && entity().position().y >= feet.y + top - 0.01) {
                     return feet.above();
                 }
                 // Ostinato: run105. Pressed against a fence, wall or closed gate post (mid-block), the player's centre is up to
@@ -106,7 +114,7 @@ public interface IPlayerContext {
                 // the traverse out never opened it (its gate check only looks ahead), and room 4's dig pushed it for 10 min
                 // (the provisioning log hunt was pinned on the fence beside it first). When the gap beside the post is
                 // narrower than the player, the body stands in the neighbour: that is the node.
-                double lx = player().position().x - feet.x, lz = player().position().z - feet.z, w = player().getBbWidth();
+                double lx = entity().position().x - feet.x, lz = entity().position().z - feet.z, w = entity().getBbWidth();
                 double minX = shape.min(net.minecraft.core.Direction.Axis.X), maxX = shape.max(net.minecraft.core.Direction.Axis.X);
                 double minZ = shape.min(net.minecraft.core.Direction.Axis.Z), maxZ = shape.max(net.minecraft.core.Direction.Axis.Z);
                 int sx = lx >= maxX ? 1 : lx <= minX ? -1 : 0, sz = lz >= maxZ ? 1 : lz <= minZ ? -1 : 0;
@@ -117,10 +125,10 @@ public interface IPlayerContext {
                         return side;
                     }
                 }
-            } else if (player().onGround() && player().mainSupportingBlockPos.isPresent()
+            } else if (entity().onGround() && entity().mainSupportingBlockPos.isPresent()
                     && world().getBlockState(feet.below()).getCollisionShape(world(), feet.below()).isEmpty()) {
                 // on the edge of a low top with the centre over air (a candle is 1/8 wide): the node is still above it
-                var on = player().mainSupportingBlockPos.get();
+                var on = entity().mainSupportingBlockPos.get();
                 var onShape = world().getBlockState(on).getCollisionShape(world(), on);
                 if (on.getY() == feet.y && !onShape.isEmpty() && onShape.max(net.minecraft.core.Direction.Axis.Y) >= 0.25) {
                     return new BetterBlockPos(on.getX(), on.getY() + 1, on.getZ());
@@ -132,21 +140,21 @@ public interface IPlayerContext {
     }
 
     default Vec3 playerFeetAsVec() {
-        return new Vec3(player().position().x, player().position().y, player().position().z);
+        return new Vec3(entity().position().x, entity().position().y, entity().position().z);
     }
 
     default Vec3 playerHead() {
-        return new Vec3(player().position().x, player().position().y + player().getEyeHeight(), player().position().z);
+        return new Vec3(entity().position().x, entity().position().y + entity().getEyeHeight(), entity().position().z);
     }
 
     default Vec3 playerMotion() {
-        return player().getDeltaMovement();
+        return entity().getDeltaMovement();
     }
 
     BetterBlockPos viewerPos();
 
     default Rotation playerRotations() {
-        return new Rotation(player().getYRot(), player().getXRot());
+        return new Rotation(entity().getYRot(), entity().getXRot());
     }
 
     /**

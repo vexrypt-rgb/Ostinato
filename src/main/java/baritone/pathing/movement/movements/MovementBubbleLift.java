@@ -190,7 +190,7 @@ public class MovementBubbleLift extends Movement {
         if (++ticks > 20 * 20) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         double ox = o.cx + 0.5 - p.x, oz = o.cz + 0.5 - p.z;
         BetterBlockPos column = new BetterBlockPos(o.cx, (int) Math.floor(p.y + 1e-4), o.cz);
         if (phase == 0) {
@@ -217,7 +217,7 @@ public class MovementBubbleLift extends Movement {
             phase = 2;
         }
         // thrown out of the top: press for the ledge. Its side holds us in the shaft until we clear its floor.
-        if (ctx.player().onGround()) {
+        if (ctx.entity().onGround()) {
             if (ctx.playerFeet().equals(dest)) {
                 if (++settle > 2) {
                     return state.setStatus(MovementStatus.SUCCESS);

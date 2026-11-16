@@ -78,8 +78,8 @@ public final class SimTravel {
     }
 
     private int tick0(IPathingHost baritone, IPath path, int pathPosition) {
-        if (!Baritone.settings().simTravel.value || ctx.player().isInWater() || ctx.player().isInLava()
-                || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+        if (!Baritone.settings().simTravel.value || ctx.entity().isInWater() || ctx.entity().isInLava()
+                || ctx.entity().onClimbable() || ctx.entity().isFallFlying() || ctx.entity().isPassenger()) {
             return drop();
         }
         if (pathPosition < 0 || pathPosition >= path.movements().size()) {
@@ -106,7 +106,7 @@ public final class SimTravel {
             // Jump that had never seen its own take-off; it walked back to its run-up and into the gap (0 of 16 laps)
             return landed(path, pathPosition);
         }
-        int now = ctx.player().tickCount;
+        int now = ctx.entity().tickCount;
         if (plan != null && stale(pressedAt, now, planDest, dest)) {
             // Ostinato Presto v4.1: another driver had the ticks in between, or this is a different jump. The plan's
             // yaw and jump timing were for where the player stood then; solve again from here.
@@ -127,7 +127,7 @@ public final class SimTravel {
             // presto-v4.1 final1 laps 21, 22: after a jolt Baritone's Jump had turned back west toward its run-up; this
             // driver then pressed W and sprint east at once and the walk swung through south (north), off the one-wide
             // walkway at x 33. Turn in place first, as PhysicsTravel does, and solve once facing the plan's way.
-            ctx.player().setYRot(yaw);
+            ctx.entity().setYRot(yaw);
             baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
             baritone.getInputOverrideHandler().clearAllKeys();
             plan = null;
@@ -167,7 +167,7 @@ public final class SimTravel {
 
     private int press(IPathingHost baritone, IPath path, int pathPosition, PlayerSim body) {
         pressed = true;
-        pressedAt = ctx.player().tickCount;
+        pressedAt = ctx.entity().tickCount;
         traceStep = step;
         boolean jump = plan[step++];
         PlayerSim predicted = new PlayerSim(world).copyFrom(body);
@@ -176,7 +176,7 @@ public final class SimTravel {
         predY = predicted.y;
         predZ = predicted.z;
         havePred = true;
-        ctx.player().setYRot(yaw);
+        ctx.entity().setYRot(yaw);
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 0), false);
         baritone.getInputOverrideHandler().clearAllKeys();
         baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);

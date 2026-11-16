@@ -49,14 +49,14 @@ public final class ThreatService extends Behavior implements IThreatAssessment {
     @Override public void onTick(TickEvent event) {
         if (event.getState() != EventState.PRE) return;
         tick++;
-        if (event.getType() != TickEvent.Type.IN || ctx.player() == null || ctx.world() == null) {
+        if (event.getType() != TickEvent.Type.IN || ctx.entity() == null || ctx.world() == null) {
             if (latest().subject() != null || !pending.isEmpty()) invalidate("NO_WORLD");
             world = null;
             subjectIdentity = null;
             return;
         }
         if (world != ctx.world()) { invalidate("WORLD_CHANGED"); world = ctx.world(); }
-        if (subjectIdentity != ctx.player()) { invalidate("SUBJECT_CHANGED"); subjectIdentity = ctx.player(); }
+        if (subjectIdentity != ctx.entity()) { invalidate("SUBJECT_CHANGED"); subjectIdentity = ctx.entity(); }
         long start = System.nanoTime();
         try { observe(); }
         catch (IllegalArgumentException | IllegalStateException unsupported) {
@@ -70,7 +70,7 @@ public final class ThreatService extends Behavior implements IThreatAssessment {
     }
 
     private void observe() {
-        Player subject = ctx.player();
+        Player subject = ctx.entity();
         if (subject.isSpectator() || !subject.isAlive()) { invalidate("SUBJECT_NOT_ACTIVE"); return; }
         var physics = baritone.getPredictivePhysics();
         // Fixed scan budget; explicit truncation means an empty answer cannot assert safety.

@@ -44,13 +44,13 @@ public final class BoatFallController {
         if (r >= 0) {
             drivenTicks++;
             MovementFall.boatRide = true;
-            MovementFall.boatRideTick = ctx.player().tickCount;
+            MovementFall.boatRideTick = ctx.entity().tickCount;
         }
         return r;
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || player.isInLava() || player.isFallFlying() || player.getAbilities().flying
                 || pathPosition >= path.movements().size() || !(path.movements().get(pathPosition) instanceof MovementFall fall)) {
             return -1;

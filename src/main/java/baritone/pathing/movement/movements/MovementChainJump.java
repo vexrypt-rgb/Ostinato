@@ -240,7 +240,7 @@ public class MovementChainJump extends Movement {
         long now = System.currentTimeMillis();
         FAILED.values().removeIf(until -> until <= now);
         FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), now + 30_000);
-        logDebug(why + " (" + src + " -> " + pad + " -> " + dest + ", at " + ctx.player().position() + "); avoiding this chain for 30s");
+        logDebug(why + " (" + src + " -> " + pad + " -> " + dest + ", at " + ctx.entity().position() + "); avoiding this chain for 30s");
         return state.setStatus(MovementStatus.UNREACHABLE);
     }
 
@@ -311,7 +311,7 @@ public class MovementChainJump extends Movement {
         if (trace == null) {
             trace = new SimTrace("chain pad=" + t.padA + "," + t.padDy + " " + t.a + "," + t.dy + "," + t.b, new ClientWorld(ctx), PredictionTolerance.active());
         }
-        trace.observe(real, ctx.player().getYRot());
+        trace.observe(real, ctx.entity().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);
     }
 
@@ -320,7 +320,7 @@ public class MovementChainJump extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         if (p.y < Math.min(src.y, Math.min(pad.y, dest.y)) - 0.6) {
             return fail(state, "fell off");
         }
@@ -329,7 +329,7 @@ public class MovementChainJump extends Movement {
             js = search(world, src, pad, t.plan1);
             real = new PlayerSim(world);
         }
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 m = ctx.entity().getDeltaMovement();
         ClientWorld.readPlayer(ctx, real);
         if (landed) {
             // let the landing settle, then step to the middle for the next movement
@@ -371,7 +371,7 @@ public class MovementChainJump extends Movement {
                 return state;
             }
             running = true;
-            PositionSync.sync(ctx.player());
+            PositionSync.sync(ctx.entity());
         } else if (replanCooldown > 0) {
             replanCooldown--;
         } else if (!js.run(real, js.plan, js.jumped, js.airTicks, null)) {

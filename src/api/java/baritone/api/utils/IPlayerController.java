@@ -50,6 +50,16 @@ public interface IPlayerController {
 
     InteractionResult processRightClick(Player player, Level world, InteractionHand hand);
 
+    /** Main's signature, kept for mods compiled against main. */
+    default InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
+        return processRightClickBlock((Player) player, world, hand, result);
+    }
+
+    /** Main's signature, kept for mods compiled against main. */
+    default InteractionResult processRightClick(LocalPlayer player, Level world, InteractionHand hand) {
+        return processRightClick((Player) player, world, hand);
+    }
+
     boolean clickBlock(BlockPos loc, Direction face);
 
     void setHittingBlock(boolean hittingBlock);

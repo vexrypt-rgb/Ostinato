@@ -70,7 +70,7 @@ public final class ClutchController {
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
                 || player.getAbilities().flying || !ClientWorld.plainGravity(ctx)) {
@@ -228,7 +228,7 @@ public final class ClutchController {
         useOverlay = false;
         try {
             prime(travel);
-            Player p = ctx.player();
+            Player p = ctx.entity();
             for (int t = 0; t < 40; t++) {
                 sim.tick(travel, true, true, false);
                 if (sim.onGround || sim.y < p.getY() - 6) {
@@ -242,7 +242,7 @@ public final class ClutchController {
     }
 
     private void prime(float travel) {
-        Player p = ctx.player();
+        Player p = ctx.entity();
         if (sim == null) {
             sprintJumpLands(travel, p.getX(), p.getZ()); // builds the sim
         }
@@ -262,7 +262,7 @@ public final class ClutchController {
         simX = px;
         simZ = pz;
         // from a standstill nothing is there yet to count on: only a run that already has speed may land on a block still to be laid
-        useOverlay = Math.hypot(ctx.player().getDeltaMovement().x, ctx.player().getDeltaMovement().z) > 0.1;
+        useOverlay = Math.hypot(ctx.entity().getDeltaMovement().x, ctx.entity().getDeltaMovement().z) > 0.1;
         if (sim == null) {
             client = new ClientWorld(ctx);
             sim = new PlayerSim(new PlayerSim.World() {
@@ -331,7 +331,7 @@ public final class ClutchController {
             });
         }
         client.reset();
-        Player p = ctx.player();
+        Player p = ctx.entity();
         sim.x = p.getX(); sim.y = p.getY(); sim.z = p.getZ();
         sim.vx = p.getDeltaMovement().x; sim.vy = p.getDeltaMovement().y; sim.vz = p.getDeltaMovement().z;
         sim.onGround = p.onGround();
@@ -443,7 +443,7 @@ public final class ClutchController {
      * the look closest to the travel direction so the player can keep sprinting.
      */
     private Aim findAim(IPathingHost baritone, double px, double py, double pz, double travel, double tx, double tz) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         Vec3 eye = ctx.playerHead();
         // the body this tick and the next: a block cannot be laid where the player is or is about to be
         Vec3 mv = player.getDeltaMovement();

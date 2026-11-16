@@ -161,7 +161,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
         ticks++;
         spentThisTick = 0;
         try {
-            early(event.getType() == TickEvent.Type.IN && ctx.player() != null && ctx.world() != null);
+            early(event.getType() == TickEvent.Type.IN && ctx.entity() != null && ctx.world() != null);
         } finally {
             spend(t0);
         }
@@ -334,7 +334,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
     /** As BucketItem.use picks the cell for a hit: a block that takes water takes it, else the cell on the hit face. */
     private BlockPos bucketCell(BlockPos hit, Direction face) {
         BlockState s = ctx.world().getBlockState(hit);
-        if (s.getBlock() instanceof LiquidBlockContainer c && c.canPlaceLiquid(ctx.player(), ctx.world(), hit, s, Fluids.WATER)) {
+        if (s.getBlock() instanceof LiquidBlockContainer c && c.canPlaceLiquid(ctx.entity(), ctx.world(), hit, s, Fluids.WATER)) {
             return hit;
         }
         return hit.relative(face);
@@ -439,7 +439,7 @@ public final class GraceNote extends Behavior implements IGraceNote {
     // ---- late: after every other listener, just before the game handles keys ----
 
     private void late() {
-        if (!core.holdsControl() || ctx.player() == null || ctx.world() == null) return;
+        if (!core.holdsControl() || ctx.entity() == null || ctx.world() == null) return;
         LocalPlayer p = ctx.localPlayer();
         boolean recovering = core.phase() == Phase.RECOVERING;
         boolean foreign = false;

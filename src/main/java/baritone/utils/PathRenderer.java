@@ -110,9 +110,9 @@ public final class PathRenderer implements IRenderer {
             return;
         }
         if (current != null && settings.renderSelectionBoxes.value) {
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toBreak(), settings.colorBlocksToBreak.value);
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toPlace(), settings.colorBlocksToPlace.value);
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toWalkInto(), settings.colorBlocksToWalkInto.value);
+            drawManySelectionBoxes(event.getModelViewStack(), ctx.entity(), current.toBreak(), settings.colorBlocksToBreak.value);
+            drawManySelectionBoxes(event.getModelViewStack(), ctx.entity(), current.toPlace(), settings.colorBlocksToPlace.value);
+            drawManySelectionBoxes(event.getModelViewStack(), ctx.entity(), current.toWalkInto(), settings.colorBlocksToWalkInto.value);
         }
 
         //drawManySelectionBoxes(player, Collections.singletonList(behavior.pathStart()), partialTicks, Color.WHITE);
@@ -151,7 +151,7 @@ public final class PathRenderer implements IRenderer {
                 } else {
                     drawPath(event.getModelViewStack(), mr.positions(), 0, settings.colorMostRecentConsidered.value, settings.fadePath.value, 10, 20);
                 }
-                drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), Collections.singletonList(mr.getDest()), settings.colorMostRecentConsidered.value);
+                drawManySelectionBoxes(event.getModelViewStack(), ctx.entity(), Collections.singletonList(mr.getDest()), settings.colorMostRecentConsidered.value);
             });
         });
     }
@@ -469,10 +469,10 @@ public final class PathRenderer implements IRenderer {
             drawGoal(stack, ctx, ((GoalInverted) goal).origin, partialTicks, settings.colorInvertedGoalBox.value);
         } else if (goal instanceof GoalYLevel) {
             GoalYLevel goalpos = (GoalYLevel) goal;
-            minX = ctx.player().position().x - settings.yLevelBoxSize.value - renderPosX;
-            minZ = ctx.player().position().z - settings.yLevelBoxSize.value - renderPosZ;
-            maxX = ctx.player().position().x + settings.yLevelBoxSize.value - renderPosX;
-            maxZ = ctx.player().position().z + settings.yLevelBoxSize.value - renderPosZ;
+            minX = ctx.entity().position().x - settings.yLevelBoxSize.value - renderPosX;
+            minZ = ctx.entity().position().z - settings.yLevelBoxSize.value - renderPosZ;
+            maxX = ctx.entity().position().x + settings.yLevelBoxSize.value - renderPosX;
+            maxZ = ctx.entity().position().z + settings.yLevelBoxSize.value - renderPosZ;
             minY = ((GoalYLevel) goal).level - renderPosY;
             maxY = minY + 2;
             y1 = 1 + y + goalpos.level - renderPosY;

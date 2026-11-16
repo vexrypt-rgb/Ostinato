@@ -82,7 +82,7 @@ public final class SwimController {
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || !(player.isInWater() || breathing && nearWater(player)) || player.isInLava()
                 || player.isFallFlying() || player.isPassenger()) {
             breathing = false;

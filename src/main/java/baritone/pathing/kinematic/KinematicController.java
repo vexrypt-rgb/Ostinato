@@ -160,10 +160,10 @@ public final class KinematicController {
             p = PRESTO.get(ctx); // disabled/unused mode must not allocate a monitor
         }
         if (p == null) return;
-        boolean eligible = Baritone.settings().presto.value && ctx.player() != null && ctx.player().isAlive()
+        boolean eligible = Baritone.settings().presto.value && ctx.entity() != null && ctx.entity().isAlive()
                 && versionSupported() && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.pvpActive();
-        if (p.auditContext(ctx.world(), ctx.player(), eligible) && p.armed()) {
-            p.landing(ctx.player().tickCount, ctx.player().getY(), ctx.player().onGround());
+        if (p.auditContext(ctx.world(), ctx.entity(), eligible) && p.armed()) {
+            p.landing(ctx.entity().tickCount, ctx.entity().getY(), ctx.entity().onGround());
         }
     }
 
@@ -185,7 +185,7 @@ public final class KinematicController {
     }
 
     private static boolean supportedBody(IPlayerContext ctx) {
-        var p = ctx.player();
+        var p = ctx.entity();
         return ClientWorld.plainGravity(ctx) && !p.isNoGravity() && !p.getAbilities().flying && !p.isFallFlying()
                 && !p.isPassenger() && !p.isInWater() && !p.isInLava() && !p.isShiftKeyDown()
                 && Presto.supportsBody(p.getBbWidth(), p.getBbHeight(), p.maxUpStep(),
@@ -209,7 +209,7 @@ public final class KinematicController {
         traceGain = Double.NaN;
         branch = "rollout";
         int r = drive(baritone, path, pathPosition);
-        traceTick = ctx.player().tickCount;
+        traceTick = ctx.entity().tickCount;
         traceR = r;
         traceWhy = r < 0 ? declined : branch;
         if (r >= 0) {
@@ -228,10 +228,10 @@ public final class KinematicController {
         }
         if ((narrowEnd || jumpNext) && Baritone.settings().kinematicTrace.value) {
             // Ostinato: per-tick trace onto a narrow landing or through a jump: who drives, where the player is, how it moves
-            net.minecraft.world.phys.Vec3 v = ctx.player().getDeltaMovement();
+            net.minecraft.world.phys.Vec3 v = ctx.entity().getDeltaMovement();
             // println, not printf: the client's stdout capture logs println only, and printf lines were lost
             System.out.println(String.format("KTRACE " + (narrowEnd ? "narrow" : "jump") + " p=" + pathPosition + " r=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b yaw=%.1f why=%s", r,
-                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround(), Mth.wrapDegrees(ctx.player().getYRot()), traceWhy));
+                    ctx.entity().getX(), ctx.entity().getY(), ctx.entity().getZ(), v.x, v.y, v.z, ctx.entity().onGround(), Mth.wrapDegrees(ctx.entity().getYRot()), traceWhy));
         }
         return r;
     }
@@ -253,16 +253,16 @@ public final class KinematicController {
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
         checkedLanding = null;
-        prestoOn = Baritone.settings().presto.value && versionSupported() && ctx.player().isAlive()
+        prestoOn = Baritone.settings().presto.value && versionSupported() && ctx.entity().isAlive()
                 && supportedBody(ctx) && !graceNoteBusy(baritone) && !baritone.pvpActive();
         if (!prestoOn) {
             presto.invalidate();
             prestoDefers = 0;
         }
         declined = "state";
-        if (!ExperimentalMovement.kinematicTravel() || ctx.player().isInWater() || ctx.player().isInLava()
-                || (ctx.player().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
-                || ctx.player().isFallFlying() || ctx.player().isPassenger() || !ClientWorld.plainGravity(ctx)) {
+        if (!ExperimentalMovement.kinematicTravel() || ctx.entity().isInWater() || ctx.entity().isInLava()
+                || (ctx.entity().onClimbable() && !(pathPosition < path.movements().size() && path.movements().get(pathPosition) instanceof MovementTraverse))
+                || ctx.entity().isFallFlying() || ctx.entity().isPassenger() || !ClientWorld.plainGravity(ctx)) {
             return -1;
         }
         if (cooldown > 0) {
@@ -276,11 +276,11 @@ public final class KinematicController {
             return -1;
         }
         ClientWorld.readPlayer(ctx, real);
-        int tick = ctx.player().tickCount;
+        int tick = ctx.entity().tickCount;
         if (prestoOn) {
             long h0 = System.nanoTime();
             baritone.physicsWarmUp(); // Presto v4: the first takeoff check is not the cold one
-            presto.begin(ctx.world(), ctx.player(), path, tick);
+            presto.begin(ctx.world(), ctx.entity(), path, tick);
             boolean was = presto.trusted();
             Presto.Reason miss = presto.observe(tick, real.x, real.y, real.z, real.vx, real.vz, real.onGround);
             presto.hookNanos += System.nanoTime() - h0;
@@ -363,7 +363,7 @@ public final class KinematicController {
                 branch = "narrowFlight";
                 return arrive(baritone, newPos, line.get(line.size() - 1));
             }
-            if (ctx.player().tickCount - narrowJumpTick > 2) {
+            if (ctx.entity().tickCount - narrowJumpTick > 2) {
                 narrowFlight = false;
             }
         }
@@ -372,7 +372,7 @@ public final class KinematicController {
             branch = "narrowStart";
             return narrowTakeoff(baritone, newPos, line.get(line.size() - 1));
         }
-        boolean backing = ctx.player().tickCount - narrowBackTick <= 15; // backing up for a run-up takes it out of range
+        boolean backing = ctx.entity().tickCount - narrowBackTick <= 15; // backing up for a run-up takes it out of range
         if (narrowEnd && real.onGround && end - here[0] < NARROW_RANGE + (backing ? 1.5 : 0)) {
             // Ostinato: a short hop onto a narrow block: the rollouts score how far along the line a jump gets before
             // the horizon, and a jump that falls past an open trapdoor's edge is still above it then (cubed level 1)
@@ -387,7 +387,7 @@ public final class KinematicController {
             return arrive(baritone, newPos, line.get(line.size() - 1));
         }
         head = Baritone.settings().headSteering.value;
-        camYaw = ctx.player().getYRot();
+        camYaw = ctx.entity().getYRot();
         camVel0 = baritone.getLookBehavior().yawVelocity();
         if (real.onGround && turningAround(ctx.playerRotations().getYaw(), aim(real.x, real.z, here[0], false))) {
             declined = "turning";
@@ -497,7 +497,7 @@ public final class KinematicController {
         if (vizRec) {
             vizRec = false;
             viz.chooseRollout(bestScore <= here[0] + 0.05 ? -1 : bestR);
-            if (Baritone.settings().chatDebug.value && ctx.player().tickCount % 20 == 0 && !viz.rolloutSummary.isEmpty()) {
+            if (Baritone.settings().chatDebug.value && ctx.entity().tickCount % 20 == 0 && !viz.rolloutSummary.isEmpty()) {
                 Helper.HELPER.logDebug("kinematic rejects: " + viz.rolloutSummary);
             }
         }
@@ -559,7 +559,7 @@ public final class KinematicController {
                 prestoDefers = 0;
             }
         }
-        boolean committed = !real.onGround && ctx.player().tickCount - lastDrivenTick <= 1;
+        boolean committed = !real.onGround && ctx.entity().tickCount - lastDrivenTick <= 1;
         if (bestScore <= here[0] + 0.05) {
             if (!committed) {
                 if (narrowEnd && real.onGround) {
@@ -575,7 +575,7 @@ public final class KinematicController {
             best = 0; // mid-air with no plan left: keep steering at the line rather than hand over in flight
             bestShort = false;
         }
-        lastDrivenTick = ctx.player().tickCount;
+        lastDrivenTick = ctx.entity().tickCount;
         float yaw = aim(real.x, real.z, here[0], bestShort) + best;
         if (head) {
             baritone.getLookBehavior().human();
@@ -686,7 +686,7 @@ public final class KinematicController {
                 return Presto.Verdict.UNAVAILABLE;
             }
             float toLand = (float) Math.toDegrees(Math.atan2(-(bestLandX - real.x), bestLandZ - real.z));
-            r = ppe.predict(PredictionRequest.trajectory(ppe.capture(ctx.player()), Math.min(PRESTO_HORIZON, bestLandT + 12))
+            r = ppe.predict(PredictionRequest.trajectory(ppe.capture(ctx.entity()), Math.min(PRESTO_HORIZON, bestLandT + 12))
                     .input(new PredictionRequest.Input(1, 0, true, sprint, false, toLand, Float.NaN))
                     .priority(PredictionRequest.Priority.MOVEMENT)
                     .fidelity(PredictionRequest.Fidelity.SCREENING)
@@ -707,7 +707,7 @@ public final class KinematicController {
         if (Baritone.settings().prestoDebug.value) {
             PredictionResult.Landing l = r == null ? null : r.landing;
             System.out.println(String.format(java.util.Locale.ROOT, "PRESTO check t=%d pos=%.3f,%.3f,%.3f v=%.4f,%.4f cam=%.1f sprint=%b sim=%d@%.3f,%.3f,%.3f ppe=%s %s %s",
-                    tick, real.x, real.y, real.z, real.vx, real.vz, ctx.player().getYRot(), sprint, bestLandT, bestLandX, bestLandY, bestLandZ,
+                    tick, real.x, real.y, real.z, real.vx, real.vz, ctx.entity().getYRot(), sprint, bestLandT, bestLandX, bestLandY, bestLandZ,
                     l == null ? "none" : String.format(java.util.Locale.ROOT, "%d@%.3f,%.3f,%.3f", l.tick, l.x, l.y, l.z),
                     r == null ? "-" : r.status + "/" + r.confidence, v));
         }
@@ -785,8 +785,8 @@ public final class KinematicController {
             in.setInputForceState(Input.SNEAK, true);
             float hy = (float) Math.toDegrees(Math.atan2(-hx, hz));
             baritone.getLookBehavior().updateTarget(new Rotation(hy, 4f), true);
-            in.setInputForceState(Input.MOVE_FORWARD, Math.hypot(hx, hz) > 0.05 && Math.abs(Mth.wrapDegrees(hy - ctx.player().getYRot())) < 30);
-            lastDrivenTick = ctx.player().tickCount;
+            in.setInputForceState(Input.MOVE_FORWARD, Math.hypot(hx, hz) > 0.05 && Math.abs(Mth.wrapDegrees(hy - ctx.entity().getYRot())) < 30);
+            lastDrivenTick = ctx.entity().tickCount;
             return newPos;
         }
         int back = pick, sp = pickSp, delay = pickDelay;
@@ -794,11 +794,11 @@ public final class KinematicController {
         baritone.getLookBehavior().updateTarget(new Rotation(yaw, 4f), true);
         IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
-        lastDrivenTick = ctx.player().tickCount;
+        lastDrivenTick = ctx.entity().tickCount;
         if (Baritone.settings().kinematicTrace.value) {
             System.out.printf("KTRACE narrowTakeoff back=%d sprint=%b delay=%d margin=%.3f at=%.3f,%.3f reach=%.3f,%.3f%n", back, sp == 1, delay, pickM, cx, cz, n[2], n[3]);
         }
-        if (Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot())) > NARROW_TURN && Math.hypot(real.vx, real.vz) < 0.05) {
+        if (Math.abs(Mth.wrapDegrees(yaw - ctx.entity().getYRot())) > NARROW_TURN && Math.hypot(real.vx, real.vz) < 0.05) {
             // Ostinato: the plan walks toward the target at once; from a stand (a teleport, a landing) the
             // camera is still turning, and W then walked sideways off an iron bar (cubed level 10). Turn first, under
             // sneak: a landing's last drift carried the feet off a trapdoor's edge while turning (cubed level 1).
@@ -807,7 +807,7 @@ public final class KinematicController {
         }
         if (back > 0) {
             in.setInputForceState(Input.MOVE_BACK, true);
-            narrowBackTick = ctx.player().tickCount;
+            narrowBackTick = ctx.entity().tickCount;
             return newPos;
         }
         in.setInputForceState(Input.MOVE_FORWARD, true);
@@ -815,7 +815,7 @@ public final class KinematicController {
         in.setInputForceState(Input.JUMP, delay == 0);
         if (delay == 0) {
             narrowFlight = true;
-            narrowJumpTick = ctx.player().tickCount;
+            narrowJumpTick = ctx.entity().tickCount;
         }
         return newPos;
     }
@@ -923,9 +923,9 @@ public final class KinematicController {
         IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
         int a = airArrive(Math.hypot(dx, dz), Math.hypot(real.vx, real.vz));
-        in.setInputForceState(Input.MOVE_FORWARD, a > 0 && Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot())) < 60);
+        in.setInputForceState(Input.MOVE_FORWARD, a > 0 && Math.abs(Mth.wrapDegrees(yaw - ctx.entity().getYRot())) < 60);
         in.setInputForceState(Input.MOVE_BACK, a < 0);
-        lastDrivenTick = ctx.player().tickCount;
+        lastDrivenTick = ctx.entity().tickCount;
         return newPos;
     }
 
@@ -941,7 +941,7 @@ public final class KinematicController {
         double want = Math.min(0.22, 0.04 + d * 0.3);
         IInputOverrideHandler in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
-        float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.player().getYRot()));
+        float diff = Math.abs(Mth.wrapDegrees(yaw - ctx.entity().getYRot()));
         if (narrowEnd && !real.onGround) {
             // Ostinato: in flight onto a candle, pot or rod: braking now drops short of it; steer for its middle instead
             airAim = new double[]{n[0], n[1]};
@@ -991,7 +991,7 @@ public final class KinematicController {
 
     private double rollout0(float yawOffset, int delay, boolean shortAim, double s0) {
         sim.copyFrom(real);
-        simTop = real.y + (real.onGround ? 0 : ctx.player().fallDistance);
+        simTop = real.y + (real.onGround ? 0 : ctx.entity().fallDistance);
         double s = s0, score = Double.NaN;
         int ground = 0, bumps = 0;
         boolean wasBumping = real.collidedH;
@@ -1211,7 +1211,7 @@ public final class KinematicController {
      * Simulates both options for a few ticks; a jump into lava, a gap or a drop is refused.
      */
     public boolean jumpHelps(double tx, double tz) {
-        if (ctx.player().isInWater() || ctx.player().isInLava() || !ClientWorld.plainGravity(ctx)) {
+        if (ctx.entity().isInWater() || ctx.entity().isInLava() || !ClientWorld.plainGravity(ctx)) {
             return false;
         }
         world.reset();

@@ -62,7 +62,7 @@ public final class LadderController {
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || player.isInWater() || player.isInLava() || player.isFallFlying()
                 || player.isPassenger() || player.getAbilities().flying) {
             return -1;

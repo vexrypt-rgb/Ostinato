@@ -102,10 +102,10 @@ public class BlockStateInterface {
         int cz = 0;
         int chunks = 0;
         // Ostinato: legit track sees loaded chunks inside render distance. Off, legitClip stays false.
-        if (Baritone.settings().trainingLegit.value && ctx.player() != null && ctx.minecraft() != null) {
+        if (Baritone.settings().trainingLegit.value && ctx.entity() != null && ctx.minecraft() != null) {
             clip = true;
-            cx = LegitHorizon.chunkOf(ctx.player().getX());
-            cz = LegitHorizon.chunkOf(ctx.player().getZ());
+            cx = LegitHorizon.chunkOf(ctx.entity().getX());
+            cz = LegitHorizon.chunkOf(ctx.entity().getZ());
             chunks = ctx.minecraft().options.renderDistance().get();
         }
         this.legitClip = clip;

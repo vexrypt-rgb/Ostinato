@@ -62,11 +62,18 @@ public interface IBaritoneProvider {
      */
     default IBaritone getBaritoneForPlayer(Player player) {
         for (IBaritone baritone : this.getAllBaritones()) {
-            if (Objects.equals(player, baritone.getPlayerContext().player())) {
+            if (Objects.equals(player, baritone.getPlayerContext().entity())) {
                 return baritone;
             }
         }
         return null;
+    }
+
+    /**
+     * Main's signature, kept so mods compiled against main (TenorClef) link against this jar.
+     */
+    default IBaritone getBaritoneForPlayer(LocalPlayer player) {
+        return getBaritoneForPlayer((Player) player);
     }
 
     /**

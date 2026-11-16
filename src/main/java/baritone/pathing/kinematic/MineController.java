@@ -62,20 +62,20 @@ public final class MineController {
     private int drop(IPathingHost baritone, Movement m, int pathPosition) {
         var in = baritone.getInputOverrideHandler();
         in.clearAllKeys();
-        if (ctx.playerFeet().equals(m.getDest()) && ctx.player().onGround()) {
+        if (ctx.playerFeet().equals(m.getDest()) && ctx.entity().onGround()) {
             return pathPosition + 1;
         }
         double cx = m.getDest().x + 0.5, cz = m.getDest().z + 0.5;
-        double off = Math.hypot(cx - ctx.player().getX(), cz - ctx.player().getZ());
-        float yaw = (float) Math.toDegrees(Math.atan2(-(cx - ctx.player().getX()), cz - ctx.player().getZ()));
+        double off = Math.hypot(cx - ctx.entity().getX(), cz - ctx.entity().getZ());
+        float yaw = (float) Math.toDegrees(Math.atan2(-(cx - ctx.entity().getX()), cz - ctx.entity().getZ()));
         baritone.getLookBehavior().human();
-        baritone.getLookBehavior().updateTarget(new Rotation(off > 0.1 ? yaw : ctx.player().getYRot(), 60f), true);
+        baritone.getLookBehavior().updateTarget(new Rotation(off > 0.1 ? yaw : ctx.entity().getYRot(), 60f), true);
         in.setInputForceState(Input.MOVE_FORWARD, off > 0.12);
         return pathPosition;
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowBreak.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
                 || player.getAbilities().flying) {
@@ -112,7 +112,7 @@ public final class MineController {
             }
             return -1;
         }
-        if (!ctx.player().onGround()) {
+        if (!ctx.entity().onGround()) {
             return -1; // mining happens standing; only the drop itself is driven in the air
         }
         in.clearAllKeys();

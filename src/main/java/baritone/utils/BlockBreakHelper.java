@@ -44,7 +44,7 @@ public final class BlockBreakHelper {
 
     public void stopBreakingBlock() {
         // The player controller will never be null, but the player can be
-        if (ctx.player() != null && wasHitting) {
+        if (ctx.entity() != null && wasHitting) {
             ctx.playerController().setHittingBlock(false);
             ctx.playerController().resetBlockRemoving();
             wasHitting = false;
@@ -64,10 +64,10 @@ public final class BlockBreakHelper {
             if (ctx.playerController().hasBrokenBlock()) {
                 ctx.playerController().syncHeldItem();
                 ctx.playerController().clickBlock(((BlockHitResult) trace).getBlockPos(), ((BlockHitResult) trace).getDirection());
-                ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+                ctx.entity().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
             } else {
                 if (ctx.playerController().onPlayerDamageBlock(((BlockHitResult) trace).getBlockPos(), ((BlockHitResult) trace).getDirection())) {
-                    ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+                    ctx.entity().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                 }
                 if (ctx.playerController().hasBrokenBlock()) { // block broken this tick
                     // break delay timer only applies for multi-tick block breaks like vanilla

@@ -1096,3 +1096,18 @@ Fix: hold sneak through an A* wait only when the body really hangs over an edge 
 bridge, void bridge, pillar and walk still succeed. Remaining on the void bridge: blockplace.scaffold 5 and noswing 4
 (noswing also hits the real client; scaffold is most likely the one-tick 180 degree turn, which the owner chose to
 leave).
+
+## 28. One jar for the real client bot and the protocol bot (16 Nov 2026)
+
+The branch had changed the public API in ways TenorClef (compiled against main) cannot link to:
+`IPlayerContext.player()` returned `Player`, `IBaritoneProvider.getBaritoneForPlayer` and the two
+`IPlayerController.processRightClick*` methods took `Player`. TenorClef calls `IPlayerContext.player()` (5 sites) and
+`getBaritoneForPlayer(LocalPlayer)` (1 site), so a real client on this branch's jar crashed at join with
+NoSuchMethodError (15 Nov, `smoke-headless2`).
+
+Fix: main's signatures are back (`LocalPlayer player()`, `getBaritoneForPlayer(LocalPlayer)`, the LocalPlayer
+`processRightClick*` overloads, all delegating), and the common accessor the bot needs is `Player entity()`. Shared code
+calls `entity()` (mechanical rename, 83 files in src/main plus src/api and the bot); `player()` and `localPlayer()`
+return the client's LocalPlayer, or null in a headless context. Full suite on the branch 2103 tests, 0 failures.
+Live 16 Nov 15:08: a visible real client with TenorClef 0.28.0 on this branch's jar joined and built the parity pillar
+(5.5,-54,-3.5, dirt placed, no NoSuchMethodError); the protocol bot from the same build did the same.

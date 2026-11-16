@@ -184,7 +184,7 @@ public class MovementAscend extends Movement {
         if (top == null || Math.min(top.maxX - top.minX, top.maxZ - top.minZ) >= 0.8) {
             return false;
         }
-        net.minecraft.world.phys.Vec3 p = ctx.player().position(), v = ctx.player().getDeltaMovement();
+        net.minecraft.world.phys.Vec3 p = ctx.entity().position(), v = ctx.entity().getDeltaMovement();
         double dx = at.getX() + (top.minX + top.maxX) / 2 - p.x, dz = at.getZ() + (top.minZ + top.maxZ) / 2 - p.z;
         double dist = Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
@@ -201,14 +201,14 @@ public class MovementAscend extends Movement {
 
     @Override
     public MovementState updateState(MovementState state) {
-        if (ctx.player().isInWater() && ctx.playerFeet().y >= src.y - 1) {
+        if (ctx.entity().isInWater() && ctx.playerFeet().y >= src.y - 1) {
             super.updateState(state);
             if (state.getStatus() != MovementStatus.RUNNING) return state;
             // Climbing out of water: bobbing drops feet below src, and vanilla lifts a swimmer
             // pushing into a ledge while holding jump.
             if (ctx.playerFeet().equals(dest)) return state.setStatus(MovementStatus.SUCCESS);
             // Pushing into the ledge pins us low; rise first, then push (the hop needs feet ~0.3 above src).
-            if (ctx.player().position().y > src.y + 0.2 || !ctx.player().horizontalCollision) MovementHelper.moveTowards(ctx, state, dest);
+            if (ctx.entity().position().y > src.y + 0.2 || !ctx.entity().horizontalCollision) MovementHelper.moveTowards(ctx, state, dest);
             return state.setInput(Input.JUMP, true);
         }
         if (ctx.playerFeet().y < src.y) {
@@ -222,7 +222,7 @@ public class MovementAscend extends Movement {
             return state;
         }
 
-        if (ctx.playerFeet().equals(dest) && !ctx.player().onGround() && steerOntoNarrow(state)) {
+        if (ctx.playerFeet().equals(dest) && !ctx.entity().onGround() && steerOntoNarrow(state)) {
             return state;
         }
         if (ctx.playerFeet().equals(dest) || ctx.playerFeet().equals(dest.offset(getDirection().below()))) {
@@ -235,7 +235,7 @@ public class MovementAscend extends Movement {
             // checked first: the back-off below returned early forever when we never stopped overlapping the cell (run 44: 4 minutes)
             if (ticksWithoutPlacement > 80) return state.setStatus(MovementStatus.UNREACHABLE);
             // standing over the cell we must fill (overhanging the edge) blocks the placement: step back onto src first
-            if (ctx.player().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
+            if (ctx.entity().getBoundingBox().intersects(new net.minecraft.world.phys.AABB(positionToPlace))) {
                 // walking "towards src" from its edge overshot and walked us off a cliff in-game (run 23, an 80-block
                 // fall): go back with the keys, sneaking, which cannot leave the block we stand on
                 MovementHelper.moveTowardsWithoutRotation(ctx, state, src);
@@ -248,11 +248,11 @@ public class MovementAscend extends Movement {
             }
             if (MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), false, true) == PlaceResult.READY_TO_PLACE) {
                 state.setInput(Input.SNEAK, true);
-                if (ctx.player().isCrouching()) {
+                if (ctx.entity().isCrouching()) {
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }
-            if (ticksWithoutPlacement > 10 && BackOff.allowed(ctx.player().getX(), ctx.player().getZ(), src.getX(), src.getZ())) {
+            if (ticksWithoutPlacement > 10 && BackOff.allowed(ctx.entity().getX(), ctx.entity().getZ(), src.getX(), src.getZ())) {
                 // After 10 ticks without placement, we might be standing in the way, move back (but never off src)
                 state.setInput(Input.MOVE_BACK, true);
             }
@@ -274,10 +274,10 @@ public class MovementAscend extends Movement {
 
         int xAxis = Math.abs(src.getX() - dest.getX()); // either 0 or 1
         int zAxis = Math.abs(src.getZ() - dest.getZ()); // either 0 or 1
-        double flatDistToNext = xAxis * Math.abs((dest.getX() + 0.5D) - ctx.player().position().x) + zAxis * Math.abs((dest.getZ() + 0.5D) - ctx.player().position().z);
-        double sideDist = zAxis * Math.abs((dest.getX() + 0.5D) - ctx.player().position().x) + xAxis * Math.abs((dest.getZ() + 0.5D) - ctx.player().position().z);
+        double flatDistToNext = xAxis * Math.abs((dest.getX() + 0.5D) - ctx.entity().position().x) + zAxis * Math.abs((dest.getZ() + 0.5D) - ctx.entity().position().z);
+        double sideDist = zAxis * Math.abs((dest.getX() + 0.5D) - ctx.entity().position().x) + xAxis * Math.abs((dest.getZ() + 0.5D) - ctx.entity().position().z);
 
-        double lateralMotion = xAxis * ctx.player().getDeltaMovement().z + zAxis * ctx.player().getDeltaMovement().x;
+        double lateralMotion = xAxis * ctx.entity().getDeltaMovement().z + zAxis * ctx.entity().getDeltaMovement().x;
         if (Math.abs(lateralMotion) > 0.1) {
             return state;
         }

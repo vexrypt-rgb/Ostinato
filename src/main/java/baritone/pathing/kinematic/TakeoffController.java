@@ -50,10 +50,10 @@ public final class TakeoffController {
         engaged = r >= 0 && r == pathPosition && current != null;
         if (inPlay && Baritone.settings().kinematicTrace.value) {
             // Ostinato: per-tick trace of a standing takeoff: who drives, the phase, where the player is, how it moves
-            Vec3 v = ctx.player().getDeltaMovement();
+            Vec3 v = ctx.entity().getDeltaMovement();
             System.out.printf("KTRACE takeoff r=%d run=%b jumped=%b landed=%b air=%d cd=%d pos=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f og=%b%n", r,
                     running, js != null && js.jumped, landed, js != null ? js.airTicks : -1, cooldown,
-                    ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround());
+                    ctx.entity().getX(), ctx.entity().getY(), ctx.entity().getZ(), v.x, v.y, v.z, ctx.entity().onGround());
         }
         return r;
     }
@@ -121,7 +121,7 @@ public final class TakeoffController {
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         boolean slowMode = Baritone.settings().slowKinematic.value;
         if (!slowMode && !ExperimentalMovement.kinematicTravel() || player.isInWater() || player.isInLava() || player.onClimbable()
                 || player.isFallFlying() || player.isPassenger() || player.getAbilities().flying
@@ -287,7 +287,7 @@ public final class TakeoffController {
                 return -1; // no takeoff from here
             }
             running = true;
-            PositionSync.sync(ctx.player());
+            PositionSync.sync(ctx.entity());
         } else {
             if (js.slewYaw) {
                 js.faceYaw = ctx.playerRotations().getYaw(); // run() resims from this tick: the cap starts at the look we have now

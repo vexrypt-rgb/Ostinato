@@ -93,7 +93,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
         if (desiredQuantity > 0) {
-            int curr = ctx.player().getInventory().getNonEquipmentItems().stream()
+            int curr = ctx.entity().getInventory().getNonEquipmentItems().stream()
                     .filter(stack -> filter.has(stack))
                     .mapToInt(ItemStack::getCount).sum();
             if (curr >= desiredQuantity) {
@@ -154,7 +154,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             if (reach != null) {
                 return reach;
             }
-        } else if (shaft.isPresent() && ctx.player().onGround()) {
+        } else if (shaft.isPresent() && ctx.entity().onGround()) {
             BlockPos pos = shaft.get();
             BlockState state = baritone.bsi.get0(pos);
             if (!MovementHelper.avoidBreaking(baritone.bsi, pos.getX(), pos.getY(), pos.getZ(), state)) {
@@ -202,8 +202,8 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             }
             blacklist.add(failed);
         }
-        if (!ctx.player().onGround() || !isSafeToCancel) {
-            cadenzaNote = !ctx.player().onGround() ? "air" : "unsafe";
+        if (!ctx.entity().onGround() || !isSafeToCancel) {
+            cadenzaNote = !ctx.entity().onGround() ? "air" : "unsafe";
             return null;
         }
         BetterBlockPos feet = ctx.playerFeet();
@@ -268,7 +268,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             cadenza.attempt(pos, 60 + (long) Math.min(breakTicks, 600));
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        cadenza.nothingReachable(feet, ctx.player().onGround());
+        cadenza.nothingReachable(feet, ctx.entity().onGround());
         return null;
     }
 
@@ -280,7 +280,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         double reach = ctx.playerController().getBlockReachDistance();
         float a = (float) Cadenza.AIM_TOLERANCE_DEG;
         for (Rotation o : new Rotation[]{r.add(new Rotation(a, 0)), r.add(new Rotation(-a, 0)), r.add(new Rotation(0, a)), r.add(new Rotation(0, -a))}) {
-            net.minecraft.world.phys.HitResult h = RayTraceUtils.rayTraceTowards(ctx.player(), o.clamp(), reach, false);
+            net.minecraft.world.phys.HitResult h = RayTraceUtils.rayTraceTowards(ctx.entity(), o.clamp(), reach, false);
             if (!(h instanceof net.minecraft.world.phys.BlockHitResult b) || h.getType() != net.minecraft.world.phys.HitResult.Type.BLOCK || !b.getBlockPos().equals(pos)) {
                 return false;
             }
@@ -401,7 +401,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         int max = Baritone.settings().cadenzaMaxTargets.value;
         boolean debug = Baritone.settings().cadenzaDebug.value;
         double reach = ctx.playerController().getBlockReachDistance();
-        double eye = ctx.player().getEyeHeight(Pose.STANDING);
+        double eye = ctx.entity().getEyeHeight(Pose.STANDING);
         boolean drops = Baritone.settings().mineScanDroppedItems.value;
         BetterBlockPos feet = ctx.playerFeet();
         List<BlockPos> byDistance = new ArrayList<>(locs);
@@ -663,7 +663,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
      * cell, the next branch cell, or one block toward air. A torch or door click is not sent from here.
      */
     private PathingCommand legitGather() {
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
         if (branchPoint == null) {
@@ -691,9 +691,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 cancel();
                 return null;
             case LOOK:
-                float yaw = ctx.player().getYRot();
+                float yaw = ctx.entity().getYRot();
                 int turn = ((salt & 1) == 0 ? 40 : -40);
-                baritone.getLookBehavior().updateTarget(new Rotation(yaw + turn, ctx.player().getXRot()), false);
+                baritone.getLookBehavior().updateTarget(new Rotation(yaw + turn, ctx.entity().getXRot()), false);
                 return pause;
             case SWAP_TOOL:
                 MovementHelper.switchToBestToolFor(ctx, Blocks.STONE.defaultBlockState());
@@ -744,10 +744,10 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     }
 
     private List<BlockPos> filterLegit(List<BlockPos> locs, CalculationContext context) {
-        if (ctx.player() == null || context == null) {
+        if (ctx.entity() == null || context == null) {
             return LegitTargets.select(locs, legitSeen, null, 0, 0, 0, true);
         }
-        Vec3 eye = ctx.player().getEyePosition(1.0F);
+        Vec3 eye = ctx.entity().getEyePosition(1.0F);
         return LegitTargets.select(locs, legitSeen, new McSeenView(context.world, context.bsi), eye.x, eye.y, eye.z, true);
     }
 
@@ -784,7 +784,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
                 .filter(pos -> !blacklist.contains(pos))
 
-                .sorted(Comparator.comparingDouble(ctx.getBaritone().getPlayerContext().player().blockPosition()::distSqr))
+                .sorted(Comparator.comparingDouble(ctx.getBaritone().getPlayerContext().entity().blockPosition()::distSqr))
                 .collect(Collectors.toList());
 
         if (locs.size() > max) {

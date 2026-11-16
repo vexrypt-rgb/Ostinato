@@ -290,14 +290,14 @@ public class MovementClimbJump extends Movement {
     @Override
     public boolean safeToCancel(MovementState state) {
         // hanging on a ladder is as safe as it gets; in the air or running up is not
-        return state.getStatus() != MovementStatus.RUNNING || !running && (t.mode == ClimbTemplates.LEAP || ctx.player().onGround());
+        return state.getStatus() != MovementStatus.RUNNING || !running && (t.mode == ClimbTemplates.LEAP || ctx.entity().onGround());
     }
 
     private void fail(String why) {
         long now = System.currentTimeMillis();
         FAILED.values().removeIf(until -> until <= now);
         FAILED.put(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), now + 30_000);
-        logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.player().position() + "); avoiding this climb jump for 30s");
+        logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.entity().position() + "); avoiding this climb jump for 30s");
     }
 
     /** World x/z of frame point (a, b), block (0, 0) being src. */
@@ -344,7 +344,7 @@ public class MovementClimbJump extends Movement {
         if (trace == null) {
             trace = new SimTrace("climb " + (t.mode == ClimbTemplates.LEAP ? t.stand ? "stand-leap" : "leap" : "grab") + " wall=" + t.wall + " " + t.a + "," + t.dy + "," + t.b + (t.destLadder ? " ladder wall=" + t.destWall : ""), new ClientWorld(ctx), PredictionTolerance.active());
         }
-        trace.observe(real, ctx.player().getYRot());
+        trace.observe(real, ctx.entity().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);
     }
 
@@ -354,7 +354,7 @@ public class MovementClimbJump extends Movement {
             return state;
         }
         boolean leap = t.mode == ClimbTemplates.LEAP;
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         if (p.y < Math.min(src.y, dest.y) - 0.6) {
             fail("fell off");
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -377,7 +377,7 @@ public class MovementClimbJump extends Movement {
             js.standJump = t.stand;
             System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 m = ctx.entity().getDeltaMovement();
         ClientWorld.readPlayer(ctx, real);
         if (landed) {
             settle++;
@@ -450,7 +450,7 @@ public class MovementClimbJump extends Movement {
                     return state.setStatus(MovementStatus.UNREACHABLE);
                 }
                 running = true;
-                PositionSync.sync(ctx.player());
+                PositionSync.sync(ctx.entity());
             }
         } else if (replanCooldown > 0) {
             replanCooldown--;

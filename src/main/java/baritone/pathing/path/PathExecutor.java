@@ -169,7 +169,7 @@ public class PathExecutor implements IPathExecutor, Helper {
      * 4: walls laid one block a tick along seven blocks of sprint-jumping).
      */
     public boolean pausableNow() {
-        return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS || lastDriver == Driver.SIM) && ctx.player().onGround();
+        return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.PHYSICS || lastDriver == Driver.SIM) && ctx.entity().onGround();
     }
 
     public boolean onTick() {
@@ -302,7 +302,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // moving, yet not along the path: none of the timeouts below run while a mover drives, so it steps aside.
                 // Only the look-ahead movers: the others (mining, a long fall) hold a position for as long as the work takes.
                 Baritone.settings().movementFault.value.accept("M01", lastDriver + " held " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " for " + drivenOnCurrent + " ticks, handing back to Baritone");
-                PathViz.get().stuck(ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), "M01 " + lastDriver + " held a movement"); // Ostinato path viz
+                PathViz.get().stuck(ctx.entity().getX(), ctx.entity().getY(), ctx.entity().getZ(), "M01 " + lastDriver + " held a movement"); // Ostinato path viz
                 legatoFailed(movement);
                 drivenOnCurrent = 0;
                 driverRest = DRIVER_REST;
@@ -322,7 +322,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             // 123 asked to stop and tower, and was carried nine blocks first. On its feet the kinematic driver is no
             // worse a place to stop than a Traverse. Ostinato 2.0 Phase 06: nor is physics on the tick it stopped, keys up and
             // on its feet, for a cancel it had refused twice.
-            return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ctx.player().onGround()
+            return (lastDriver == Driver.KINEMATIC || lastDriver == Driver.SIM) && ctx.entity().onGround()
                     || lastDriver == Driver.PHYSICS && ux != null && ux.stoppedForCancel();
         }
         BetterBlockPos whereAmI = ctx.playerFeet();
@@ -480,7 +480,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             FastTravel.Steer steer = fastSteer();
             if (steer.aim) {
                 host.getLookBehavior().updateTarget(
-                        RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(steer.x, ctx.player().getY(), steer.z), ctx.playerRotations())
+                        RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(steer.x, ctx.entity().getY(), steer.z), ctx.playerRotations())
                                 .withPitch(ctx.playerRotations().getPitch()),
                         false);
             }
@@ -511,7 +511,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         } else {
             sprintNextTick = shouldSprintNextTick();
             if (!sprintNextTick) {
-                ctx.player().setSprinting(false); // letting go of control doesn't make you stop sprinting actually
+                ctx.entity().setSprinting(false); // letting go of control doesn't make you stop sprinting actually
             }
             ticksOnCurrent++;
             if (ticksOnCurrent > currentMovementOriginalCostEstimate + Baritone.settings().movementTimeoutTicks.value) {
@@ -521,7 +521,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // this is why we cache cost at the beginning, and don't recalculate for this comparison every tick
                 System.out.println("[PathExecutor] movement timeout ticksOnCurrent=" + ticksOnCurrent
                         + " est=" + currentMovementOriginalCostEstimate + " " + movement.getClass().getSimpleName()
-                        + " " + movement.getSrc() + "->" + movement.getDest() + " player=" + ctx.player().position());
+                        + " " + movement.getSrc() + "->" + movement.getDest() + " player=" + ctx.entity().position());
                 logDebug("This movement has taken too long (" + ticksOnCurrent + " ticks, expected " + currentMovementOriginalCostEstimate + ") " + movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + ". Cancelling.");
                 Baritone.settings().movementFault.value.accept("M03", movement.getClass().getSimpleName() + " " + movement.getSrc() + "->" + movement.getDest() + " took " + ticksOnCurrent + " ticks");
                 legatoFailed(movement);
@@ -545,7 +545,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         BlockPos bestPos = null;
         for (IMovement movement : path.movements()) {
             for (BlockPos pos : ((Movement) movement).getValidPositions()) {
-                double dist = VecUtils.entityDistanceToCenter(ctx.player(), pos);
+                double dist = VecUtils.entityDistanceToCenter(ctx.entity(), pos);
                 if (dist < best || best == -1) {
                     best = dist;
                     bestPos = pos;
@@ -560,7 +560,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (!current.isPresent()) {
             return false;
         }
-        if (!ctx.player().onGround()) {
+        if (!ctx.entity().onGround()) {
             return false;
         }
         if (!MovementHelper.canWalkOn(ctx, ctx.playerFeet().below())) {
@@ -594,7 +594,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             // when we're midair in the middle of a fall, we're very far from both the beginning and the end, but we aren't actually off path
             if (path.movements().get(pathPosition) instanceof MovementFall) {
                 BlockPos fallDest = path.positions().get(pathPosition + 1); // .get(pathPosition) is the block we fell off of
-                return VecUtils.entityFlatDistanceToCenter(ctx.player(), fallDest) >= leniency; // ignore Y by using flat distance
+                return VecUtils.entityFlatDistanceToCenter(ctx.entity(), fallDest) >= leniency; // ignore Y by using flat distance
             } else {
                 return true;
             }
@@ -609,12 +609,12 @@ public class PathExecutor implements IPathExecutor, Helper {
      * @return Whether or not it was possible to snap to the current player feet
      */
     public boolean snipsnapifpossible() {
-        if (!ctx.player().onGround() && ctx.world().getFluidState(ctx.playerFeet()).isEmpty()) {
+        if (!ctx.entity().onGround() && ctx.world().getFluidState(ctx.playerFeet()).isEmpty()) {
             // if we're falling in the air, and not in water, don't splice
             return false;
         } else {
             // we are either onGround or in liquid
-            if (ctx.player().getDeltaMovement().y < -0.1) {
+            if (ctx.entity().getDeltaMovement().y < -0.1) {
                 // if we are strictly moving downwards (not stationary)
                 // we could be falling through water, which could be unsafe to splice
                 return false; // so don't
@@ -732,7 +732,7 @@ public class PathExecutor implements IPathExecutor, Helper {
                 // playerFeet adds 0.1251 to account for soul sand
                 // farmland is 0.9375
                 // 0.07 is to account for farmland
-                if (ctx.player().position().y >= center.getY() - 0.07) {
+                if (ctx.entity().position().y >= center.getY() - 0.07) {
                     host.getInputOverrideHandler().setInputForceState(Input.JUMP, false);
                     return true;
                 }
@@ -774,7 +774,7 @@ public class PathExecutor implements IPathExecutor, Helper {
      * setting is on, so the search and the default executor do no extra work.
      */
     private FastTravel.Steer fastSteer() {
-        if (pathPosition >= path.movements().size() - 1 || !ctx.player().onGround() || ctx.player().isShiftKeyDown()) {
+        if (pathPosition >= path.movements().size() - 1 || !ctx.entity().onGround() || ctx.entity().isShiftKeyDown()) {
             return FastTravel.Steer.NONE;
         }
         IMovement current = path.movements().get(pathPosition);
@@ -792,7 +792,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         boolean busy = placesOrBreaks(current) || placesOrBreaks(next);
         BetterBlockPos corner = current.getDest();
         boolean lava = lavaNear(corner) || lavaNear(next.getDest());
-        boolean safe = FastTravel.sprintCutAllowed(ctx.player().getHealth(), nether, lava, busy);
+        boolean safe = FastTravel.sprintCutAllowed(ctx.entity().getHealth(), nether, lava, busy);
         int dx1 = current.getDirection().getX();
         int dz1 = current.getDirection().getZ();
         int run = 1;
@@ -869,10 +869,10 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (!FastMode.sprintJump() || !(current instanceof MovementTraverse || current instanceof MovementDiagonal)) {
             return false;
         }
-        if (!ctx.player().onGround() || ctx.player().isInWater() || ctx.player().isInLava() || ctx.player().isShiftKeyDown()) {
+        if (!ctx.entity().onGround() || ctx.entity().isInWater() || ctx.entity().isInLava() || ctx.entity().isShiftKeyDown()) {
             return false;
         }
-        Vec3 motion = ctx.player().getDeltaMovement();
+        Vec3 motion = ctx.entity().getDeltaMovement();
         if (motion.x * motion.x + motion.z * motion.z < 0.2 * 0.2) {
             return false; // accelerate first; jumping from a standstill is slower than walking
         }
@@ -905,7 +905,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             return false;
         }
         // Stay on the line: veering sideways at 0.4 blocks/tick would clip a corner.
-        Vec3 pos = ctx.player().position();
+        Vec3 pos = ctx.entity().position();
         double lx = pos.x - (src.x + 0.5), lz = pos.z - (src.z + 0.5);
         double side = Math.abs(lx * dir.getZ() - lz * dir.getX()) / Math.sqrt(dir.getX() * dir.getX() + dir.getZ() * dir.getZ());
         return side < 0.25;
@@ -951,7 +951,7 @@ public class PathExecutor implements IPathExecutor, Helper {
     }
 
     private static boolean skipNow(IPlayerContext ctx, IMovement current) {
-        double offTarget = Math.abs(current.getDirection().getX() * (current.getSrc().z + 0.5D - ctx.player().position().z)) + Math.abs(current.getDirection().getZ() * (current.getSrc().x + 0.5D - ctx.player().position().x));
+        double offTarget = Math.abs(current.getDirection().getX() * (current.getSrc().z + 0.5D - ctx.entity().position().z)) + Math.abs(current.getDirection().getZ() * (current.getSrc().x + 0.5D - ctx.entity().position().x));
         if (offTarget > 0.1) {
             return false;
         }
@@ -961,7 +961,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             return true;
         }
         // wait 0.3
-        double flatDist = Math.abs(current.getDirection().getX() * (headBonk.getX() + 0.5D - ctx.player().position().x)) + Math.abs(current.getDirection().getZ() * (headBonk.getZ() + 0.5 - ctx.player().position().z));
+        double flatDist = Math.abs(current.getDirection().getX() * (headBonk.getX() + 0.5D - ctx.entity().position().x)) + Math.abs(current.getDirection().getZ() * (headBonk.getZ() + 0.5 - ctx.entity().position().z));
         return flatDist > 0.8;
     }
 
@@ -1039,7 +1039,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         }
         IMovement m = path.movements().get(Math.min(watchBest, path.movements().size() - 1));
         baritone.api.utils.BetterBlockPos d = m.getDest();
-        double dist = ctx.player().position().distanceTo(new Vec3(d.x + 0.5, d.y, d.z + 0.5));
+        double dist = ctx.entity().position().distanceTo(new Vec3(d.x + 0.5, d.y, d.z + 0.5));
         if (dist < watchDist - 0.5) {
             watchDist = dist;
             watchTicks = 0;
@@ -1061,7 +1061,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             }
         }
         String ev = "no path progress for " + watchTicks + " ticks at " + ctx.playerFeet() + " driver=" + lastDriver + " pos=" + pathPosition + "/best=" + watchBest
-                + " move=" + m.getClass().getSimpleName() + " " + m.getSrc() + "->" + m.getDest() + " inWater=" + ctx.player().isInWater();
+                + " move=" + m.getClass().getSimpleName() + " " + m.getSrc() + "->" + m.getDest() + " inWater=" + ctx.entity().isInWater();
         System.out.println("PATH no-progress watchdog: " + ev + ", cancelling for replan");
         Baritone.settings().movementFault.value.accept("M05", ev);
         logDebug("PATH no-progress watchdog: " + ev);
@@ -1084,7 +1084,7 @@ public class PathExecutor implements IPathExecutor, Helper {
         if (!failed) {
             IMovement m = pathPosition < path.movements().size() ? path.movements().get(pathPosition) : null;
             System.out.println("[PathExecutor] cancel feet=" + ctx.playerFeet()
-                    + " pos=" + ctx.player().position()
+                    + " pos=" + ctx.entity().position()
                     + " pathPos=" + pathPosition + "/" + path.length()
                     + " ticksOnCurrent=" + ticksOnCurrent
                     + " est=" + currentMovementOriginalCostEstimate
@@ -1188,7 +1188,7 @@ public class PathExecutor implements IPathExecutor, Helper {
             vizAir = false;
             return;
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         boolean travel = travelDriving();
         if (vizTravel && !travel) {
             viz.handback(p.x, p.y, p.z, "to " + lastDriver + " at " + movement.getClass().getSimpleName());
@@ -1198,9 +1198,9 @@ public class PathExecutor implements IPathExecutor, Helper {
             vizAir = false;
             return;
         }
-        boolean ground = ctx.player().onGround(), climb = ctx.player().onClimbable();
+        boolean ground = ctx.entity().onGround(), climb = ctx.entity().onClimbable();
         if (!vizAir) {
-            if (!ground && !climb && ctx.player().getDeltaMovement().y > 0.2) {
+            if (!ground && !climb && ctx.entity().getDeltaMovement().y > 0.2) {
                 vizAir = true;
                 String label = travel ? lastDriver.name().toLowerCase(Locale.ROOT) + " hop" : movement.getClass().getSimpleName();
                 viz.jumpTakeoff(this, PathViz.JUMP, label, p.x, p.y, p.z);

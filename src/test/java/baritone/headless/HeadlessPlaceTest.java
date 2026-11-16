@@ -591,7 +591,7 @@ public class HeadlessPlaceTest {
 
             boolean hasThrowaway = Baritone.settings().allowPlace.value && host.hasGenericThrowaway();
             CalculationContext context = new CalculationContext(host, host.bsi(),
-                    new ToolSet(host.getPlayerContext().player()), hasThrowaway, host.bsi().minY(), host.bsi().height());
+                    new ToolSet(host.getPlayerContext().entity()), hasThrowaway, host.bsi().minY(), host.bsi().height());
             BetterBlockPos start = host.getPlayerContext().playerFeet();
             GoalBlock goal = new GoalBlock(0, 2, 13);
             AStarPathFinder first = new AStarPathFinder(start, start.x, start.y, start.z, goal,

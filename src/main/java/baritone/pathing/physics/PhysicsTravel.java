@@ -95,8 +95,8 @@ public final class PhysicsTravel {
     public int tick(IPathingHost baritone, IPath path, int pathPosition, boolean stackAsked) {
         // Ostinato 2.0 Phase 06: null while unifiedExecutor is off, and every use below is behind that null.
         UnifiedExecutor ux = Baritone.settings().unifiedExecutor.value ? baritone.getUnifiedExecutor() : null;
-        if (ctx.player().isInWater() || ctx.player().isInLava()
-                || ctx.player().onClimbable() || ctx.player().isFallFlying() || ctx.player().isPassenger()) {
+        if (ctx.entity().isInWater() || ctx.entity().isInLava()
+                || ctx.entity().onClimbable() || ctx.entity().isFallFlying() || ctx.entity().isPassenger()) {
             return drop(ux, pathPosition);
         }
         // Ostinato: the old switch still forces physics when the stack did not ask. Auto asks on its own.
@@ -180,7 +180,7 @@ public final class PhysicsTravel {
         }
         PhysicsPathfinder.Action a = plan.get(step);
         // Set yaw now: the look behaviour applies a tick late, and the plan assumes this tick's yaw.
-        ctx.player().setYRot(a.yaw);
+        ctx.entity().setYRot(a.yaw);
         baritone.getLookBehavior().updateTarget(new Rotation(a.yaw, 0), false);
         if (real.onGround && offPlan(baritone.getLookBehavior().getAimProcessor().peekRotation(new Rotation(a.yaw, 0)).getYaw(), a.yaw)) {
             // Ostinato Presto v4: the move this tick goes the aim processor's way, at most 32° a tick from the last

@@ -37,7 +37,7 @@ final class CombatTargeting {
     Vec3 velocity(LivingEntity target) {
         // Remote players keep a stale getDeltaMovement (Vex0 vy stayed 1.16 for a whole jump).
         Vec3 own = target.getDeltaMovement();
-        if (target != ctx.player() && tvVel.lengthSqr() > 1e-4) return tvVel;
+        if (target != ctx.entity() && tvVel.lengthSqr() > 1e-4) return tvVel;
         return own.lengthSqr() > 1e-4 ? own : tvVel;
     }
 

@@ -65,7 +65,7 @@ public class MovementDiagonal extends Movement {
     protected boolean safeToCancel(MovementState state) {
         //too simple. backfill does not work after cornering with this
         //return context.precomputedData.canWalkOn(ctx, ctx.playerFeet().down());
-        Player player = ctx.player();
+        Player player = ctx.entity();
         double offset = 0.25;
         double x = player.position().x;
         double y = player.position().y - 1;
@@ -298,7 +298,7 @@ public class MovementDiagonal extends Movement {
         } else if (!playerInValidPosition() && !(MovementHelper.isLiquid(ctx, src) && getValidPositions().contains(ctx.playerFeet().above())) && !nearDest()) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        if (dest.y > src.y && ctx.player().position().y < src.y + 0.1 && ctx.player().horizontalCollision) {
+        if (dest.y > src.y && ctx.entity().position().y < src.y + 0.1 && ctx.entity().horizontalCollision) {
             state.setInput(Input.JUMP, true);
         }
         if (sprint()) {
@@ -306,7 +306,7 @@ public class MovementDiagonal extends Movement {
         }
         state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
         MovementHelper.moveTowards(ctx, state, dest);
-        if (swim || (ctx.player().isSwimming() && FastMode.swimInWater())) {
+        if (swim || (ctx.entity().isSwimming() && FastMode.swimInWater())) {
             MovementHelper.surfaceSwim(ctx, state);
         }
         return state;
@@ -361,8 +361,8 @@ public class MovementDiagonal extends Movement {
 
     /** Mid-hop just past the corner (e.g. handed over from the kinematic driver): keep steering, it lands on dest. */
     private boolean nearDest() {
-        double dx = ctx.player().position().x - (dest.x + 0.5), dz = ctx.player().position().z - (dest.z + 0.5);
-        double y = ctx.player().position().y;
+        double dx = ctx.entity().position().x - (dest.x + 0.5), dz = ctx.entity().position().z - (dest.z + 0.5);
+        double y = ctx.entity().position().y;
         return dx * dx + dz * dz < 1.5 * 1.5 && y >= dest.y && y < dest.y + 1.3;
     }
 }

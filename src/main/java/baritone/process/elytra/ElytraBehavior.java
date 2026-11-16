@@ -167,7 +167,7 @@ public final class ElytraBehavior implements Helper {
             final int prevMaxNear = this.maxPlayerNear;
             this.maxPlayerNear = Math.max(this.maxPlayerNear, this.playerNear);
 
-            if (this.maxPlayerNear == prevMaxNear && ctx.player().isFallFlying()) {
+            if (this.maxPlayerNear == prevMaxNear && ctx.entity().isFallFlying()) {
                 this.ticksNearUnchanged++;
             } else {
                 this.ticksNearUnchanged = 0;
@@ -265,7 +265,7 @@ public final class ElytraBehavior implements Helper {
                             final Throwable cause = ex.getCause();
                             if (cause instanceof PathCalculationException) {
                                 logDirect("Failed to compute next segment");
-                                if (pathStart.distToCenterSqr(ctx.player().position()) < 16 * 16) {
+                                if (pathStart.distToCenterSqr(ctx.entity().position()) < 16 * 16) {
                                     logVerbose("Player is near the segment start, therefore repeating this calculation is pointless. Marking as complete");
                                     completePath = true;
                                 }
@@ -461,7 +461,7 @@ public final class ElytraBehavior implements Helper {
         }
         if (this.simulationLine != null && Baritone.settings().elytraRenderSimulation.value) {
             BufferBuilder bufferBuilder = IRenderer.startLines(new Color(0x36CCDC));
-            final Vec3 offset = ctx.player().getPosition(event.getPartialTicks());
+            final Vec3 offset = ctx.entity().getPosition(event.getPartialTicks());
             for (int i = 0; i < this.simulationLine.size() - 1; i++) {
                 final Vec3 src = this.simulationLine.get(i).add(offset);
                 final Vec3 dst = this.simulationLine.get(i + 1).add(offset);
@@ -491,7 +491,7 @@ public final class ElytraBehavior implements Helper {
     }
 
     public void pathTo() {
-        if (!FastMode.elytraGroundTakeoff() || ctx.player().isFallFlying()) {
+        if (!FastMode.elytraGroundTakeoff() || ctx.entity().isFallFlying()) {
             this.pathManager.pathToDestination();
         }
     }
@@ -518,7 +518,7 @@ public final class ElytraBehavior implements Helper {
         }
         final long now = System.currentTimeMillis();
         if ((now - this.timeLastCacheCull) / 1000 > Baritone.settings().elytraTimeBetweenCacheCullSecs.value) {
-            npfContext.queueCacheCulling(ctx.player().chunkPosition().x(), ctx.player().chunkPosition().z(), Baritone.settings().elytraCacheCullDistance.value);
+            npfContext.queueCacheCulling(ctx.entity().chunkPosition().x(), ctx.entity().chunkPosition().z(), Baritone.settings().elytraCacheCullDistance.value);
             this.timeLastCacheCull = now;
         }
     }
@@ -590,10 +590,10 @@ public final class ElytraBehavior implements Helper {
         }
         trySwapElytra();
 
-        if (ctx.player().horizontalCollision) {
+        if (ctx.entity().horizontalCollision) {
             logVerbose("hbonk");
         }
-        if (ctx.player().verticalCollision) {
+        if (ctx.entity().verticalCollision) {
             logVerbose("vbonk");
         }
 
@@ -613,7 +613,7 @@ public final class ElytraBehavior implements Helper {
             this.deployedFireworkLastTick = false;
         }
 
-        final boolean inLava = ctx.player().isInLava();
+        final boolean inLava = ctx.entity().isInLava();
         if (inLava) {
             baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
         }
@@ -756,18 +756,18 @@ public final class ElytraBehavior implements Helper {
         if (this.landingMode) {
             return;
         }
-        final boolean useOnDescend = !Baritone.settings().elytraConserveFireworks.value || ctx.player().position().y < goingTo.y + 5;
+        final boolean useOnDescend = !Baritone.settings().elytraConserveFireworks.value || ctx.entity().position().y < goingTo.y + 5;
         final double currentSpeed = new Vec3(
-                ctx.player().getDeltaMovement().x,
+                ctx.entity().getDeltaMovement().x,
                 // ignore y component if we are BOTH below where we want to be AND descending
-                ctx.player().position().y < goingTo.y ? Math.max(0, ctx.player().getDeltaMovement().y) : ctx.player().getDeltaMovement().y,
-                ctx.player().getDeltaMovement().z
+                ctx.entity().position().y < goingTo.y ? Math.max(0, ctx.entity().getDeltaMovement().y) : ctx.entity().getDeltaMovement().y,
+                ctx.entity().getDeltaMovement().z
         ).lengthSqr();
 
         final double elytraFireworkSpeed = Baritone.settings().elytraFireworkSpeed.value;
         if (this.remainingFireworkTicks <= 0 && (forceUseFirework || (!isBoosted
                 && useOnDescend
-                && (ctx.player().position().y < goingTo.y - 5 || start.distanceTo(new Vec3(goingTo.x + 0.5, ctx.player().position().y, goingTo.z + 0.5)) > 5) // UGH!!!!!!!
+                && (ctx.entity().position().y < goingTo.y - 5 || start.distanceTo(new Vec3(goingTo.x + 0.5, ctx.entity().position().y, goingTo.z + 0.5)) > 5) // UGH!!!!!!!
                 && currentSpeed < elytraFireworkSpeed * elytraFireworkSpeed))
         ) {
             // Prioritize boosting fireworks over regular ones
@@ -778,8 +778,8 @@ public final class ElytraBehavior implements Helper {
                 return;
             }
             logVerbose("attempting to use firework" + (forceUseFirework ? " (forced)" : ""));
-            ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
-            this.minimumBoostTicks = 10 * (1 + getFireworkBoost(ctx.player().getItemInHand(InteractionHand.MAIN_HAND)).orElse(0));
+            ctx.playerController().processRightClick(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND);
+            this.minimumBoostTicks = 10 * (1 + getFireworkBoost(ctx.entity().getItemInHand(InteractionHand.MAIN_HAND)).orElse(0));
             this.remainingFireworkTicks = 10;
             this.deployedFireworkLastTick = true;
         }
@@ -808,8 +808,8 @@ public final class ElytraBehavior implements Helper {
 
             this.start = ctx.playerFeetAsVec();
             this.motion = ctx.playerMotion();
-            this.boundingBox = ctx.player().getBoundingBox();
-            this.ignoreLava = ctx.player().isInLava();
+            this.boundingBox = ctx.entity().getBoundingBox();
+            this.ignoreLava = ctx.entity().isInLava();
 
             final Integer fireworkTicksExisted;
             if (async && ElytraBehavior.this.deployedFireworkLastTick) {
@@ -958,7 +958,7 @@ public final class ElytraBehavior implements Helper {
     private Optional<FireworkRocketEntity> getAttachedFirework() {
         return ctx.entitiesStream()
                 .filter(x -> x instanceof FireworkRocketEntity)
-                .filter(x -> Objects.equals(((IFireworkRocketEntity) x).getBoostedEntity(), ctx.player()))
+                .filter(x -> Objects.equals(((IFireworkRocketEntity) x).getBoostedEntity(), ctx.entity()))
                 .map(x -> (FireworkRocketEntity) x)
                 .findFirst();
     }
@@ -1025,7 +1025,7 @@ public final class ElytraBehavior implements Helper {
             // if start == dest then the cpp raytracer dies
             clear = start.equals(dest) || raytrace(start, dest);
         } else {
-            clear = ctx.world().clip(new ClipContext(start, dest, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.player())).getType() == HitResult.Type.MISS;
+            clear = ctx.world().clip(new ClipContext(start, dest, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.entity())).getType() == HitResult.Type.MISS;
         }
 
         if (Baritone.settings().elytraRenderRaytraces.value) {
@@ -1304,11 +1304,11 @@ public final class ElytraBehavior implements Helper {
     }
 
     private void queueWindowClick(int windowId, int slotId, int button, ContainerInput type) {
-        invTransactionQueue.add(() -> ctx.playerController().windowClick(windowId, slotId, button, type, ctx.player()));
+        invTransactionQueue.add(() -> ctx.playerController().windowClick(windowId, slotId, button, type, ctx.entity()));
     }
 
     private int findGoodElytra() {
-        NonNullList<ItemStack> invy = ctx.player().getInventory().getNonEquipmentItems();
+        NonNullList<ItemStack> invy = ctx.entity().getInventory().getNonEquipmentItems();
         for (int i = 0; i < invy.size(); i++) {
             ItemStack slot = invy.get(i);
             if (slot.getItem() == Items.ELYTRA && (slot.getMaxDamage() - slot.getDamageValue()) > Baritone.settings().elytraMinimumDurability.value) {
@@ -1323,7 +1323,7 @@ public final class ElytraBehavior implements Helper {
             return;
         }
 
-        ItemStack chest = ctx.player().getItemBySlot(EquipmentSlot.CHEST);
+        ItemStack chest = ctx.entity().getItemBySlot(EquipmentSlot.CHEST);
         if (chest.getItem() != Items.ELYTRA
                 || chest.getMaxDamage() - chest.getDamageValue() > Baritone.settings().elytraMinimumDurability.value) {
             return;
@@ -1333,9 +1333,9 @@ public final class ElytraBehavior implements Helper {
         if (goodElytraSlot != -1) {
             final int CHEST_SLOT = 6;
             final int slotId = goodElytraSlot < 9 ? goodElytraSlot + 36 : goodElytraSlot;
-            queueWindowClick(ctx.player().inventoryMenu.containerId, slotId, 0, ContainerInput.PICKUP);
-            queueWindowClick(ctx.player().inventoryMenu.containerId, CHEST_SLOT, 0, ContainerInput.PICKUP);
-            queueWindowClick(ctx.player().inventoryMenu.containerId, slotId, 0, ContainerInput.PICKUP);
+            queueWindowClick(ctx.entity().inventoryMenu.containerId, slotId, 0, ContainerInput.PICKUP);
+            queueWindowClick(ctx.entity().inventoryMenu.containerId, CHEST_SLOT, 0, ContainerInput.PICKUP);
+            queueWindowClick(ctx.entity().inventoryMenu.containerId, slotId, 0, ContainerInput.PICKUP);
         }
     }
 
@@ -1348,10 +1348,10 @@ public final class ElytraBehavior implements Helper {
     // so we don't get stuck trying to pathfind through the roof
     private BetterBlockPos fixDestination(BetterBlockPos dst) {
         if (ctx.world().dimension() == Level.NETHER) {
-            if (ctx.player().getY() >= 128 && dst.y < 128) {
+            if (ctx.entity().getY() >= 128 && dst.y < 128) {
                 return new BetterBlockPos(dst.x, 128, dst.z);
             }
-            else if (ctx.player().getY() < 128 && dst.y >= 128) {
+            else if (ctx.entity().getY() < 128 && dst.y >= 128) {
                 return new BetterBlockPos(dst.x, 64, dst.z);
             }
         }
@@ -1369,7 +1369,7 @@ public final class ElytraBehavior implements Helper {
         if (isOOB) {
             Vec3 start = new Vec3(startX, startY, startZ);
             Vec3 end = new Vec3(endX, endY, endZ);
-            return ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.player())).getType() == HitResult.Type.MISS;
+            return ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.entity())).getType() == HitResult.Type.MISS;
         }
 
         return npfContext.raytrace(startX, startY, startZ, endX, endY, endZ);
@@ -1380,7 +1380,7 @@ public final class ElytraBehavior implements Helper {
         final int minHeight = ctx.world().getMinY();
         final boolean isOOB = start.y >= maxHeight || end.y >= maxHeight || start.y < minHeight || end.y < minHeight;
         if (isOOB) {
-            return ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.player())).getType() == HitResult.Type.MISS;
+            return ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.entity())).getType() == HitResult.Type.MISS;
         }
         return npfContext.raytrace(start.x, start.y, start.z, end.x, end.y, end.z);
     }
@@ -1404,7 +1404,7 @@ public final class ElytraBehavior implements Helper {
             for (int i = 0; i < count; i++) {
                 Vec3 start = new Vec3(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]);
                 Vec3 end = new Vec3(dst[i * 3], dst[i * 3 + 1], dst[i * 3 + 2]);
-                if (ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.player())).getType() != HitResult.Type.MISS) {
+                if (ctx.world().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.entity())).getType() != HitResult.Type.MISS) {
                     return false;
                 }
             }

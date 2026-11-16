@@ -177,10 +177,10 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
 
     /** Standing on magma: sneaking is the only thing that stops it burning us, whatever else is steering. */
     boolean onMagma() {
-        if (ctx.player() == null || ctx.world() == null || !ctx.player().onGround()) {
+        if (ctx.entity() == null || ctx.world() == null || !ctx.entity().onGround()) {
             return false;
         }
-        net.minecraft.core.BlockPos below = net.minecraft.core.BlockPos.containing(ctx.player().position().add(0, -0.2, 0));
+        net.minecraft.core.BlockPos below = net.minecraft.core.BlockPos.containing(ctx.entity().position().add(0, -0.2, 0));
         return ctx.world().getBlockState(below).getBlock() == net.minecraft.world.level.block.Blocks.MAGMA_BLOCK;
     }
 
@@ -208,7 +208,7 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
 
         // Ostinato: the keyboard/movement-input swap only exists in the client's LocalPlayer; a headless bot
         // reads the forced inputs directly and never enters this branch.
-        if (ctx.player() instanceof net.minecraft.client.player.LocalPlayer local) {
+        if (ctx.entity() instanceof net.minecraft.client.player.LocalPlayer local) {
             if (inControl()) {
                 if (local.input.getClass() != PlayerMovementInput.class) {
                     local.input = new PlayerMovementInput(this);

@@ -249,7 +249,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        return active && ctx.player() != null && ctx.world() != null;
+        return active && ctx.entity() != null && ctx.world() != null;
     }
 
     private String layout() {
@@ -1118,17 +1118,17 @@ public final class BastionProcess extends BaritoneProcessHelper {
             stuckAvoider = this::avoidCell;
             AltoClefSettings.getInstance().getForceAvoidWalkThroughPredicates().add(stuckAvoider);
         }
-        if (ticks < nudgeUntil && nudgeDest != null && ctx.player() != null && !ctx.player().isInLava()) {
+        if (ticks < nudgeUntil && nudgeDest != null && ctx.entity() != null && !ctx.entity().isInLava()) {
             // walk straight at the step the planner keeps failing (run 16: 5 minutes at index 0 of a 2-block MovementFall)
-            Player p0 = ctx.player();
+            Player p0 = ctx.entity();
             // run 96: a MovementFall straight down through netherrack stalled with the netherrack held (no dig); walking
             // toward our own column does nothing, so dig the block under our feet ourselves (never into lava)
-            BlockPos under = ctx.player().blockPosition().below();
-            if (nudgeDest.getX() == ctx.player().blockPosition().getX() && nudgeDest.getZ() == ctx.player().blockPosition().getZ() && solid(under) && !lavaNearPos(under.below())) {
-                int pk = pickaxeSlot(ctx.player());
-                if (pk >= 0 && pk < 9) ctx.player().getInventory().setSelectedSlot(pk);
-                else if (pk >= 9) ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, pk, 7, ContainerInput.SWAP, ctx.player());
-                baritone.getLookBehavior().updateTarget(new Rotation(ctx.player().getYRot(), 90), true);
+            BlockPos under = ctx.entity().blockPosition().below();
+            if (nudgeDest.getX() == ctx.entity().blockPosition().getX() && nudgeDest.getZ() == ctx.entity().blockPosition().getZ() && solid(under) && !lavaNearPos(under.below())) {
+                int pk = pickaxeSlot(ctx.entity());
+                if (pk >= 0 && pk < 9) ctx.entity().getInventory().setSelectedSlot(pk);
+                else if (pk >= 9) ctx.playerController().windowClick(ctx.entity().inventoryMenu.containerId, pk, 7, ContainerInput.SWAP, ctx.entity());
+                baritone.getLookBehavior().updateTarget(new Rotation(ctx.entity().getYRot(), 90), true);
                 if (!under.equals(holeTarget)) { holeTarget = under; ctx.playerController().clickBlock(under, Direction.UP); }
                 else ctx.playerController().onPlayerDamageBlock(under, Direction.UP);
                 ticks++;
@@ -1142,16 +1142,16 @@ public final class BastionProcess extends BaritoneProcessHelper {
             status = "nudging toward " + nudgeDest.toShortString();
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        if (ctx.player() != null) {
-            selAtTickStart = ctx.player().getInventory().getSelectedSlot(); updateFlow(ctx.player(), brokeNextToFluid()); if (ticks - lastBlockTick == 3) { net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false); if (ctx.player().isUsingItem() && ctx.player().getUseItem().is(Items.SHIELD)) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(ctx.player()); }
+        if (ctx.entity() != null) {
+            selAtTickStart = ctx.entity().getInventory().getSelectedSlot(); updateFlow(ctx.entity(), brokeNextToFluid()); if (ticks - lastBlockTick == 3) { net.minecraft.client.Minecraft.getInstance().options.keyUse.setDown(false); if (ctx.entity().isUsingItem() && ctx.entity().getUseItem().is(Items.SHIELD)) net.minecraft.client.Minecraft.getInstance().gameMode.releaseUsingItem(ctx.entity()); }
             // picked-up counter from the inventory (counting the item we walked to missed most pickups, run 32: 2)
             int u = 0;
-            for (int i = 0; i < 36; i++) { ItemStack st = ctx.player().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
+            for (int i = 0; i < 36; i++) { ItemStack st = ctx.entity().getInventory().getItem(i); if (!st.isEmpty() && BastionGoals.barterUseful(itemId(st)) && !st.is(Items.GOLD_INGOT)) u += st.getCount(); }
             if (usefulSeen >= 0 && u > usefulSeen && ticks - throwTick < ADMIRE_TICKS + 600) lootPicked += u - usefulSeen;
             usefulSeen = u;
         }        EdgeCost.enabled = ticks >= relaxUntil;
         PathingCommand cmd = tick0(calcFailed, isSafeToCancel);
-        Player me = ctx.player();
+        Player me = ctx.entity();
         boolean walking = cmd != null && (cmd.commandType == PathingCommandType.SET_GOAL_AND_PATH
                 || cmd.commandType == PathingCommandType.REVALIDATE_GOAL_AND_PATH || cmd.commandType == PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
         if (!walking || me == null) {
@@ -1246,7 +1246,7 @@ public final class BastionProcess extends BaritoneProcessHelper {
     }
 
     private PathingCommand tick0(boolean calcFailed, boolean isSafeToCancel) {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         ticks++;
         baritone.getInputOverrideHandler().clearAllKeys();
         // the use key (shield, food) is only held by whoever needs it this tick; PveProcess leaves it down when we stop calling it
@@ -2395,9 +2395,9 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
      * avoidance setting: that one counts every mob, and piglins are who we came to see.
      */
     public List<baritone.utils.pathing.Avoidance> avoid() {
-        if (!active || ctx.player() == null || ctx.world() == null || BastionSettings.bruteAvoid == 1) return List.of();
+        if (!active || ctx.entity() == null || ctx.world() == null || BastionSettings.bruteAvoid == 1) return List.of();
         List<baritone.utils.pathing.Avoidance> out = new ArrayList<>();
-        for (PiglinBrute b : ctx.world().getEntitiesOfClass(PiglinBrute.class, ctx.player().getBoundingBox().inflate(48), PiglinBrute::isAlive))
+        for (PiglinBrute b : ctx.world().getEntitiesOfClass(PiglinBrute.class, ctx.entity().getBoundingBox().inflate(48), PiglinBrute::isAlive))
             out.add(new baritone.utils.pathing.Avoidance(b.blockPosition(), BastionSettings.bruteAvoid, BastionSettings.bruteAvoidRadius));
         return out;
     }
@@ -3610,7 +3610,7 @@ if (!solid(n) && !solid(n.above()) && !water(n) && !water(n.above())) {
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true);
             if (ticks % 6 == 0 && clipDesc(me).contains("lava")) {
                 // use the item directly: the bucket takes the fluid its own ray finds, the crosshair block is beside the point
-                ctx.playerController().processRightClick(ctx.player(), ctx.world(), net.minecraft.world.InteractionHand.MAIN_HAND);
+                ctx.playerController().processRightClick(ctx.entity(), ctx.world(), net.minecraft.world.InteractionHand.MAIN_HAND);
             }
             status = "perch: lava back";
             return pause0();

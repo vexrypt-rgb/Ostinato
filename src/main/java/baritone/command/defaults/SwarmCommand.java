@@ -264,7 +264,7 @@ public class SwarmCommand extends Command {
     // Ostinato: only this thin adapter reads Minecraft state; helpers can be tested without a client.
     private void spawn(SwarmSpawnArgs request, SwarmBehavior swarm) throws Exception {
         var mc = ctx.minecraft();
-        if (ctx.player() == null || mc.getConnection() == null || mc.level == null) {
+        if (ctx.entity() == null || mc.getConnection() == null || mc.level == null) {
             throw new IllegalArgumentException("Join a world with a connection before spawning bots");
         }
         var integrated = mc.getSingleplayerServer();
@@ -277,14 +277,14 @@ public class SwarmCommand extends Command {
             else if (mc.getCurrentServer() != null) server = mc.getCurrentServer().ip;
         }
         if (server == null || server.isBlank()) throw new IllegalArgumentException("Cannot determine current server; specify host:port");
-        String parent = ctx.player().getName().getString();
+        String parent = ctx.entity().getName().getString();
         SwarmSpawnRegistry registry = SwarmSpawnRegistry.INSTANCE;
         registry.checkNames(request.names(), parent);
         SwarmSpawnMemory.require(SwarmSpawnMemory::freeCommit, request.names().size());
         Path game = mc.gameDirectory.toPath().toAbsolutePath().normalize();
         Path userHome = Path.of(System.getProperty("user.home"));
         SwarmSpawnCommandBuilder.Snapshot snapshot = SwarmSpawnCommandBuilder.current(game);
-        boolean offline = SwarmSpawnAccounts.offline(server, parent, ctx.player().getUUID());
+        boolean offline = SwarmSpawnAccounts.offline(server, parent, ctx.entity().getUUID());
         List<Path> accountFiles = SwarmSpawnAccounts.launcherFiles(game);
         SecretProtector protector = null;
         try {

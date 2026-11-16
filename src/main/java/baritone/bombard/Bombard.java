@@ -172,7 +172,7 @@ public final class Bombard implements AbstractGameEventListener {
     @Override
     public void onTick(TickEvent event) {
         if (mode == Mode.OFF || event.getState() != EventState.PRE) return;
-        Player me = baritone.getPlayerContext().player();
+        Player me = baritone.getPlayerContext().entity();
         if (event.getType() != TickEvent.Type.IN || me == null || baritone.getPlayerContext().world() == null) {
             if (level != null) leave();
             return;

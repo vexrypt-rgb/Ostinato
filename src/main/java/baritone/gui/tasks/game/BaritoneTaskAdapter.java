@@ -152,7 +152,7 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
                 if (startedGoal == null) {
                     return "goto did not start";
                 }
-                return baritone().getPlayerContext().player() != null && startedGoal.isInGoal(baritone().getPlayerContext().playerFeet())
+                return baritone().getPlayerContext().entity() != null && startedGoal.isInGoal(baritone().getPlayerContext().playerFeet())
                         ? null : "stopped before reaching the goal";
             case MINE: {
                 int want = step.mineCount();
@@ -195,13 +195,13 @@ public final class BaritoneTaskAdapter implements TaskAdapter {
     }
 
     private static int count(TaskStep step) {
-        if (baritone().getPlayerContext().player() == null) {
+        if (baritone().getPlayerContext().entity() == null) {
             return 0;
         }
         try {
             BlockOptionalMetaLookup filter = new BlockOptionalMetaLookup(step.blocks());
             int n = 0;
-            for (ItemStack s : baritone().getPlayerContext().player().getInventory().getNonEquipmentItems()) {
+            for (ItemStack s : baritone().getPlayerContext().entity().getInventory().getNonEquipmentItems()) {
                 if (filter.has(s)) {
                     n += s.getCount();
                 }

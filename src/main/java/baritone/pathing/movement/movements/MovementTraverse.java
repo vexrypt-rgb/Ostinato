@@ -236,7 +236,7 @@ public class MovementTraverse extends Movement {
                 return state;
             }
             // and we aren't already pressed up against the block
-            double dist = Math.max(Math.abs(ctx.player().position().x - (dest.getX() + 0.5D)), Math.abs(ctx.player().position().z - (dest.getZ() + 0.5D)));
+            double dist = Math.max(Math.abs(ctx.entity().position().x - (dest.getX() + 0.5D)), Math.abs(ctx.entity().position().z - (dest.getZ() + 0.5D)));
             if (dist < 0.83) {
                 return state;
             }
@@ -302,7 +302,7 @@ public class MovementTraverse extends Movement {
         boolean swim = FastMode.swimInWater()
                 && MovementHelper.isLiquid(ctx, src)
                 && MovementHelper.isLiquid(ctx, dest)
-                && (ctx.player().isSwimming()
+                && (ctx.entity().isSwimming()
                     || (ctx.world().getBlockState(dest.below()).equals(pb1)
                         && ctx.world().getBlockState(src.below()).equals(pb1)))
                 && ctx.playerFeetAsVec().y >= src.y - 1;
@@ -326,7 +326,7 @@ public class MovementTraverse extends Movement {
             }
             Block low = BlockStateInterface.get(ctx, src).getBlock();
             Block high = BlockStateInterface.get(ctx, src.above()).getBlock();
-            if (ctx.player().position().y > src.y + 0.1D && !ctx.player().onGround() && (MovementHelper.isClimbable(low) || MovementHelper.isClimbable(high))) {
+            if (ctx.entity().position().y > src.y + 0.1D && !ctx.entity().onGround() && (MovementHelper.isClimbable(low) || MovementHelper.isClimbable(high))) {
                 // hitting W could cause us to climb the ladder instead of going forward
                 // wait until we're on the ground
                 return state;
@@ -351,7 +351,7 @@ public class MovementTraverse extends Movement {
             wasTheBridgeBlockAlwaysThere = false;
             Block standingOn = BlockStateInterface.get(ctx, feet.below()).getBlock();
             if ((standingOn.equals(Blocks.SOUL_SAND) && !AltoClefSettings.getInstance().shouldTreatSoulSandAsOrdinaryBlock()) || standingOn instanceof SlabBlock) { // see issue #118
-                double dist = Math.max(Math.abs(dest.getX() + 0.5 - ctx.player().position().x), Math.abs(dest.getZ() + 0.5 - ctx.player().position().z));
+                double dist = Math.max(Math.abs(dest.getX() + 0.5 - ctx.entity().position().x), Math.abs(dest.getZ() + 0.5 - ctx.entity().position().z));
                 if (dist < 0.85) { // 0.5 + 0.3 + epsilon
                     MovementHelper.moveTowards(ctx, state, dest);
                     return state.setInput(Input.MOVE_FORWARD, false)
@@ -362,14 +362,14 @@ public class MovementTraverse extends Movement {
             if (Baritone.settings().allowGodBridge.value && !Baritone.settings().assumeSafeWalk.value && godBridge(state)) {
                 return state;
             }
-            double dist1 = Math.max(Math.abs(ctx.player().position().x - (dest.getX() + 0.5D)), Math.abs(ctx.player().position().z - (dest.getZ() + 0.5D)));
+            double dist1 = Math.max(Math.abs(ctx.entity().position().x - (dest.getX() + 0.5D)), Math.abs(ctx.entity().position().z - (dest.getZ() + 0.5D)));
             PlaceResult p = MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), false, !Baritone.settings().assumeSafeWalk.value);
             if ((p == PlaceResult.READY_TO_PLACE || dist1 < 0.6) && !Baritone.settings().assumeSafeWalk.value) {
                 state.setInput(Input.SNEAK, true);
             }
             switch (p) {
                 case READY_TO_PLACE: {
-                    if (ctx.player().isCrouching() || Baritone.settings().assumeSafeWalk.value) {
+                    if (ctx.entity().isCrouching() || Baritone.settings().assumeSafeWalk.value) {
                         state.setInput(Input.CLICK_RIGHT, true);
                     }
                     return state;
@@ -402,7 +402,7 @@ public class MovementTraverse extends Movement {
 
                 Rotation backToFace = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
                 float pitch = backToFace.getPitch();
-                double dist2 = Math.max(Math.abs(ctx.player().position().x - faceX), Math.abs(ctx.player().position().z - faceZ));
+                double dist2 = Math.max(Math.abs(ctx.entity().position().x - faceX), Math.abs(ctx.entity().position().z - faceZ));
                 if (dist2 < 0.29) { // see issue #208
                     float yaw = RotationUtils.calcRotationFromVec3d(VecUtils.getBlockPosCenter(dest), ctx.playerHead(), ctx.playerRotations()).getYaw();
                     state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, pitch), true));
@@ -508,7 +508,7 @@ public class MovementTraverse extends Movement {
 
     // Ostinato: one tick of a god bridge. False leaves the sneak backplace to run, with no keys changed here.
     private boolean godBridge(MovementState state) {
-        if (ctx.player().isInWater() || ctx.player().isInLava() || ctx.player().getY() < src.getY() - 0.05) {
+        if (ctx.entity().isInWater() || ctx.entity().isInLava() || ctx.entity().getY() < src.getY() - 0.05) {
             return false;
         }
         BlockState anchor = BlockStateInterface.get(ctx, src.below());
@@ -533,8 +533,8 @@ public class MovementTraverse extends Movement {
         }
         int dx = dest.getX() - src.getX();
         int dz = dest.getZ() - src.getZ();
-        double px = ctx.player().getX();
-        double pz = ctx.player().getZ();
+        double px = ctx.entity().getX();
+        double pz = ctx.entity().getZ();
         double cx = src.getX() + 0.5;
         double cz = src.getZ() + 0.5;
         double past = dx * (px - cx) + dz * (pz - cz) - 0.5;
@@ -547,17 +547,17 @@ public class MovementTraverse extends Movement {
         if (GodBridge.sneakInstead(facing, past)) {
             return false;
         }
-        if (!ctx.player().onGround() && past > 0) {
+        if (!ctx.entity().onGround() && past > 0) {
             return false;
         }
-        Vec3 delta = ctx.player().getDeltaMovement();
+        Vec3 delta = ctx.entity().getDeltaMovement();
         double dragged = dx * delta.x + dz * delta.z;
-        double upcoming = facing && ctx.player().onGround() ? GodBridge.displacement(dragged) : dragged;
+        double upcoming = facing && ctx.entity().onGround() ? GodBridge.displacement(dragged) : dragged;
         double predict = past + upcoming;
         Rotation aim;
         if (predict > 0) {
-            double eye = ctx.playerHead().y - ctx.player().getY();
-            Vec3 from = new Vec3(px + dx * upcoming, ctx.player().getY() + eye, pz + dz * upcoming);
+            double eye = ctx.playerHead().y - ctx.entity().getY();
+            Vec3 from = new Vec3(px + dx * upcoming, ctx.entity().getY() + eye, pz + dz * upcoming);
             double faceX = (dest.getX() + src.getX() + 1.0D) * 0.5D;
             double faceY = (dest.getY() + src.getY() - 1.0D) * 0.5D;
             double faceZ = (dest.getZ() + src.getZ() + 1.0D) * 0.5D;

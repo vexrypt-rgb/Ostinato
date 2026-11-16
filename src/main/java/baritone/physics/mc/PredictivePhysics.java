@@ -78,7 +78,7 @@ public final class PredictivePhysics extends Behavior implements IPredictivePhys
     public BodyState capture(Entity entity) {
         if (!ctx.minecraft().isSameThread()) throw new IllegalStateException("capture off the game thread");
         if (!BodyCapture.supported(entity)) throw new IllegalArgumentException("no body type for " + entity.getType());
-        return BodyCapture.read(entity, entity == ctx.player(), baritone.getHealthEstimator());
+        return BodyCapture.read(entity, entity == ctx.entity(), baritone.getHealthEstimator());
     }
 
     @Override

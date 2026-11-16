@@ -76,7 +76,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     }
 
     public String start(long seed) {
-        if (ctx.player() == null) return "No world";
+        if (ctx.entity() == null) return "No world";
         BlockPos feet = ctx.playerFeet();
         entryTop = feet;
         // Ostinato: root node 17 blocks east and 16 down from where the command was used; an entry stair leads there
@@ -140,7 +140,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        if (phase == Phase.OFF || ctx.player() == null) return false;
+        if (phase == Phase.OFF || ctx.entity() == null) return false;
         if (phase == Phase.DIG) {
             if (baritone.getBuilderProcess().isActive()) {
                 if (bestPickLeft() > 0) {
@@ -272,8 +272,8 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (ctx.playerHead().distanceTo(hit) > 4.0) return new PathingCommand(new GoalNear(t, 1), PathingCommandType.SET_GOAL_AND_PATH);
         baritone.getInventoryBehavior().throwaway(true, st -> st.is(Items.TORCH), true);
         baritone.getLookBehavior().updateTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), hit, ctx.playerRotations()), true);
-        if (torchTicks % 5 == 0 && ctx.player().getMainHandItem().is(Items.TORCH)) {
-            ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND,
+        if (torchTicks % 5 == 0 && ctx.entity().getMainHandItem().is(Items.TORCH)) {
+            ctx.playerController().processRightClickBlock(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND,
                     new BlockHitResult(hit, Direction.UP, t.below(), false));
         }
         return new PathingCommand((Goal) null, PathingCommandType.REQUEST_PAUSE);
@@ -338,7 +338,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         // more than the stone picks already held (worn or not), and one more again each time a hard ask came back
         // with still no usable pick, so the provisioner must actually craft a fresh one.
         int heldStone = 0;
-        var inv = ctx.player().getInventory();
+        var inv = ctx.entity().getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) if (inv.getItem(i).is(Items.STONE_PICKAXE)) heldStone += inv.getItem(i).getCount();
         // Ostinato: +2 (a fresh pick and a spare). A stone pick lasts ~2 edges, and every ask can mean a trip up for logs;
         // one table visit for two picks halves the trips.
@@ -360,7 +360,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
 
     /** Best remaining durability fraction over pickaxes not about to break (0 = none usable). */
     private double bestPickLeft() {
-        var inv = ctx.player().getInventory();
+        var inv = ctx.entity().getInventory();
         double best = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
@@ -430,7 +430,7 @@ public final class TunnelProcess extends BaritoneProcessHelper {
     /** What the survival kit is missing right now. Catalogue names for TenorClef. */
     private Map<String, Integer> needs() {
         Map<String, Integer> n = new LinkedHashMap<>();
-        var inv = ctx.player().getInventory();
+        var inv = ctx.entity().getInventory();
         int ironPicks = 0, picks = 0, food = 0, torches = 0, beds = 0, shovels = 0, swords = 0;
         double bestPick = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
@@ -455,10 +455,10 @@ public final class TunnelProcess extends BaritoneProcessHelper {
         if (swords == 0) n.put(tier("sword", "stone") + "_sword", 1);
         if (food < 6) n.put("food", 20);
         if (torches < 8) n.put("torch", 16);
-        if (ctx.player().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:" + tier("helmet", "iron") + "_helmet", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:" + tier("chestplate", "iron") + "_chestplate", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:" + tier("leggings", "iron") + "_leggings", 1);
-        if (ctx.player().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:" + tier("boots", "iron") + "_boots", 1);
+        if (ctx.entity().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) n.put("equip:" + tier("helmet", "iron") + "_helmet", 1);
+        if (ctx.entity().getItemBySlot(EquipmentSlot.CHEST).isEmpty()) n.put("equip:" + tier("chestplate", "iron") + "_chestplate", 1);
+        if (ctx.entity().getItemBySlot(EquipmentSlot.LEGS).isEmpty()) n.put("equip:" + tier("leggings", "iron") + "_leggings", 1);
+        if (ctx.entity().getItemBySlot(EquipmentSlot.FEET).isEmpty()) n.put("equip:" + tier("boots", "iron") + "_boots", 1);
         BlockPos f = face();
         if (bed == null || horiz(bed, f) > BED_RANGE) {
             BlockPos placed = phase == Phase.PROVISION && lastNeeds.containsKey("bed") ? bedNear(ctx.playerFeet(), 5) : null;

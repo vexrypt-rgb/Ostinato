@@ -62,7 +62,7 @@ final class CombatAim {
 
     boolean face(float yaw, float pitch, float tol) {
         aim(new Rotation(yaw, pitch), true);
-        Player me = ctx.player();
+        Player me = ctx.entity();
         return Math.abs(Mth.wrapDegrees(yaw - me.getYRot())) <= tol && Math.abs(pitch - me.getXRot()) <= tol;
     }
 

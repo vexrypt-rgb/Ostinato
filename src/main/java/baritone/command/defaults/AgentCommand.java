@@ -55,7 +55,7 @@ public class AgentCommand extends Command {
         }
         String message = text.toString();
         Settings settings = Baritone.settings();
-        String sender = ctx.player() == null ? "" : ctx.player().getName().getString();
+        String sender = ctx.entity() == null ? "" : ctx.entity().getName().getString();
         if (!AgentPolicy.ownerAllowed(settings.agentOwnerOnly.value, settings.agentOwner.value, sender)) {
             logDirect("agent: owner only");
             return;
@@ -177,7 +177,7 @@ public class AgentCommand extends Command {
             }
             try {
                 // Ostinato: AI tool calls go through the unified registry. Owner-only commands are refused here.
-                String actor = ctx.player() == null ? "" : ctx.player().getName().getString();
+                String actor = ctx.entity() == null ? "" : ctx.entity().getName().getString();
                 RegistryCall call = RegistryCall.ai(actor,
                         Baritone.settings().agentOwner.value, Baritone.settings().agentOwnerOnly.value,
                         Baritone.settings().agentTools.value, false, line);

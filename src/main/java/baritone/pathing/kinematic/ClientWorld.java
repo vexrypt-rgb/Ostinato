@@ -40,16 +40,16 @@ public final class ClientWorld implements PlayerSim.World {
      * and {@link PlayerSim} does not follow them: anything that rolls it forward from the player is wrong then.
      */
     public static boolean plainGravity(IPlayerContext ctx) {
-        return !ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)
-                && !ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
-                && Math.abs(ctx.player().getGravity() - 0.08) < 1e-6;
+        return !ctx.entity().hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)
+                && !ctx.entity().hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                && Math.abs(ctx.entity().getGravity() - 0.08) < 1e-6;
     }
 
     /** The player's ground speed against the plain walk: above 1 under Speed, below it under Slowness. */
     private static double walkScale(IPlayerContext ctx) {
         // the attribute carries the sprint bonus while sprinting, which the simulator adds itself
-        double walk = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
-                / (ctx.player().isSprinting() ? 1 + SPRINT_BONUS : 1);
+        double walk = ctx.entity().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
+                / (ctx.entity().isSprinting() ? 1 + SPRINT_BONUS : 1);
         return near(walk / WALK_SPEED, 1);
     }
 
@@ -72,34 +72,34 @@ public final class ClientWorld implements PlayerSim.World {
      */
     public static void readEffects(IPlayerContext ctx, PlayerSim sim) {
         sim.speedScale = walkScale(ctx);
-        double jump = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.JUMP_STRENGTH);
+        double jump = ctx.entity().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.JUMP_STRENGTH);
         sim.jumpStrength = near(jump, JUMP_STRENGTH) == JUMP_STRENGTH ? 0.42 : jump;
-        sim.jumpBoost = ctx.player().getJumpBoostPower();
+        sim.jumpBoost = ctx.entity().getJumpBoostPower();
         // Soul Speed raises this only while the player stands on a soul block: read from anywhere else it is 0
-        sim.movementEfficiency = ctx.player().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_EFFICIENCY);
+        sim.movementEfficiency = ctx.entity().getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_EFFICIENCY);
     }
 
     /** Loads the real player's position, velocity, collision flags, speed and jump strength into {@code sim}. */
     public static void readPlayer(IPlayerContext ctx, PlayerSim sim) {
         readEffects(ctx, sim);
-        Vec3 p = ctx.player().position();
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 p = ctx.entity().position();
+        Vec3 m = ctx.entity().getDeltaMovement();
         sim.x = p.x;
         sim.y = p.y;
         sim.z = p.z;
         sim.vx = m.x;
         sim.vy = m.y;
         sim.vz = m.z;
-        sim.onGround = ctx.player().onGround();
-        sim.sprinting = ctx.player().isSprinting();
-        sim.collidedH = ctx.player().horizontalCollision;
-        sim.minorCollision = ctx.player().minorHorizontalCollision;
+        sim.onGround = ctx.entity().onGround();
+        sim.sprinting = ctx.entity().isSprinting();
+        sim.collidedH = ctx.entity().horizontalCollision;
+        sim.minorCollision = ctx.entity().minorHorizontalCollision;
         readSupport(ctx, sim);
     }
 
     /** Loads the block the real player stands on (Entity.mainSupportingBlockPos), for a sim already given its onGround. */
     public static void readSupport(IPlayerContext ctx, PlayerSim sim) {
-        BlockPos sup = ctx.player().mainSupportingBlockPos.orElse(null);
+        BlockPos sup = ctx.entity().mainSupportingBlockPos.orElse(null);
         sim.supported = sup != null;
         // Entity.onGroundNoBlocks is private; after a move it is exactly "on the ground with no supporting block"
         sim.onGroundNoBlocks = sim.onGround && sup == null;
@@ -193,7 +193,7 @@ public final class ClientWorld implements PlayerSim.World {
         if (soulSpeed == null) {
             soulSpeed = false;
             for (net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> e
-                    : ctx.player().getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).getEnchantments().keySet()) {
+                    : ctx.entity().getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).getEnchantments().keySet()) {
                 if (e.is(net.minecraft.world.item.enchantment.Enchantments.SOUL_SPEED)) soulSpeed = true;
             }
         }

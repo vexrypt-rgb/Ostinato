@@ -37,12 +37,12 @@ public final class LegitGatherLive {
         facts.originX = originX;
         facts.originZ = originZ;
         facts.block = block == null ? "stone" : block;
-        if (ctx == null || ctx.player() == null || ctx.world() == null) {
+        if (ctx == null || ctx.entity() == null || ctx.world() == null) {
             facts.unreadable = true;
             return facts;
         }
         try {
-            Player player = ctx.player();
+            Player player = ctx.entity();
             Level world = ctx.world();
             BlockPos feet = player.blockPosition();
             facts.feetX = feet.getX();

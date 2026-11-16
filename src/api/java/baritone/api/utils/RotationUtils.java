@@ -193,7 +193,7 @@ public final class RotationUtils {
             Rotation hypothetical = ctx.playerRotations().add(new Rotation(0, 0.0001F));
             if (wouldSneak) {
                 // the concern here is: what if we're looking at it now, but as soon as we start sneaking we no longer are
-                HitResult result = RayTraceUtils.rayTraceTowards(ctx.player(), hypothetical, blockReachDistance, true);
+                HitResult result = RayTraceUtils.rayTraceTowards(ctx.entity(), hypothetical, blockReachDistance, true);
                 if (result != null && result.getType() == HitResult.Type.BLOCK && ((BlockHitResult) result).getBlockPos().equals(pos)) {
                     return Optional.of(hypothetical); // yes, if we sneaked we would still be looking at the block
                 }
@@ -236,15 +236,15 @@ public final class RotationUtils {
      * @return The optional rotation
      */
     public static Optional<Rotation> reachableOffset(IPlayerContext ctx, BlockPos pos, Vec3 offsetPos, double blockReachDistance, boolean wouldSneak) {
-        Vec3 eyes = wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.player().getEyePosition(1.0F);
+        Vec3 eyes = wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.entity()) : ctx.entity().getEyePosition(1.0F);
         Rotation rotation = calcRotationFromVec3d(eyes, offsetPos, ctx.playerRotations());
         // Ostinato: peekAim, not peekRotation. The turn cap made every block more than one tick off the view unreachable.
         // A headless context has no provider registration (the provider builds a client Baritone) and aims instantly,
         // so the requested rotation is already the one the next look tick applies.
         Rotation actualRotation = ctx.minecraft() == null
                 ? rotation
-                : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player()).getLookBehavior().getAimProcessor().peekAim(rotation);
-        HitResult result = RayTraceUtils.rayTraceTowards(ctx.player(), actualRotation, blockReachDistance, wouldSneak);
+                : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.entity()).getLookBehavior().getAimProcessor().peekAim(rotation);
+        HitResult result = RayTraceUtils.rayTraceTowards(ctx.entity(), actualRotation, blockReachDistance, wouldSneak);
         //System.out.println(result);
         if (result != null && result.getType() == HitResult.Type.BLOCK) {
             if (((BlockHitResult) result).getBlockPos().equals(pos)) {

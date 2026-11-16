@@ -219,7 +219,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             }
             return;
         }
-        String self = ctx.player().getName().getString();
+        String self = ctx.entity().getName().getString();
         String settings = settingsKey(s);
         if (startedWith != null && !startedWith.equals(settings)) {
             stop(true); // Ostinato: planned settings restart.
@@ -1071,12 +1071,12 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
         @Override
         public String name() {
-            return ctx.player() == null ? "?" : ctx.player().getName().getString();
+            return ctx.entity() == null ? "?" : ctx.entity().getName().getString();
         }
 
         @Override
         public String position() {
-            if (ctx.player() == null) {
+            if (ctx.entity() == null) {
                 return "?";
             }
             BetterBlockPos p = ctx.playerFeet();

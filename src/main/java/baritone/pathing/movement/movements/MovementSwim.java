@@ -256,7 +256,7 @@ public class MovementSwim extends Movement {
             return state;
         }
         BetterBlockPos feet = ctx.playerFeet();
-        Vec3 pos = ctx.player().position();
+        Vec3 pos = ctx.entity().position();
         double hx = dest.x + 0.5 - pos.x, hz = dest.z + 0.5 - pos.z;
         double horiz = Math.sqrt(hx * hx + hz * hz);
         // Block-level arrival is enough: sprint-swimming carries momentum, so demanding the column
@@ -283,12 +283,12 @@ public class MovementSwim extends Movement {
             state.setInput(Input.SPRINT, true);
             // Looking up only steers the swim pose upward while jumping (or with water overhead).
             state.setInput(Input.JUMP, true);
-            if (!ctx.player().isSwimming() && !ctx.player().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
+            if (!ctx.entity().isSwimming() && !ctx.entity().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
                 state.setInput(Input.SNEAK, true);
             }
             return state;
         }
-        if (vertical && dest.y > src.y && falling(dest) && falling(dest.above()) && ctx.player().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
+        if (vertical && dest.y > src.y && falling(dest) && falling(dest.above()) && ctx.entity().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
             // Up a waterfall: sprint-swim looking straight up, pressed into a side wall so forward thrust
             // can't carry us out of the column.
             for (Direction d : Direction.Plane.HORIZONTAL) {
@@ -315,7 +315,7 @@ public class MovementSwim extends Movement {
         // Against a step edge (a stream down stairs) or sagging below the lane: jumping in water
         // against a wall is vanilla's climb-out boost; it also keeps us up in a current.
         if (++stallTicks % 40 == 0) {
-            net.minecraft.world.entity.player.Player pl = ctx.player();
+            net.minecraft.world.entity.player.Player pl = ctx.entity();
             logDebug(String.format("swim stall %s->%s pos=%.2f,%.2f,%.2f swim=%b sprint=%b food=%d hcol=%b vcol=%b eye=%b",
                     src, dest, pos.x, pos.y, pos.z, pl.isSwimming(), pl.isSprinting(), pl.getFoodData().getFoodLevel(),
                     pl.horizontalCollision, pl.verticalCollision, pl.isEyeInFluid(net.minecraft.tags.FluidTags.WATER)));
@@ -324,11 +324,11 @@ public class MovementSwim extends Movement {
         boolean step = !MovementHelper.isWater(ctx, new BetterBlockPos(dest.x, feet.y, dest.z))
                 || (pos.y < feet.y && !MovementHelper.isWater(ctx, new BetterBlockPos(dest.x, feet.y - 1, dest.z))
                     && !ctx.world().getBlockState(new BetterBlockPos(dest.x, feet.y - 1, dest.z)).getCollisionShape(ctx.world(), new BetterBlockPos(dest.x, feet.y - 1, dest.z)).isEmpty());
-        if (ctx.player().horizontalCollision && !step) {
+        if (ctx.entity().horizontalCollision && !step) {
             // Head against a roof lip over open water: sink under it, jumping only wedges us into the edge.
             // keep MOVE_FORWARD: without it applySwim never runs and the bot just floats against the lip
             state.setInput(Input.SNEAK, true);
-        } else if (dest.y >= feet.y && ((ctx.player().horizontalCollision && step) || pos.y < dest.y - 0.1)) {
+        } else if (dest.y >= feet.y && ((ctx.entity().horizontalCollision && step) || pos.y < dest.y - 0.1)) {
             state.setInput(Input.JUMP, true);
         }
         return state;

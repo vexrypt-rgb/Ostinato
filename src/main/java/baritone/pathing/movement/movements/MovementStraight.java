@@ -75,7 +75,7 @@ public class MovementStraight extends Movement {
 
     @Override
     protected boolean safeToCancel(MovementState state) {
-        return state.getStatus() != MovementStatus.RUNNING || ctx.player().onGround();
+        return state.getStatus() != MovementStatus.RUNNING || ctx.entity().onGround();
     }
 
     @Override
@@ -88,8 +88,8 @@ public class MovementStraight extends Movement {
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
         }
-        Vec3 p = ctx.player().position();
-        boolean ground = ctx.player().onGround();
+        Vec3 p = ctx.entity().position();
+        boolean ground = ctx.entity().onGround();
         if (p.y < src.y - 0.25 || (ground && (feet.y != src.y || !getValidPositions().contains(feet)))) {
             failed(feet);
             return state.setStatus(MovementStatus.FAILED);

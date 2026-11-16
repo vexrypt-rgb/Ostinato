@@ -291,9 +291,9 @@ public class MovementJump extends Movement {
 
     private MovementState fail(MovementState state, String why) {
         JumpFailures.mark(failKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis());
-        logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.player().position() + "); this jump costs more for 30s");
+        logDebug(why + " (" + src + " -> " + dest + ", at " + ctx.entity().position() + "); this jump costs more for 30s");
         if (Baritone.settings().kinematicTrace.value) {
-            System.out.println("KTRACE jumpfail " + why + " " + src + "->" + dest + " t=" + t.a + "," + t.dy + "," + t.b + " r" + t.runUp + " at " + ctx.player().position() + " v=" + ctx.player().getDeltaMovement());
+            System.out.println("KTRACE jumpfail " + why + " " + src + "->" + dest + " t=" + t.a + "," + t.dy + "," + t.b + " r" + t.runUp + " at " + ctx.entity().position() + " v=" + ctx.entity().getDeltaMovement());
         }
         return state.setStatus(MovementStatus.UNREACHABLE);
     }
@@ -1200,7 +1200,7 @@ public class MovementJump extends Movement {
             glide = new PlayerSim(s.world());
         }
         glide.copyFrom(s);
-        float yaw = ctx.player().getYRot();
+        float yaw = ctx.entity().getYRot();
         for (int i = 0; i < 40 && Math.abs(glide.vx) + Math.abs(glide.vz) > 0.003; i++) {
             glide.tick(yaw, 0, false, false);
             if (glide.y < s.y - 0.5) {
@@ -1232,7 +1232,7 @@ public class MovementJump extends Movement {
         double keep = slip * 0.91, coast = 1 / (1 - keep);
         double amax = 0.1 * real.speedScale * (0.21600002 / (slip * slip * slip)) * 0.98;
         double ax = dx / coast - m.x, az = dz / coast - m.z;
-        float yaw = ctx.player().getYRot();
+        float yaw = ctx.entity().getYRot();
         state.setTarget(new MovementState.MovementTarget(new Rotation(js.yaw(js.plan, false, 0), ctx.playerRotations().getPitch()), true));
         double sin = Math.sin(Math.toRadians(yaw)), cos = Math.cos(Math.toRadians(yaw));
         // world push = left * (cos, sin) + forward * (-sin, cos), as PlayerSim.tick
@@ -1250,9 +1250,9 @@ public class MovementJump extends Movement {
     }
 
     private void stepIn(MovementState state) {
-        double dx = dest.x + 0.5 - ctx.player().getX();
-        double dz = dest.z + 0.5 - ctx.player().getZ();
-        int[] k = StepIn.keys(ctx.player().getYRot(), dx, dz);
+        double dx = dest.x + 0.5 - ctx.entity().getX();
+        double dz = dest.z + 0.5 - ctx.entity().getZ();
+        int[] k = StepIn.keys(ctx.entity().getYRot(), dx, dz);
         state.setInput(Input.MOVE_FORWARD, k[0] > 0);
         state.setInput(Input.MOVE_BACK, k[0] < 0);
         state.setInput(Input.MOVE_LEFT, k[1] > 0);
@@ -1283,7 +1283,7 @@ public class MovementJump extends Movement {
         // Landing.on accepts a centre past the side of dest, and the feet block is then the next column.
         // Success used to release every key on that tick. A fast landing that stays on the block is handed
         // straight on; anything else steps toward the middle, the same as a grid landing.
-        if (ctx.player().onGround()) {
+        if (ctx.entity().onGround()) {
             if (ctx.playerFeet().equals(dest) && keepsSpeed(real)) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
@@ -1357,7 +1357,7 @@ public class MovementJump extends Movement {
         if (trace == null) {
             trace = new SimTrace("jump " + t.a + "," + t.dy + "," + t.b + " runUp=" + t.runUp, new ClientWorld(ctx), PredictionTolerance.active());
         }
-        trace.observe(real, ctx.player().getYRot());
+        trace.observe(real, ctx.entity().getYRot());
         trace.commit(real, yaw, in, in > 0, jump);
     }
 
@@ -1373,7 +1373,7 @@ public class MovementJump extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         // Ostinato: measured from the real floor: off a daylight sensor (top at 0.375) the feet stand 0.625 under src.y
         if (p.y < Math.min(floorY(src), floorY(dest)) - 0.6) {
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -1394,7 +1394,7 @@ public class MovementJump extends Movement {
             js.ledge = t.ledge;
             System.arraycopy(t.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 m = ctx.entity().getDeltaMovement();
         ClientWorld.readPlayer(ctx, real);
         if (landed) {
             // A neo lands with its centre past the side. Three ticks of no keys, the old settle, slides that
@@ -1436,7 +1436,7 @@ public class MovementJump extends Movement {
                 // yaw the player has now. If none exists, fly a snap plan anyway: waiting for the yaw spends
                 // the landing speed, and the 2-wall then misses (drill_hh 20:53, 0/8).
                 js.slewYaw = true;
-                js.faceYaw = ctx.player().getYRot();
+                js.faceYaw = ctx.entity().getYRot();
                 boolean found = js.search(real, true) || js.search(real, false);
                 if (!found) {
                     js.slewYaw = false;
@@ -1444,7 +1444,7 @@ public class MovementJump extends Movement {
                 }
                 if (found) {
                     running = true;
-                    PositionSync.sync(ctx.player());
+                    PositionSync.sync(ctx.entity());
                 }
             }
             if (!running) {
@@ -1474,7 +1474,7 @@ public class MovementJump extends Movement {
                 if (JumpTemplates.MOMENTUM.contains(t)) {
                     running = true;
                     state.setInput(Input.SNEAK, false);
-                    PositionSync.sync(ctx.player());
+                    PositionSync.sync(ctx.entity());
                 } else {
                     boolean still = Math.abs(m.x) + Math.abs(m.z) <= 0.02;
                     if (edge && Math.abs(m.x) + Math.abs(m.z) > 0.003 && stopWait++ < 12) {
@@ -1489,7 +1489,7 @@ public class MovementJump extends Movement {
                         // more than an aim step off. The head-hitter 3-gap (runUp=0) was flown at 68° of lag and
                         // missed; a plan the look can follow is used when this search finds one.
                         float want = js.yaw(js.plan, false, 0);
-                        float err = Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot()));
+                        float err = Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.entity().getYRot()));
                         if (along <= 0 && err > JumpSearch.YAW_STEP) {
                             // Ostinato: still moving away from the jump (the last landing's slide): that speed is no
                             // run-up, and a plan from it snaps the look round mid-run. Cubed level 1's head-hitter
@@ -1499,7 +1499,7 @@ public class MovementJump extends Movement {
                         if (!slewTried && err > JumpSearch.YAW_STEP) {
                             slewTried = true;
                             js.slewYaw = true;
-                            js.faceYaw = ctx.player().getYRot();
+                            js.faceYaw = ctx.entity().getYRot();
                             if (!(js.search(real, true) || js.search(real, false))) {
                                 js.slewYaw = false;
                             }
@@ -1518,7 +1518,7 @@ public class MovementJump extends Movement {
                             brute.beam = 2500;
                             brute.maxTicks = 22;
                             brute.nativeSearch = Baritone.settings().nativeAcceleration.value;
-                            tasPlan = brute.search(real, ctx.player().getYRot(), new TasBrute.Landing(dest.x, dest.y, dest.z));
+                            tasPlan = brute.search(real, ctx.entity().getYRot(), new TasBrute.Landing(dest.x, dest.y, dest.z));
                             tasTick = 0;
                             if (tasPlan == null) {
                                 return fail(state, "no jump from here");
@@ -1526,7 +1526,7 @@ public class MovementJump extends Movement {
                         } else {
                             // Stopped, so face the plan before the first tick. The search assumed that facing.
                             float want = js.yaw(js.plan, false, 0);
-                            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.player().getYRot())) > TURN_FIRST_DEG && turnWait++ < TURN_FIRST_TICKS) {
+                            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(want - ctx.entity().getYRot())) > TURN_FIRST_DEG && turnWait++ < TURN_FIRST_TICKS) {
                                 lookAt(state, want);
                                 return state;
                             }
@@ -1536,7 +1536,7 @@ public class MovementJump extends Movement {
                     state.setInput(Input.SNEAK, false);
                     // the client only reports moves over 0.03, and a neo starts ~0.01 off the wall: sync the server's copy of our
                     // position first, or it replays the jump from a stale spot inside the wall and rubber-bands us back
-                    PositionSync.sync(ctx.player());
+                    PositionSync.sync(ctx.entity());
                 }
             }
         }
@@ -1548,7 +1548,7 @@ public class MovementJump extends Movement {
         }
         if (js.slewYaw) {
             // run() resims from this tick. The cap has to start at the look we have now, not the yaw at take-off.
-            js.faceYaw = ctx.player().getYRot();
+            js.faceYaw = ctx.entity().getYRot();
         }
         if (replanCooldown > 0) {
             replanCooldown--;

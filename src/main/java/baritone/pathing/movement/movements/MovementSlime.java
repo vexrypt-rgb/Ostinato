@@ -332,7 +332,7 @@ public class MovementSlime extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         if (p.y < Math.min(o.bounceY, dest.y) - 0.6) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
@@ -346,7 +346,7 @@ public class MovementSlime extends Movement {
             real = new PlayerSim(world);
             System.arraycopy(o.plan, 0, js.plan, 0, JumpSearch.DIMS);
         }
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 m = ctx.entity().getDeltaMovement();
         ClientWorld.readPlayer(ctx, real);
         if (landed) {
             settle++;
@@ -372,7 +372,7 @@ public class MovementSlime extends Movement {
                 return state;
             }
             float first = js.yaw(js.plan, false, 0);
-            float off = ((first - ctx.player().getYRot()) % 360 + 540) % 360 - 180;
+            float off = ((first - ctx.entity().getYRot()) % 360 + 540) % 360 - 180;
             if (Math.abs(off) > 8) {
                 // Ostinato: an angled take-off: face the plan's first yaw standing still, the run-up assumes it
                 state.setTarget(new MovementState.MovementTarget(new Rotation(first, ctx.playerRotations().getPitch()), true));

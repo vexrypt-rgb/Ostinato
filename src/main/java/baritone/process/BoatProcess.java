@@ -69,29 +69,29 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        if (ctx.player() == null || ctx.world() == null || !FastMode.allowBoats()) {
+        if (ctx.entity() == null || ctx.world() == null || !FastMode.allowBoats()) {
             return reset();
         }
         if (phase != Phase.IDLE) {
             return true;
         }
-        if (ctx.player().getVehicle() instanceof AbstractBoat) {
+        if (ctx.entity().getVehicle() instanceof AbstractBoat) {
             BoatUtil.restore(ctx);
-            if (MovementFall.boatRideClaimed(ctx.player().tickCount)) return false;
-            if (!BoatUtil.isDriver(ctx.player())) {
+            if (MovementFall.boatRideClaimed(ctx.entity().tickCount)) return false;
+            if (!BoatUtil.isDriver(ctx.entity())) {
                 // A passenger can't steer: get out and leave the boat to its driver.
                 target = currentGoal();
                 boat = null;
                 return enter(Phase.EXIT);
             }
-            if (BoatUtil.mobAboard(ctx.player())) {
+            if (BoatUtil.mobAboard(ctx.entity())) {
                 target = currentGoal();
-                boat = ctx.player().getVehicle();
+                boat = ctx.entity().getVehicle();
                 return enter(Phase.EXIT);
             }
             // Seated by someone else, a relog, or a boat fall that just landed: sail if there's somewhere to go.
             Goal g = currentGoal();
-            boat = ctx.player().getVehicle();
+            boat = ctx.entity().getVehicle();
             if (g == null) {
                 // Nothing to go to: leave the player seated. Like Soprano, whose BoatTrip only acts on a seated
                 // player when a path asks for it. Getting out here broke boats the player had just boarded
@@ -109,22 +109,22 @@ public final class BoatProcess extends BaritoneProcessHelper {
             }
             return false;
         }
-        if (lastCheck > ctx.player().tickCount + 200) {
+        if (lastCheck > ctx.entity().tickCount + 200) {
             lastCheck = 0; // tickCount starts again with a new player entity (respawn, another dimension)
         }
         // Grace already swims faster than a boat, and the swim costs use that speed.
-        if (ctx.player().hasEffect(net.minecraft.world.effect.MobEffects.DOLPHINS_GRACE)) {
+        if (ctx.entity().hasEffect(net.minecraft.world.effect.MobEffects.DOLPHINS_GRACE)) {
             return false;
         }
-        if (ctx.player().tickCount - lastCheck < 40) {
+        if (ctx.entity().tickCount - lastCheck < 40) {
             return false;
         }
-        boolean own = BoatUtil.hasBoat(ctx.player().getInventory().getNonEquipmentItems());
+        boolean own = BoatUtil.hasBoat(ctx.entity().getInventory().getNonEquipmentItems());
         Entity found = floatingBoat();
         if (!own && found == null) {
             return false;
         }
-        lastCheck = ctx.player().tickCount;
+        lastCheck = ctx.entity().tickCount;
         Goal g = currentGoal();
         if (g == null || !baritone.getPathingBehavior().isPathing() && !baritone.getCustomGoalProcess().isActive()) {
             return false;
@@ -137,7 +137,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
         // counting the walk/swim over to it against the crossing's gain.
         if (found != null) {
             BlockPos at = BlockPos.containing(found.getX(), found.getY() + 0.1, found.getZ());
-            double walk = ctx.player().distanceTo(found);
+            double walk = ctx.entity().distanceTo(found);
             // With our own boat, only detour to a found one that's close; placing ours costs about that much.
             if ((!own || walk < 8) && plan(g, at, false, walk)) {
                 boat = found;
@@ -153,8 +153,8 @@ public final class BoatProcess extends BaritoneProcessHelper {
     private Entity floatingBoat() {
         Entity best = null;
         for (Entity e : ctx.entities()) {
-            if (BoatUtil.free(e) && e.isInWater() && ctx.player().distanceTo(e) < 16
-                    && (best == null || ctx.player().distanceTo(e) < ctx.player().distanceTo(best))) best = e;
+            if (BoatUtil.free(e) && e.isInWater() && ctx.entity().distanceTo(e) < 16
+                    && (best == null || ctx.entity().distanceTo(e) < ctx.entity().distanceTo(best))) best = e;
         }
         return best;
     }
@@ -308,7 +308,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
         surfaceY = y;
         launch = route.get(Math.min(2, route.size() - 1));
         bank = null;
-        if (!aboard && !ctx.player().isInWater()) findBank();
+        if (!aboard && !ctx.entity().isInWater()) findBank();
         target = g;
         sailStuck = 0;
         lastProgressD = Double.MAX_VALUE;
@@ -334,21 +334,21 @@ public final class BoatProcess extends BaritoneProcessHelper {
             case APPROACH: {
                 // Get within reach of the launch cell (the pathfinder brings us to the water's edge).
                 if (bank != null) {
-                    if (ctx.playerFeet().equals(bank) && ctx.player().onGround()) return enter(Phase.PLACE) ? pause() : pause();
-                } else if (ctx.player().position().distanceTo(center(launch)) < 3.5) return enter(Phase.PLACE) ? pause() : pause();
+                    if (ctx.playerFeet().equals(bank) && ctx.entity().onGround()) return enter(Phase.PLACE) ? pause() : pause();
+                } else if (ctx.entity().position().distanceTo(center(launch)) < 3.5) return enter(Phase.PLACE) ? pause() : pause();
                 if (phaseTicks > 400) return abort("could not reach the water");
                 return new PathingCommand(bank != null ? new GoalBlock(bank) : new GoalNear(launch, 2), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
             }
             case PLACE: {
                 if (findBoat(4) != null) { enter(Phase.MOUNT); return pause(); }
                 int slot = BoatUtil.hotbarBoat(ctx);
-                if (slot < 0 || phaseTicks > 100) return abort("could not place the boat (" + Minecraft.getInstance().hitResult + " eye " + ctx.player().getEyeY() + ")");
-                ctx.player().getInventory().setSelectedSlot(slot);
+                if (slot < 0 || phaseTicks > 100) return abort("could not place the boat (" + Minecraft.getInstance().hitResult + " eye " + ctx.entity().getEyeY() + ")");
+                ctx.entity().getInventory().setSelectedSlot(slot);
                 if (surfacing()) {
                     if (phaseTicks < 15) return pause();
                     // Can't place from under the surface; let the swim carry on and look again shortly.
                     PathingCommand c = abort("underwater");
-                    lastCheck = ctx.player().tickCount;
+                    lastCheck = ctx.entity().tickCount;
                     return c;
                 }
                 // Boats only go on the water's top surface (or a block top with room), so aim at it from above.
@@ -364,35 +364,35 @@ public final class BoatProcess extends BaritoneProcessHelper {
                     // the look target only lands on the next player tick; useItem raycasts (and sends) the current
                     // rotation, so face the surface now or the use misses and we wait for the next retry
                     // Ostinato: capped like every other turn; a far aim takes a few retries instead of one snap
-                    float fromY = ctx.player().getYRot(), fromP = ctx.player().getXRot();
+                    float fromY = ctx.entity().getYRot(), fromP = ctx.entity().getXRot();
                     float toY = HumanInputCaps.capYaw(fromY, aim.getYaw(), HumanInputCaps.maxYaw());
                     float toP = HumanInputCaps.capPitch(fromP, aim.getPitch(), HumanInputCaps.maxPitch());
                     // Ostinato: physicalInput off returns toY/toP unchanged
                     float[] aimed = baritone.getLookBehavior().physicalLook(fromY, fromP, toY, toP);
-                    ctx.player().setYRot(aimed[0]);
-                    ctx.player().setXRot(aimed[1]);
-                    Minecraft.getInstance().gameMode.useItem(ctx.player(), InteractionHand.MAIN_HAND);
+                    ctx.entity().setYRot(aimed[0]);
+                    ctx.entity().setXRot(aimed[1]);
+                    Minecraft.getInstance().gameMode.useItem(ctx.entity(), InteractionHand.MAIN_HAND);
                 }
                 return pause();
             }
             case MOUNT: {
-                if (ctx.player().getVehicle() instanceof AbstractBoat) {
-                    boat = ctx.player().getVehicle();
-                    enter(BoatUtil.mobAboard(ctx.player()) ? Phase.EXIT : Phase.SAIL);
+                if (ctx.entity().getVehicle() instanceof AbstractBoat) {
+                    boat = ctx.entity().getVehicle();
+                    enter(BoatUtil.mobAboard(ctx.entity()) ? Phase.EXIT : Phase.SAIL);
                     return pause();
                 }
                 surfacing();
                 Entity b = findBoat(8);
                 if (b == null || phaseTicks > 100) return abort("could not board");
-                if (ctx.player().distanceTo(b) > 3) return new PathingCommand(new GoalNear(b.blockPosition(), 1), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+                if (ctx.entity().distanceTo(b) > 3) return new PathingCommand(new GoalNear(b.blockPosition(), 1), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
                 look(b.getX(), b.getY() + 0.3, b.getZ());
-                if (phaseTicks % 4 == 3) Minecraft.getInstance().gameMode.interact(ctx.player(), b, new net.minecraft.world.phys.EntityHitResult(b), InteractionHand.MAIN_HAND);
+                if (phaseTicks % 4 == 3) Minecraft.getInstance().gameMode.interact(ctx.entity(), b, new net.minecraft.world.phys.EntityHitResult(b), InteractionHand.MAIN_HAND);
                 return pause();
             }
             case SAIL:
                 return sail();
             case EXIT: {
-                if (!(ctx.player().getVehicle() instanceof AbstractBoat)) {
+                if (!(ctx.entity().getVehicle() instanceof AbstractBoat)) {
                     enter(Phase.BREAK);
                     return pause();
                 }
@@ -403,11 +403,11 @@ public final class BoatProcess extends BaritoneProcessHelper {
             case BREAK: {
                 if (boat == null || !boat.isAlive()) { enter(Phase.COLLECT); return pause(); }
                 if (danger()) { logDebug("Boat: danger about, leaving the boat"); return finish(); }
-                if (phaseTicks > 100 || ctx.player().distanceTo(boat) > 5) return finish();
+                if (phaseTicks > 100 || ctx.entity().distanceTo(boat) > 5) return finish();
                 look(boat.getX(), boat.getY() + 0.3, boat.getZ());
                 if (phaseTicks % 4 == 0) {
-                    Minecraft.getInstance().gameMode.attack(ctx.player(), boat);
-                    ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+                    Minecraft.getInstance().gameMode.attack(ctx.entity(), boat);
+                    ctx.entity().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
                 }
                 return pause();
             }
@@ -418,7 +418,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
                     // the item spawns a tick or two after the boat breaks
                     return phaseTicks > 12 ? finish() : pause();
                 }
-                if (phaseTicks > 160 || ctx.player().distanceTo(drop) < 0.6 && phaseTicks > 40) return finish();
+                if (phaseTicks > 160 || ctx.entity().distanceTo(drop) < 0.6 && phaseTicks > 40) return finish();
                 // the path to the old goal is still running: drop it so the walk goes to the item, not onward
                 return new PathingCommand(new GoalBlock(drop.blockPosition()),
                         phaseTicks % 40 == 1 ? PathingCommandType.CANCEL_AND_SET_GOAL : PathingCommandType.SET_GOAL_AND_PATH);
@@ -429,9 +429,9 @@ public final class BoatProcess extends BaritoneProcessHelper {
     }
 
     private PathingCommand sail() {
-        if (!(ctx.player().getVehicle() instanceof AbstractBoat)) return abort("fell out of the boat");
-        boat = ctx.player().getVehicle();
-        if (!BoatUtil.isDriver(ctx.player()) || BoatUtil.mobAboard(ctx.player())) { enter(Phase.EXIT); return pause(); }
+        if (!(ctx.entity().getVehicle() instanceof AbstractBoat)) return abort("fell out of the boat");
+        boat = ctx.entity().getVehicle();
+        if (!BoatUtil.isDriver(ctx.entity()) || BoatUtil.mobAboard(ctx.entity())) { enter(Phase.EXIT); return pause(); }
         double bx = boat.getX(), bz = boat.getZ();
         if (lane == null) {
             lane = smoothLane(route);
@@ -675,15 +675,15 @@ public final class BoatProcess extends BaritoneProcessHelper {
     private Entity findBoat(double r) {
         Entity best = null;
         for (Entity e : ctx.entities()) {
-            if (BoatUtil.free(e) && ctx.player().distanceTo(e) < r
-                    && (best == null || ctx.player().distanceTo(e) < ctx.player().distanceTo(best))) best = e;
+            if (BoatUtil.free(e) && ctx.entity().distanceTo(e) < r
+                    && (best == null || ctx.entity().distanceTo(e) < ctx.entity().distanceTo(best))) best = e;
         }
         return best;
     }
 
     /** Hostile mob close by, low health, burning or in lava: not the time to stand about collecting a boat. */
     private boolean danger() {
-        var p = ctx.player();
+        var p = ctx.entity();
         if (p.getHealth() < 8 || p.isOnFire() || p.isInLava()) return true;
         for (Entity e : ctx.entities()) {
             if (e instanceof net.minecraft.world.entity.monster.Enemy && e.isAlive() && p.distanceTo(e) < 12) return true;
@@ -693,13 +693,13 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     private ItemEntity boatDrop() {
         for (Entity e : ctx.entities()) {
-            if (e instanceof ItemEntity && ((ItemEntity) e).getItem().getItem() instanceof BoatItem && ctx.player().distanceTo(e) < 8) return (ItemEntity) e;
+            if (e instanceof ItemEntity && ((ItemEntity) e).getItem().getItem() instanceof BoatItem && ctx.entity().distanceTo(e) < 8) return (ItemEntity) e;
         }
         return null;
     }
 
     private Rotation look(double x, double y, double z) {
-        double dx = x - ctx.player().getX(), dy = y - ctx.player().getEyeY(), dz = z - ctx.player().getZ();
+        double dx = x - ctx.entity().getX(), dy = y - ctx.entity().getEyeY(), dz = z - ctx.entity().getZ();
         float yaw = (float) (Mth.atan2(dz, dx) * 180 / Math.PI) - 90;
         float pitch = (float) -(Mth.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI);
         Rotation r = new Rotation(yaw, pitch);
@@ -717,14 +717,14 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     /** Swim up while the eyes are under the surface; items and entities can't be used well from below. */
     private boolean surfacing() {
-        boolean under = ctx.player().getEyeY() < surfaceY + 1.1 && ctx.player().isInWater();
+        boolean under = ctx.entity().getEyeY() < surfaceY + 1.1 && ctx.entity().isInWater();
         if (under) baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, true);
         return under && phaseTicks < 80;
     }
 
     private PathingCommand abort(String why) {
         logDebug("Boat: giving up (" + why + ")");
-        lastCheck = ctx.player().tickCount + 200; // don't retry straight away
+        lastCheck = ctx.entity().tickCount + 200; // don't retry straight away
         return finish();
     }
 
@@ -739,7 +739,7 @@ public final class BoatProcess extends BaritoneProcessHelper {
 
     @Override
     public void onLostControl() {
-        if (ctx.player() != null && ctx.player().getVehicle() instanceof AbstractBoat) return; // keep sailing state
+        if (ctx.entity() != null && ctx.entity().getVehicle() instanceof AbstractBoat) return; // keep sailing state
         reset();
     }
 

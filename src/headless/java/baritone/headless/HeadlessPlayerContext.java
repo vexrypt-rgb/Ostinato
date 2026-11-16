@@ -45,7 +45,7 @@ public final class HeadlessPlayerContext implements IPlayerContext {
     }
 
     @Override
-    public HeadlessPlayer player() {
+    public HeadlessPlayer entity() {
         return player;
     }
 

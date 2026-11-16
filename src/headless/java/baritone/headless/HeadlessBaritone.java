@@ -137,7 +137,7 @@ public final class HeadlessBaritone implements IPathingHost {
      * Selecting the offhand holds an empty or non-block hotbar slot so the place path can try OFF_HAND.
      */
     private boolean findThrowaway(Item item, boolean select) {
-        Inventory inv = ctx.player().getInventory();
+        Inventory inv = ctx.entity().getInventory();
         synchronized (inv) {
             var items = inv.getNonEquipmentItems();
             int hotbar = Math.min(Inventory.SELECTION_SIZE, items.size());
@@ -184,7 +184,7 @@ public final class HeadlessBaritone implements IPathingHost {
             return 0;
         }
         int n = 0;
-        Inventory inv = ctx.player().getInventory();
+        Inventory inv = ctx.entity().getInventory();
         synchronized (inv) {
             var items = inv.getNonEquipmentItems();
             for (int i = 0; i < items.size() && i < Inventory.INVENTORY_SIZE; i++) {
@@ -203,7 +203,7 @@ public final class HeadlessBaritone implements IPathingHost {
 
     /** Ostinato: selected slot, hotbar, and offhand for A* diagnostics. */
     String describeHotbar() {
-        Inventory inv = ctx.player().getInventory();
+        Inventory inv = ctx.entity().getInventory();
         synchronized (inv) {
             var items = inv.getNonEquipmentItems();
             StringBuilder sb = new StringBuilder("sel=").append(inv.getSelectedSlot());

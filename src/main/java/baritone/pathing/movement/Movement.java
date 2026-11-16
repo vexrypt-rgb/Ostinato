@@ -137,16 +137,16 @@ public abstract class Movement implements IMovement, MovementHelper {
      */
     @Override
     public MovementStatus update() {
-        ctx.player().getAbilities().flying = false;
+        ctx.entity().getAbilities().flying = false;
         currentState = updateState(currentState);
         // Unconditional JUMP-in-liquid causes bobbing stuck (cabaletta/baritone#2377).
         // In deep water the swim controller steers instead (real sprint-swim, #3988).
         boolean swimming = applySwim(currentState);
-        if (!swimming && MovementHelper.isLiquid(ctx, ctx.playerFeet()) && ctx.player().position().y < dest.y + 0.6
+        if (!swimming && MovementHelper.isLiquid(ctx, ctx.playerFeet()) && ctx.entity().position().y < dest.y + 0.6
                 && !(FastMode.swimInWater() && this instanceof baritone.pathing.movement.movements.MovementTraverse)) {
             currentState.setInput(Input.JUMP, true);
         }
-        if (ctx.player().isInWall()) {
+        if (ctx.entity().isInWall()) {
             ctx.getSelectedBlock().ifPresent(pos -> MovementHelper.switchToBestToolFor(ctx, BlockStateInterface.get(ctx, pos)));
             currentState.setInput(Input.CLICK_LEFT, true);
         }
@@ -211,7 +211,7 @@ public abstract class Movement implements IMovement, MovementHelper {
      */
     private boolean applySwim(MovementState state) {
         if (!FastMode.swimInWater() || currentState.getStatus().isComplete()) return false;
-        net.minecraft.world.entity.player.Player p = ctx.player();
+        net.minecraft.world.entity.player.Player p = ctx.entity();
         if (!p.isInWater() || p.isPassenger()) return false;
         if (!Boolean.TRUE.equals(state.getInputStates().get(Input.MOVE_FORWARD))) return false;
         BlockPos feet = ctx.playerFeet();

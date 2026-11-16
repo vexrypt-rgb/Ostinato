@@ -117,13 +117,13 @@ public class MovementDownward extends Movement {
         }
 
         boolean fall = dest.y < src.y - 1;
-        if (ctx.playerFeet().equals(dest) && (!fall || ctx.player().onGround())) {
+        if (ctx.playerFeet().equals(dest) && (!fall || ctx.entity().onGround())) {
             return state.setStatus(MovementStatus.SUCCESS);
         } else if (!playerInValidPosition()) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        double diffX = ctx.player().position().x - (dest.getX() + 0.5);
-        double diffZ = ctx.player().position().z - (dest.getZ() + 0.5);
+        double diffX = ctx.entity().position().x - (dest.getX() + 0.5);
+        double diffZ = ctx.entity().position().z - (dest.getZ() + 0.5);
         double ab = Math.sqrt(diffX * diffX + diffZ * diffZ);
 
         if ((numTicks++ < 10 || fall) && ab < 0.2) {

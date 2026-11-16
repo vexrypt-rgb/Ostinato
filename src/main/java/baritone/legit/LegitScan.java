@@ -28,7 +28,7 @@ public final class LegitScan {
         if (context == null || filter == null || context.baritone == null) {
             return out;
         }
-        Entity player = context.baritone.getPlayerContext().player();
+        Entity player = context.baritone.getPlayerContext().entity();
         if (player == null) {
             return out;
         }

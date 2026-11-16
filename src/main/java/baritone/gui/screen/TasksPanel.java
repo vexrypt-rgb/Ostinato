@@ -685,7 +685,7 @@ final class TasksPanel {
     private TaskStep newStep() {
         TaskStep s = new TaskStep(StepType.GOTO);
         try {
-            if (BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext().player() != null) {
+            if (BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext().entity() != null) {
                 BetterBlockPos p = BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext().playerFeet();
                 s.set("coords", p.x + " " + p.y + " " + p.z);
             }

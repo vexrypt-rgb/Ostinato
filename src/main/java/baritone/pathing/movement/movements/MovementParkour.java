@@ -572,7 +572,7 @@ public class MovementParkour extends Movement {
         }
         BetterBlockPos feet = ctx.playerFeet();
         double srcTop = MovementHelper.collisionTop(ctx.world().getBlockState(src.below()));
-        if (feet.y == src.y - 1 && srcTop > 0 && srcTop < 1 && ctx.player().position().y >= src.y - 1 + srcTop - 0.01) {
+        if (feet.y == src.y - 1 && srcTop > 0 && srcTop < 1 && ctx.entity().position().y >= src.y - 1 + srcTop - 0.01) {
             // Ostinato: off a low top (snow layers, a slab) the feet stand inside the cell below src's node: past the
             // take-off block's column but still level with its top is the run to the edge, not a fall. It used to give
             // up there, a step before the jump (cubed's snow ledge, 0 of 4).
@@ -585,7 +585,7 @@ public class MovementParkour extends Movement {
         }
         // Ostinato: momentumJumpCosts priced this 1 or 2 block gap as a sprint jump off the run-up, so fly it as one
         boolean momentumSprint = !ascend && ext == 0 && dist <= 3 && Baritone.settings().momentumJumpCosts.value
-                && ctx.player().isSprinting() && !isTallTop(ctx.world().getBlockState(dest.below()))
+                && ctx.entity().isSprinting() && !isTallTop(ctx.world().getBlockState(dest.below()))
                 && MovementHelper.canWalkOn(ctx, src.relative(direction.getOpposite()).below());
         if (dist >= 4 || ascend || dist == 3 && narrowLanding() || momentumSprint) { // Ostinato: momentumSprint
             state.setInput(Input.SPRINT, true);
@@ -596,7 +596,7 @@ public class MovementParkour extends Movement {
 
         BetterBlockPos from = src.relative(direction, ext);
         int jd = dist - ext; // the jump proper, measured from the last extension
-        if (ext > 0 && !backed && ctx.player().onGround()) {
+        if (ext > 0 && !backed && ctx.entity().onGround()) {
             BetterBlockPos missing = null;
             for (int k = 1; k <= ext && missing == null; k++) {
                 BetterBlockPos cell = src.relative(direction, k).below();
@@ -615,7 +615,7 @@ public class MovementParkour extends Movement {
                 k++;
             }
             BetterBlockPos start = src.relative(direction, -k);
-            double along = ctx.player().position().x * direction.getStepX() + ctx.player().position().z * direction.getStepZ();
+            double along = ctx.entity().position().x * direction.getStepX() + ctx.entity().position().z * direction.getStepZ();
             double startCentre = (start.x + 0.5) * direction.getStepX() + (start.z + 0.5) * direction.getStepZ();
             float travelYaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
             state.setTarget(new MovementState.MovementTarget(new Rotation(travelYaw, 0), true));
@@ -623,8 +623,8 @@ public class MovementParkour extends Movement {
                 state.setInput(Input.MOVE_BACK, true); // too short a run to clear the gap from here: back up further
                 return state;
             }
-            float yawErr = Math.abs(Mth.wrapDegrees(ctx.player().getYRot() - travelYaw));
-            if (yawErr > 8 || Math.abs(ctx.player().getXRot()) > 25) {
+            float yawErr = Math.abs(Mth.wrapDegrees(ctx.entity().getYRot() - travelYaw));
+            if (yawErr > 8 || Math.abs(ctx.entity().getXRot()) > 25) {
                 return state; // the camera has to be on the line before W and the jump
             }
             backed = true;
@@ -636,12 +636,12 @@ public class MovementParkour extends Movement {
             BetterBlockPos back = src.relative(direction, -1), back2 = src.relative(direction, -2);
             boolean two = MovementHelper.canWalkOn(ctx, back2.below()) && MovementHelper.fullyPassable(ctx, back2) && MovementHelper.fullyPassable(ctx, back2.above());
             BetterBlockPos runFrom = two ? back2 : back;
-            double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
-            double along = (ctx.player().position().x - (runFrom.x + 0.5)) * direction.getStepX() + (ctx.player().position().z - (runFrom.z + 0.5)) * direction.getStepZ();
+            double v = ctx.entity().getDeltaMovement().x * direction.getStepX() + ctx.entity().getDeltaMovement().z * direction.getStepZ();
+            double along = (ctx.entity().position().x - (runFrom.x + 0.5)) * direction.getStepX() + (ctx.entity().position().z - (runFrom.z + 0.5)) * direction.getStepZ();
             boolean onRunUp = ctx.playerFeet().equals(src) || ctx.playerFeet().equals(back) || ctx.playerFeet().equals(runFrom);
             float travelYaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
             boolean runningIn = v > 0.1 && !rerunning;
-            if (runningIn && !reran && along > -0.3 && onRunUp && ctx.player().onGround() && ctx.player().position().y <= src.y + 0.1
+            if (runningIn && !reran && along > -0.3 && onRunUp && ctx.entity().onGround() && ctx.entity().position().y <= src.y + 0.1
                     && !runUpLands(travelYaw)) {
                 // Ostinato (Presto v4): already running when the jump came up (a Traverse led into it), so there was no
                 // back-up, and no tick of this run jumps far enough: the sprint's steps fall against the edge so the
@@ -651,7 +651,7 @@ public class MovementParkour extends Movement {
                 reran = rerunning = true;
                 runningIn = false;
             }
-            if (along <= -0.3 || runningIn || ctx.player().position().y > src.y + 0.1 || !onRunUp) {
+            if (along <= -0.3 || runningIn || ctx.entity().position().y > src.y + 0.1 || !onRunUp) {
                 ranUp = true;
                 rerunning = false;
             } else {
@@ -664,12 +664,12 @@ public class MovementParkour extends Movement {
             }
         }
         MovementHelper.moveTowards(ctx, state, dest);
-        if (!ctx.player().onGround() && ctx.player().position().y > src.y + 0.1 && BlockStateInterface.getBlock(ctx, dest) != Blocks.LADDER) {
+        if (!ctx.entity().onGround() && ctx.entity().position().y > src.y + 0.1 && BlockStateInterface.getBlock(ctx, dest) != Blocks.LADDER) {
             // mid-air: stop pushing once coasting alone reaches the landing centre, so narrow tops (bars, fence posts) are not overshot
-            double pos = ctx.player().position().x * direction.getStepX() + ctx.player().position().z * direction.getStepZ();
+            double pos = ctx.entity().position().x * direction.getStepX() + ctx.entity().position().z * direction.getStepZ();
             double centre = (dest.x + 0.5) * direction.getStepX() + (dest.z + 0.5) * direction.getStepZ();
-            double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
-            double vy = ctx.player().getDeltaMovement().y, y = ctx.player().position().y, land = pos;
+            double v = ctx.entity().getDeltaMovement().x * direction.getStepX() + ctx.entity().getDeltaMovement().z * direction.getStepZ();
+            double vy = ctx.entity().getDeltaMovement().y, y = ctx.entity().position().y, land = pos;
             for (int t = 0; t < 40 && (vy > 0 || y > dest.y); t++) {
                 vy = (vy - 0.08) * 0.98f;
                 y += vy;
@@ -682,8 +682,8 @@ public class MovementParkour extends Movement {
                 state.setInput(Input.MOVE_BACK, land > centre + 0.2);
             }
         }
-        Vec3 at = ctx.player().position(), dv = ctx.player().getDeltaMovement();
-        if (ctx.player().onGround() && Math.abs(at.y - dest.y) < 0.6 && Math.abs(at.x - (dest.x + 0.5)) < 0.8 && Math.abs(at.z - (dest.z + 0.5)) < 0.8
+        Vec3 at = ctx.entity().position(), dv = ctx.entity().getDeltaMovement();
+        if (ctx.entity().onGround() && Math.abs(at.y - dest.y) < 0.6 && Math.abs(at.x - (dest.x + 0.5)) < 0.8 && Math.abs(at.z - (dest.z + 0.5)) < 0.8
                 && BlockStateInterface.getBlock(ctx, dest.below()).getFriction() > 0.6f && Math.abs(dv.x) + Math.abs(dv.z) > 0.03) {
             // Ostinato: landed on ice still gliding: hold sneak (its edge guard keeps the feet on dest) and brake until
             // stopped, before anything else. Past the centre and fast it used to only drop sprint, and a landing at the
@@ -704,41 +704,41 @@ public class MovementParkour extends Movement {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
             // any parkour landing still carrying momentum past the centre (or sliding on ice): brake toward the centre before succeeding
-            double off = (ctx.player().position().x - (dest.x + 0.5)) * direction.getStepX() + (ctx.player().position().z - (dest.z + 0.5)) * direction.getStepZ();
-            double v = ctx.player().getDeltaMovement().x * direction.getStepX() + ctx.player().getDeltaMovement().z * direction.getStepZ();
+            double off = (ctx.entity().position().x - (dest.x + 0.5)) * direction.getStepX() + (ctx.entity().position().z - (dest.z + 0.5)) * direction.getStepZ();
+            double v = ctx.entity().getDeltaMovement().x * direction.getStepX() + ctx.entity().getDeltaMovement().z * direction.getStepZ();
             if (off > 0.2 && v > 0.05) {
                 state.setInput(Input.SPRINT, false);
                 return state;
             }
-            if (ctx.player().position().y - ctx.playerFeet().getY() < 0.094 // lilypads
-                    || ctx.player().onGround() && isTallTop(ctx.world().getBlockState(dest.below()))) {
+            if (ctx.entity().position().y - ctx.playerFeet().getY() < 0.094 // lilypads
+                    || ctx.entity().onGround() && isTallTop(ctx.world().getBlockState(dest.below()))) {
                 state.setStatus(MovementStatus.SUCCESS);
             }
         } else if (!feet.equals(from)) {
-            if (feet.equals(from.relative(direction)) || ctx.player().position().y - src.y > 0.0001) {
+            if (feet.equals(from.relative(direction)) || ctx.entity().position().y - src.y > 0.0001) {
                 if (Baritone.settings().allowPlace.value // see PR #3775
                         && MovementHelper.hasGenericThrowaway(baritone)
                         && !MovementHelper.canWalkOn(ctx, dest.below())
-                        && !ctx.player().onGround()
+                        && !ctx.entity().onGround()
                         && MovementHelper.attemptToPlaceABlock(state, baritone, dest.below(), true, false) == PlaceResult.READY_TO_PLACE
                 ) {
                     // go in the opposite order to check DOWN before all horizontals -- down is preferable because you don't have to look to the side while in midair, which could mess up the trajectory
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
-                if (ext > 0 && jd == 5 && ctx.player().onGround()) {
+                if (ext > 0 && jd == 5 && ctx.entity().onGround()) {
                     // an extended jump leaves from the very edge: wait while a jump one tick later still lands
                     float yaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
                     if (jumpLands(yaw, 1, true)) {
                         return state;
                     }
                 } else if ((jd == 3 || jd == 5) && !ascend) { // 2 or 4 block gap: jump from the very edge
-                    double xDiff = (from.x + 0.5) - ctx.player().position().x;
-                    double zDiff = (from.z + 0.5) - ctx.player().position().z;
+                    double xDiff = (from.x + 0.5) - ctx.entity().position().x;
+                    double zDiff = (from.z + 0.5) - ctx.entity().position().z;
                     double distFromStart = Math.max(Math.abs(xDiff), Math.abs(zDiff));
                     // a 4 block gap jumps on the last tick still on the block: wait while the next step stays on it
-                    double speed = jd == 5 ? Math.max(Math.abs(ctx.player().getDeltaMovement().x), Math.abs(ctx.player().getDeltaMovement().z)) / 0.546 : 0;
+                    double speed = jd == 5 ? Math.max(Math.abs(ctx.entity().getDeltaMovement().x), Math.abs(ctx.entity().getDeltaMovement().z)) / 0.546 : 0;
                     boolean wait = jd == 5 ? distFromStart + speed < 1.0 : distFromStart < 0.7;
-                    if (jd == 5 && ctx.player().onGround()) {
+                    if (jd == 5 && ctx.entity().onGround()) {
                         // Ostinato (Presto v4): the sim knows which tick lands: wait while a jump a tick later still
                         // does, jump now if this one does, and keep the step rule only when neither lands
                         float yaw = (float) Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
@@ -772,7 +772,7 @@ public class MovementParkour extends Movement {
                 return false;
             }
         }
-        double along = ctx.player().position().x * direction.getStepX() + ctx.player().position().z * direction.getStepZ();
+        double along = ctx.entity().position().x * direction.getStepX() + ctx.entity().position().z * direction.getStepZ();
         double fromCentre = (from.x + 0.5) * direction.getStepX() + (from.z + 0.5) * direction.getStepZ();
         return along >= fromCentre - 0.3;
     }
@@ -783,7 +783,7 @@ public class MovementParkour extends Movement {
             sim = new PlayerSim(simWorld);
         }
         simWorld.reset(); // it remembers collision boxes, and blocks are laid and broken while this movement runs
-        Player p = ctx.player();
+        Player p = ctx.entity();
         sim.x = p.getX(); sim.y = p.getY(); sim.z = p.getZ();
         sim.vx = p.getDeltaMovement().x; sim.vy = p.getDeltaMovement().y; sim.vz = p.getDeltaMovement().z;
         sim.onGround = p.onGround();
@@ -831,14 +831,14 @@ public class MovementParkour extends Movement {
 
     /** Creep to the edge sneaking, lay the next block in front of it, repeat until the whole extension is down. */
     private MovementState extend(MovementState state, BetterBlockPos target) {
-        double along = ctx.player().position().x * direction.getStepX() + ctx.player().position().z * direction.getStepZ();
+        double along = ctx.entity().position().x * direction.getStepX() + ctx.entity().position().z * direction.getStepZ();
         double edge = (target.x + 0.5) * direction.getStepX() + (target.z + 0.5) * direction.getStepZ() - 0.5; // the near side of the cell to fill
         state.setInput(Input.SNEAK, true);
         // Ostinato: route through IPathingHost so a headless bot can lay parkour extensions.
         MovementHelper.selectThrowaway(baritone, true, target.getX(), target.getY(), target.getZ());
         BetterBlockPos against = target.relative(direction, -1);
         Direction face = direction;
-        Vec3 eye = RayTraceUtils.inferSneakingEyePosition(ctx.player());
+        Vec3 eye = RayTraceUtils.inferSneakingEyePosition(ctx.entity());
         Rotation aim = null;
         // a point on the face of the block behind the cell, the top of the block edge first, nudged sideways if hidden
         for (double rel : new double[]{0, -0.3, 0.3}) {
@@ -847,7 +847,7 @@ public class MovementParkour extends Movement {
                         against.y + 1 + v,
                         against.z + 0.5 + face.getStepZ() * 0.5 + (face.getStepZ() == 0 ? rel : 0) + face.getStepZ() * 0.001);
                 Rotation rot = RotationUtils.calcRotationFromVec3d(eye, pt, ctx.playerRotations());
-                HitResult hit = RayTraceUtils.rayTraceTowards(ctx.player(), rot, ctx.playerController().getBlockReachDistance(), true);
+                HitResult hit = RayTraceUtils.rayTraceTowards(ctx.entity(), rot, ctx.playerController().getBlockReachDistance(), true);
                 if (hit instanceof BlockHitResult h && h.getType() == HitResult.Type.BLOCK && h.getBlockPos().equals(against) && h.getDirection() == face) {
                     aim = rot;
                     break;
@@ -859,7 +859,7 @@ public class MovementParkour extends Movement {
         }
         if (aim != null) {
             state.setTarget(new MovementState.MovementTarget(aim, true));
-            if (ctx.player().isCrouching()) {
+            if (ctx.entity().isCrouching()) {
                 HitResult hit = ctx.objectMouseOver();
                 if (hit instanceof BlockHitResult h && h.getType() == HitResult.Type.BLOCK && h.getBlockPos().equals(against) && h.getDirection() == face) {
                     state.setInput(Input.CLICK_RIGHT, true);
@@ -870,7 +870,7 @@ public class MovementParkour extends Movement {
         if (along < edge + 0.2) {
             // shuffle toward the edge relative to where the camera looks: W/A/S/D follow the head
             double travel = Math.toDegrees(Math.atan2(-direction.getStepX(), direction.getStepZ()));
-            float lookYaw = aim != null ? aim.getYaw() : ctx.player().getYRot();
+            float lookYaw = aim != null ? aim.getYaw() : ctx.entity().getYRot();
             double rel = Math.toRadians(travel - lookYaw);
             double fwd = Math.cos(rel), left = -Math.sin(rel);
             state.setInput(Input.MOVE_FORWARD, fwd > 0.38);

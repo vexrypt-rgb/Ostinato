@@ -296,7 +296,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
                 map.bus().publishLoot(placement.x(), placement.y(), placement.z(),
                         placement.kind().name().toLowerCase(), placement.theme().id, placement.payload());
             }
-            boolean survival = !ctx.player().getAbilities().instabuild;
+            boolean survival = !ctx.entity().getAbilities().instabuild;
             if (survival && !Baritone.settings().breakFromAbove.value) {
                 // Ostinato: a survival room is dug from inside. The builder only breaks blocks at or above the feet unless
                 // breakFromAbove is on, and live it stood on the last interior layer with nothing in reach (no path, no keys).
@@ -331,7 +331,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         if (!enabled()) {
             return Outcome.fail("Maze mode is off");
         }
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             return Outcome.fail("No world");
         }
         if (furnishRoom == null) {
@@ -340,7 +340,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         if (handedToBuilder != null && baritone.getBuilderProcess().isActive()) {
             return Outcome.fail("The room is still being dug");
         }
-        boolean survival = !ctx.player().getAbilities().instabuild;
+        boolean survival = !ctx.entity().getAbilities().instabuild;
         MazeFurnishPlanner.woods = nearbyPlanks(); // Ostinato: wood cladding asks for planks this area actually grows
         MazeFurnishJob job = furnishSegment != null
                 ? connectedJob(furnishSegment, furnishLoot, survival)
@@ -363,7 +363,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         if (!enabled()) {
             return Report.error("Maze mode is off. Set mazeMode to true. Pathing is unchanged while it is off.");
         }
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             return Report.error("No world");
         }
         if (building && phase == Phase.WAIT) {
@@ -440,10 +440,10 @@ public final class MazeProcess extends BaritoneProcessHelper {
     }
 
     private String botId() {
-        if (ctx.player() == null) {
+        if (ctx.entity() == null) {
             return "local";
         }
-        return MazeMap.sanitize(ctx.player().getName().getString());
+        return MazeMap.sanitize(ctx.entity().getName().getString());
     }
 
     private void clearPending() {
@@ -643,7 +643,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     private ConnectedReport prepareConnected(boolean building, ConnectedPlan.Choice forced) {
         if (!enabled()) return ConnectedReport.error("Maze mode is off. Set mazeMode to true. Pathing is unchanged while it is off.");
-        if (ctx.player() == null || ctx.world() == null) return ConnectedReport.error("No world");
+        if (ctx.entity() == null || ctx.world() == null) return ConnectedReport.error("No world");
         if (building && phase != Phase.IDLE) return ConnectedReport.error("Already waiting to build a room");
         if (building && baritone.getBuilderProcess().isActive()) return ConnectedReport.error("The builder is already working");
         Path file = mapPath();
@@ -794,7 +794,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             for (LootPlanner.LootPlacement placement : loot) map.recordLoot(placement, false);
             map.save(file);
             saveComplex(seg.after);
-            boolean survival = !ctx.player().getAbilities().instabuild;
+            boolean survival = !ctx.entity().getAbilities().instabuild;
             if (survival && !Baritone.settings().breakFromAbove.value) {
                 Baritone.settings().breakFromAbove.value = true; // dug from inside, as a survival room is
                 restoreBreakFromAbove = true;
@@ -931,7 +931,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
             summary = "Walking to the way in at " + e.x() + " " + (e.groundY() + 1) + " " + e.z();
             return new PathingCommand(new GoalBlock(e.x(), e.groundY() + 1, e.z()), PathingCommandType.SET_GOAL_AND_PATH);
         }
-        if (!ctx.player().onGround()) {
+        if (!ctx.entity().onGround()) {
             return new PathingCommand((Goal) null, PathingCommandType.CANCEL_AND_SET_GOAL); // sinking one block
         }
         if (feet.y != descentFeetY) {
@@ -1025,7 +1025,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     /** The solid neighbour the player is actually standing on when the shaft cell under the feet is already open. */
     private BlockPos descentSupport(BetterBlockPos feet) {
-        net.minecraft.world.phys.AABB box = ctx.player().getBoundingBox();
+        net.minecraft.world.phys.AABB box = ctx.entity().getBoundingBox();
         BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -1231,7 +1231,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
         // -13,82,-69, OUTSIDE the room where it had just placed the ceiling lights from. Every way back in was a guarded
         // shell cell, so every torch stand was unreachable (skip-light why=stuck x4, light 0/1, room FAIL). A player
         // outside would dig back in; so may the bot. Any hole it makes is a leak the next light check seals.
-        if (ctx.player() != null) {
+        if (ctx.entity() != null) {
             BetterBlockPos f = ctx.playerFeet();
             boolean inside = air.contains(ConnectedPlan.key(f.x, f.y, f.z)) || air.contains(ConnectedPlan.key(f.x, f.y + 1, f.z))
                     || air.contains(ConnectedPlan.key(f.x, f.y - 1, f.z)) || (e != null && f.x == e.x() && f.z == e.z());
@@ -1259,7 +1259,7 @@ public final class MazeProcess extends BaritoneProcessHelper {
      */
     public Outcome repairConnected(ConnectedPlan.Segment seg, Set<Long> leaks) {
         if (drive != Drive.HOLD && drive != Drive.FURNISH || seg == null || seg.plan == null) return Outcome.fail("no segment to repair");
-        boolean survival = ctx.player() != null && !ctx.player().getAbilities().instabuild;
+        boolean survival = ctx.entity() != null && !ctx.entity().getAbilities().instabuild;
         MazeFurnishJob job = onServer(() -> {
             net.minecraft.world.level.Level level = probeLevel();
             ConnectedPlan.Complex c = seg.after;
@@ -1352,11 +1352,11 @@ public final class MazeProcess extends BaritoneProcessHelper {
 
     private void driveConnected() {
         if (drive == Drive.OFF) return;
-        if (!enabled() || ctx.player() == null) {
+        if (!enabled() || ctx.entity() == null) {
             drive = Drive.OFF;
             return;
         }
-        int tick = ctx.player().tickCount;
+        int tick = ctx.entity().tickCount;
         if (tick == lastDriveTick) return; // isActive() can be asked more than once a tick
         lastDriveTick = tick;
         driveTicks++;

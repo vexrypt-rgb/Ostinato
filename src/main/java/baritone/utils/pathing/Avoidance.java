@@ -105,7 +105,7 @@ public class Avoidance {
                     .filter(entity -> entity instanceof LivingEntity)
                     .map(entity -> (LivingEntity) entity)
                     .filter(MobProfile::hostile)
-                    .filter(entity -> !(entity instanceof Spider) || ctx.player().getLightLevelDependentMagicValue() < 0.5)
+                    .filter(entity -> !(entity instanceof Spider) || ctx.entity().getLightLevelDependentMagicValue() < 0.5)
                     .filter(entity -> !(entity instanceof ZombifiedPiglin) || ((ZombifiedPiglin) entity).getLastHurtByMob() != null)
                     .filter(entity -> !(entity instanceof Enderman) || ((Enderman) entity).isCreepy())
                     .forEach(entity -> {

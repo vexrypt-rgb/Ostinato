@@ -95,7 +95,7 @@ public class HeadlessPhase3Test {
         HeadlessPlayerContext context = new HeadlessPlayerContext(player, level, controller);
         assertNull(context.minecraft());
         assertNull(context.localPlayer());
-        assertTrue(context.player() == player);
+        assertTrue(context.entity() == player);
 
         IPlayerContext viaDefault = new IPlayerContext() {
             @Override
@@ -104,7 +104,7 @@ public class HeadlessPhase3Test {
             }
 
             @Override
-            public Player player() {
+            public Player entity() {
                 return player;
             }
 

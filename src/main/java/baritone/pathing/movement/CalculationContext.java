@@ -299,7 +299,7 @@ public class CalculationContext {
         this.precomputedData = new PrecomputedData();
         this.safeForThreadedUse = forUseOnAnotherThread;
         this.baritone = baritone;
-        Player player = baritone.getPlayerContext().player();
+        Player player = baritone.getPlayerContext().entity();
         this.world = baritone.getPlayerContext().world();
         this.worldData = (WorldData) baritone.getPlayerContext().worldData();
         this.bsi = new BlockStateInterface(baritone.getPlayerContext(), forUseOnAnotherThread);
@@ -360,7 +360,7 @@ public class CalculationContext {
         int frostWalkerLevel = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = baritone.getPlayerContext()
-                .player()
+                .entity()
                 .getItemBySlot(slot)
                 .getEnchantments();
             for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
@@ -379,7 +379,7 @@ public class CalculationContext {
         float waterSpeedMultiplier = 1.0f;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = baritone.getPlayerContext()
-                .player()
+                .entity()
                 .getItemBySlot(slot)
                 .getEnchantments();
             for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {

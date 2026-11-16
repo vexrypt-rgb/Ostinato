@@ -70,7 +70,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
 
     @Override
     public void updateTarget(Rotation rotation, boolean blockInteract) {
-        if (Baritone.settings().humanLookEverywhere.value && !ctx.player().isFallFlying()) this.human = true;
+        if (Baritone.settings().humanLookEverywhere.value && !ctx.entity().isFallFlying()) this.human = true;
         // a humanized look is the player's own mouse: the camera turns, never a silent server-only rotation
         this.target = new Target(rotation, this.human ? Target.Mode.CLIENT : Target.Mode.resolve(ctx, blockInteract));
         this.traceTarget = rotation; // Ostinato
@@ -173,7 +173,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             return physicalBuf;
         }
         float step = 0f;
-        if (ctx.player() != null && ctx.minecraft() != null) step = mouseStep();
+        if (ctx.entity() != null && ctx.minecraft() != null) step = mouseStep();
         return physical.emit(true, lookSerial, fromYaw, fromPitch, toYaw, toPitch, step);
     }
 
@@ -301,7 +301,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
             if (reactLeft > 0 && --reactLeft > 0) want = heldWant; // 3 ticks on the old point, then the new one
             else heldWant = want;
         }
-        float cy = ctx.player().getYRot(), cp = ctx.player().getXRot();
+        float cy = ctx.entity().getYRot(), cp = ctx.entity().getXRot();
         float dy = net.minecraft.util.Mth.wrapDegrees(want.getYaw() - cy), dp = want.getPitch() - cp;
         float wantY = Math.abs(dy) > 1.5f ? net.minecraft.util.Mth.clamp(dy * 0.6f, -HAND_MAX_YAW, HAND_MAX_YAW) : dy;
         float wantP = Math.abs(dp) > 1.5f ? net.minecraft.util.Mth.clamp(dp * 0.6f, -HAND_MAX_PITCH, HAND_MAX_PITCH) : dp;
@@ -357,7 +357,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     return;
                 }
 
-                this.prevRotation = new Rotation(ctx.player().getYRot(), ctx.player().getXRot());
+                this.prevRotation = new Rotation(ctx.entity().getYRot(), ctx.entity().getXRot());
                 this.processor.capOverride = this.turnCap;
                 final Rotation actual = this.human ? humanStep(this.target.rotation) : this.processor.peekRotation(this.target.rotation);
                 this.processor.capOverride = 0;
@@ -367,8 +367,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 float toY = HumanInputCaps.capYaw(from.getYaw(), actual.getYaw(), HumanInputCaps.maxYaw());
                 float toP = HumanInputCaps.capPitch(from.getPitch(), actual.getPitch(), HumanInputCaps.maxPitch());
                 float[] aimed = physicalLook(from.getYaw(), from.getPitch(), toY, toP);
-                ctx.player().setYRot(aimed[0]);
-                ctx.player().setXRot(aimed[1]);
+                ctx.entity().setYRot(aimed[0]);
+                ctx.entity().setXRot(aimed[1]);
                 break;
             }
             case POST: {
@@ -385,19 +385,19 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                     if (this.human) {
                         // the camera stays on the rotation that was sent
                         this.frameGoal = this.target.rotation;
-                        this.frameGoalTick = ctx.player().tickCount;
-                        planFrameStep(ctx.player()); // Ostinato
+                        this.frameGoalTick = ctx.entity().tickCount;
+                        planFrameStep(ctx.entity()); // Ostinato
                     } else if (this.target.mode == Target.Mode.SERVER) {
-                        ctx.player().setYRot(this.prevRotation.getYaw());
-                        ctx.player().setXRot(this.prevRotation.getPitch());
-                    } else if (ctx.player().isFallFlying() ? Baritone.settings().elytraSmoothLook.value : Baritone.settings().smoothLook.value) {
-                        ctx.player().setYRot((float) this.smoothYawBuffer.stream().mapToDouble(d -> d).average().orElse(this.prevRotation.getYaw()));
-                        if (ctx.player().isFallFlying()) {
-                            ctx.player().setXRot((float) this.smoothPitchBuffer.stream().mapToDouble(d -> d).average().orElse(this.prevRotation.getPitch()));
+                        ctx.entity().setYRot(this.prevRotation.getYaw());
+                        ctx.entity().setXRot(this.prevRotation.getPitch());
+                    } else if (ctx.entity().isFallFlying() ? Baritone.settings().elytraSmoothLook.value : Baritone.settings().smoothLook.value) {
+                        ctx.entity().setYRot((float) this.smoothYawBuffer.stream().mapToDouble(d -> d).average().orElse(this.prevRotation.getYaw()));
+                        if (ctx.entity().isFallFlying()) {
+                            ctx.entity().setXRot((float) this.smoothPitchBuffer.stream().mapToDouble(d -> d).average().orElse(this.prevRotation.getPitch()));
                         }
                     }
-                    //ctx.player().xRotO = prevRotation.getPitch();
-                    //ctx.player().yRotO = prevRotation.getYaw();
+                    //ctx.entity().xRotO = prevRotation.getPitch();
+                    //ctx.entity().yRotO = prevRotation.getYaw();
                     this.prevRotation = null;
                 }
                 // The target is done being used for this game tick, so it can be invalidated
@@ -435,15 +435,15 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
     public void pig() {
         if (this.target != null) {
             final Rotation actual = this.processor.peekRotation(this.target.rotation);
-            float fromY = ctx.player().getYRot();
+            float fromY = ctx.entity().getYRot();
             float toY = HumanInputCaps.capYaw(fromY, actual.getYaw(), HumanInputCaps.maxYaw()); // Ostinato: capped
             if (!Baritone.settings().physicalInput.value) {
-                ctx.player().setYRot(toY);
+                ctx.entity().setYRot(toY);
             } else {
-                float fromP = ctx.player().getXRot();
+                float fromP = ctx.entity().getXRot();
                 float[] aimed = physicalLook(fromY, fromP, toY, fromP);
-                ctx.player().setYRot(aimed[0]);
-                ctx.player().setXRot(aimed[1]);
+                ctx.entity().setYRot(aimed[0]);
+                ctx.entity().setXRot(aimed[1]);
             }
         }
     }
@@ -655,7 +655,7 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
                 final boolean antiCheat = settings.antiCheatCompatibility.value;
                 final boolean blockFreeLook = settings.blockFreeLook.value;
 
-                if (ctx.player().isFallFlying()) {
+                if (ctx.entity().isFallFlying()) {
                     // always need to set angles while flying
                     return settings.elytraFreeLook.value ? SERVER : CLIENT;
                 } else if (settings.freeLook.value) {

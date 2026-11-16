@@ -398,7 +398,7 @@ public class MovementTas extends Movement {
     private MovementState fail(MovementState state, String why) {
         FAILED.put(pairKey(src.x, src.y, src.z, dest.x, dest.y, dest.z), System.currentTimeMillis() + 30_000);
         logDebug("tas jump: " + why + " (" + src + " -> " + dest + "); avoiding it for 30s");
-        log("fail " + why + " " + src + "->" + dest + " at " + ctx.player().position());
+        log("fail " + why + " " + src + "->" + dest + " at " + ctx.entity().position());
         return state.setStatus(MovementStatus.UNREACHABLE);
     }
 
@@ -413,7 +413,7 @@ public class MovementTas extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        Vec3 p = ctx.player().position();
+        Vec3 p = ctx.entity().position();
         if (p.y < Math.min(src.y, dest.y) - 2.5) {
             return fail(state, "fell");
         }
@@ -422,7 +422,7 @@ public class MovementTas extends Movement {
             predicted = new PlayerSim(new ClientWorld(ctx));
         }
         ClientWorld.readPlayer(ctx, real);
-        Vec3 m = ctx.player().getDeltaMovement();
+        Vec3 m = ctx.entity().getDeltaMovement();
         if (phase == 0) {
             // walk to the start, sneaking so a narrow floor (a ladder's top, a candle) can't be walked off; a run-up's
             // start is blocks back, walked upright until the last half block
@@ -441,13 +441,13 @@ public class MovementTas extends Movement {
         if (phase == 1) {
             // stand up and face the search's first yaw, still
             state.setTarget(new MovementState.MovementTarget(new Rotation(e.yaw0, ctx.playerRotations().getPitch()), true));
-            if ((Math.abs(Mth.wrapDegrees(e.yaw0 - ctx.player().getYRot())) > 1 || ctx.player().isCrouching()) && ++waited < 20) {
+            if ((Math.abs(Mth.wrapDegrees(e.yaw0 - ctx.entity().getYRot())) > 1 || ctx.entity().isCrouching()) && ++waited < 20) {
                 return state;
             }
             double off = Math.abs(p.x - e.sx) + Math.abs(p.z - e.sz) + Math.abs(p.y - e.sy);
             plan = e.r;
             if (off > 0.02) {
-                plan = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.player().getYRot(), landing());
+                plan = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.entity().getYRot(), landing());
                 if (plan == null && e.runUp == 0) return fail(state, "no jump from where we stand");
                 if (plan == null) {
                     plan = e.r; // a run-up's hops are timed to the edge: fly the stored plan, the drift check searches again
@@ -456,14 +456,14 @@ public class MovementTas extends Movement {
             phase = 2;
             tick = 0;
             running = true;
-            PositionSync.sync(ctx.player());
+            PositionSync.sync(ctx.entity());
         }
         if (phase == 2) {
             if (tick > 0) {
                 double dev = Math.abs(real.x - predicted.x) + Math.abs(real.y - predicted.y) + Math.abs(real.z - predicted.z);
                 if (dev > 0.05 && replans < 2 && tick < plan.ticks() - 2) {
                     replans++;
-                    TasBrute.Result again = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.player().getYRot(), landing());
+                    TasBrute.Result again = brute(real.world(), Math.min(src.y, dest.y), e.runUp).search(real, ctx.entity().getYRot(), landing());
                     log("drift " + String.format("%.3f", dev) + " at tick " + tick + ", search again: " + (again != null));
                     if (again != null) {
                         plan = again;
@@ -488,7 +488,7 @@ public class MovementTas extends Movement {
             phase = 3;
         }
         // played out: done once standing on the landing (or hanging on its ladder) a few ticks
-        boolean there = e.grab ? ctx.playerFeet().equals(dest) && ctx.player().onClimbable() : ctx.playerFeet().equals(dest) && ctx.player().onGround();
+        boolean there = e.grab ? ctx.playerFeet().equals(dest) && ctx.entity().onClimbable() : ctx.playerFeet().equals(dest) && ctx.entity().onGround();
         if (there) {
             if (++settle > 2) return state.setStatus(MovementStatus.SUCCESS);
         } else if (++waited > 30) {
@@ -497,7 +497,7 @@ public class MovementTas extends Movement {
         if (!e.grab && real.onGround) {
             // A landing counts with any sliver of the box on the block, so the centre (the feet cell) can be in the next
             // column. Step in on the keys the plan's check assumed (TasBrute.stepKeys), sneaking so the edge holds.
-            int[] k = TasBrute.stepKeys(ctx.player().getYRot(), dest.x + 0.5 - p.x, dest.z + 0.5 - p.z);
+            int[] k = TasBrute.stepKeys(ctx.entity().getYRot(), dest.x + 0.5 - p.x, dest.z + 0.5 - p.z);
             if (Math.abs(p.x - dest.x - 0.5) < 0.5 - PlayerSim.HALF_WIDTH && Math.abs(p.z - dest.z - 0.5) < 0.5 - PlayerSim.HALF_WIDTH) {
                 k = new int[]{0, 0}; // the whole box is over the block
             }

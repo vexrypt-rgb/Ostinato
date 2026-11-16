@@ -71,7 +71,7 @@ public final class PathStatus {
             if (goal instanceof IGoalRenderPos) {
                 BlockPos p = ((IGoalRenderPos) goal).getGoalPos();
                 pos = new int[]{p.getX(), p.getY(), p.getZ()};
-                if (b.getPlayerContext().player() != null) {
+                if (b.getPlayerContext().entity() != null) {
                     Vec3 feet = b.getPlayerContext().playerFeetAsVec();
                     st.distance = Math.sqrt(p.distToCenterSqr(feet.x, feet.y, feet.z));
                 }

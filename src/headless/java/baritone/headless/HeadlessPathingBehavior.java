@@ -83,7 +83,7 @@ public final class HeadlessPathingBehavior implements IPathingBehavior {
         int throwawayCount = host.countGenericThrowaway();
         String hotbar = host.describeHotbar();
         CalculationContext context = new CalculationContext(host, host.bsi(),
-                new ToolSet(host.getPlayerContext().player()), hasThrowaway, host.bsi().minY(), host.bsi().height());
+                new ToolSet(host.getPlayerContext().entity()), hasThrowaway, host.bsi().minY(), host.bsi().height());
         host.setCalculationContext(context);
 
         long primary;

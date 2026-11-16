@@ -69,7 +69,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (baritone.getGraceNote().holdsControl()) {
             return; // Ostinato: no hotbar swaps under an emergency maneuver (the bucket it holds could be swapped out)
         }
-        if (ctx.player().containerMenu != ctx.player().inventoryMenu) {
+        if (ctx.entity().containerMenu != ctx.entity().inventoryMenu) {
             // we have a crafting table or a chest or something open
             return;
         }
@@ -105,7 +105,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         // we're using 0 and 8 for pickaxe and throwaway
         ArrayList<Integer> candidates = new ArrayList<>();
         for (int i = 1; i < 8; i++) {
-            if (ctx.player().getInventory().getNonEquipmentItems().get(i).isEmpty() && !disallowedHotbar.test(i)) {
+            if (ctx.entity().getInventory().getNonEquipmentItems().get(i).isEmpty() && !disallowedHotbar.test(i)) {
                 candidates.add(i);
             }
         }
@@ -134,14 +134,14 @@ public final class InventoryBehavior extends Behavior implements Helper {
         }
         if (AltoClefSettings.getInstance().isInteractionPaused()) return false;
 
-        ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, inInventory < 9 ? inInventory + 36 : inInventory, inHotbar, ContainerInput.SWAP, ctx.player());
+        ctx.playerController().windowClick(ctx.entity().inventoryMenu.containerId, inInventory < 9 ? inInventory + 36 : inInventory, inHotbar, ContainerInput.SWAP, ctx.entity());
         ticksSinceLastInventoryMove = 0;
         lastTickRequestedMove = null;
         return true;
     }
 
     private int firstValidThrowaway() { // TODO offhand idk
-        NonNullList<ItemStack> invy = ctx.player().getInventory().getNonEquipmentItems();
+        NonNullList<ItemStack> invy = ctx.entity().getInventory().getNonEquipmentItems();
         for (int i = 0; i < invy.size(); i++) {
             Item item = invy.get(i).getItem();
 
@@ -155,7 +155,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     private int bestToolAgainst(Block against) {
-        NonNullList<ItemStack> invy = ctx.player().getInventory().getNonEquipmentItems();
+        NonNullList<ItemStack> invy = ctx.entity().getInventory().getNonEquipmentItems();
         int bestInd = -1;
         double bestSpeed = -1;
         for (int i = 0; i < invy.size(); i++) {
@@ -207,7 +207,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (AltoClefSettings.getInstance().shouldAvoidPlacingAt(x, y, z)) return false;
 
         BlockState maybe = baritone.getBuilderProcess().placeAt(x, y, z, baritone.bsi.get0(x, y, z));
-        if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof BlockItem && maybe.equals(((BlockItem) stack.getItem()).getBlock().getStateForPlacement(new BlockPlaceContext(new UseOnContext(ctx.world(), ctx.player(), InteractionHand.MAIN_HAND, stack, new BlockHitResult(new Vec3(ctx.player().position().x, ctx.player().position().y, ctx.player().position().z), Direction.UP, ctx.playerFeet(), false)) {}))))) {
+        if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof BlockItem && maybe.equals(((BlockItem) stack.getItem()).getBlock().getStateForPlacement(new BlockPlaceContext(new UseOnContext(ctx.world(), ctx.entity(), InteractionHand.MAIN_HAND, stack, new BlockHitResult(new Vec3(ctx.entity().position().x, ctx.entity().position().y, ctx.entity().position().z), Direction.UP, ctx.playerFeet(), false)) {}))))) {
             return true; // gotem
         }
         if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock().equals(maybe.getBlock()))) {

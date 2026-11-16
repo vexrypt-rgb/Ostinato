@@ -78,13 +78,13 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        if (ctx.player() == null || ctx.world() == null || !FastMode.swimInWater()) {
+        if (ctx.entity() == null || ctx.world() == null || !FastMode.swimInWater()) {
             door = null; // a pocket from the world we left must not be picked up again in the next one
             return active = false;
         }
-        int air = ctx.player().getAirSupply(), max = ctx.player().getMaxAirSupply();
-        boolean onMagma = ctx.world().getBlockState(BlockPos.containing(ctx.player().position()).below()).getBlock() == Blocks.MAGMA_BLOCK
-                || (ctx.player().isInWater() && ctx.world().getBlockState(ctx.playerFeet().below()).getBlock() == Blocks.MAGMA_BLOCK);
+        int air = ctx.entity().getAirSupply(), max = ctx.entity().getMaxAirSupply();
+        boolean onMagma = ctx.world().getBlockState(BlockPos.containing(ctx.entity().position()).below()).getBlock() == Blocks.MAGMA_BLOCK
+                || (ctx.entity().isInWater() && ctx.world().getBlockState(ctx.playerFeet().below()).getBlock() == Blocks.MAGMA_BLOCK);
         // Whatever process is driving: sneaking is the only thing that stops magma burning us.
         Boolean sneak = magmaSneak(onMagma, magmaSneak);
         if (sneak != null) {
@@ -95,7 +95,7 @@ public final class AirProcess extends BaritoneProcessHelper {
             if (air < 30) breathCooldown = 0; // one bubble left: try again before drowning
             else breathCooldown--;
         }
-        if (!active && breathCooldown == 0 && ctx.player().isInWater() && ctx.player().tickCount % 20 == 0) {
+        if (!active && breathCooldown == 0 && ctx.entity().isInWater() && ctx.entity().tickCount % 20 == 0) {
             // Blocks to the nearest breathable spot: open surface straight up, or a bubble column.
             int surface = findSurfaceY();
             surfaceInReach = surface != NONE;
@@ -104,11 +104,11 @@ public final class AirProcess extends BaritoneProcessHelper {
             depth = Math.min(sd, colDist);
             if (depth == Integer.MAX_VALUE) depth = 0; // no air in reach: keep going, one may come into range
         }
-        if (!active && breathCooldown == 0 && ctx.player().isSwimming() && col == null && surfaceInReach && baritone.getPathingBehavior().isPathing() && air > 20) {
+        if (!active && breathCooldown == 0 && ctx.entity().isSwimming() && col == null && surfaceInReach && baritone.getPathingBehavior().isPathing() && air > 20) {
             // Swimming under open water: the movement creeps up to breathe without leaving the swim pose.
             return false;
         }
-        if (!active && breathCooldown == 0 && ctx.player().isInWater() && air < Math.min(max - 40, Math.max(max / 3, depth * 9)) && !goalWithinBreath(air, depth)) {
+        if (!active && breathCooldown == 0 && ctx.entity().isInWater() && air < Math.min(max - 40, Math.max(max / 3, depth * 9)) && !goalWithinBreath(air, depth)) {
             // ~1.5x the straight swim (4 ticks/block): paths detour around hulls and walls.
             active = true;
             fromX = ctx.playerFeet().getX();
@@ -266,7 +266,7 @@ public final class AirProcess extends BaritoneProcessHelper {
                 return new PathingCommand(null, PathingCommandType.DEFER);
             }
         }
-        BlockPos eyes = BlockPos.containing(ctx.player().getEyePosition(1));
+        BlockPos eyes = BlockPos.containing(ctx.entity().getEyePosition(1));
         BlockState below = ctx.world().getBlockState(ctx.playerFeet().below());
         if (below.getBlock() == Blocks.MAGMA_BLOCK) {
             baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, true); // no burn while sneaking
@@ -292,7 +292,7 @@ public final class AirProcess extends BaritoneProcessHelper {
 
     private int doorCount() {
         int n = 0;
-        for (ItemStack st : ctx.player().getInventory().getNonEquipmentItems()) if (isWoodenDoor(st)) n += st.getCount();
+        for (ItemStack st : ctx.entity().getInventory().getNonEquipmentItems()) if (isWoodenDoor(st)) n += st.getCount();
         return n;
     }
 
@@ -310,7 +310,7 @@ public final class AirProcess extends BaritoneProcessHelper {
                     if (!MovementHelper.isWater(ctx.world().getBlockState(p)) || !MovementHelper.isWater(ctx.world().getBlockState(p.above()))) continue;
                     BlockPos under = p.below();
                     if (!ctx.world().getBlockState(under).isFaceSturdy(ctx.world(), under, Direction.UP)) continue;
-                    double d = ctx.player().distanceToSqr(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
+                    double d = ctx.entity().distanceToSqr(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
                     if (d < bestD && d < 16) {
                         bestD = d;
                         best = p;
@@ -347,22 +347,22 @@ public final class AirProcess extends BaritoneProcessHelper {
         if (!placed) {
             if (wasPlaced) {
                 // Broken back: wait for the dropped door to reach us (it drops at our feet).
-                if (doorCount() > 0 || ctx.player().getAirSupply() < 60) { door = null; return null; }
+                if (doorCount() > 0 || ctx.entity().getAirSupply() < 60) { door = null; return null; }
                 // The drop drifts underwater; swim to it rather than waiting in place (TenorClef door course rep 1 drowned waiting).
                 ItemEntity drop = null;
                 for (ItemEntity e : ctx.world().getEntitiesOfClass(ItemEntity.class, new AABB(door).inflate(6), e -> isWoodenDoor(e.getItem()))) {
-                    if (drop == null || ctx.player().distanceToSqr(e) < ctx.player().distanceToSqr(drop)) drop = e;
+                    if (drop == null || ctx.entity().distanceToSqr(e) < ctx.entity().distanceToSqr(drop)) drop = e;
                 }
                 if (drop != null) {
                     Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), drop.position(), ctx.playerRotations());
                     baritone.getLookBehavior().updateTarget(new Rotation(r.getYaw(), 0), false);
-                    double dx = drop.getX() - ctx.player().getX(), dz = drop.getZ() - ctx.player().getZ();
+                    double dx = drop.getX() - ctx.entity().getX(), dz = drop.getZ() - ctx.entity().getZ();
                     // Drops float to the ceiling; walking into the spot under it pins us to the floor, so only close in horizontally.
                     if (dx * dx + dz * dz > 0.25) baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
                     // Set both every tick: forced inputs stick, and a SNEAK left from entering the door cancelled
                     // JUMP in water, pinning us to the floor under a drop at the roof (TenorClef door course).
-                    baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, drop.getY() < ctx.player().getY() - 0.3);
-                    baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, drop.getY() > ctx.player().getY() + 0.5);
+                    baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, drop.getY() < ctx.entity().getY() - 0.3);
+                    baritone.getInputOverrideHandler().setInputForceState(Input.JUMP, drop.getY() > ctx.entity().getY() + 0.5);
                 }
                 return pause;
             }
@@ -399,12 +399,12 @@ public final class AirProcess extends BaritoneProcessHelper {
             Vec3 c = new Vec3(door.getX() + 0.5, door.getY(), door.getZ() + 0.5);
             Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), c, ctx.playerRotations());
             baritone.getLookBehavior().updateTarget(new Rotation(r.getYaw(), 0), false);
-            double hx = c.x - ctx.player().getX(), hz = c.z - ctx.player().getZ();
+            double hx = c.x - ctx.entity().getX(), hz = c.z - ctx.entity().getZ();
             if (hx * hx + hz * hz > 0.04) baritone.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
-            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, ctx.player().getY() > door.getY() + 0.1);
+            baritone.getInputOverrideHandler().setInputForceState(Input.SNEAK, ctx.entity().getY() > door.getY() + 0.1);
             return pause;
         }
-        if (ctx.player().getAirSupply() < ctx.player().getMaxAirSupply()) return pause; // breathing
+        if (ctx.entity().getAirSupply() < ctx.entity().getMaxAirSupply()) return pause; // breathing
         if (!breathed) { breathed = true; doorTicks = 0; }
         if (!pickUpDoor) {
             door = null; // leave it as an air station
@@ -423,7 +423,7 @@ public final class AirProcess extends BaritoneProcessHelper {
             breakStarted = true;
         }
         ctx.playerController().onPlayerDamageBlock(top, Direction.UP);
-        ctx.player().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
+        ctx.entity().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         return pause;
     }
 
@@ -445,7 +445,7 @@ public final class AirProcess extends BaritoneProcessHelper {
     public void onLostControl() {
         // A caller cancelling every tick must not reset surfacing: that rebuilt the goal and restarted
         // the search each tick at spd 0 until drowning (TenorClef s326o). Keep it while still short of air.
-        if (active && door == null && goal != null && ctx.player() != null && ctx.player().isInWater() && ctx.player().getAirSupply() < ctx.player().getMaxAirSupply()) return;
+        if (active && door == null && goal != null && ctx.entity() != null && ctx.entity().isInWater() && ctx.entity().getAirSupply() < ctx.entity().getMaxAirSupply()) return;
         active = false;
         door = null;
     }

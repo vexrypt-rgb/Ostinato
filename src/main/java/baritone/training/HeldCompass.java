@@ -33,10 +33,10 @@ public final class HeldCompass {
     private HeldCompass() {}
 
     public static CompassNeedle.Reading read(IPlayerContext ctx) {
-        if (ctx == null || ctx.player() == null || !(ctx.world() instanceof ClientLevel level)) {
+        if (ctx == null || ctx.entity() == null || !(ctx.world() instanceof ClientLevel level)) {
             return CompassNeedle.read(CompassNeedle.Kind.NONE, false, "", 0, 0, 0, "", 0, 0, 0);
         }
-        Player player = ctx.player();
+        Player player = ctx.entity();
         ItemStack stack = choose(player);
         if (stack == null) {
             return CompassNeedle.read(CompassNeedle.Kind.NONE, false, "", 0, 0, 0, here(level), feet(player).x, feet(player).y, feet(player).z);

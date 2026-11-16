@@ -47,7 +47,7 @@ public final class CompassFollowProcess extends BaritoneProcessHelper {
         if (!Baritone.settings().trainingLegit.value || !Baritone.settings().compassFollow.value) {
             return false;
         }
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             return false;
         }
         reading = HeldCompass.read(ctx);

@@ -318,7 +318,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
 
     /** Ostinato: same admission rule as MineProcess. A block that fails the filter is not a target. */
     private List<BlockPos> filterLegit(List<BlockPos> locs, CalculationContext context) {
-        Entity player = ctx.player();
+        Entity player = ctx.entity();
         if (player == null || context == null) {
             return LegitTargets.select(locs, legitSeen, null, 0, 0, 0, true);
         }
@@ -344,7 +344,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
     private Goal cadenzaGoal() {
         CalculationContext context = new GetToBlockCalculationContext(false);
         double reach = ctx.playerController().getBlockReachDistance();
-        double eye = ctx.player().getEyeHeight(Pose.STANDING);
+        double eye = ctx.entity().getEyeHeight(Pose.STANDING);
         int max = Baritone.settings().cadenzaMaxTargets.value;
         BetterBlockPos feet = ctx.playerFeet();
         List<BlockPos> byDistance = new ArrayList<>(knownLocations);
@@ -404,9 +404,9 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
             // the planned cell does not work live: drop it after a few ticks and replan, instead of giving up here
             if (Baritone.settings().cadenzaDebug.value && !ctx.playerFeet().equals(debugCell)) {
                 debugCell = ctx.playerFeet();
-                logDirect("Cadenza: cannot reach " + knownLocations + " from " + debugCell + " eye " + ctx.player().getEyePosition(1.0F));
+                logDirect("Cadenza: cannot reach " + knownLocations + " from " + debugCell + " eye " + ctx.entity().getEyePosition(1.0F));
             }
-            cadenza.nothingReachable(ctx.playerFeet(), ctx.player().onGround());
+            cadenza.nothingReachable(ctx.playerFeet(), ctx.entity().onGround());
             return false;
         }
         logDirect("Arrived but failed to right click open");
@@ -421,7 +421,7 @@ public final class GetToBlockProcess extends BaritoneProcessHelper implements IG
 
     @Override
     public boolean reached(BlockOptionalMeta target, Object before) {
-        if (ctx.player() == null) {
+        if (ctx.entity() == null) {
             return false;
         }
         Block block = target.getBlock();

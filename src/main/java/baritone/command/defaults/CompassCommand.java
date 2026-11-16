@@ -26,7 +26,7 @@ public class CompassCommand extends Command {
         args.requireMax(0);
         boolean legit = Baritone.settings().trainingLegit.value;
         boolean follow = Baritone.settings().compassFollow.value;
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             logDirect("compass: not in a world. trainingLegit=" + legit + " compassFollow=" + follow);
             return;
         }

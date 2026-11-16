@@ -284,7 +284,7 @@ public class MovementFall extends Movement {
             // Claim any boat ride for this movement from the start, so BoatProcess doesn't see us seated
             // on land and climb straight back out (which also puts a 60-tick cooldown on boarding).
             boatRide = true;
-            boatRideTick = ctx.player().tickCount;
+            boatRideTick = ctx.entity().tickCount;
             boatFall(state);
             boatRide = state.getStatus() == MovementStatus.RUNNING;
             return state;
@@ -292,7 +292,7 @@ public class MovementFall extends Movement {
         ticks++;
         confirmLadder();
 
-        if (ctx.player().getVehicle() != null) {
+        if (ctx.entity().getVehicle() != null) {
             // the ride cancelled the fall (LivingEntity.rideTick), now get off and finish on foot. never done while seated
             mounted = true;
             return state.setInput(Input.SNEAK, true);
@@ -301,10 +301,10 @@ public class MovementFall extends Movement {
         BlockPos playerFeet = ctx.playerFeet();
         // Ostinato: a caught ladder is slid. Forward would climb it, and sneak would freeze the slide.
         // Ostinato: fastMode behaves as if allowLadderClutch were on. Off, this is the setting.
-        if (MovementDescend.slideOnGrabbedLadder(FastMode.allowLadderClutch(), ctx.player().onClimbable(),
+        if (MovementDescend.slideOnGrabbedLadder(FastMode.allowLadderClutch(), ctx.entity().onClimbable(),
                 playerFeet.getX(), playerFeet.getY(), playerFeet.getZ(), fx, fz, src.y, dest.y)) {
-            double dx = ctx.player().position().x - (fx + 0.5);
-            double dz = ctx.player().position().z - (fz + 0.5);
+            double dx = ctx.entity().position().x - (fx + 0.5);
+            double dz = ctx.entity().position().z - (fz + 0.5);
             if (dx * dx + dz * dz > 0.04) {
                 MovementHelper.moveTowards(ctx, state, new BlockPos(fx, playerFeet.getY(), fz));
             }
@@ -320,19 +320,19 @@ public class MovementFall extends Movement {
         }
 
         boolean isWater = destState.getFluidState().getType() instanceof WaterFluid;
-        if (hurt && !isWater && playerFeet.equals(src) && ctx.player().onGround() && !stillPossible()) {
+        if (hurt && !isWater && playerFeet.equals(src) && ctx.entity().onGround() && !stillPossible()) {
             // we got hurt (or something else dropped our health) since the plan was made, and this fall would now cost us
             // more than we agreed to. nothing has happened yet, so the executor can just replan
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
         FallMode mode = isWater ? FallMode.NONE : fallMode();
         if (mode == FallMode.BUCKET && !playerFeet.equals(dest) && !AltoClefSettings.getInstance().shouldNotPlaceBucketButStillFall()) {
-            if (!Inventory.isHotbarSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) || ctx.world().dimension() == Level.NETHER) {
+            if (!Inventory.isHotbarSlot(ctx.entity().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER)) || ctx.world().dimension() == Level.NETHER) {
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
 
-            if (ctx.player().position().y - dest.getY() < ctx.playerController().getBlockReachDistance() && !ctx.player().onGround()) {
-                ctx.player().getInventory().setSelectedSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER));
+            if (ctx.entity().position().y - dest.getY() < ctx.playerController().getBlockReachDistance() && !ctx.entity().onGround()) {
+                ctx.entity().getInventory().setSelectedSlot(ctx.entity().getInventory().findSlotMatchingItem(STACK_BUCKET_WATER));
 
                 targetRotation = new Rotation(toDest.getYaw(), 90.0F);
 
@@ -347,18 +347,18 @@ public class MovementFall extends Movement {
             state.setTarget(new MovementTarget(toDest, false));
         }
         boolean slime = !isWater && ctx.world().getBlockState(dest.below()).is(Blocks.SLIME_BLOCK);
-        if (playerFeet.equals(dest) && (ctx.player().position().y - playerFeet.getY() < 0.094 || isWater)
-                && (!slime || ctx.player().onGround() && ctx.player().getDeltaMovement().y < 0.1)) { // 0.094 because lilypads; on slime, once we stop bouncing
+        if (playerFeet.equals(dest) && (ctx.entity().position().y - playerFeet.getY() < 0.094 || isWater)
+                && (!slime || ctx.entity().onGround() && ctx.entity().getDeltaMovement().y < 0.1)) { // 0.094 because lilypads; on slime, once we stop bouncing
             if (isWater) { // only match water, not flowing water (which we cannot pick up with a bucket)
-                if (Inventory.isHotbarSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY))) {
-                    ctx.player().getInventory().setSelectedSlot(ctx.player().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY));
-                    if (ctx.player().getDeltaMovement().y >= 0) {
+                if (Inventory.isHotbarSlot(ctx.entity().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY))) {
+                    ctx.entity().getInventory().setSelectedSlot(ctx.entity().getInventory().findSlotMatchingItem(STACK_BUCKET_EMPTY));
+                    if (ctx.entity().getDeltaMovement().y >= 0) {
                         return state.setInput(Input.CLICK_RIGHT, true);
                     } else {
                         return state;
                     }
                 } else {
-                    if (ctx.player().getDeltaMovement().y >= 0) {
+                    if (ctx.entity().getDeltaMovement().y >= 0) {
                         return state.setStatus(MovementStatus.SUCCESS);
                     } // don't else return state; we need to stay centered because this water might be flowing under the surface
                 }
@@ -369,15 +369,15 @@ public class MovementFall extends Movement {
         if (mode == FallMode.CLUTCH && !playerFeet.equals(dest) && clutch(state)) {
             return state; // it's doing the steering, the centering below would fight it
         }
-        if (steer != null && (!ctx.player().onGround() || playerFeet.getY() >= src.y)) {
-            if (ctx.player().onGround()) {
+        if (steer != null && (!ctx.entity().onGround() || playerFeet.getY() >= src.y)) {
+            if (ctx.entity().onGround()) {
                 // walk off into the fall column, the drift starts once we're in the air
                 Vec3 col = new Vec3(fx + 0.5, src.y, fz + 0.5);
                 state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), col, ctx.playerRotations()), false));
                 return state.setInput(Input.MOVE_FORWARD, true);
             }
             // the keys are worked out for the way we face now, so don't turn (unless the bucket needs to look down)
-            boolean[] k = airKeys(ctx.player());
+            boolean[] k = airKeys(ctx.entity());
             state.setInput(Input.MOVE_FORWARD, k[0]);
             state.setInput(Input.MOVE_BACK, k[1]);
             state.setInput(Input.MOVE_LEFT, k[2]);
@@ -395,8 +395,8 @@ public class MovementFall extends Movement {
             return state;
         }
         Vec3 destCenter = VecUtils.getBlockPosCenter(dest); // we are moving to the 0.5 center not the edge (like if we were falling on a ladder)
-        if (Math.abs(ctx.player().position().x + ctx.player().getDeltaMovement().x - destCenter.x) > 0.1 || Math.abs(ctx.player().position().z + ctx.player().getDeltaMovement().z - destCenter.z) > 0.1) {
-            if (!ctx.player().onGround() && Math.abs(ctx.player().getDeltaMovement().y) > 0.4) {
+        if (Math.abs(ctx.entity().position().x + ctx.entity().getDeltaMovement().x - destCenter.x) > 0.1 || Math.abs(ctx.entity().position().z + ctx.entity().getDeltaMovement().z - destCenter.z) > 0.1) {
+            if (!ctx.entity().onGround() && Math.abs(ctx.entity().getDeltaMovement().y) > 0.4) {
                 state.setInput(Input.SNEAK, true);
             }
             state.setInput(Input.MOVE_FORWARD, true);
@@ -405,10 +405,10 @@ public class MovementFall extends Movement {
         if (avoid == null) {
             avoid = src.subtract(dest);
         } else {
-            double dist = Math.abs(avoid.getX() * (destCenter.x - avoid.getX() / 2.0 - ctx.player().position().x)) + Math.abs(avoid.getZ() * (destCenter.z - avoid.getZ() / 2.0 - ctx.player().position().z));
+            double dist = Math.abs(avoid.getX() * (destCenter.x - avoid.getX() / 2.0 - ctx.entity().position().x)) + Math.abs(avoid.getZ() * (destCenter.z - avoid.getZ() / 2.0 - ctx.entity().position().z));
             if (dist < 0.6) {
                 state.setInput(Input.MOVE_FORWARD, true);
-            } else if (!ctx.player().onGround()) {
+            } else if (!ctx.entity().onGround()) {
                 state.setInput(Input.SNEAK, false);
             }
         }
@@ -432,9 +432,9 @@ public class MovementFall extends Movement {
 
     /** How far the landing coming up will have fallen: the rest of this drop, or from the top of this bounce. */
     private double slimeDrop() {
-        double above = ctx.player().position().y - dest.y;
-        double vy = ctx.player().getDeltaMovement().y;
-        return vy > 0 ? above + vy * vy / 0.16 : ctx.player().fallDistance + above;
+        double above = ctx.entity().position().y - dest.y;
+        double vy = ctx.entity().getDeltaMovement().y;
+        return vy > 0 ? above + vy * vy / 0.16 : ctx.entity().fallDistance + above;
     }
 
     /**
@@ -444,23 +444,23 @@ public class MovementFall extends Movement {
      */
     private Rotation mount() {
         Entity m = MountUtil.mountAt(ctx.world(), dest);
-        if (m == null || ctx.player().onGround()) {
+        if (m == null || ctx.entity().onGround()) {
             return null;
         }
         Vec3 aim = m.getBoundingBox().getCenter();
         Rotation r = RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations());
-        double reach = MountUtil.reach(ctx.player(), m);
-        double nextY = ctx.player().position().y + (ctx.player().getDeltaMovement().y - 0.08) * 0.98f;
+        double reach = MountUtil.reach(ctx.entity(), m);
+        double nextY = ctx.entity().position().y + (ctx.entity().getDeltaMovement().y - 0.08) * 0.98f;
         if (reach <= MountUtil.REACH || nextY <= dest.y + 0.5 && reach < MountUtil.SERVER_REACH - 0.5) {
             emptyHand();
-            Minecraft.getInstance().gameMode.interact(ctx.player(), m, new net.minecraft.world.phys.EntityHitResult(m, aim), InteractionHand.MAIN_HAND);
+            Minecraft.getInstance().gameMode.interact(ctx.entity(), m, new net.minecraft.world.phys.EntityHitResult(m, aim), InteractionHand.MAIN_HAND);
         }
         return r;
     }
 
     /** Food, saddles, leads and the like get used on the mount instead of getting on it, so click with nothing in hand. */
     private void emptyHand() {
-        Inventory inv = ctx.player().getInventory();
+        Inventory inv = ctx.entity().getInventory();
         if (inv.getSelectedItem().isEmpty()) {
             return;
         }
@@ -477,9 +477,9 @@ public class MovementFall extends Movement {
      * soaks up the landing; once down, BoatProcess climbs out, breaks it and picks it back up.
      */
     private MovementState boatFall(MovementState state) {
-        Entity v = ctx.player().getVehicle();
+        Entity v = ctx.entity().getVehicle();
         if (v instanceof AbstractBoat) {
-            if (!BoatUtil.isDriver(ctx.player()) || BoatUtil.mobAboard(ctx.player())) {
+            if (!BoatUtil.isDriver(ctx.entity()) || BoatUtil.mobAboard(ctx.entity())) {
                 // Someone else got in first (or a mob did: we'd steer, but not with it aboard) and steers: get out and don't ride their boat off the cliff.
                 boatRide = false;
                 logDebug("boat fall: not the driver, getting out");
@@ -503,59 +503,59 @@ public class MovementFall extends Movement {
             if (Math.abs(diff) < 50) state.setInput(Input.MOVE_FORWARD, true);
             if (boatTicks++ > 200) {
                 boatRide = false;
-                logDebug("boat fall: stuck riding at edge " + ctx.player().position() + " ticks=" + boatTicks);
+                logDebug("boat fall: stuck riding at edge " + ctx.entity().position() + " ticks=" + boatTicks);
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
             return state.setTarget(new MovementTarget(new Rotation(want, 10), true));
         }
-        if (nearSrc() > 2 && ctx.player().onGround() && boatTicks < 60 && ctx.playerFeet().getY() >= src.getY()) {
+        if (nearSrc() > 2 && ctx.entity().onGround() && boatTicks < 60 && ctx.playerFeet().getY() >= src.getY()) {
             // Handed the movement a step early/late: walk back onto src first.
             boatTicks++;
             state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), VecUtils.getBlockPosCenter(src), ctx.playerRotations()), false));
             return state.setInput(Input.MOVE_FORWARD, true);
         }
         if (nearSrc() > 2 || boatTicks++ > 160) {
-            logDebug("boat fall: couldn't place/mount " + ctx.player().position() + " src=" + src + " dest=" + dest + " ticks=" + boatTicks);
+            logDebug("boat fall: couldn't place/mount " + ctx.entity().position() + " src=" + src + " dest=" + dest + " ticks=" + boatTicks);
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
         Entity boat = null;
         for (Entity e : ctx.entities()) {
-            if (BoatUtil.free(e) && ctx.player().distanceTo(e) < 3
-                    && (boat == null || ctx.player().distanceTo(e) < ctx.player().distanceTo(boat))) boat = e;
+            if (BoatUtil.free(e) && ctx.entity().distanceTo(e) < 3
+                    && (boat == null || ctx.entity().distanceTo(e) < ctx.entity().distanceTo(boat))) boat = e;
         }
         if (boat != null) {
             state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), new Vec3(boat.getX(), boat.getY() + 0.3, boat.getZ()), ctx.playerRotations()), true));
             if (boatTicks % 4 == 3) {
-                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.player(), boat, new net.minecraft.world.phys.EntityHitResult(boat), InteractionHand.MAIN_HAND);
-                if (boatTicks % 40 == 3) logDebug("boat fall: board " + r + " riding=" + ctx.player().getVehicle());
+                net.minecraft.world.InteractionResult r = Minecraft.getInstance().gameMode.interact(ctx.entity(), boat, new net.minecraft.world.phys.EntityHitResult(boat), InteractionHand.MAIN_HAND);
+                if (boatTicks % 40 == 3) logDebug("boat fall: board " + r + " riding=" + ctx.entity().getVehicle());
             }
             return state;
         }
         int slot = BoatUtil.hotbarBoat(ctx);
         if (slot < 0) {
-            logDebug("boat fall: no boat " + ctx.player().position() + " ticks=" + boatTicks);
+            logDebug("boat fall: no boat " + ctx.entity().position() + " ticks=" + boatTicks);
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
-        ctx.player().getInventory().setSelectedSlot(slot);
+        ctx.entity().getInventory().setSelectedSlot(slot);
         // Boats can't overlap us. With headroom, jump and place underneath at the top of the jump;
         // in a 1-2 high space, back off src and place on its far half instead.
         if (ctx.playerFeet().equals(src) && MovementHelper.canWalkThrough(ctx, src.above(2)) && MovementHelper.canWalkThrough(ctx, src.above(3))) {
             state.setTarget(new MovementTarget(new Rotation(ctx.playerRotations().getYaw(), 90), true));
-            if (ctx.player().onGround()) {
+            if (ctx.entity().onGround()) {
                 state.setInput(Input.JUMP, true);
-            } else if (ctx.player().getY() - src.getY() > 0.7) {
-                Minecraft.getInstance().gameMode.useItem(ctx.player(), InteractionHand.MAIN_HAND);
+            } else if (ctx.entity().getY() - src.getY() > 0.7) {
+                Minecraft.getInstance().gameMode.useItem(ctx.entity(), InteractionHand.MAIN_HAND);
             }
             return state;
         }
         double dx = Math.signum(dest.getX() - src.getX()), dz = Math.signum(dest.getZ() - src.getZ());
         Vec3 aim = new Vec3(src.getX() + 0.5 + dx * 0.35, src.getY(), src.getZ() + 0.5 + dz * 0.35);
         state.setTarget(new MovementTarget(RotationUtils.calcRotationFromVec3d(ctx.playerHead(), aim, ctx.playerRotations()), true));
-        double back = (src.getX() + 0.5 - ctx.player().getX()) * dx + (src.getZ() + 0.5 - ctx.player().getZ()) * dz;
+        double back = (src.getX() + 0.5 - ctx.entity().getX()) * dx + (src.getZ() + 0.5 - ctx.entity().getZ()) * dz;
         if (back < 0.8) {
             state.setInput(Input.MOVE_BACK, true);
         } else if (boatTicks % 5 == 4) {
-            Minecraft.getInstance().gameMode.useItem(ctx.player(), InteractionHand.MAIN_HAND);
+            Minecraft.getInstance().gameMode.useItem(ctx.entity(), InteractionHand.MAIN_HAND);
         }
         return state;
     }
@@ -614,7 +614,7 @@ public class MovementFall extends Movement {
         }
         // a drop can't be picked up for 10 ticks, and the pickup box is a block wider than us. nobody to wait for means
         // creative, a full inventory that ate it already, or the gamerule being off
-        Vec3 me = ctx.player().position();
+        Vec3 me = ctx.entity().position();
         ItemEntity drop = null;
         double best = Double.MAX_VALUE;
         for (ItemEntity item : ctx.world().getEntitiesOfClass(ItemEntity.class, new AABB(ladder).inflate(1.5), e -> e.getItem().is(Items.LADDER))) {
@@ -657,7 +657,7 @@ public class MovementFall extends Movement {
     // and the aim goes on the tick before that, pointed from where our eye is going to be
     // returns true if it took over the inputs this tick
     private boolean clutch(MovementState state) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (player.onGround() || player.getDeltaMovement().y >= 0) {
             return false;
         }
@@ -724,14 +724,14 @@ public class MovementFall extends Movement {
     // line the crosshair up with the wall next to this cell for the next tick, and only if the ray from where we'll be
     // really ends up on the face (same check as attemptToPlaceABlock, except from the next eye instead of this one)
     private boolean aim(MovementState state, BlockStateInterface bsi, BlockPos cell, boolean ladder, Vec3 pos, Vec3 mot, double reach) {
-        Vec3 eye = new Vec3(pos.x + mot.x, pos.y + mot.y + ctx.player().getEyeHeight(), pos.z + mot.z);
+        Vec3 eye = new Vec3(pos.x + mot.x, pos.y + mot.y + ctx.entity().getEyeHeight(), pos.z + mot.z);
         Vec3 feet = new Vec3(eye.x, pos.y + mot.y, eye.z);
         for (Direction side : walls(bsi, cell, feet, ladder)) {
             for (double height : AIM_HEIGHTS) {
                 Rotation want = RotationUtils.calcRotationFromVec3d(eye, faceSpot(cell, side, eye, height), ctx.playerRotations());
                 Rotation actual = baritone.getLookBehavior().getAimProcessor().peekRotation(want);
                 Vec3 dir = RotationUtils.calcLookDirectionFromRotation(actual);
-                HitResult res = ctx.world().clip(new ClipContext(eye, eye.add(dir.scale(reach)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, ctx.player()));
+                HitResult res = ctx.world().clip(new ClipContext(eye, eye.add(dir.scale(reach)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, ctx.entity()));
                 if (res instanceof BlockHitResult b && b.getType() == HitResult.Type.BLOCK && b.getBlockPos().equals(cell.relative(side)) && b.getDirection() == side.getOpposite()) {
                     state.setTarget(new MovementTarget(want, true));
                     return true;
@@ -815,7 +815,7 @@ public class MovementFall extends Movement {
     public boolean safeToCancel(MovementState state) {
         // if we haven't started walking off the edge yet, or if we're in the process of breaking blocks before doing the fall
         // then it's safe to cancel this
-        if (ctx.player().getVehicle() instanceof AbstractBoat) {
+        if (ctx.entity().getVehicle() instanceof AbstractBoat) {
             return state.getStatus() != MovementStatus.RUNNING;
         }
         // Boat placed but not mounted yet: it's no longer in the inventory, so a cost recheck says

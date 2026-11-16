@@ -424,7 +424,7 @@ public final class FreecamBehavior extends Behavior implements Helper {
         } catch (RuntimeException ignored) {
             // bad key name in the setting: treat as unbound
         }
-        if (down && !toggleKeyHeld && ctx.player() != null) {
+        if (down && !toggleKeyHeld && ctx.entity() != null) {
             toggle();
         }
         toggleKeyHeld = down;

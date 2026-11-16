@@ -48,7 +48,7 @@ public final class BoatUtil {
 
     /** Hotbar slot holding a boat, swapping one in from the main inventory if needed; -1 if none. */
     public static int hotbarBoat(IPlayerContext ctx) {
-        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
+        NonNullList<ItemStack> inv = ctx.entity().getInventory().getNonEquipmentItems();
         for (int i = 0; i < 9; i++) {
             if (inv.get(i).getItem() instanceof BoatItem) return i;
         }
@@ -58,7 +58,7 @@ public final class BoatUtil {
             for (int j = 0; j < 9; j++) {
                 if (inv.get(j).isEmpty()) { hb = j; break; }
             }
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, hb, ContainerInput.SWAP, ctx.player());
+            ctx.playerController().windowClick(ctx.entity().inventoryMenu.containerId, i, hb, ContainerInput.SWAP, ctx.entity());
             borrowed = new int[]{i, hb};
             return hb;
         }
@@ -67,9 +67,9 @@ public final class BoatUtil {
 
     /** Put back whatever the borrowed hotbar slot held, once the boat has been placed. */
     public static void restore(IPlayerContext ctx) {
-        if (borrowed == null || ctx.player() == null) return;
-        if (!(ctx.player().getInventory().getNonEquipmentItems().get(borrowed[1]).getItem() instanceof BoatItem)) {
-            ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, borrowed[0], borrowed[1], ContainerInput.SWAP, ctx.player());
+        if (borrowed == null || ctx.entity() == null) return;
+        if (!(ctx.entity().getInventory().getNonEquipmentItems().get(borrowed[1]).getItem() instanceof BoatItem)) {
+            ctx.playerController().windowClick(ctx.entity().inventoryMenu.containerId, borrowed[0], borrowed[1], ContainerInput.SWAP, ctx.entity());
         }
         borrowed = null;
     }

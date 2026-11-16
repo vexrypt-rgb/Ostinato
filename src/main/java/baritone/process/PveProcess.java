@@ -94,7 +94,7 @@ public final class PveProcess extends BaritoneProcessHelper {
 
     /** Marked by hand (freecam). Players are PvP's; this takes mobs only. */
     public boolean addEnemy(LivingEntity e) {
-        if (e == null || e instanceof Player || ctx.player() == null) return false;
+        if (e == null || e instanceof Player || ctx.entity() == null) return false;
         if (!isActive()) attack(x -> false, "marked");
         marked.add(e.getUUID());
         return true;
@@ -127,17 +127,17 @@ public final class PveProcess extends BaritoneProcessHelper {
 
     @Override
     public boolean isActive() {
-        return filter != null && ctx.player() != null;
+        return filter != null && ctx.entity() != null;
     }
 
     private boolean matches(LivingEntity e) {
-        return e != ctx.player() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null
+        return e != ctx.entity() && e.isAlive() && !e.isRemoved() && !(e instanceof Player) && filter != null
                 && (marked.contains(e.getUUID()) || filter.test(e));
     }
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         inv.closeAbandoned(me);
         if (!inv.wear(me)) inv.freshShield(me);
         baritone.getInputOverrideHandler().clearAllKeys();

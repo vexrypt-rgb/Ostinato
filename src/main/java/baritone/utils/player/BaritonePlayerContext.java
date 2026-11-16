@@ -50,7 +50,7 @@ public final class BaritonePlayerContext implements IPlayerContext {
     }
 
     @Override
-    public LocalPlayer player() {
+    public LocalPlayer entity() {
         return this.mc.player;
     }
 

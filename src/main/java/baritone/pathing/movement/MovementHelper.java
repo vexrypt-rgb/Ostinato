@@ -672,7 +672,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         boolean hasFrostWalker = false;
         OUTER: for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = ctx
-                .player()
+                .entity()
                 .getItemBySlot(slot)
                 .getEnchantments();
             for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
@@ -849,7 +849,7 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param b   the blockstate to mine
      */
     static void switchToBestToolFor(IPlayerContext ctx, BlockState b) {
-        switchToBestToolFor(ctx, b, new ToolSet(ctx.player()), BaritoneAPI.getSettings().preferSilkTouch.value);
+        switchToBestToolFor(ctx, b, new ToolSet(ctx.entity()), BaritoneAPI.getSettings().preferSilkTouch.value);
     }
 
     /**
@@ -861,7 +861,7 @@ public interface MovementHelper extends ActionCosts, Helper {
      */
     static void switchToBestToolFor(IPlayerContext ctx, BlockState b, ToolSet ts, boolean preferSilkTouch) {
         if (Baritone.settings().autoTool.value && !Baritone.settings().assumeExternalAutoTool.value) {
-            ctx.player().getInventory().setSelectedSlot(ts.getBestSlot(b.getBlock(), preferSilkTouch));
+            ctx.entity().getInventory().setSelectedSlot(ts.getBestSlot(b.getBlock(), preferSilkTouch));
         }
     }
 
@@ -948,7 +948,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (ctx.minecraft() == null) {
             return walkGate(ctx.playerRotations().getYaw(), to.getYaw());
         }
-        IBaritone b = ctx.player() == null ? null : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+        IBaritone b = ctx.entity() == null ? null : BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.entity());
         float moving = b == null ? ctx.playerRotations().getYaw() : b.getLookBehavior().getAimProcessor().peekRotation(to).getYaw();
         return walkGate(moving, to.getYaw());
     }
@@ -987,8 +987,8 @@ public interface MovementHelper extends ActionCosts, Helper {
         float to = (float) Math.toDegrees(Math.atan2(-dx, dz));
         state.setTarget(new MovementTarget(new Rotation(to, ctx.playerRotations().getPitch()), true));
         double d2 = dx * dx + dz * dz;
-        net.minecraft.world.phys.Vec3 m = ctx.player().getDeltaMovement();
-        boolean facing = Math.abs(Mth.wrapDegrees(to - ctx.player().getYRot())) < (d2 > 1 ? 60 : 30);
+        net.minecraft.world.phys.Vec3 m = ctx.entity().getDeltaMovement();
+        boolean facing = Math.abs(Mth.wrapDegrees(to - ctx.entity().getYRot())) < (d2 > 1 ? 60 : 30);
         if (facing && (d2 > 0.05 || Math.abs(m.x) + Math.abs(m.z) < 0.05)) {
             state.setInput(Input.MOVE_FORWARD, true);
         }
@@ -1159,9 +1159,9 @@ public interface MovementHelper extends ActionCosts, Helper {
                 double faceX = (placeAt.getX() + against1.getX() + 1.0D) * 0.5D;
                 double faceY = (placeAt.getY() + against1.getY() + 0.5D) * 0.5D;
                 double faceZ = (placeAt.getZ() + against1.getZ() + 1.0D) * 0.5D;
-                Rotation place = RotationUtils.calcRotationFromVec3d(wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.player()) : ctx.playerHead(), new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
+                Rotation place = RotationUtils.calcRotationFromVec3d(wouldSneak ? RayTraceUtils.inferSneakingEyePosition(ctx.entity()) : ctx.playerHead(), new Vec3(faceX, faceY, faceZ), ctx.playerRotations());
                 Rotation actual = baritone.getLookBehavior().getAimProcessor().peekAim(place); // Ostinato: run100, uncapped (IAimProcessor.peekAim)
-                HitResult res = RayTraceUtils.rayTraceTowards(ctx.player(), actual, ctx.playerController().getBlockReachDistance(), wouldSneak);
+                HitResult res = RayTraceUtils.rayTraceTowards(ctx.entity(), actual, ctx.playerController().getBlockReachDistance(), wouldSneak);
                 if (res != null && res.getType() == HitResult.Type.BLOCK && ((BlockHitResult) res).getBlockPos().equals(against1) && ((BlockHitResult) res).getBlockPos().relative(((BlockHitResult) res).getDirection()).equals(placeAt)) {
                     state.setTarget(new MovementTarget(place, true));
                     found = true;
@@ -1211,8 +1211,8 @@ public interface MovementHelper extends ActionCosts, Helper {
         List<BetterBlockPos> blocks = new ArrayList<>();
         for (byte x = -1; x <= 1; x++) {
             for (byte z = -1; z <= 1; z++) {
-                if (ctx.player().getBoundingBox().intersects(Vec3.atLowerCornerOf(ctx.player().blockPosition()).add(x, 0, z), Vec3.atLowerCornerOf(ctx.player().blockPosition()).add(x + 1, 1, z + 1))) {
-                    blocks.add(new BetterBlockPos(ctx.player().getBlockX() + x, ctx.player().getBlockY() - 1, ctx.player().getBlockZ() + z));
+                if (ctx.entity().getBoundingBox().intersects(Vec3.atLowerCornerOf(ctx.entity().blockPosition()).add(x, 0, z), Vec3.atLowerCornerOf(ctx.entity().blockPosition()).add(x + 1, 1, z + 1))) {
+                    blocks.add(new BetterBlockPos(ctx.entity().getBlockX() + x, ctx.entity().getBlockY() - 1, ctx.entity().getBlockZ() + z));
                 }
             }
         }
@@ -1229,15 +1229,15 @@ public interface MovementHelper extends ActionCosts, Helper {
         state.setInput(Input.JUMP, false);
         float yaw = state.getTarget().getRotation().map(Rotation::getYaw).orElse(ctx.playerRotations().getYaw());
         float pitch;
-        if (!ctx.player().isSwimming()) {
+        if (!ctx.entity().isSwimming()) {
             pitch = 35;
             // the swim pose needs the eyes under; pitch alone can't sink them
-            if (!ctx.player().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) state.setInput(Input.SNEAK, true);
-        } else if (!ctx.player().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
+            if (!ctx.entity().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) state.setInput(Input.SNEAK, true);
+        } else if (!ctx.entity().isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) {
             pitch = 6; // breaching: nose back under or the swim pose drops
         } else {
             // two blocks of water over the head: drifted too deep, ease back up
-            pitch = isWater(ctx.world().getBlockState(BlockPos.containing(ctx.player().getX(), ctx.player().getEyeY() + 1, ctx.player().getZ()))) ? -12 : 0;
+            pitch = isWater(ctx.world().getBlockState(BlockPos.containing(ctx.entity().getX(), ctx.entity().getEyeY() + 1, ctx.entity().getZ()))) ? -12 : 0;
         }
         state.setTarget(new MovementState.MovementTarget(new Rotation(yaw, pitch), true));
     }
@@ -1245,6 +1245,6 @@ public interface MovementHelper extends ActionCosts, Helper {
     /** Swimming a surface path puts the feet a block under it; that still counts as there. */
     static boolean atSwum(IPlayerContext ctx, BlockPos dest) {
         BlockPos f = ctx.playerFeet();
-        return f.equals(dest) || (ctx.player().isSwimming() && f.equals(dest.below()));
+        return f.equals(dest) || (ctx.entity().isSwimming() && f.equals(dest.below()));
     }
 }

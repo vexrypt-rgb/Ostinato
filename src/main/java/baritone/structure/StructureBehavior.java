@@ -82,7 +82,7 @@ public final class StructureBehavior extends Behavior {
 
     @Override
     public void onTick(TickEvent event) {
-        if (!enabled || event.getType() != TickEvent.Type.IN || ctx.player() == null || ctx.world() == null) return;
+        if (!enabled || event.getType() != TickEvent.Type.IN || ctx.entity() == null || ctx.world() == null) return;
         tick++;
         String dim = ctx.world().dimension().identifier().getPath();
         if (!dim.equals(dimension)) {

@@ -228,7 +228,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
      * @return null when started, otherwise why not
      */
     public String build(boolean enter) {
-        if (ctx.player() == null || ctx.world() == null) {
+        if (ctx.entity() == null || ctx.world() == null) {
             return "not in a world";
         }
         if (ctx.world().dimension() == Level.NETHER) {
@@ -339,7 +339,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
         if (cooldown > 0) {
             cooldown--;
         }
-        if (ctx.player().isInLava()) {
+        if (ctx.entity().isInLava()) {
             return fail("fell into the lava");
         }
         if (phaseTicks > 1200) {
@@ -380,7 +380,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
             logDebug("Portal: trying " + candidate);
             return new PathingCommand(new GoalBlock(pos(PortalLayout.RIM_FEET)), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
         }
-        if (ctx.playerFeet().equals(goal) && ctx.player().onGround()) {
+        if (ctx.playerFeet().equals(goal) && ctx.entity().onGround()) {
             Candidate now = PortalSiteFinder.evaluate(this::kind, site, has(PICKAXE));
             if (!now.usable()) {
                 return fail("the site is no longer usable: " + now.reject);
@@ -667,25 +667,25 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
     }
 
     private String toPool() {
-        double feet = ctx.player().getY();
+        double feet = ctx.entity().getY();
         int top = site.worldY(2);
         lookAt(facePoint(pos(PortalLayout.CORNER.support), dir(PortalLayout.CORNER.face), 0.5, 0.5));
         if (sub == 0) {
             // off the rim into the emptied row
             walk(1.5, 0.45, false, 0.15);
-            if (feet < top - 0.5 && ctx.player().onGround()) {
+            if (feet < top - 0.5 && ctx.entity().onGround()) {
                 sub = 1;
             }
             return phaseTicks > 100 && feet >= top - 0.5 ? "cannot get down into the emptied row" : null;
         }
         if (sub == 1) {
             // up onto the obsidian on the pool side, and no further: the pool is beyond it
-            if (feet >= top - 0.01 && ctx.player().onGround()) {
+            if (feet >= top - 0.01 && ctx.entity().onGround()) {
                 sub = 2;
                 return null;
             }
             walk(1.5, 1.5, false, 0.1);
-            if (ctx.player().onGround()) {
+            if (ctx.entity().onGround()) {
                 input(Input.JUMP);
             }
             return phaseTicks > 200 ? "cannot get up onto the pool side" : null;
@@ -895,12 +895,12 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
 
     /** Right click on a block face, as the game does it: the block first, then the item in the hand. */
     private void use(BlockHitResult hit) {
-        InteractionResult result = ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND, hit);
-        if (result == InteractionResult.PASS && !ctx.player().getItemInHand(InteractionHand.MAIN_HAND).isEmpty()) {
-            result = ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
+        InteractionResult result = ctx.playerController().processRightClickBlock(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND, hit);
+        if (result == InteractionResult.PASS && !ctx.entity().getItemInHand(InteractionHand.MAIN_HAND).isEmpty()) {
+            result = ctx.playerController().processRightClick(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND);
         }
         if (swings(result)) {
-            ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+            ctx.entity().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
         }
         cooldown = 3 + rand.nextInt(3);
         onTarget = 0;
@@ -953,13 +953,13 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
             HitResult cross = trace(eye, ctx.playerRotations(), ClipContext.Fluid.NONE);
             InteractionResult result = InteractionResult.PASS;
             if (cross.getType() == HitResult.Type.BLOCK) {
-                result = ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND, (BlockHitResult) cross);
+                result = ctx.playerController().processRightClickBlock(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND, (BlockHitResult) cross);
             }
             if (result == InteractionResult.PASS) {
-                result = ctx.playerController().processRightClick(ctx.player(), ctx.world(), InteractionHand.MAIN_HAND);
+                result = ctx.playerController().processRightClick(ctx.entity(), ctx.world(), InteractionHand.MAIN_HAND);
             }
             if (swings(result)) {
-                ctx.player().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+                ctx.entity().swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
             }
             cooldown = 3 + rand.nextInt(3);
             onTarget = 0;
@@ -998,7 +998,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
 
     /** Ticks the best tool takes to break what is at {@code p}. */
     private int breakTicks(BlockPos p) {
-        double perTick = new ToolSet(ctx.player()).getStrVsBlock(ctx.world().getBlockState(p));
+        double perTick = new ToolSet(ctx.entity()).getStrVsBlock(ctx.world().getBlockState(p));
         return perTick <= 0 ? 1000 : (int) Math.ceil(1.0 / perTick);
     }
 
@@ -1042,7 +1042,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
     // ------------------------------------------------------------------------------------------------------------
 
     private Vec3 eye() {
-        return ctx.player().getEyePosition(1.0F);
+        return ctx.entity().getEyePosition(1.0F);
     }
 
     private double reach() {
@@ -1053,14 +1053,14 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
         Vec3 d = RotationUtils.calcLookDirectionFromRotation(rot);
         double r = reach();
         Vec3 end = eye.add(d.x * r, d.y * r, d.z * r);
-        return ctx.world().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, ctx.player()));
+        return ctx.world().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, ctx.entity()));
     }
 
     private HitResult traceTo(Vec3 eye, Vec3 point, ClipContext.Fluid fluid) {
         Vec3 d = point.subtract(eye).normalize();
         double r = reach();
         Vec3 end = eye.add(d.x * r, d.y * r, d.z * r);
-        return ctx.world().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, ctx.player()));
+        return ctx.world().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, ctx.entity()));
     }
 
     private static Vec3 facePoint(BlockPos p, Direction face, double u, double v) {
@@ -1142,7 +1142,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
             blind++;
             onTarget = 0;
             lookAt(facePoint(support, face, 0.5, 0.5));
-            if (jump && ctx.player().onGround()) {
+            if (jump && ctx.entity().onGround()) {
                 input(Input.JUMP);
             }
             return null;
@@ -1190,12 +1190,12 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
         if (sneak) {
             input(Input.SNEAK);
         }
-        double dx = site.pointX(sx, sz) - ctx.player().getX();
-        double dz = site.pointZ(sx, sz) - ctx.player().getZ();
+        double dx = site.pointX(sx, sz) - ctx.entity().getX();
+        double dz = site.pointZ(sx, sz) - ctx.entity().getZ();
         if (dx * dx + dz * dz <= tolerance * tolerance) {
             return true;
         }
-        double yaw = Math.toRadians(ctx.player().getYRot());
+        double yaw = Math.toRadians(ctx.entity().getYRot());
         double forward = -Math.sin(yaw) * dx + Math.cos(yaw) * dz;
         double left = Math.cos(yaw) * dx + Math.sin(yaw) * dz;
         double dead = tolerance * 0.7;
@@ -1217,7 +1217,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
     // ------------------------------------------------------------------------------------------------------------
 
     private boolean has(Predicate<ItemStack> what) {
-        for (ItemStack s : ctx.player().getInventory().getNonEquipmentItems()) {
+        for (ItemStack s : ctx.entity().getInventory().getNonEquipmentItems()) {
             if (what.test(s)) {
                 return true;
             }
@@ -1249,7 +1249,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
             missing.add("flint and steel");
         }
         int count = 0;
-        for (ItemStack s : ctx.player().getInventory().getNonEquipmentItems()) {
+        for (ItemStack s : ctx.entity().getInventory().getNonEquipmentItems()) {
             if (throwaway(s)) {
                 count += s.getCount();
             }
@@ -1269,8 +1269,8 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
      * item that is not on the hotbar is swapped onto it first.
      */
     private boolean hold(Predicate<ItemStack> what, String name) {
-        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
-        if (what.test(inv.get(ctx.player().getInventory().getSelectedSlot()))) {
+        NonNullList<ItemStack> inv = ctx.entity().getInventory().getNonEquipmentItems();
+        if (what.test(inv.get(ctx.entity().getInventory().getSelectedSlot()))) {
             return true;
         }
         if (cooldown > 0) {
@@ -1294,7 +1294,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
                         to = h;
                     }
                 }
-                ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, i, to, ContainerInput.SWAP, ctx.player());
+                ctx.playerController().windowClick(ctx.entity().inventoryMenu.containerId, i, to, ContainerInput.SWAP, ctx.entity());
                 cooldown = 4;
                 return false;
             }
@@ -1304,7 +1304,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
     }
 
     private void select(int slot) {
-        ctx.player().getInventory().setSelectedSlot(slot);
+        ctx.entity().getInventory().setSelectedSlot(slot);
         cooldown = 1 + rand.nextInt(2);
         onTarget = 0;
     }
@@ -1314,8 +1314,8 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
         if (!quickToBreak) {
             return hold(this::throwaway, "blocks");
         }
-        NonNullList<ItemStack> inv = ctx.player().getInventory().getNonEquipmentItems();
-        ToolSet tools = new ToolSet(ctx.player());
+        NonNullList<ItemStack> inv = ctx.entity().getInventory().getNonEquipmentItems();
+        ToolSet tools = new ToolSet(ctx.entity());
         int best = -1;
         double speed = -1;
         for (int i = 0; i < 9; i++) {
@@ -1330,7 +1330,7 @@ public final class PortalBuildProcess extends BaritoneProcessHelper {
         if (best < 0) {
             return hold(this::throwaway, "blocks");
         }
-        if (ctx.player().getInventory().getSelectedSlot() == best) {
+        if (ctx.entity().getInventory().getSelectedSlot() == best) {
             return true;
         }
         if (cooldown == 0) {

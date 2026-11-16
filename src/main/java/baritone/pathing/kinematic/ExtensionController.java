@@ -53,7 +53,7 @@ public final class ExtensionController {
     }
 
     private int drive(IPathingHost baritone, IPath path, int pathPosition) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         if (!Baritone.settings().slowKinematic.value || !Baritone.settings().allowPlace.value
                 || player.isInWater() || player.isInLava() || player.isFallFlying() || player.isPassenger()
                 || player.getAbilities().flying || pathPosition >= path.movements().size() || !ClientWorld.plainGravity(ctx)) {
@@ -196,7 +196,7 @@ public final class ExtensionController {
      * push along the jump stays the same wherever the camera points.
      */
     private void placeMidAir(IPathingHost baritone, BetterBlockPos dest, int ext, int sx, int sz, float travelYaw) {
-        Player player = ctx.player();
+        Player player = ctx.entity();
         BetterBlockPos target = null;
         for (int j = 0; j <= ext && target == null; j++) { // the cell next to the far platform first, each next one against the last
             BetterBlockPos c = cell(dest, sx, sz, -j).below();
@@ -356,7 +356,7 @@ public final class ExtensionController {
             });
         }
         client.reset();
-        var p = ctx.player();
+        var p = ctx.entity();
         sim.x = p.getX(); sim.y = p.getY(); sim.z = p.getZ();
         sim.vx = p.getDeltaMovement().x; sim.vy = p.getDeltaMovement().y; sim.vz = p.getDeltaMovement().z;
         sim.onGround = p.onGround();

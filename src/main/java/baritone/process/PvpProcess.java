@@ -128,7 +128,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
     }
 
     public boolean addEnemy(LivingEntity p) {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         if (me == null || p == null || p == me) return false;
         boolean added = enemies.add(p.getUUID());
         if (added) {
@@ -179,7 +179,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
 
     @Override
     public boolean isActive() {
-        return (filter != null || !enemies.isEmpty()) && ctx.player() != null;
+        return (filter != null || !enemies.isEmpty()) && ctx.entity() != null;
     }
 
     /** Ostinato: the action this tick chose, for the parity trace ({@code -} when none was named). */
@@ -189,7 +189,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         // a new player object in the level we were in is a respawn: when it is immediate the client never ticks at 0 health
         if (outcomeMe != null && me != outcomeMe && (me.level() == outcomeMe.level() || outcomeMe.getHealth() <= 0)) outcome.died();
         outcomeMe = me;
@@ -833,7 +833,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
      * When the keys and the momentum of this tick carry us over a drop the target is not down, steer back in.
      */
     private void ledgeGuard() {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         if (me == null || target == null) return;
         if (me.onGround()) groundY = me.getY();
         if (Double.isNaN(groundY)) return;
@@ -892,7 +892,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
      * (Carpet PvP's fake players do this; so do some duel plugins). The fight record counts it as the kill it was.
      */
     public void foeKilled(Entity foe) {
-        Player me = ctx.player();
+        Player me = ctx.entity();
         if (me == null || !(foe instanceof LivingEntity le)) return; // Ostinato
         outcome.foeDied(le.getId(), CombatGeometry.eyeToBox(me, le));
         // close it now: next tick the same foe reads full health again and the record would take the kill back
@@ -952,7 +952,7 @@ public final class PvpProcess extends BaritoneProcessHelper implements baritone.
         outcome.interrupt("lost");
         remember(true);
         outcomeMe = null;
-        endFight(ctx.player(), "lost");
+        endFight(ctx.entity(), "lost");
         scherzo.reset(); // Ostinato (Scherzo): whatever takes over, the path we watched is not the one we come back to
         bombard.foe(null); // Ostinato (Bombard): the fight is over; the TNT it watches burn on and are still watched
         filter = null;
