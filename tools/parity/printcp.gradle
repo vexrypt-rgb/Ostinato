@@ -1,0 +1,11 @@
+// Parity harness: print the protocol bot's runtime classpath so it can be launched without Gradle each run.
+allprojects { p ->
+  p.afterEvaluate {
+    if (p.extensions.findByName('sourceSets') && p.sourceSets.findByName('headless')) {
+      p.tasks.register('printHeadlessCp') {
+        dependsOn p.sourceSets.headless.runtimeClasspath
+        doLast { new File(System.getProperty('parity.cpOut')).text = p.sourceSets.headless.runtimeClasspath.asPath }
+      }
+    }
+  }
+}

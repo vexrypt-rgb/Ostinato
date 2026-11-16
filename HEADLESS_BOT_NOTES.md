@@ -937,3 +937,88 @@ The join at 16:13:42 disconnected itself at 16:17:01. It arrived and stayed at 5
 The working tree behind sections 18-22 is now committed. Apex click and vertical-change packet: `d1435df7c`. Pong held until tick end: `38bcb92d0`. These notes are in the commit after them. The code is the same code that ran live at 15:48 (Grim), 15:52 (NCP), 16:04 (Spartan), and 16:13 (LightAntiCheat). Before committing: `HeadlessPlaceTest` 18 tests, `HeadlessPacketSequenceTest` 5 tests, and the full `baritone.headless.*` set 74 tests, all 0 failures and 0 skipped. Logs are in `headless-bot-logs\commit-20261115\`.
 
 Correction to section 18. Vanilla 26.3 `LocalPlayer.sendPosition` (`LocalPlayer.java:417`) tests `lengthSquared(dx,dy,dz) > Mth.square(2.0E-4)`, which is 4e-8. Section 3 already says this. `HeadlessMovement.sendMovementPacket` tests the squared distance against `2.0E-4` itself, so it needs a move of about 0.014 blocks, not 0.0002. A vanilla client would send the +0.003 tick after the apex whatever the look does. The `|dy| > 1e-4` clause covers the vertical case that showed up live. It still drops horizontal moves between 0.0002 and 0.014 that vanilla sends, and it sends vertical moves between 0.0001 and 0.0002 that vanilla does not. The vanilla-faithful fix is to use `Mth.square(2.0E-4)` and drop the extra clause. That fix needs a live run on Grim before it replaces the tested code.
+
+## 24. Parity harness and first full table (15-16 Nov 2026)
+
+Feature freeze from 15 Nov: no new protocol-bot capabilities until this table is green. All runs live, sequential,
+one bot at a time, America/Phoenix. Harness: `tools/parity/` (also `MinecraftDev/parity/`, with every run dir).
+
+**Setup.** Same server, username (PBot), restored flat world, console fixture and command text for both bots.
+Vanilla 26.3 (port 25573, Peaceful, allow-flight=false) and Paper 26.3-252 with each anticheat alone.
+Real client = Ostinato main @ fb07cf4ef (PacketLog, ParityTrace) + TenorClef-swarm-beta @ 5c18e626, hidden, command
+inbox `#<command>`. Protocol bot = this branch, `commands.txt`. `diff.py` aligns each outbound stream at its first
+action after the fixture teleport and compares every tick's packets at log precision; `table.py` and `ac_table.py`
+build the tables. The real client runs twice per vanilla scenario for a noise floor.
+
+**Noise floor.** Real vs real is identical only for the pillar (656 ticks). Walk, parkour, ladder, bridge, void bridge
+and mine differ between two real runs: the client's look is applied per rendered frame (`frameLook=true`), so the yaw
+it travels with depends on frame timing (walk-real-1 turned through 303.75 at tick 0, walk-real-2 snapped to 270).
+A tick-for-tick match against the real client is only defined for frame-independent scenarios, or with a deterministic
+real client (owner decision).
+
+**PlayerSim.** Not the cause of any difference found. Pillar vertical positions are identical to the real client's
+(-59.58, -59.2468, -58.998664, -58.833891, -58.750813 ...). `replay/Replay.java` fed the real walk's ParityTrace (keys,
+r0 yaw) into this branch's PlayerSim with per-tick resync: 214 of 214 ticks bit-exact, 33 of them after solving the
+travel yaw on the 0.15 degree grid (the frame look changed yaw mid-tick, which the trace does not record). Ladder climb
+steps match (+0.1176 per tick). Sneak-edge and water were not replayed.
+
+**Fixes (6947163ba, tests b13d561e3), toward the real client only.** Move threshold squared (`Mth.square(2.0E-4)`, the
+extra `|dy|` clause removed); brand `fabric`; Baritone settings = TenorClef `initializeBaritoneSettings` (no parkour)
+instead of the forced allowParkour / allowParkourPlace. No packet added, PlayerSim untouched. Before the settings fix the
+bot planned parkour across the trenches and fell into the bridge trench and into the void (v1); after it, both cross on
+the real client's path. `baritone.headless.*` 74 tests, 0 failures (three HeadlessPlaceTest cases now set parkour
+explicitly or assert the client settings).
+
+**Vanilla table after the fixes (v2).** Every cell is DIFFERENT; the first divergence is tick +0 in every scenario.
+
+| Scenario | real vs real | real vs bot | divergent ticks | path dev p50/max (blocks) | end real | end bot | outcome real / bot | corrections |
+|---|---|---|---|---|---|---|---|---|
+| walk 20 | different | different | 97 of 220 | 0.11 / 0.27 | 20.59,-60,0.50 | 20.68,-60,0.50 | reached / reached | 0 / 0 |
+| pillar 5-high | identical | different | 121 of 656 | 0.00 / 6.40 | 5.5,-54,-3.5 | 5.5,-54,-3.5 | dirt placed / dirt placed | 0 / 0 |
+| parkour trench | different | different | 162 | 0.16 / 0.27 | 8.37,-60,0.51 | 8.64,-60,0.51 | reached / reached | 0 / 0 |
+| ladder | different | different | 126 | 0.03 / 0.61 | 4.45,-54,0.51 | 4.47,-54,0.50 | top / top | 0 / 0 |
+| sneak-bridge | different | different | 169 | 0.04 / 0.43 | 9.55,-60,0.58 | 9.58,-60,0.55 | crossed / crossed | 0 / 0 |
+| void bridge | different | different | 192 | 0.03 / 0.10 | 9.58,-60,0.50 | 9.60,-60,0.50 | dirt at 4,-61,0 / same | 0 / 0 |
+| mine stone | different | different | 668 | 0.01 / 0.14 | -102.5,-60,3.5 | 4.47,-60,3.49 | mined, then explores / mined, stops | 0 / 0 |
+| idle landing | (pillar end) | different packets | | | onGround 1b | onGround 1b | same | 0 / 0 |
+| place, 1 and 3 zombies, crafting table, wooden pickaxe, smelting, chest deposit/withdraw, drop, pickup, armor | not run | not comparable | | | | | | |
+
+The last row has no identical command on the real client bot: it does these through TenorClef tasks, the protocol bot
+through its own HeadlessCraft, HeadlessCombat and inventory code. They differ by construction and stay blocked until
+TenorClef drives both bots.
+
+**Differences, all in the bot's controller and look layer:**
+1. Start of every command: the bot sends a lone `PlayerInput shift=true` and starts moving 5 to 29 ticks later; the
+   real client starts on the command tick (sprint, PlayerCommand, PosRot).
+2. Look: the real client turns over several ticks and sends `PosRot` each tick with a +-0.15 degree tremor (pitch
+   88.95/90 on the pillar; trace `hd` counter); the bot snaps and mostly sends `Pos`.
+3. Place click: real `UseItemOn MAIN` + `UseItem MAIN` + `UseItemOn OFF_HAND` per layer (hit z -3.4554); bot one
+   `UseItemOn MAIN` (hit z -3.5).
+4. The bot sends `SetCarriedItem slot=0`; the real client does not (slot already 0).
+5. The real client sends `PlayerLoaded` late and no position reminders before it; the bot sends both early.
+6. Ladder: the real client jumps from outside the ladder cell (x 2.49, full jump arc); the bot walks into the cell and
+   jumps there.
+7. Mine: Baritone `#mine` keeps exploring after the visible stone; the bespoke `mine` stops.
+
+**Anticheats** (Paper 26.3-252, each alone, with and without ProtocolLib 5.5.0-SNAPSHOT-9cb125f, which enables and
+hooks; 126 runs plus 4 reruns, 0 cells not run). A hit counts against the bot only if the real client did not trip it.
+Full table: `tools/parity/table-ac1.md`.
+- Grim 2.3.75: clean for both bots in all 14 scenario cells.
+- The real client trips NCP (blockplace.noswing, blockinteract.direction, player.survivalfly up to 1205 VL on the walk
+  with ProtocolLib, blockbreak.noswing), Spartan gravity-simulation (16 on the pillar) and LAC FastClimbA on the ladder.
+  The bot's NCP noswing from section 20 is therefore not a bot-only hit.
+- Bot-only: ladder NCP player.survivalfly 2077 VL and a kick ("Moved unexpectedly", tags v_air+v_climbable+vdistrel),
+  with and without ProtocolLib (difference 6); void bridge NCP blockplace.scaffold 5 (with and without); pillar Spartan
+  speed-simulation 1 (with ProtocolLib only); pillar LAC + ProtocolLib kick "Internal server error". The last is LAC
+  1.2.9.5 reading attributes on an async thread (`CraftLivingEntity.getAttribute` from LACAsyncPlayerMoveEvent,
+  fastutil rehash ArrayIndexOutOfBounds); it threw in 7 of 14 bot runs and 2 of 14 real runs and kicked only the bot,
+  once.
+- Task outcomes under NCP differ too: the real client stayed at its start in the void bridge, the bot crossed.
+
+**Real-client stability seen by the harness.** Five hidden real-client launches (of about 62) exited silently right
+after TenorClef's mixin init and never joined (`hang-*` and `exit-*` run dirs). The runner now records the exit code and
+copies hs_err and crash reports; no cause yet.
+
+**Verdict.** Parity not met: every scenario differs tick for tick, four bot-only anticheat results remain, and the
+non-movement capabilities have no shared command. Nothing found so far traces to PlayerSim; the differences sit in the
+bot's own controller, look and task code, plus a real-client reference that is itself frame-timing dependent.
