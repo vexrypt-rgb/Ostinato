@@ -138,6 +138,8 @@ public final class Phase0Probe implements AbstractGameEventListener {
             runTicks.computeIfAbsent("ALL", k -> new LongList()).add(ns);
             windowTicks.computeIfAbsent(prevDriver, k -> new LongList()).add(ns);
             windowTicks.computeIfAbsent("ALL", k -> new LongList()).add(ns);
+            runTicks.computeIfAbsent("TCPU", k -> new LongList()).add(TickClock.lastCpu);
+            windowTicks.computeIfAbsent("TCPU", k -> new LongList()).add(TickClock.lastCpu);
         }
         prevDriver = drv;
 
@@ -315,8 +317,12 @@ public final class Phase0Probe implements AbstractGameEventListener {
         String summary() {
             long[] s = Arrays.copyOf(a, n);
             Arrays.sort(s);
+            long sum = 0;
+            for (long v : s) sum += v;
+            // Ostinato: n/p50/p95/p99/max/mean, in microseconds. The mean is the useful figure for TCPU, whose
+            // Windows thread clock only moves in 15.6 ms steps.
             return n + "/" + rank(s, 0.50) / 1000 + "/" + rank(s, 0.95) / 1000 + "/" + rank(s, 0.99) / 1000 + "/"
-                    + (n == 0 ? 0 : s[n - 1] / 1000);
+                    + (n == 0 ? 0 : s[n - 1] / 1000) + "/" + (n == 0 ? 0 : sum / n / 1000);
         }
 
         private static long rank(long[] s, double q) {

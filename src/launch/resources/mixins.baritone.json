@@ -44,6 +44,8 @@
     "MixinWindowPlacement",
     "MixinNoMouseGrab",
     "MixinHiddenFps",
+    "MixinLevelLoadReady",
+    "MixinBotFramerateThrottle",
     "MixinHiddenWorld",
     "MixinHiddenMesh",
     "MixinHiddenAtlas",
