@@ -22,6 +22,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -81,19 +82,49 @@ final class HeadlessLiveDriver implements HeadlessMovement.Driver {
         controller = new HeadlessPlayerController(bot, player, level);
         context = new HeadlessPlayerContext(player, level, controller);
         look = new HeadlessLookBehavior(player);
-        // Ostinato: placement packets are real, so bridges, pillars and parkour-place may plan.
-        // Parkour moves are not even considered unless allowParkour is on, so parkour-place needs both.
-        // allowGodBridge stays off: executing it walks backward off the edge into a sub-block window
-        // PlayerSim has not been shown to hit, and this slice does not change PlayerSim.
-        // unifiedExecutor stays off; the live driver runs the legacy path executor.
-        Baritone.settings().allowPlace.value = true;
-        Baritone.settings().allowParkour.value = true;
-        Baritone.settings().allowParkourPlace.value = true;
-        Baritone.settings().allowGodBridge.value = false;
-        Baritone.settings().unifiedExecutor.value = false;
+        // Ostinato parity: the same Baritone settings the real 26.3 client bot runs with, i.e. Ostinato defaults
+        // plus TenorClef's AltoClef.initializeBaritoneSettings (TenorClef-swarm-beta @ 5c18e626). No parkour.
+        applyClientBotSettings();
         host = new HeadlessBaritone(context, new HeadlessBlockStateInterface(bot.chunks()), input, look);
         combat = new HeadlessCombat(bot, player, controller, host, bot.entities());
         craft = new HeadlessCraft(bot, player, controller, host, this);
+    }
+
+    /**
+     * Ostinato parity: mirror of TenorClef AltoClef.initializeBaritoneSettings on the real client bot, so planning
+     * and execution choices start from the same settings. TenorClef-only hooks (end portal walking, bucket
+     * placement) live in its own mixins and have no setting here.
+     */
+    static void applyClientBotSettings() {
+        var s = Baritone.settings();
+        s.freeLook.value = false;
+        s.overshootTraverse.value = false;
+        s.allowOvershootDiagonalDescend.value = true;
+        s.allowInventory.value = true;
+        s.allowParkour.value = false;
+        s.sprintJump.value = false;
+        s.kinematicTravel.value = !"false".equals(System.getProperty("tenorclef.kinematic"));
+        s.allowParkourAscend.value = false;
+        s.allowParkourPlace.value = false;
+        s.allowDiagonalDescend.value = false;
+        s.costHeuristic.value = 4.5;
+        s.allowDiagonalAscend.value = false;
+        s.blocksToAvoid.value = new java.util.LinkedList<>(java.util.List.of(Blocks.FLOWERING_AZALEA, Blocks.AZALEA,
+                Blocks.POWDER_SNOW, Blocks.BIG_DRIPLEAF, Blocks.BIG_DRIPLEAF_STEM, Blocks.CAVE_VINES,
+                Blocks.CAVE_VINES_PLANT, Blocks.TWISTING_VINES, Blocks.TWISTING_VINES_PLANT, Blocks.SWEET_BERRY_BUSH,
+                Blocks.WARPED_ROOTS, Blocks.VINE, Blocks.SHORT_GRASS, Blocks.FERN, Blocks.TALL_GRASS, Blocks.LARGE_FERN,
+                Blocks.SMALL_AMETHYST_BUD, Blocks.MEDIUM_AMETHYST_BUD, Blocks.LARGE_AMETHYST_BUD,
+                Blocks.AMETHYST_CLUSTER, Blocks.SCULK, Blocks.SCULK_VEIN));
+        s.blocksToAvoidBreaking.value.add(Blocks.NETHER_PORTAL);
+        s.blocksToDisallowBreaking.value.add(Blocks.NETHER_PORTAL);
+        s.fadePath.value = true;
+        s.mineScanDroppedItems.value = false;
+        s.mineDropLoiterDurationMSThanksLouca.value = 0L;
+        s.randomLooking.value = 0.0;
+        s.randomLooking113.value = 0.0;
+        s.failureTimeoutMS.reset();
+        s.planAheadFailureTimeoutMS.reset();
+        s.movementTimeoutTicks.reset();
     }
 
     /** True while a goal is queued, a mine is waiting on a break, or a place command is in progress. */

@@ -443,9 +443,9 @@ public final class HeadlessMovement {
         double dx = sim.x - lastSentX;
         double dy = sim.y - lastSentY;
         double dz = sim.z - lastSentZ;
+        // Ostinato parity: LocalPlayer.sendPosition tests lengthSquared > Mth.square(2.0E-4), nothing else.
         boolean posChanged = Double.isNaN(lastSentX)
-                || dx * dx + dy * dy + dz * dz > 2.0E-4
-                || Math.abs(dy) > 1.0E-4
+                || dx * dx + dy * dy + dz * dz > Mth.square(2.0E-4)
                 || positionReminder >= 20;
         boolean rotChanged = Float.isNaN(lastSentYaw) || yaw != lastSentYaw || pitch != lastSentPitch;
         boolean statusChanged = sim.onGround != lastSentOnGround || sim.collidedH != lastSentCollidedH;

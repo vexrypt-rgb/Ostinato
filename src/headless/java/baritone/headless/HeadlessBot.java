@@ -553,7 +553,7 @@ public final class HeadlessBot implements HeadlessPacketListeners.Handler {
             send(ServerboundLoginAcknowledgedPacket.INSTANCE);
         }
         transport.setupOutbound(ConfigurationProtocols.SERVERBOUND);
-        send(new ServerboundCustomPayloadPacket(new BrandPayload("vanilla")));
+        send(new ServerboundCustomPayloadPacket(new BrandPayload("fabric"))); // Ostinato parity: the real client bot runs on Fabric
         // Ostinato: createDefault() uses viewDistance=2 (a dummy server-side player).
         // A real client advertises its render distance; 12 is vanilla's options default.
         // Paper/Moonrise will otherwise forget columns down to a 2-chunk window as we
