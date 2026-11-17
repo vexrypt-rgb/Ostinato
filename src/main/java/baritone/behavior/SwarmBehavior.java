@@ -1246,16 +1246,25 @@ public final class SwarmBehavior extends Behavior implements Helper {
         return "swarm-obs: world id set to " + tag;
     }
 
-    /** Ostinato: the coordinator's loaded world, as the reservation resolver sees it. */
+    /**
+     * Ostinato: this client's loaded world, as the reservation resolver, the observation verifier and the reporter see
+     * it. Loaded means the client's chunk source holds the chunk; 26.3's ClientLevel.hasChunkAt is always true.
+     */
     private ReservationResolver.World reservationWorld() {
-        return new ReservationResolver.World() {
+        return new baritone.swarm.world.LoadedWorld(new baritone.swarm.world.LoadedWorld.Client() {
             @Override
-            public String block(int x, int y, int z) {
+            public boolean chunkHeld(int chunkX, int chunkZ) {
                 net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
-                net.minecraft.core.BlockPos p = new net.minecraft.core.BlockPos(x, y, z);
-                if (w == null || !w.hasChunkAt(p)) {
-                    return null;
+                return w != null && w.getChunkSource().hasChunk(chunkX, chunkZ);
+            }
+
+            @Override
+            public String blockId(int x, int y, int z) {
+                net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+                if (w == null) {
+                    return "minecraft:air";
                 }
+                net.minecraft.core.BlockPos p = new net.minecraft.core.BlockPos(x, y, z);
                 return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(w.getBlockState(p).getBlock())
                         .toString();
             }
@@ -1276,7 +1285,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
                 net.minecraft.core.BlockPos o = p.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(st));
                 return new int[]{o.getX(), o.getY(), o.getZ()};
             }
-        };
+        });
     }
 
     /** Ostinato: {@code #swarm lease revoke <resource|leaseId>}. */
