@@ -109,6 +109,7 @@ public final class ObservationReporter {
     private final LinkedHashMap<String, Pending> normal = new LinkedHashMap<>();
     /** A rebuild dump in progress: whole messages, sent before anything else, then E. */
     private final ArrayDeque<ObservationMessage> dump = new ArrayDeque<>();
+    private long dumpAt; // Ostinato: when the dump's ages were read; added on to them when each part leaves
     private String worldId;
     private long lastSend = Long.MIN_VALUE / 2;
     private long sentMessages;
@@ -217,6 +218,40 @@ public final class ObservationReporter {
     }
 
     /**
+     * The bot's leased mine found its whole vein box loaded and empty of {@code ores} (short ids, e.g.
+     * {@code emerald_ore}): the leased key is gone, and so is every vein of those ores this bot reported inside the
+     * box, such as a part-mined state a scan caught mid-mine. Sent before ordinary changes, as a verified fact. p2ch
+     * run 3 (17 Nov): such a part-mined report outlived the mine, because the bot left before its next scan, and the
+     * coordinator offered it again.
+     */
+    public synchronized void minedOut(ReservationKey box, Set<String> ores, long now) {
+        if (worldId == null || box == null || ores == null || ores.isEmpty()) {
+            return;
+        }
+        String leased = box.toString();
+        List<String> gone = new ArrayList<>();
+        gone.add(leased);
+        for (Map.Entry<String, Known> e : reported.entrySet()) {
+            String key = e.getKey();
+            if (key.equals(leased) || !key.startsWith("v:") || !inside(key, box)) {
+                continue;
+            }
+            String d = e.getValue().detail;
+            int dot = d.lastIndexOf('.');
+            String ore = dot < 0 ? d : d.substring(0, dot);
+            if (ores.contains(ore.startsWith("minecraft:") ? ore.substring("minecraft:".length()) : ore)) {
+                gone.add(key);
+            }
+        }
+        for (String key : gone) {
+            corrections++;
+            reported.remove(key);
+            normal.remove(key);
+            queue(urgent, new Pending(ObservationMessage.Op.G, key, "-", VERIFIED_CONFIDENCE, now));
+        }
+    }
+
+    /**
      * The coordinator asked for a rebuild: queue everything still reported (all of it over the spool, the newest
      * {@link #CHAT_ENTRIES} over chat), then E. Ordinary pending entries are folded in.
      */
@@ -242,6 +277,7 @@ public final class ObservationReporter {
             dump.addAll(ObservationMessage.pack(ObservationMessage.Op.R, worldId, all, ObservationMessage.MAX_BODY));
         }
         dump.add(new ObservationMessage(ObservationMessage.Op.E, worldId, new ArrayList<>()));
+        dumpAt = now;
     }
 
     /** Sends at most one message if the gap for this transport has passed. Returns true when it sent one. */
@@ -251,6 +287,14 @@ public final class ObservationReporter {
         }
         ObservationMessage m = dump.peek();
         boolean fromDump = m != null;
+        if (fromDump && now > dumpAt && !m.entries.isEmpty()) {
+            // Ostinato: a dump part that waited (a busy link) leaves with ages as of now, not as of the query.
+            List<ObservationMessage.Entry> aged = new ArrayList<>();
+            for (ObservationMessage.Entry e : m.entries) {
+                aged.add(new ObservationMessage.Entry(e.key, e.detail, e.ageMs + (now - dumpAt), e.confidence));
+            }
+            m = new ObservationMessage(m.op, m.worldId, aged);
+        }
         List<Pending> taken = new ArrayList<>();
         if (m == null) {
             m = next(spool, now, taken);

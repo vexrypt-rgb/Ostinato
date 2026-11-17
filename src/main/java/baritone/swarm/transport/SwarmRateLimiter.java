@@ -275,6 +275,19 @@ public final class SwarmRateLimiter {
 
     /** Ostinato: lines waiting at {@code p}. */
     public synchronized int queued(SwarmPriority p) { return queues[p.ordinal()].size(); }
+
+    /**
+     * Ostinato: Phase 2c. Lines a new line at {@code p} would wait behind (that priority and every more urgent one). A
+     * sender whose line carries a measured age (observation reports) offers it only when this is 0, so the age is
+     * read when the line actually leaves, not seconds earlier.
+     */
+    public synchronized int queuedAtOrAbove(SwarmPriority p) {
+        int n = 0;
+        for (int i = 0; i <= p.ordinal(); i++) {
+            n += queues[i].size();
+        }
+        return n;
+    }
     public synchronized long withdrawn() { return withdrawn; }
     public synchronized long expiredQueued() { return expiredQueued; }
     private final java.util.LinkedHashSet<String> loggedExpired = new java.util.LinkedHashSet<>(); // Ostinato:

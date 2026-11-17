@@ -487,6 +487,10 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         if (scan.state == LeasedVein.State.MINED_OUT) {
             logDirect("swarm-lease: vein " + vein + " mined out here, ending the leased mine");
+            // Ostinato: Phase 2c - withdraw this bot's own reports of the vein it just emptied (part-mined states too).
+            LeaseFence.minedOut(vein, filter.blocks().stream()
+                    .map(b -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b.getBlock()).getPath())
+                    .collect(Collectors.toSet()));
             return null;
         }
         List<BlockPos> ore = new ArrayList<>();

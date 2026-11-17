@@ -332,6 +332,11 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // seen-only scan knows no ore there yet. Only the mine asks, and only an active (started) lease answers,
             // so this needs no in-control check (on its first tick the mine is not in control yet).
             LeaseFence.installVein(() -> g.activeVein(dimChar()));
+            // Ostinato: Phase 2c - a leased mine that emptied its vein withdraws this bot's reports of it.
+            LeaseFence.installMinedOut((box, ores) -> {
+                obsReporter.minedOut(box, ores, nowMs());
+                logDirect("swarm-obs: vein " + box + " mined out; withdrawing this bot's reports of it");
+            });
             // Ostinato: Phase 2c - a lease chosen from a shared observation is checked against this bot's own world
             // before it acts; a stale record is reported back as a correction.
             g.setObsCheck(this::checkObservation);
@@ -584,8 +589,17 @@ public final class SwarmBehavior extends Behavior implements Helper {
             return;
         }
         boolean spool = l.transport.isLocal(to);
-        obsReporter.tick(now, spool, m -> l.obsSend.send(to, m.encode(),
-                m.op == ObservationMessage.Op.G ? SwarmPriority.HIGH : SwarmPriority.NORMAL));
+        SwarmRateLimiter lim = spool ? null : l.status.limiter;
+        obsReporter.tick(now, spool, m -> {
+            SwarmPriority p = m.op == ObservationMessage.Op.G ? SwarmPriority.HIGH : SwarmPriority.NORMAL;
+            // Ostinato: Phase 2c - entry ages are read now; over chat, a frame offered behind queued lines would leave
+            // seconds later with that stale age and look newer to the coordinator (p2ch run 3: ~24 s). Wait for a free
+            // link instead; the entries stay pending and age honestly.
+            if (lim != null && lim.queuedAtOrAbove(p) > 0) {
+                return false;
+            }
+            return l.obsSend.send(to, m.encode(), p);
+        });
     }
 
     /** Ostinato: Phase 2c. SWO inbound, on the tick thread. */

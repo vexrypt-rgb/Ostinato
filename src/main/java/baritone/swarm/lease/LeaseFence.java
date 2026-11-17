@@ -70,6 +70,31 @@ public final class LeaseFence {
         }
     }
 
+    /** Ostinato: Phase 2c. Told when a leased mine finds its loaded vein box empty of its ore. */
+    public interface MinedOut {
+        void minedOut(ReservationKey box, java.util.Set<String> ores);
+    }
+
+    private static final MinedOut NO_MINED_OUT = (box, ores) -> {};
+    private static volatile MinedOut minedOut = NO_MINED_OUT;
+
+    public static void installMinedOut(MinedOut m) {
+        minedOut = m == null ? NO_MINED_OUT : m;
+    }
+
+    /**
+     * Ostinato: Phase 2c. The mine checked the whole leased box (loaded) and found none of {@code ores} left. The swarm
+     * side withdraws this bot's own reports of that vein (p2ch run 3: a part-mined vein reported mid-mine stayed in
+     * the shared store and was picked again). A broken listener never stops the mine.
+     */
+    public static void minedOut(ReservationKey box, java.util.Set<String> ores) {
+        try {
+            minedOut.minedOut(box, ores);
+        } catch (RuntimeException ignored) {
+            // the mine ends either way
+        }
+    }
+
     /** True when the current action must not run. Counts each denial. */
     public static boolean denied() {
         BooleanSupplier c = check;
