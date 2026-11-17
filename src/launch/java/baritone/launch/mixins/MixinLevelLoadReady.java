@@ -61,7 +61,8 @@ public class MixinLevelLoadReady {
         if (!meshesSkipped || player == null || level == null || !player.isAlive()) {
             return;
         }
-        if (level.hasChunk(SectionPos.blockToSectionCoord(player.getBlockX()), SectionPos.blockToSectionCoord(player.getBlockZ()))) {
+        // Ostinato: ask the chunk source; 26.3's ClientLevel.hasChunk is always true, so it made this check a no-op.
+        if (level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(player.getBlockX()), SectionPos.blockToSectionCoord(player.getBlockZ()))) {
             cir.setReturnValue(true);
         }
     }

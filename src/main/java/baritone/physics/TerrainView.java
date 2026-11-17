@@ -62,7 +62,7 @@ public final class TerrainView {
         return memo == null ? BlockInfo.AIR_INFO : memo.get(x & 15, y & 15, z & 15);
     }
 
-    /** Whether the cell's section was copied from a chunk the client had not loaded (Level.hasChunkAt false). */
+    /** Whether the cell's section was copied from a chunk the client had not loaded (its chunk source had no chunk). */
     public boolean unloadedAt(int x, int y, int z) {
         Terrain.Section s = terrain.section(x >> 4, y >> 4, z >> 4);
         return s != null && (s.flags & Terrain.Section.UNLOADED) != 0;
