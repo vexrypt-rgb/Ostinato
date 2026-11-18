@@ -22,6 +22,7 @@ import baritone.swarm.lease.ReservationKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +52,12 @@ public final class WorldKnowledge {
     public static final long MAX_AGE_MS = TERRAIN_FRESH_MS;
 
     /** What happened to one entry. */
-    public enum Outcome { NEW, REFRESH, OLDER, WON, LOST, EXPIRED, REJECTED }
+    public enum Outcome { NEW, REFRESH, OLDER, WON, LOST, EXPIRED, REJECTED, OUT_OF_ORDER }
+
+    /** Ostinato: told when a bot's last applied message (run, number) moves on, so the coordinator can persist it. */
+    public interface MarkListener {
+        void advanced(String bot, long epoch, long seq);
+    }
 
     /** A pick: the chosen record, or why there is none. */
     public static final class Pick {
@@ -86,6 +92,15 @@ public final class WorldKnowledge {
     private long invalidations;
     private long evicted;
     private long lastWorldRejectLog = Long.MIN_VALUE / 2;
+    /**
+     * Ostinato: per bot (lower case), the run and number of the last sequenced message applied. A message at or below
+     * it, or from an older run, was overtaken or duplicated on the way and is dropped. Survives a coordinator relaunch
+     * through {@link #restoreMarks}.
+     */
+    private final Map<String, long[]> marks = new HashMap<>();
+    private MarkListener markListener = (b, e, q) -> {};
+    private long outOfOrder;
+    private long lastOutOfOrderLog = Long.MIN_VALUE / 2;
 
     public WorldKnowledge(LongSupplier mono, Consumer<String> log) {
         this(mono, log, TERRAIN_CAP, ENTITY_CAP);
@@ -148,6 +163,24 @@ public final class WorldKnowledge {
     public synchronized List<Outcome> apply(String bot, ObservationMessage m) {
         List<Outcome> out = new ArrayList<>();
         long now = mono.getAsLong();
+        if (m.sequenced()) {
+            String b = bot.toLowerCase(java.util.Locale.ROOT);
+            long[] mk = marks.get(b);
+            if (mk != null && (m.epoch < mk[0] || (m.epoch == mk[0] && m.seq <= mk[1]))) {
+                outOfOrder++;
+                if (now - lastOutOfOrderLog >= 10_000L) {
+                    lastOutOfOrderLog = now;
+                    log.accept("swarm-obs: dropped " + m.op + " from " + bot + " run " + m.epoch + " #" + m.seq
+                            + " (already applied run " + mk[0] + " #" + mk[1] + ")");
+                }
+                for (int i = 0; i < Math.max(1, m.entries.size()); i++) {
+                    out.add(Outcome.OUT_OF_ORDER);
+                }
+                return out;
+            }
+            marks.put(b, new long[]{m.epoch, m.seq});
+            markListener.advanced(b, m.epoch, m.seq);
+        }
         if (worldId == null || !worldId.equals(m.worldId)) {
             worldRejected++;
             if (now - lastWorldRejectLog >= 10_000L) {
@@ -433,6 +466,35 @@ public final class WorldKnowledge {
         return worldRejected;
     }
 
+    /** Ostinato: messages dropped because they arrived after a later one from the same bot (or twice). */
+    public synchronized long outOfOrder() {
+        return outOfOrder;
+    }
+
+    public synchronized void setMarkListener(MarkListener l) {
+        markListener = l == null ? (b, e, q) -> {} : l;
+    }
+
+    /** Ostinato: the persisted per-bot marks, loaded before any message is applied (coordinator relaunch). */
+    public synchronized void restoreMarks(Map<String, long[]> persisted) {
+        for (Map.Entry<String, long[]> e : persisted.entrySet()) {
+            String b = e.getKey().toLowerCase(java.util.Locale.ROOT);
+            long[] v = e.getValue();
+            long[] mk = marks.get(b);
+            if (mk == null || v[0] > mk[0] || (v[0] == mk[0] && v[1] > mk[1])) {
+                marks.put(b, new long[]{v[0], v[1]});
+            }
+        }
+    }
+
+    public synchronized Map<String, long[]> marks() {
+        Map<String, long[]> copy = new HashMap<>();
+        for (Map.Entry<String, long[]> e : marks.entrySet()) {
+            copy.put(e.getKey(), e.getValue().clone());
+        }
+        return copy;
+    }
+
     public synchronized long invalidations() {
         return invalidations;
     }
@@ -450,7 +512,7 @@ public final class WorldKnowledge {
                 + entities.size() + "/" + entityCap + " v=" + version + " rebuilding=" + rebuilding
                 + " accepted=" + accepted + " refreshed=" + refreshed + " conflicts=" + conflictsWon + "w/"
                 + conflictsLost + "l worldRejected=" + worldRejected + " invalidations=" + invalidations
-                + " evicted=" + evicted);
+                + " evicted=" + evicted + " outOfOrder=" + outOfOrder);
         List<ObservationRecord> all = new ArrayList<>(terrain.values());
         all.sort(Comparator.comparingLong((ObservationRecord r) -> -r.version));
         int n = 0;

@@ -253,7 +253,7 @@ public class SwarmCommand extends Command {
                 return;
             }
             case "obs": {
-                // Ostinato: Phase 2c - #swarm obs status | see <key> <detail> [conf] [ageMs]
+                // Ostinato: Phase 2c - #swarm obs status | see <key> <detail> [conf] [ageMs] | gone <key>
                 // | waypoint <name> | structure <type> | world <tag|auto>.
                 Settings os = Baritone.settings();
                 if (!os.swarmLeases.value && !os.swarmCoordinator.value) {
@@ -273,6 +273,11 @@ public class SwarmCommand extends Command {
                         int conf = args.hasAny() ? args.getAs(Integer.class) : 90;
                         long age = args.hasAny() ? args.getAs(Long.class) : 0L;
                         logDirect(swarm.obsSee(key, detail, conf, age));
+                        return;
+                    }
+                    case "gone": { // Ostinato: Phase 2c - a verified correction for one key
+                        args.requireExactly(1);
+                        logDirect(swarm.obsGone(args.getString()));
                         return;
                     }
                     case "waypoint":

@@ -45,6 +45,7 @@ import baritone.swarm.transport.SwarmRateLimiter;
 import baritone.swarm.world.ObservationMessage; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationRecord;
 import baritone.swarm.world.ObservationReporter;
+import baritone.swarm.world.RunEpoch; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationVerifier;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
@@ -123,7 +124,22 @@ public final class SwarmBehavior extends Behavior implements Helper {
     // Ostinato: Phase 2c shared world observations. The store lives on the coordinator (memory only, rebuilt from
     // bot reports after a restart); every bot with leases or coordinator on reports what it sees.
     private WorldKnowledge worldKnowledge;
-    private final ObservationReporter obsReporter = new ObservationReporter();
+    private final ObservationReporter obsReporter = new ObservationReporter(obsRunEpoch());
+
+    /**
+     * Ostinato: Phase 2c. This run's number on observation messages: larger than any earlier run of this instance,
+     * kept next to the coordinator state (the coordinator drops a bot's messages from an older run).
+     */
+    private static long obsRunEpoch() {
+        Path dir;
+        try {
+            dir = net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath();
+        } catch (RuntimeException e) {
+            dir = Path.of(".");
+        }
+        return RunEpoch.next(dir.resolve("ostinato").resolve("swarm").resolve("obs-run-epoch"),
+                System.currentTimeMillis());
+    }
     private long nextObsScanAt;
     /** Set by {@code #swarm obs world <tag>}: overrides the server-derived world id (test stand-in for a world change). */
     private volatile String obsWorldOverride;
@@ -453,6 +469,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2c - a new coordinator starts with an empty store that rebuilds from bot reports.
             WorldKnowledge wk = new WorldKnowledge(SwarmBehavior::nowMs, this::logDirect);
             worldKnowledge = wk;
+            // Ostinato: Phase 2c - the last message applied from each bot is kept with the coordinator's durable state.
+            LeaseCoordinator lc = leaseCoordinator;
+            wk.setMarkListener((bot, epoch, seq) -> lc.noteObsMark(bot, epoch, seq));
             leaseCoordinator.setObsReportListener((res, reason, bot) -> wk.leaseReport(res, reason, bot));
         }
         if (leaseCoordinator.mode() == LeaseCoordinator.Mode.IDLE) {
@@ -460,6 +479,10 @@ public final class SwarmBehavior extends Behavior implements Helper {
                 return;
             }
             leaseCoordinator.start();
+            WorldKnowledge wk0 = worldKnowledge;
+            if (wk0 != null) {
+                wk0.restoreMarks(leaseCoordinator.obsMarks()); // Ostinato: Phase 2c - before any message is applied
+            }
             obsRebuild(l); // Ostinato: Phase 2c
         }
         leaseCoordinator.tick();
@@ -591,7 +614,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
         boolean spool = l.transport.isLocal(to);
         SwarmRateLimiter lim = spool ? null : l.status.limiter;
         obsReporter.tick(now, spool, m -> {
-            SwarmPriority p = m.op == ObservationMessage.Op.G ? SwarmPriority.HIGH : SwarmPriority.NORMAL;
+            // Ostinato: Phase 2c - one priority for every observation message of this bot, so they leave in the order
+            // they were numbered (p2ch run 4: a gone report at HIGH overtook an earlier report at NORMAL).
+            SwarmPriority p = SwarmPriority.NORMAL;
             // Ostinato: Phase 2c - entry ages are read now; over chat, a frame offered behind queued lines would leave
             // seconds later with that stale age and look newer to the coordinator (p2ch run 3: ~24 s). Wait for a free
             // link instead; the entries stay pending and age honestly.
@@ -1245,6 +1270,21 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         obsReporter.manual(key, detail, confidence, ageMs, nowMs());
         return "swarm-obs: queued " + key + " " + detail + " conf=" + confidence + " age=" + ageMs + "ms";
+    }
+
+    /**
+     * Ostinato: Phase 2c. {@code #swarm obs gone <key>}: report that a record no longer holds, as a verified
+     * correction (an operator who checked, or a test of message order).
+     */
+    public String obsGone(String key) {
+        if (!ObservationMessage.validKey(key)) {
+            return "swarm-obs: bad key " + key;
+        }
+        if (obsReporter.world() == null) {
+            return "swarm-obs: not reporting yet (link down or not in a world)";
+        }
+        obsReporter.correction(key, null, null, nowMs());
+        return "swarm-obs: queued gone " + key;
     }
 
     /** Ostinato: Phase 2c. {@code #swarm obs world <tag|auto>}: test equivalent of a world/session change. */

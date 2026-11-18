@@ -92,6 +92,8 @@ public final class LeaseCoordinator {
     private Mode mode = Mode.IDLE;
     private String refusedReason;
     private final Map<String, Long> highWater = new LinkedHashMap<>();
+    /** Ostinato: Phase 2c. Bot (lower case) to {epoch, seq} of the last observation message applied; kept durable. */
+    private final Map<String, long[]> obsMarks = new LinkedHashMap<>();
     private final LinkedHashMap<UUID, LeaseRecord> records = new LinkedHashMap<>();
     /** Per lease: the duration sent with its last offer or grant. */
     private final Map<UUID, Long> durations = new HashMap<>();
@@ -178,6 +180,9 @@ public final class LeaseCoordinator {
             return refuse("store unreadable: " + e.getMessage());
         }
         highWater.putAll(snap.highWater);
+        for (Map.Entry<String, long[]> e : snap.obsMarks.entrySet()) {
+            obsMarks.put(e.getKey(), e.getValue().clone());
+        }
         for (LeaseRecord r : snap.leases) {
             records.put(r.leaseId, r);
         }
@@ -1030,9 +1035,36 @@ public final class LeaseCoordinator {
         return n;
     }
 
+    /**
+     * Ostinato: Phase 2c. The observation store applied message {@code seq} of run {@code epoch} from {@code bot}:
+     * remember it durably, so a message overtaken before a coordinator relaunch is still dropped after it. A mark
+     * never moves back. Returns false when the store could not be written.
+     */
+    public synchronized boolean noteObsMark(String bot, long epoch, long seq) {
+        String b = bot.toLowerCase(Locale.ROOT);
+        long[] mk = obsMarks.get(b);
+        if (mk != null && (epoch < mk[0] || (epoch == mk[0] && seq <= mk[1]))) {
+            return true;
+        }
+        obsMarks.put(b, new long[]{epoch, seq});
+        if (mode == Mode.IDLE || mode == Mode.REFUSED) {
+            return false; // the store was never loaded (or is unreadable): never write over it from here
+        }
+        return persist();
+    }
+
+    /** Ostinato: Phase 2c. The durable per-bot marks (a copy), for the observation store after a relaunch. */
+    public synchronized Map<String, long[]> obsMarks() {
+        Map<String, long[]> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> e : obsMarks.entrySet()) {
+            copy.put(e.getKey(), e.getValue().clone());
+        }
+        return copy;
+    }
+
     private boolean persist() {
         try {
-            store.save(highWater, new ArrayList<>(records.values()));
+            store.save(highWater, new ArrayList<>(records.values()), obsMarks);
             return true;
         } catch (IOException e) {
             log.accept("swarm-lease: store-write-failed " + store.path() + ": " + e.getMessage());

@@ -112,10 +112,33 @@ public final class ObservationReporter {
     private long dumpAt; // Ostinato: when the dump's ages were read; added on to them when each part leaves
     private String worldId;
     private long lastSend = Long.MIN_VALUE / 2;
+    /**
+     * Ostinato: this run of the bot (its start time, so a relaunch counts as newer) and the number the next message
+     * that leaves gets. The coordinator applies one bot's messages only in this order (p2ch run 4: an older report
+     * overtaken by this bot's own gone report reached the coordinator second and won).
+     */
+    private final long epoch;
+    private long nextSeq = 1;
     private long sentMessages;
     private long sentEntries;
     private long corrections;
     private long queries;
+
+    public ObservationReporter() {
+        this(System.currentTimeMillis());
+    }
+
+    /** Ostinato: {@code epoch} names this run of the bot; it must grow from one run to the next. */
+    public ObservationReporter(long epoch) {
+        if (epoch <= 0) {
+            throw new IllegalArgumentException("epoch must be positive");
+        }
+        this.epoch = epoch;
+    }
+
+    public long epoch() {
+        return epoch;
+    }
 
     public synchronized boolean setWorld(String id) {
         if (id == null ? worldId == null : id.equals(worldId)) {
@@ -302,9 +325,11 @@ public final class ObservationReporter {
                 return false;
             }
         }
+        m = m.sequenced(epoch, nextSeq); // Ostinato: numbered as it leaves, so the order on the wire is the order sent
         if (!sender.send(m)) {
             return false;
         }
+        nextSeq++;
         lastSend = now;
         sentMessages++;
         sentEntries += m.entries.size();
