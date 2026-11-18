@@ -121,6 +121,13 @@ final class Phase1Support {
         public ExecutionState poll(UUID id) {
             return poll;
         }
+
+        boolean idle; // Ostinato: the command's process went idle without a recorded outcome
+
+        @Override
+        public boolean unverifiedIdle(UUID id) {
+            return idle;
+        }
     }
 
     /** Two bots, direct delivery, no SIGIL. Use this for semantics. */
