@@ -76,6 +76,9 @@ public final class CommandProtocol {
     private final Map<UUID, Tracked> ledger = new LinkedHashMap<>();
     private final Map<UUID, Sent> outbound = new LinkedHashMap<>();
     private final Map<UUID, PendingStop> pendingStops = new LinkedHashMap<>(); // Ostinato: keyed by target id.
+    // Ostinato: running commands whose process went idle without a recorded outcome. Their observation is unknown, but
+    // they are still polled so an outcome recorded later ends them.
+    private final Set<UUID> idleUnknown = new java.util.HashSet<>();
     private final List<StatusView> views = new ArrayList<>();
     private boolean linkUp = true;
     private final Set<String> onlineMembers = new java.util.HashSet<>(); // Ostinato: join edges.
@@ -769,8 +772,10 @@ public final class CommandProtocol {
             if (!linkUp) {
                 return;
             }
+            idleUnknown.removeIf(i -> ledger.get(i) == null || ledger.get(i).execution.terminal()); // Ostinato:
             for (Tracked t : ledger.values()) {
-                if (t.started && t.execution == ExecutionState.RUNNING && t.observation != ObservationState.UNKNOWN
+                if (t.started && t.execution == ExecutionState.RUNNING
+                        && (t.observation != ObservationState.UNKNOWN || idleUnknown.contains(t.id))
                         && !pendingStops.containsKey(t.id) // Ostinato: a stopping command is settled by its cancel.
                         && !leaseStops.containsKey(t.id) && !t.leaseEnded) { // Ostinato: or by its lease end.
                     running.add(t.id);
@@ -785,6 +790,22 @@ public final class CommandProtocol {
                 next = null;
             }
             if (next == null || next == ExecutionState.RUNNING || next == ExecutionState.ACCEPTED) {
+                boolean idle;
+                try {
+                    idle = executor.unverifiedIdle(id);
+                } catch (RuntimeException e) {
+                    idle = false;
+                }
+                if (idle) { // Ostinato: stopped without a verified result: running, observation unknown
+                    synchronized (lock) {
+                        Tracked t = ledger.get(id);
+                        if (t != null && !t.execution.terminal() && t.observation != ObservationState.UNKNOWN) {
+                            t.observation = ObservationState.UNKNOWN;
+                            idleUnknown.add(id);
+                            log.accept("swarm: " + id + " went idle without a verified result; running, observation unknown");
+                        }
+                    }
+                }
                 continue;
             }
             Decision outcome = null; // Ostinato: capture send work while locked.
@@ -805,6 +826,7 @@ public final class CommandProtocol {
                     try {
                         move(t, next);
                         t.observation = ObservationState.CONFIRMED;
+                        idleUnknown.remove(id);
                         outcome = outcomeAck(t); // Ostinato: publish verified terminal results.
                     } catch (IllegalStateException refused) {
                         log.accept("swarm: refused illegal outcome " + t.id + " " + refused.getMessage());
@@ -1795,6 +1817,14 @@ public final class CommandProtocol {
 
         /** Null while still running. Terminal values are verified or confirmed results. */
         ExecutionState poll(UUID id);
+
+        /**
+         * Ostinato: true once the command's work stopped without a verified result (its process went idle without
+         * recording an outcome). The command then stays running with observation unknown, never succeeded (verified).
+         */
+        default boolean unverifiedIdle(UUID id) {
+            return false;
+        }
     }
 
     /** Owner name, AI dry-run and the tool whitelist. Empty owner means "this bot". */

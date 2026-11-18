@@ -22,6 +22,7 @@ import baritone.altoclef.AltoClefSettings;
 import baritone.api.BaritoneAPI;
 import baritone.api.pathing.goals.*;
 import baritone.api.process.IMineProcess;
+import baritone.api.process.ProcessOutcome;
 import baritone.api.process.PathingCommand;
 import baritone.api.process.PathingCommandType;
 import baritone.api.utils.*;
@@ -90,15 +91,72 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         return filter != null;
     }
 
+    // ---- Ostinato: the outcome of each mine request (a swarm command reports success only from this) ----------
+
+    private final MineOutcome requestOutcome = new MineOutcome();
+    /** Target blocks within reach on the last tick; one that no longer matches counts as mined. */
+    private final Set<BlockPos> targetsInReach = new HashSet<>();
+
+    @Override
+    public ProcessOutcome outcome() {
+        synchronized (requestOutcome) {
+            return requestOutcome.outcome();
+        }
+    }
+
+    /** Ostinato: blocks of the current request mined so far (diagnostics). */
+    public int minedThisRequest() {
+        synchronized (requestOutcome) {
+            return requestOutcome.mined();
+        }
+    }
+
+    /** Ostinato: the mine ends itself for {@code why}; the outcome is decided when the request is closed. */
+    private void endFor(ProcessOutcome.Reason why) {
+        synchronized (requestOutcome) {
+            requestOutcome.endFor(why);
+        }
+        cancel();
+    }
+
+    /** Counts target blocks next to the bot that stopped matching since the last tick (the bot broke them). */
+    private void countMined() {
+        if (filter == null || ctx.player() == null || ctx.world() == null) {
+            return;
+        }
+        BlockPos feet = ctx.playerFeet();
+        for (BlockPos pos : new ArrayList<>(targetsInReach)) {
+            if (!ctx.world().isLoaded(pos) || !filter.has(ctx.world().getBlockState(pos))) {
+                synchronized (requestOutcome) {
+                    requestOutcome.minedOne();
+                }
+                targetsInReach.remove(pos);
+            } else if (pos.distSqr(feet) > 36) {
+                targetsInReach.remove(pos); // walked away from it unbroken
+            }
+        }
+        if (knownOreLocations != null) {
+            for (BlockPos pos : knownOreLocations) {
+                if (pos.distSqr(feet) <= 25 && ctx.world().isLoaded(pos) && filter.has(ctx.world().getBlockState(pos))) {
+                    targetsInReach.add(pos);
+                }
+            }
+        }
+    }
+
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        synchronized (requestOutcome) { // Ostinato:
+            requestOutcome.running();
+        }
+        countMined(); // Ostinato:
         if (desiredQuantity > 0) {
             int curr = ctx.player().getInventory().getNonEquipmentItems().stream()
                     .filter(stack -> filter.has(stack))
                     .mapToInt(ItemStack::getCount).sum();
             if (curr >= desiredQuantity) {
                 logDirect("Have " + curr + " valid items");
-                cancel();
+                endFor(ProcessOutcome.Reason.NONE); // Ostinato: a success only if this request mined something
                 return null;
             }
         }
@@ -115,7 +173,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 if (Baritone.settings().notificationOnMineFail.value) {
                     logNotification("Unable to find any path to " + filter + ", canceling mine", true);
                 }
-                cancel();
+                endFor(ProcessOutcome.Reason.UNREACHABLE); // Ostinato:
                 return null;
             }
         }
@@ -138,7 +196,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
         if (Baritone.settings().legitMine.value) {
             if (!addNearby()) {
-                cancel();
+                endFor(ProcessOutcome.Reason.MISSING_RESOURCE); // Ostinato:
                 return null;
             }
         }
@@ -173,7 +231,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         if (command == null) {
             // none in range
             // maybe say something in chat? (ahem impact)
-            cancel();
+            endFor(ProcessOutcome.Reason.MISSING_RESOURCE); // Ostinato:
             return null;
         }
         return command;
@@ -459,7 +517,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             if (Baritone.settings().notificationOnMineFail.value) {
                 logNotification("No locations for " + filter + " known, cancelling", true);
             }
-            cancel();
+            endFor(ProcessOutcome.Reason.MISSING_RESOURCE); // Ostinato:
             return;
         }
         knownOreLocations = locs;
@@ -688,7 +746,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         switch (plan.strategy) {
             case REJECT:
                 logDirect(plan.refusal == null ? LegitGather.MULTI_BOT_REFUSAL : plan.refusal);
-                cancel();
+                endFor(ProcessOutcome.Reason.REJECTED); // Ostinato:
                 return null;
             case LOOK:
                 float yaw = ctx.player().getYRot();
@@ -835,6 +893,9 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
 
     @Override
     public void mine(int quantity, BlockOptionalMetaLookup filter) {
+        synchronized (requestOutcome) { // Ostinato: a new request (or the end, filter null) closes the previous one
+            requestOutcome.finish();
+        }
         this.filter = filter;
         if (this.filterFilter() == null) {
             this.filter = null;
@@ -849,6 +910,13 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         this.legitSeen.clear();
         this.legitBranchStep = 0;
         this.legitBranchIndex = 0;
+        // Ostinato: a real request starts a new outcome; the end of one (filter null) leaves the closed outcome.
+        this.targetsInReach.clear();
+        if (this.filter != null) {
+            synchronized (requestOutcome) {
+                requestOutcome.start();
+            }
+        }
         if (filter != null) {
             rescan(new ArrayList<>(), new CalculationContext(baritone));
         }

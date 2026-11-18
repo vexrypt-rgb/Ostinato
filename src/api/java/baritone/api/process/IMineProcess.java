@@ -49,6 +49,15 @@ public interface IMineProcess extends IBaritoneProcess {
     void mine(int quantity, BlockOptionalMetaLookup filter);
 
     /**
+     * Ostinato: the outcome of the latest {@link #mine} request. SUCCEEDED only after this request actually broke at
+     * least one target block; FAILED when it ended having broken none (nothing found or reachable); CANCELLED when
+     * control was taken away first. A swarm command reports success only from this, never from the mine going idle.
+     */
+    default ProcessOutcome outcome() {
+        return ProcessOutcome.NONE;
+    }
+
+    /**
      * Begin to search for and mine the specified blocks.
      *
      * @param filter The blocks to mine
