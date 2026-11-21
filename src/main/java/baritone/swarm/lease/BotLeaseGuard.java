@@ -97,6 +97,25 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
      */
     public static final String OBS_APPROACH = CommandProtocol.OBS_APPROACH;
 
+    /**
+     * Ostinato: Phase 2c part 2. The lease's answer to a verifier result: null (verified), obs-stale, obs-approach
+     * (not loaded here: walk closer, check again) or obs-unknown. Decided by the result's {@code notLoaded} flag, never
+     * by its message.
+     */
+    public static String answerFor(baritone.swarm.world.ObservationVerifier.Result r) {
+        if (r == null) {
+            return OBS_UNKNOWN;
+        }
+        switch (r.state) {
+            case CONFIRMED:
+                return null;
+            case STALE:
+                return OBS_STALE;
+            default:
+                return r.notLoaded ? OBS_APPROACH : OBS_UNKNOWN;
+        }
+    }
+
     public interface Sender {
         /** Send an SWL body to {@code to}; false when it could not be queued. */
         boolean send(String to, String body);
@@ -882,6 +901,16 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                 endUnverified(l, why, l.expect);
             }
         }
+    }
+
+    /** Ostinato: Phase 2c part 2. The command of the lease that is approaching, or null. */
+    public synchronized UUID approachCommand() {
+        for (Lease l : leases.values()) {
+            if (l.approaching && l.phase != Phase.DONE) {
+                return l.commandId;
+            }
+        }
+        return null;
     }
 
     /** Ostinato: Phase 2c part 2. The box an approaching lease walks to, or null. */

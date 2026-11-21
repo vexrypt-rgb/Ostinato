@@ -91,6 +91,7 @@ public class Baritone implements IBaritone {
     private final MineProcess mineProcess;
     private final GetToBlockProcess getToBlockProcess;
     private final CustomGoalProcess customGoalProcess;
+    private final baritone.process.ApproachProcess approachProcess; // Ostinato: Phase 2c part 2, swarm walk-to-verify
     private final BuilderProcess builderProcess;
     private final ExploreProcess exploreProcess;
     private final FarmProcess farmProcess;
@@ -158,6 +159,7 @@ public class Baritone implements IBaritone {
             this.followProcess           = this.registerProcess(FollowProcess::new);
             this.mineProcess             = this.registerProcess(MineProcess::new);
             this.customGoalProcess       = this.registerProcess(CustomGoalProcess::new); // very high iq
+            this.approachProcess         = this.registerProcess(baritone.process.ApproachProcess::new); // Ostinato: idle unless the swarm approaches
             this.registerProcess(baritone.process.CompassFollowProcess::new); // Ostinato: compass needle, idle unless trainingLegit and compassFollow
             this.getToBlockProcess       = this.registerProcess(GetToBlockProcess::new);
             this.builderProcess          = this.registerProcess(BuilderProcess::new);
@@ -270,6 +272,11 @@ public class Baritone implements IBaritone {
     @Override
     public CustomGoalProcess getCustomGoalProcess() {
         return this.customGoalProcess;
+    }
+
+    /** Ostinato: Phase 2c part 2. Walks a swarm bot to a shared observation under approach limits. */
+    public baritone.process.ApproachProcess getApproachProcess() {
+        return this.approachProcess;
     }
 
     @Override

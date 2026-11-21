@@ -1999,6 +1999,30 @@ public final class CommandProtocol {
         }
     }
 
+    /**
+     * Ostinato: Phase 2c part 2. The bot cannot get to the observation under the approach limits (no route without
+     * breaking, placing or a long fall): reject the held command obs-unknown now instead of waiting out the budget.
+     */
+    public void giveUpApproach(UUID commandId, String why) {
+        List<Decision> sends = new ArrayList<>();
+        boolean removed;
+        synchronized (lock) {
+            Approach a = approaching.remove(commandId);
+            removed = a != null;
+            if (removed) {
+                log.accept("swarm: rejected " + commandId + " " + leaseUnknown() + " (" + why + "; gave up approaching)");
+                sends.add(Decision.ack(a.h.from, rememberReject(a.h.p, leaseUnknown())));
+            }
+        }
+        if (removed) {
+            LeaseHooks hooks = leaseHooks;
+            if (hooks != null) {
+                hooks.approachEnded(commandId, leaseUnknown());
+            }
+            deliver(sends);
+        }
+    }
+
     /** True while {@code commandId} is held for its approach (walk-to-verify). */
     public boolean isApproaching(UUID commandId) {
         synchronized (lock) {

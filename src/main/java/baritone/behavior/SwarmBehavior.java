@@ -4,7 +4,6 @@ import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.IBaritoneProcess;
-import baritone.api.process.ICustomGoalProcess;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalNear;
 import baritone.api.schematic.ISchematic;
@@ -39,6 +38,8 @@ import baritone.swarm.lease.LeaseRate;
 import baritone.swarm.lease.ReservationResolver;
 import baritone.swarm.lease.ReservationKey;
 import baritone.swarm.lease.LeasedVein;
+import baritone.process.ApproachProcess;
+import baritone.pathing.movement.CalculationContext;
 import baritone.swarm.protocol.CommandProtocol;
 import baritone.swarm.protocol.RegistryExecutor;
 import baritone.swarm.roster.SwarmRoster;
@@ -390,17 +391,27 @@ public final class SwarmBehavior extends Behavior implements Helper {
      */
     private void driveApproach(BotLeaseGuard g) {
         ReservationKey box = g.approachTarget();
-        ICustomGoalProcess cgp = baritone.getCustomGoalProcess();
+        ApproachProcess ap = baritone.getApproachProcess();
         if (box != null && (approachBox == null || !box.toString().equals(approachBox.toString()))) {
             int[] c = LeasedVein.centre(box);
             approachGoal = new GoalNear(new BlockPos(c[0], c[1], c[2]), APPROACH_RADIUS);
             approachBox = box;
-            cgp.setGoalAndPath(approachGoal);
+            ap.approach(approachGoal);
             logDirect("swarm-lease: walking to " + box + " to verify it (goal near " + c[0] + "," + c[1] + "," + c[2]
-                    + ", nothing broken or placed on the way)");
+                    + "; no breaking, no placing, no fall over "
+                    + CalculationContext.APPROACH_MAX_FALL + " blocks)");
+        } else if (box != null && ap.noRoute()) {
+            // Ostinato: Phase 2c part 2 - no route under the approach limits: end unknown now, not at the budget.
+            UUID cmd = g.approachCommand();
+            CommandProtocol p = liveProtocol();
+            if (cmd != null && p != null) {
+                p.giveUpApproach(cmd, "no approach route");
+            } else if (cmd != null) {
+                g.approachEnded(cmd, BotLeaseGuard.OBS_UNKNOWN);
+            }
         } else if (box == null && approachBox != null) {
-            if (cgp.getGoal() == approachGoal && cgp.isActive()) {
-                cgp.onLostControl();
+            if (ap.goal() == approachGoal) {
+                ap.stop();
             }
             logDirect("swarm-lease: approach to " + approachBox + " over");
             approachGoal = null;
@@ -415,8 +426,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
             return false;
         }
         try {
-            ICustomGoalProcess cgp = baritone.getCustomGoalProcess();
-            boolean on = cgp.isActive() && cgp.getGoal() == goal;
+            ApproachProcess ap = baritone.getApproachProcess();
+            boolean on = ap.isActive() && ap.goal() == goal;
             if (on) {
                 long now = nowMs();
                 if (now >= nextApproachFenceLogAt) {
@@ -723,8 +734,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             logDirect("swarm-obs: stale " + resource + " (" + r.why + "); reporting the correction");
             return BotLeaseGuard.OBS_STALE;
         }
-        if ("vein not loaded".equals(r.why)) {
-            return BotLeaseGuard.OBS_APPROACH; // Ostinato: Phase 2c part 2 - walk to it, then check again
+        String answer = BotLeaseGuard.answerFor(r); // Ostinato: Phase 2c part 2 - by the notLoaded flag, never the text
+        if (BotLeaseGuard.OBS_APPROACH.equals(answer)) {
+            return answer; // walk closer, then check again
         }
         logDirect("swarm-obs: cannot verify " + resource + " (" + r.why + ")");
         return BotLeaseGuard.OBS_UNKNOWN;

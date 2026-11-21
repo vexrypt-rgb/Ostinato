@@ -253,6 +253,27 @@ public class LeaseObservationTest {
     }
 
     @Test
+    public void noApproachRouteEndsUnknownAtOnce() throws Exception {
+        LeaseSupport s = active();
+        s.guard.setObsCheck(approachUntil(new boolean[]{false}, null, new ArrayList<>()));
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4"));
+        s.pump();
+        s.run(2_000L, 500L);
+        UUID cmd = s.guard.approachCommand();
+        assertNotNull(cmd);
+        assertTrue(s.bobP.isApproaching(cmd));
+        s.bobP.giveUpApproach(cmd, "no approach route");
+        s.pump();
+        assertFalse(s.bobP.isApproaching(cmd));
+        assertTrue(s.logged("obs-unknown (no approach route; gave up approaching)"));
+        assertEquals("ended long before the budget", BotLeaseGuard.Phase.DONE, s.guard.phaseOf(id));
+        assertNull(s.guard.approachTarget());
+        s.run(CommandProtocol.APPROACH_MS, 1_000L);
+        assertEquals(0, s.bobExec.count("mine"));
+        assertEquals("rejected once", 0, s.loggedCount("not verified within"));
+    }
+
+    @Test
     public void aBusyBotDoesNotApproach() throws Exception {
         LeaseSupport s = active();
         s.coord.lease("Bob", OTHER, "mine coal_ore"); // a plain lease: runs, and stays running
