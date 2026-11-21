@@ -442,6 +442,44 @@ public final class WorldKnowledge {
         return new Pick(c.get(0), null);
     }
 
+    /**
+     * Ostinato: Phase 2c part 2, refresh before reuse. Vein records of {@code ore} in {@code dim} that {@link #pick}
+     * would skip only because they are suspect or out of date (CONFIRMED, not busy): the ones worth re-checking before
+     * the coordinator gives up on the ore. Best first (confidence, newest, key), at most {@code max}.
+     */
+    public synchronized List<ObservationRecord> refreshCandidates(String ore, char dim, Predicate<String> busy, int max) {
+        List<ObservationRecord> c = new ArrayList<>();
+        if (rebuilding) {
+            return c;
+        }
+        long now = mono.getAsLong();
+        for (ObservationRecord r : terrain.values()) {
+            if (r.kind != ObservationRecord.Kind.VEIN || r.dim != dim || r.ore() == null || !r.ore().contains(ore)) {
+                continue;
+            }
+            if (r.state == ObservationRecord.State.CONFIRMED && (r.suspect || now - r.observedAt > TERRAIN_FRESH_MS)
+                    && (busy == null || !busy.test(r.key))) {
+                c.add(r);
+            }
+        }
+        c.sort(Comparator.comparingInt((ObservationRecord r) -> -r.confidence)
+                .thenComparingLong(r -> -r.observedAt)
+                .thenComparing(r -> r.key));
+        return c.size() > max ? new ArrayList<>(c.subList(0, max)) : c;
+    }
+
+    /**
+     * Ostinato: Phase 2c part 2. True once {@code key} no longer needs its refresh: the record is gone (or dropped), or
+     * it is confirmed again, not suspect and fresh.
+     */
+    public synchronized boolean refreshed(String key) {
+        ObservationRecord r = terrain.get(key);
+        if (r == null || r.state != ObservationRecord.State.CONFIRMED) {
+            return true;
+        }
+        return !r.suspect && mono.getAsLong() - r.observedAt <= TERRAIN_FRESH_MS;
+    }
+
     /** A live vein record whose box holds the position (fallback when the coordinator cannot see the vein). */
     public synchronized ObservationRecord covering(char dim, int x, int y, int z) {
         if (rebuilding) {

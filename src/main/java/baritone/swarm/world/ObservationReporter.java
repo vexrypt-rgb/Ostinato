@@ -223,6 +223,27 @@ public final class ObservationReporter {
                 && k.y2 <= box.y2 && k.z1 >= box.z1 && k.z2 <= box.z2;
     }
 
+    /**
+     * Ostinato: Phase 2c part 2. The coordinator asked this bot to re-check {@code key} (expected {@code detail});
+     * {@code r} is this bot's check of it. Confirmed: report it again, observed now. Changed or gone: report the
+     * correction. Not loaded (or otherwise unknown): no answer, another bot may have it. Returns what was done.
+     */
+    public synchronized String refreshAnswer(String key, String detail, ObservationVerifier.Result r, long now) {
+        if (worldId == null || r == null) {
+            return "no world";
+        }
+        switch (r.state) {
+            case CONFIRMED:
+                manual(key, detail, SCAN_CONFIDENCE, 0, now);
+                return "confirmed";
+            case STALE:
+                correction(key, r.key, r.detail, now);
+                return "stale (" + r.why + ")";
+            default:
+                return "cannot check here (" + r.why + ")";
+        }
+    }
+
     /** One record typed in by hand (a waypoint, a structure, or a test report with a chosen confidence/age). */
     public synchronized void manual(String key, String detail, int confidence, long ageMs, long now) {
         if (worldId == null) {

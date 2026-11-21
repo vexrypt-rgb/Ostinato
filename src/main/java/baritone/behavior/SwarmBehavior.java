@@ -54,6 +54,7 @@ import baritone.swarm.world.ObservationReporter;
 import baritone.swarm.world.RunEpoch;
 import baritone.swarm.world.ObservationOffer; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationVerifier;
+import baritone.swarm.world.ObsRefresh;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
 import net.minecraft.client.player.LocalPlayer;
@@ -691,6 +692,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             if (!wk.rebuildAsked()) {
                 return; // not started yet: keep the reports until the store is bound
             }
+            decideRefreshed(wk); // Ostinato: Phase 2c part 2 - held obs leases whose refresh is over
             obsReporter.tick(now, true, m -> {
                 wk.apply(l.self, m);
                 return true;
@@ -729,6 +731,17 @@ public final class SwarmBehavior extends Behavior implements Helper {
             obsReporter.onQuery(l != null && l.transport.isLocal(msg.from()), nowMs());
             logDirect("swarm-obs: rebuild asked by " + msg.from() + ", dumping " + obsReporter.reportedSize()
                     + " records");
+            return;
+        }
+        if (m.op == ObservationMessage.Op.F) { // Ostinato: Phase 2c part 2 - the coordinator's refresh request
+            if (!msg.from().equalsIgnoreCase(allowedCoordinator())) {
+                return;
+            }
+            String mine = obsReporter.world();
+            if (mine == null || !mine.equals(m.worldId)) {
+                return; // another world: these records are not ours to check
+            }
+            onRefreshRequest(m);
             return;
         }
         WorldKnowledge wk = worldKnowledge;
@@ -1291,7 +1304,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             }
             WorldKnowledge.Pick p = wk.pick(ore, dimChar(), key -> c.busyReason(key) != null);
             if (p.record == null) {
-                return "swarm-lease: not offering " + resource + ": " + p.reason;
+                // Ostinato: Phase 2c part 2 - suspect or out-of-date records are re-checked before giving up.
+                String held = holdForRefresh(wk, c, bot, ore, resource, commandLine);
+                return held != null ? held : "swarm-lease: not offering " + resource + ": " + p.reason;
             }
             logDirect("swarm-obs: " + resource + " picked " + p.record);
             return c.lease(bot, p.record.key, commandLine, p.record.detail);
@@ -1310,6 +1325,69 @@ public final class SwarmBehavior extends Behavior implements Helper {
             return "swarm-lease: not offering " + resource + ": " + r.error;
         }
         return c.lease(bot, r.key, commandLine);
+    }
+
+    // ---- Ostinato: Phase 2c part 2, slice 2: refresh before reuse ------------------------------------------------
+
+    private final ObsRefresh obsRefresh = new ObsRefresh();
+
+    /**
+     * Ask the swarm to re-check the suspect or out-of-date records of {@code ore} and hold the lease request until
+     * they are answered (or {@link ObsRefresh#WAIT_MS}); null when there is nothing to refresh.
+     */
+    private String holdForRefresh(WorldKnowledge wk, LeaseCoordinator c, String bot, String ore, String resource,
+                                  String commandLine) {
+        if (obsRefresh.holding(bot, resource)) {
+            return "swarm-lease: holding " + resource + " for " + bot + ": a refresh is already under way";
+        }
+        List<ObservationRecord> cand = wk.refreshCandidates(ore, dimChar(), key -> c.busyReason(key) != null,
+                ObsRefresh.MAX_KEYS);
+        Link l = link;
+        if (cand.isEmpty() || l == null || l.obsSend == null || wk.world() == null) {
+            return null;
+        }
+        List<ObservationMessage.Entry> entries = new ArrayList<>();
+        List<String> keys = new ArrayList<>();
+        for (ObservationRecord r : cand) {
+            entries.add(new ObservationMessage.Entry(r.key, r.detail, 0L, 0));
+            keys.add(r.key);
+        }
+        if (!l.obsSend.send("*", new ObservationMessage(ObservationMessage.Op.F, wk.world(), entries).encode(),
+                SwarmPriority.HIGH, null)) {
+            return null;
+        }
+        obsRefresh.hold(bot, ore, resource, commandLine, keys, nowMs());
+        String line = "swarm-obs: refreshing " + keys + " before offering " + resource + " to " + bot
+                + " (suspect or out of date); holding the request up to " + ObsRefresh.WAIT_MS + " ms";
+        logDirect(line);
+        return "swarm-lease: holding " + resource + " for " + bot + ": refreshing " + keys.size() + " record(s)";
+    }
+
+    /** Decide the held requests whose refresh is over, once each. Coordinator tick. */
+    private void decideRefreshed(WorldKnowledge wk) {
+        LeaseCoordinator c = leaseCoordinator;
+        if (c == null || obsRefresh.size() == 0) {
+            return;
+        }
+        for (ObsRefresh.Pending p : obsRefresh.due(wk::refreshed, nowMs())) {
+            WorldKnowledge.Pick pick = wk.pick(p.ore, dimChar(), key -> c.busyReason(key) != null);
+            if (pick.record == null) {
+                logDirect("swarm-lease: not offering " + p.resource + " to " + p.bot + ": " + pick.reason
+                        + " (after the refresh of " + p.keys + ")");
+                continue;
+            }
+            logDirect("swarm-obs: " + p.resource + " picked " + pick.record + " (after the refresh of " + p.keys + ")");
+            logDirect(c.lease(p.bot, pick.record.key, p.commandLine, pick.record.detail));
+        }
+    }
+
+    /** A refresh request from the coordinator: check each record here and answer through the reporter. */
+    private void onRefreshRequest(ObservationMessage m) {
+        for (ObservationMessage.Entry e : m.entries) {
+            ObservationVerifier.Result r = ObservationVerifier.verify(e.key, e.detail, dimChar(), reservationWorld());
+            String did = obsReporter.refreshAnswer(e.key, e.detail, r, nowMs());
+            logDirect("swarm-obs: refresh asked for " + e.key + ": " + did);
+        }
     }
 
     /** Ostinato: Phase 2c. The x,y,z of a {@code vein:x,y,z} shorthand, else null. */

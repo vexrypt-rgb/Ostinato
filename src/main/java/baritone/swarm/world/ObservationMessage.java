@@ -46,7 +46,8 @@ public final class ObservationMessage {
     /** Longest body accepted; senders split before this. */
     public static final int MAX_BODY = 4000;
 
-    public enum Op { R, G, Q, E }
+    /** Ostinato: F (Phase 2c part 2) is the coordinator's refresh request: re-check these records and report. */
+    public enum Op { R, G, Q, E, F }
 
     private static final Pattern WORLD = Pattern.compile("[A-Za-z0-9_.-]{1,24}");
     private static final Pattern KEY = Pattern.compile("[a-z]:[oen]:[A-Za-z0-9_,:.-]{1,60}");
@@ -196,6 +197,9 @@ public final class ObservationMessage {
         }
         if ((op == Op.Q || op == Op.E) && !out.isEmpty()) {
             return null;
+        }
+        if (op == Op.F && out.isEmpty()) {
+            return null; // a refresh request names the records it asks about
         }
         try {
             return new ObservationMessage(op, f[2], out, epoch, seq);
