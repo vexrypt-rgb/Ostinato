@@ -44,6 +44,12 @@ public final class ObservationRecord {
     public final String worldId;
     /** Store-wide counter, bumped on every accepted change. */
     public long version;
+    /**
+     * Ostinato: the bot's run and message number that carried this record (0, 0 for an unnumbered v1 message). A later
+     * message from the same bot replaces its own record whatever the timestamps say (p2ch run 7).
+     */
+    public long epoch;
+    public long seq;
     /** Monotonic coordinator time of the observation: receipt time minus the age the bot reported. */
     public final long observedAt;
     public final long receivedAt;

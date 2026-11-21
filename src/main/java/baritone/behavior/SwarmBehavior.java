@@ -513,7 +513,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
     /** Ostinato: Phase 2c. One sealed SWO send at the given priority. */
     interface ObsSend {
-        boolean send(String to, String body, SwarmPriority priority);
+        boolean send(String to, String body, SwarmPriority priority, SwarmRateLimiter.Deadline deadline);
     }
 
     /**
@@ -569,7 +569,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             }
         }
         l.obsSend.send("*", new ObservationMessage(ObservationMessage.Op.Q, world, new ArrayList<>()).encode(),
-                SwarmPriority.HIGH);
+                SwarmPriority.HIGH, null);
         wk.startRebuild(live);
         obsReporter.onQuery(true, nowMs()); // the coordinator's own records go straight into the store
     }
@@ -616,7 +616,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
         SwarmRateLimiter lim = spool ? null : l.status.limiter;
         // Ostinato: Phase 2c - one priority, offered over chat only to a free link, each hand-over logged
         // (ObservationOffer).
-        obsReporter.tick(now, spool, m -> ObservationOffer.offer(m, to, lim, l.obsSend::send, line -> logDirect(line)));
+        obsReporter.tick(now, spool, m -> ObservationOffer.offer(m, to, lim, l.obsSend::send, line -> logDirect(line),
+                obsReporter::withdrawn));
     }
 
     /** Ostinato: Phase 2c. SWO inbound, on the tick thread. */
@@ -940,8 +941,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
                             body, urgent ? SwarmPriority.URGENT : SwarmPriority.HIGH);
                     control.registerHandler(LeaseMessage.TYPE, this::onLeaseMessage);
                     // Ostinato: Phase 2c - SWO observation reports (spool when the coordinator is local).
-                    made.obsSend = (to, body, priority) -> sendSealed(endpoint, roster, self, to,
-                            ObservationMessage.TYPE, body, priority);
+                    made.obsSend = (to, body, priority, deadline) -> sendSealed(endpoint, roster, self, to,
+                            ObservationMessage.TYPE, body, priority, deadline);
                     control.registerHandler(ObservationMessage.TYPE, this::onObsMessage);
                 }
                 return made;

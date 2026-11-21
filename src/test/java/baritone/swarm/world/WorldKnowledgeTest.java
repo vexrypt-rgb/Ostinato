@@ -133,13 +133,15 @@ public class WorldKnowledgeTest {
     }
 
     @Test
-    public void aBotUpdatingItsOwnRecordIsNoConflict() {
+    public void aBotReplacingItsOwnRecordIsLoggedLikeAConflictButNotCountedAsOne() {
+        // Ostinato (owner, 20 Nov): same-bot replacements are logged like conflicts; they are counted apart.
         WorldKnowledge k = store();
         k.apply("Amy", r("b:o:1,2,3", "stone", 0, 90));
         mono.addAndGet(1000);
         assertEquals(Outcome.WON, one(k.apply("Amy", r("b:o:1,2,3", "air", 0, 90))));
         assertEquals(0, k.conflictsWon());
-        assertFalse(logged("swarm-obs: conflict"));
+        assertEquals(1, k.ownReplaced());
+        assertTrue(log.toString(), logged("swarm-obs: conflict b:o:1,2,3 winner=Amy (air) loser=Amy (b:o:1,2,3 stone) rule=newer"));
     }
 
     @Test

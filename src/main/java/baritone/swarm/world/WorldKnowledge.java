@@ -87,6 +87,7 @@ public final class WorldKnowledge {
     private long accepted;
     private long refreshed;
     private long conflictsWon;
+    private long ownReplaced; // Ostinato: a bot's later message replaced its own record (logged like a conflict)
     private long conflictsLost;
     private long worldRejected;
     private long invalidations;
@@ -197,7 +198,7 @@ public final class WorldKnowledge {
             case R:
             case G:
                 for (ObservationMessage.Entry e : m.entries) {
-                    out.add(put(bot, e, m.op == ObservationMessage.Op.G, now));
+                    out.add(put(bot, e, m.op == ObservationMessage.Op.G, now, m.epoch, m.seq));
                 }
                 break;
             case E:
@@ -209,7 +210,7 @@ public final class WorldKnowledge {
         return out;
     }
 
-    private Outcome put(String bot, ObservationMessage.Entry e, boolean gone, long now) {
+    private Outcome put(String bot, ObservationMessage.Entry e, boolean gone, long now, long epoch, long seq) {
         long age = Math.min(e.ageMs, MAX_AGE_MS);
         ObservationRecord n;
         try {
@@ -218,6 +219,8 @@ public final class WorldKnowledge {
         } catch (IllegalArgumentException ex) {
             return Outcome.REJECTED;
         }
+        n.epoch = epoch;
+        n.seq = seq;
         LinkedHashMap<String, ObservationRecord> store = n.kind.entity() ? entities : terrain;
         if (n.kind.entity() && now - n.observedAt > ENTITY_TTL_MS) {
             return Outcome.EXPIRED;
@@ -249,10 +252,12 @@ public final class WorldKnowledge {
                 }
             }
         }
-        // The same rule decides a bot's update of its own record, but only two different bots make a conflict
-        // (counted and logged); a bot superseding its own report is an ordinary update.
+        // Two different bots: newer wins (then confidence, then bot name), counted and logged as a conflict. One bot:
+        // its later message replaces its own record whatever the timestamps say, logged the same way. A report that
+        // waited in a chat queue arrives with an age read when it was built and looks newer than it is; its own later
+        // correction must still win (p2ch run 7: a full-vein report that waited 22 s outlived the bot's gone report).
         for (ObservationRecord o : rivals) {
-            if (!ObservationRecord.beats(n, o)) {
+            if (!laterOwnMessage(n, o) && !ObservationRecord.beats(n, o)) {
                 if (!o.bot.equalsIgnoreCase(n.bot)) {
                     conflictsLost++;
                     log.accept("swarm-obs: conflict " + n.key + " winner=" + o.bot + " (" + o.key + " " + o.detail
@@ -266,6 +271,12 @@ public final class WorldKnowledge {
                 conflictsWon++;
                 log.accept("swarm-obs: conflict " + n.key + " winner=" + n.bot + " (" + n.detail + ") loser="
                         + o.bot + " (" + o.key + " " + o.detail + ") rule=" + rule(n, o));
+            } else {
+                ownReplaced++;
+                log.accept("swarm-obs: conflict " + n.key + " winner=" + n.bot + " (" + n.detail + ") loser="
+                        + o.bot + " (" + o.key + " " + o.detail + ") rule="
+                        + (laterOwnMessage(n, o) ? "later-message run " + n.epoch + " #" + n.seq + " over #" + o.seq
+                        : rule(n, o)));
             }
             if (o != old) {
                 terrain.remove(o.key);
@@ -275,6 +286,16 @@ public final class WorldKnowledge {
         store.put(n.key, n);
         accepted++;
         return rivals.isEmpty() ? Outcome.NEW : Outcome.WON;
+    }
+
+    /** Ostinato: {@code n} came in a later numbered message (run, then number) of the bot that set {@code o}. */
+    static boolean laterOwnMessage(ObservationRecord n, ObservationRecord o) {
+        return n.bot.equalsIgnoreCase(o.bot) && n.seq > 0 && o.seq > 0
+                && (n.epoch > o.epoch || (n.epoch == o.epoch && n.seq > o.seq));
+    }
+
+    public synchronized long ownReplaced() {
+        return ownReplaced;
     }
 
     /** Which step of the rule decided that {@code w} beats {@code l}. */
@@ -512,7 +533,7 @@ public final class WorldKnowledge {
                 + entities.size() + "/" + entityCap + " v=" + version + " rebuilding=" + rebuilding
                 + " accepted=" + accepted + " refreshed=" + refreshed + " conflicts=" + conflictsWon + "w/"
                 + conflictsLost + "l worldRejected=" + worldRejected + " invalidations=" + invalidations
-                + " evicted=" + evicted + " outOfOrder=" + outOfOrder);
+                + " evicted=" + evicted + " outOfOrder=" + outOfOrder + " ownReplaced=" + ownReplaced);
         List<ObservationRecord> all = new ArrayList<>(terrain.values());
         all.sort(Comparator.comparingLong((ObservationRecord r) -> -r.version));
         int n = 0;

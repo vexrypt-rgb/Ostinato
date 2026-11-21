@@ -55,10 +55,10 @@ public class ObservationOfferTest {
 
         void tick(long now, boolean spool) {
             SwarmRateLimiter chat = spool ? null : lim;
-            boolean r = rep.tick(now, spool, m -> ObservationOffer.offer(m, "Copper", chat, (to, body, p) -> {
-                calls.add(to + " " + p + " " + body);
-                return spool || lim.offer(p, body, to, null);
-            }, sink));
+            boolean r = rep.tick(now, spool, m -> ObservationOffer.offer(m, "Copper", chat, (to, body, p, d) -> {
+                calls.add(to + " " + p + " " + body + (d == null ? "" : " deadline=" + d.expiresInMs()));
+                return spool || lim.offer(p, body, to, d);
+            }, sink, rep::withdrawn));
             String out;
             while ((out = lim.poll(now)) != null) {
                 wire.add(out);
@@ -131,11 +131,11 @@ public class ObservationOfferTest {
     public void noLineWhenTheLinkRefusesOrTheGateHolds() {
         List<String> log = new ArrayList<>();
         ObservationMessage m = new ObservationMessage(ObservationMessage.Op.R, "w1", new ArrayList<>(), RUN, 1);
-        assertFalse(ObservationOffer.offer(m, "Copper", null, (to, body, p) -> false, log::add));
+        assertFalse(ObservationOffer.offer(m, "Copper", null, (to, body, p, d) -> false, log::add, s -> { }));
         SwarmRateLimiter lim = new SwarmRateLimiter(0.1, 1, false, 64, T0);
         lim.offer(SwarmPriority.HIGH, "ack", "Copper", null);
         List<String> calls = new ArrayList<>();
-        assertFalse(ObservationOffer.offer(m, "Copper", lim, (to, body, p) -> calls.add(body), log::add));
+        assertFalse(ObservationOffer.offer(m, "Copper", lim, (to, body, p, d) -> calls.add(body), log::add, s -> { }));
         assertTrue("held back before the link is called", calls.isEmpty());
         assertTrue(log.isEmpty());
     }

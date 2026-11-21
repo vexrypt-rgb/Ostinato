@@ -122,6 +122,25 @@ public class LocalRoutingTransportTest {
         assertEquals(List.of("Bob|" + OTHER), whispers.sent);
     }
 
+    // Ostinato: p2ch run 7 (20 Nov). Azalea turned local routing off; her marker stayed fresh for 30 s and Copper and
+    // Spelunker wrote 15 frames into an inbox nobody read.
+    @Test
+    public void aMemberTurningLocalRoutingOffIsWhisperedToAtOnce() throws Exception {
+        Path root = temporary.newFolder("spool-off").toPath();
+        Path game = temporary.newFolder("game-bob").toPath();
+        RecordingTransport whispers = new RecordingTransport("Alice");
+        LocalRoutingTransport alice = routing("Alice", whispers, new LocalSpoolTransport(root, "Alice"), root, true);
+        markAlive(root, "Bob", clock.get());
+        markAlive(root, "Carol", clock.get());
+        assertTrue(alice.isLocal("Bob"));
+        LocalRoutingTransport.open("Bob", null, false, root.toString(), game, line -> { });
+        assertFalse("Bob's marker is withdrawn", alice.isLocal("Bob"));
+        alice.send("Bob", SEALED);
+        assertEquals(List.of("Bob|" + SEALED), whispers.sent);
+        assertTrue("nothing waits in Bob's unread inbox", new LocalSpoolTransport(root, "Bob").receive().isEmpty());
+        assertTrue("other members keep theirs", alice.isLocal("Carol"));
+    }
+
     private LocalRoutingTransport routing(String self, SwarmTransport fallback, SwarmTransport local,
             Path root, boolean enabled) {
         LocalRoutingTransport transport = new LocalRoutingTransport(self, fallback, local, root, enabled,

@@ -106,6 +106,24 @@ public final class ObservationReporter {
     };
     /** Corrections first, then ordinary changes; one pending entry per key (the latest wins). */
     private final LinkedHashMap<String, Pending> urgent = new LinkedHashMap<>();
+    // Ostinato: chat messages whose frame the limiter may still take back: seq -> entries (and which queue each came
+    // from). Bounded; a frame that left is simply forgotten when it falls off the end.
+    private static final int IN_FLIGHT_MAX = 32;
+    private final LinkedHashMap<Long, InFlight> inFlight = new LinkedHashMap<>();
+    private final java.util.concurrent.ConcurrentLinkedQueue<Long> withdrawnSeqs = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private long requeued;
+
+    private static final class InFlight {
+        final String world;
+        final List<Pending> entries;
+        final List<Boolean> wasUrgent;
+
+        InFlight(String world, List<Pending> entries, List<Boolean> wasUrgent) {
+            this.world = world;
+            this.entries = entries;
+            this.wasUrgent = wasUrgent;
+        }
+    }
     private final LinkedHashMap<String, Pending> normal = new LinkedHashMap<>();
     /** A rebuild dump in progress: whole messages, sent before anything else, then E. */
     private final ArrayDeque<ObservationMessage> dump = new ArrayDeque<>();
@@ -304,7 +322,46 @@ public final class ObservationReporter {
     }
 
     /** Sends at most one message if the gap for this transport has passed. Returns true when it sent one. */
+    /**
+     * Ostinato: the chat limiter took back the frame of message {@code seq} before it left (ObservationOffer's
+     * deadline). Lock-free; the entries are re-queued on the next tick.
+     */
+    public void withdrawn(long seq) {
+        withdrawnSeqs.add(seq);
+    }
+
+    /** Ostinato: entries put back after their frame was withdrawn (tests, status). */
+    public synchronized long requeued() {
+        return requeued;
+    }
+
+    // Ostinato: put a withdrawn message's entries back, each only if it is still this bot's latest word on its key
+    // (nothing newer pending for the key, and the reported state unchanged); they keep their observation times.
+    private void requeueWithdrawn() {
+        Long seq;
+        while ((seq = withdrawnSeqs.poll()) != null) {
+            InFlight f = inFlight.remove(seq);
+            if (f == null || !f.world.equals(worldId)) {
+                continue;
+            }
+            for (int i = 0; i < f.entries.size(); i++) {
+                Pending p = f.entries.get(i);
+                if (urgent.containsKey(p.key) || normal.containsKey(p.key)) {
+                    continue; // a newer fact about it is already waiting
+                }
+                Known k = reported.get(p.key);
+                boolean current = p.op == ObservationMessage.Op.G ? k == null : k != null && k.detail.equals(p.detail);
+                if (!current) {
+                    continue;
+                }
+                (f.wasUrgent.get(i) ? urgent : normal).put(p.key, p);
+                requeued++;
+            }
+        }
+    }
+
     public synchronized boolean tick(long now, boolean spool, Sender sender) {
+        requeueWithdrawn(); // Ostinato:
         if (worldId == null || now - lastSend < (spool ? SPOOL_GAP_MS : CHAT_GAP_MS)) {
             return false;
         }
@@ -337,7 +394,9 @@ public final class ObservationReporter {
             dump.poll();
             return true;
         }
+        List<Boolean> wasUrgent = new ArrayList<>(taken.size());
         for (Pending p : taken) {
+            wasUrgent.add(urgent.get(p.key) == p);
             if (urgent.get(p.key) == p) {
                 urgent.remove(p.key);
             } else if (normal.get(p.key) == p) {
@@ -346,6 +405,13 @@ public final class ObservationReporter {
             Known k = reported.get(p.key);
             if (k != null && p.op == ObservationMessage.Op.R) {
                 k.lastSent = now;
+            }
+        }
+        if (!spool && !taken.isEmpty()) { // Ostinato: the chat limiter may still take this frame back
+            inFlight.put(m.seq, new InFlight(worldId, new ArrayList<>(taken), wasUrgent));
+            if (inFlight.size() > IN_FLIGHT_MAX) {
+                Long eldest = inFlight.keySet().iterator().next();
+                inFlight.remove(eldest);
             }
         }
         return true;
