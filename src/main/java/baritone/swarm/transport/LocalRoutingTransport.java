@@ -17,6 +17,8 @@
 
 package baritone.swarm.transport;
 
+import baritone.swarm.frame.SwarmFrame;
+
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -72,10 +74,32 @@ public final class LocalRoutingTransport implements SwarmTransport {
                 }
             }
         }
+        if (!enabled) {
+            withdrawAlive(self, spoolDir, gameDir);
+        }
         LocalRoutingTransport transport = new LocalRoutingTransport(self, chat, local, root, enabled,
                 System::currentTimeMillis, ALIVE_TTL_MS, null);
         transport.touchAlive();
         return transport;
+    }
+
+    /**
+     * Ostinato: a member that turns its local spool off withdraws its own alive marker, so same-PC peers whisper to
+     * it at once. Left in place, the marker stays fresh for up to {@link #ALIVE_TTL_MS} and peers keep writing into
+     * an inbox nobody reads (p2ch run 7, 20 Nov: 15 frames to Azalea lost between 20:00:41 and 20:01:08).
+     */
+    static void withdrawAlive(String self, String spoolDir, Path gameDir) {
+        if (!SwarmFrame.isValidId(self) || gameDir == null) {
+            return;
+        }
+        try {
+            Path root = (spoolDir == null || spoolDir.isBlank())
+                    ? gameDir.resolve("swarm-spool")
+                    : gameDir.getFileSystem().getPath(spoolDir);
+            Files.deleteIfExists(root.resolve(self).resolve(ALIVE_FILE));
+        } catch (Exception ignored) {
+            // Peers fall back to whispers once the marker is ALIVE_TTL_MS old.
+        }
     }
 
     LocalRoutingTransport(String self, SwarmTransport fallback, SwarmTransport local, Path root,

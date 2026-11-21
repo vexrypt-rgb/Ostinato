@@ -92,10 +92,17 @@ public final class LeaseCoordinator {
     private Mode mode = Mode.IDLE;
     private String refusedReason;
     private final Map<String, Long> highWater = new LinkedHashMap<>();
+    /** Ostinato: Phase 2c. Bot (lower case) to {epoch, seq} of the last observation message applied; kept durable. */
+    private final Map<String, long[]> obsMarks = new LinkedHashMap<>();
     private final LinkedHashMap<UUID, LeaseRecord> records = new LinkedHashMap<>();
     /** Per lease: the duration sent with its last offer or grant. */
     private final Map<UUID, Long> durations = new HashMap<>();
     private final Map<UUID, Long> lastResend = new HashMap<>();
+    // Ostinato: Phase 2c. Per lease: the shared observation it was chosen from (OFFER extra), memory only. After a
+    // restart a re-sent OFFER carries "-", which the bot ignores for a lease it already holds.
+    private final Map<UUID, String> expects = new HashMap<>();
+    /** Ostinato: Phase 2c. (resource, reason, bot) for lease reports whose reason starts with obs-; run unlocked. */
+    private volatile ObsReportListener obsReports;
     /** Ostinato: when each denial (REVOKE to an unknown, stale or wrong-state request) last went out, by bot and lease. */
     private final LinkedHashMap<String, Long> lastDenied = new LinkedHashMap<String, Long>(16, 0.75f, true) {
         @Override
@@ -173,6 +180,9 @@ public final class LeaseCoordinator {
             return refuse("store unreadable: " + e.getMessage());
         }
         highWater.putAll(snap.highWater);
+        for (Map.Entry<String, long[]> e : snap.obsMarks.entrySet()) {
+            obsMarks.put(e.getKey(), e.getValue().clone());
+        }
         for (LeaseRecord r : snap.leases) {
             records.put(r.leaseId, r);
         }
@@ -277,7 +287,7 @@ public final class LeaseCoordinator {
                 onRack(from, m);
                 break;
             case REPORT:
-                onReport(from, m);
+                onReport(from, m, after);
                 break;
             default:
                 break;
@@ -458,7 +468,7 @@ public final class LeaseCoordinator {
                 + m.extra + ")");
     }
 
-    private void onReport(String from, LeaseMessage m) {
+    private void onReport(String from, LeaseMessage m, List<Runnable> after) {
         if (m.leaseId == null) {
             return; // End marker outside reconciliation.
         }
@@ -468,6 +478,15 @@ public final class LeaseCoordinator {
         }
         Map<String, String> x = parseExtra(m.extra);
         applyReport(r, x);
+        // Ostinato: Phase 2c. A bot that refused to act on a shared observation tells the knowledge service, outside
+        // this lock (the service asks this coordinator which resources are busy while holding its own).
+        String reason = x.get("reason");
+        ObsReportListener ol = obsReports;
+        if (ol != null && reason != null && reason.startsWith("obs-")) {
+            String res = r.resource;
+            String bot = r.bot;
+            after.add(() -> ol.onObsReport(res, reason, bot));
+        }
         boolean active = "true".equals(x.get("active"));
         boolean terminal = r.exec != null && r.exec.terminal();
         if (r.state.live() && !active && (terminal || "done".equals(x.get("phase")))) {
@@ -758,7 +777,7 @@ public final class LeaseCoordinator {
                     } else if (now - lastResend.getOrDefault(r.leaseId, r.offeredAtMono) >= LeaseClock.resendEvery(d)) {
                         lastResend.put(r.leaseId, now);
                         send(r.bot, new LeaseMessage(LeaseMessage.Op.OFFER, r.leaseId, r.resource, r.gen, r.commandId,
-                                0, d, "-"));
+                                0, d, expects.getOrDefault(r.leaseId, "-"))); // Ostinato: Phase 2c
                     }
                     break;
                 case GRANTED:
@@ -796,6 +815,32 @@ public final class LeaseCoordinator {
 
     /** Lease {@code resource} to {@code bot} and, once granted, send it {@code commandLine}. Returns a status line. */
     public String lease(String bot, String resource, String commandLine) {
+        return lease(bot, resource, commandLine, null);
+    }
+
+    /** Ostinato: Phase 2c. Receives obs-* lease reports (resource, reason, bot); called without the coordinator lock. */
+    public interface ObsReportListener {
+        void onObsReport(String resource, String reason, String bot);
+    }
+
+    public void setObsReportListener(ObsReportListener l) {
+        this.obsReports = l;
+    }
+
+    /** Ostinato: Phase 2c. The OFFER extra for an observation the lease was chosen from, or "-". */
+    static String offerExtra(String expect) {
+        if (expect == null || expect.isEmpty()) {
+            return "-";
+        }
+        String e = "ob=" + expect;
+        return LeaseMessage.validExtra(e) ? e : "-";
+    }
+
+    /**
+     * Ostinato: Phase 2c. As {@link #lease(String, String, String)}, for a resource chosen from a shared observation
+     * ({@code expect} = {@code <ore>.<count>}): the OFFER carries it, and the bot checks it in its own world first.
+     */
+    public String lease(String bot, String resource, String commandLine, String expect) {
         // Ostinato: a live or still-fenced lease is the first answer the operator needs.
         String busy = LeaseMessage.validResource(resource) ? busyReason(resource) : null;
         if (busy != null) {
@@ -855,9 +900,13 @@ public final class LeaseCoordinator {
             }
             durations.put(r.leaseId, d);
             lastResend.put(r.leaseId, now);
-            send(bot, new LeaseMessage(LeaseMessage.Op.OFFER, r.leaseId, resource, gen, r.commandId, 0, d, "-"));
+            String extra = offerExtra(expect); // Ostinato: Phase 2c
+            if (!"-".equals(extra)) {
+                expects.put(r.leaseId, extra);
+            }
+            send(bot, new LeaseMessage(LeaseMessage.Op.OFFER, r.leaseId, resource, gen, r.commandId, 0, d, extra));
             log.accept("swarm-lease: offered lease=" + r.leaseId + " gen=" + gen + " bot=" + bot + " resource="
-                    + resource + " D=" + d + "ms");
+                    + resource + " D=" + d + "ms" + ("-".equals(extra) ? "" : " " + extra));
             return "swarm-lease: offered " + resource + " gen " + gen + " to " + bot + " (lease " + r.leaseId + ")";
         }
     }
@@ -986,9 +1035,36 @@ public final class LeaseCoordinator {
         return n;
     }
 
+    /**
+     * Ostinato: Phase 2c. The observation store applied message {@code seq} of run {@code epoch} from {@code bot}:
+     * remember it durably, so a message overtaken before a coordinator relaunch is still dropped after it. A mark
+     * never moves back. Returns false when the store could not be written.
+     */
+    public synchronized boolean noteObsMark(String bot, long epoch, long seq) {
+        String b = bot.toLowerCase(Locale.ROOT);
+        long[] mk = obsMarks.get(b);
+        if (mk != null && (epoch < mk[0] || (epoch == mk[0] && seq <= mk[1]))) {
+            return true;
+        }
+        obsMarks.put(b, new long[]{epoch, seq});
+        if (mode == Mode.IDLE || mode == Mode.REFUSED) {
+            return false; // the store was never loaded (or is unreadable): never write over it from here
+        }
+        return persist();
+    }
+
+    /** Ostinato: Phase 2c. The durable per-bot marks (a copy), for the observation store after a relaunch. */
+    public synchronized Map<String, long[]> obsMarks() {
+        Map<String, long[]> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> e : obsMarks.entrySet()) {
+            copy.put(e.getKey(), e.getValue().clone());
+        }
+        return copy;
+    }
+
     private boolean persist() {
         try {
-            store.save(highWater, new ArrayList<>(records.values()));
+            store.save(highWater, new ArrayList<>(records.values()), obsMarks);
             return true;
         } catch (IOException e) {
             log.accept("swarm-lease: store-write-failed " + store.path() + ": " + e.getMessage());
@@ -1013,6 +1089,7 @@ public final class LeaseCoordinator {
                 it.remove();
                 durations.remove(r.leaseId);
                 lastResend.remove(r.leaseId);
+                expects.remove(r.leaseId); // Ostinato: Phase 2c
                 terminal--;
             }
         }

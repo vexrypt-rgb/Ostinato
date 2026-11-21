@@ -47,21 +47,29 @@ import java.util.UUID;
  * coordinator refuses to grant rather than guess.
  *
  * <pre>
- * ostinato-coordinator v1
+ * ostinato-coordinator v2
  * hw|resource|gen
  * lease|leaseId|resource|gen|commandId|bot|state|notBeforeWall|exec|obs|endReason|b64(commandLine)
+ * obs|bot|epoch|seq
  * end
+ * </pre>
+ * <p>Ostinato: v2 adds {@code obs} lines, the last observation message applied from each bot (Phase 2c ordering), so
+ * a message overtaken before a coordinator relaunch is still dropped after it. A v1 file (no such lines) still loads.
+ * <pre>
  * </pre>
  */
 public final class CoordinatorStore {
 
-    public static final String HEADER = "ostinato-coordinator v1";
+    public static final String HEADER = "ostinato-coordinator v2";
+    public static final String HEADER_V1 = "ostinato-coordinator v1";
     /** Terminal records kept for dedup and audit; live ones are always kept. */
     public static final int KEEP_TERMINAL = 200;
 
     public static final class Snapshot {
         public final Map<String, Long> highWater = new LinkedHashMap<>();
         public final List<LeaseRecord> leases = new ArrayList<>();
+        /** Ostinato: bot (lower case) to {epoch, seq} of the last observation message applied from it. */
+        public final Map<String, long[]> obsMarks = new LinkedHashMap<>();
     }
 
     private final Path file;
@@ -86,7 +94,7 @@ public final class CoordinatorStore {
             return s;
         }
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-        if (lines.isEmpty() || !HEADER.equals(lines.get(0))) {
+        if (lines.isEmpty() || !(HEADER.equals(lines.get(0)) || HEADER_V1.equals(lines.get(0)))) {
             throw new IOException("bad coordinator store header in " + file);
         }
         boolean ended = false;
@@ -113,6 +121,13 @@ public final class CoordinatorStore {
                     r.obs = ObservationState.valueOf(f[9].toUpperCase(Locale.ROOT));
                     r.endReason = "-".equals(f[10]) ? null : f[10];
                     s.leases.add(r);
+                } else if ("obs".equals(f[0]) && f.length == 4 && HEADER.equals(lines.get(0))) {
+                    long epoch = Long.parseLong(f[2]);
+                    long seq = Long.parseLong(f[3]);
+                    if (f[1].isEmpty() || epoch <= 0 || seq <= 0) {
+                        throw new IOException("bad coordinator store line " + (i + 1) + " in " + file);
+                    }
+                    s.obsMarks.put(f[1], new long[]{epoch, seq});
                 } else {
                     throw new IOException("bad coordinator store line " + (i + 1) + " in " + file);
                 }
@@ -128,6 +143,12 @@ public final class CoordinatorStore {
 
     /** Write {@code highWater} and {@code leases} atomically. Keeps every live record and the newest terminal ones. */
     public void save(Map<String, Long> highWater, List<LeaseRecord> leases) throws IOException {
+        save(highWater, leases, java.util.Collections.emptyMap());
+    }
+
+    /** Ostinato: as {@link #save(Map, List)}, plus the per-bot observation marks. */
+    public void save(Map<String, Long> highWater, List<LeaseRecord> leases, Map<String, long[]> obsMarks)
+            throws IOException {
         StringBuilder sb = new StringBuilder(HEADER).append('\n');
         for (Map.Entry<String, Long> e : highWater.entrySet()) {
             sb.append("hw|").append(e.getKey()).append('|').append(e.getValue()).append('\n');
@@ -152,6 +173,10 @@ public final class CoordinatorStore {
                     .append(r.endReason == null ? "-" : r.endReason).append('|')
                     .append(Base64.getEncoder().encodeToString(r.commandLine.getBytes(StandardCharsets.UTF_8)))
                     .append('\n');
+        }
+        for (Map.Entry<String, long[]> e : obsMarks.entrySet()) {
+            sb.append("obs|").append(e.getKey()).append('|').append(e.getValue()[0]).append('|')
+                    .append(e.getValue()[1]).append('\n');
         }
         sb.append("end\n");
         Path parent = file.toAbsolutePath().getParent();

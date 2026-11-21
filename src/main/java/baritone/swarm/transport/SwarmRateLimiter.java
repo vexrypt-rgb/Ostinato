@@ -70,8 +70,16 @@ public final class SwarmRateLimiter {
     /**
      * Ostinato: what the sender knows about a line's useful life. If the line is still queued {@code expiresInMs}
      * after it was offered, the limiter logs {@code label} once: the sender gave up before the line ever left.
+     *
+     * <p>With {@code onWithdrawn} set, the limiter instead takes every line offered with this deadline back out of
+     * the queue at that moment, provided none of them has left yet, logs it, and calls {@code onWithdrawn} (on the
+     * thread that polls; it must only record the fact). Observation frames use this: their entry ages are read when
+     * the frame is built, so one that waited longer would look newer than it is (p2ch run 7: 22 s).
      */
-    public record Deadline(long expiresInMs, String label) {
+    public record Deadline(long expiresInMs, String label, Runnable onWithdrawn) {
+        public Deadline(long expiresInMs, String label) {
+            this(expiresInMs, label, null);
+        }
     }
 
     // Ostinato: one queued line, with whom it goes to and an optional deadline on this limiter's clock.
@@ -80,13 +88,15 @@ public final class SwarmRateLimiter {
         final String to;
         final long expiresAtMs;
         final String label;
+        final Deadline deadline; // Ostinato: identity of the offer this line belongs to (null: none)
         boolean expiryLogged;
 
-        Entry(String line, String to, long expiresAtMs, String label) {
+        Entry(String line, String to, long expiresAtMs, String label, Deadline deadline) {
             this.line = line;
             this.to = to;
             this.expiresAtMs = expiresAtMs;
             this.label = label;
+            this.deadline = deadline;
         }
     }
 
@@ -156,7 +166,8 @@ public final class SwarmRateLimiter {
             }
         }
         long expires = deadline == null ? Long.MAX_VALUE : lastMs + Math.max(0L, deadline.expiresInMs());
-        queues[p.ordinal()].addLast(new Entry(line, key(to), expires, deadline == null ? null : deadline.label()));
+        queues[p.ordinal()].addLast(new Entry(line, key(to), expires, deadline == null ? null : deadline.label(),
+                deadline));
         return true;
     }
 
@@ -167,6 +178,7 @@ public final class SwarmRateLimiter {
             lastMs = nowMs;
         }
         withdrawTelemetry(nowMs); // Ostinato:
+        withdrawExpired(nowMs); // Ostinato:
         logExpired(nowMs); // Ostinato:
         if (tokens < 1.0) {
             return null;
@@ -176,6 +188,14 @@ public final class SwarmRateLimiter {
             if (e != null) {
                 tokens -= 1.0;
                 sent++;
+                if (e.deadline != null && e.deadline.onWithdrawn() != null) {
+                    // Ostinato: part of this offer has left; the rest is never withdrawn (no half frames).
+                    if (holds(e.deadline)) {
+                        leaving.add(e.deadline);
+                    } else {
+                        leaving.remove(e.deadline);
+                    }
+                }
                 window.add(nowMs); // Ostinato: link monitor budget.
                 if (e.to != null) {
                     lastSentTo.put(e.to, nowMs); // Ostinato: liveness for the heartbeat skip
@@ -201,6 +221,69 @@ public final class SwarmRateLimiter {
         if (!t.isEmpty() && !telemetryRoom(nowMs)) {
             withdrawn += t.size();
             t.clear();
+        }
+    }
+
+    // Ostinato: offers with a withdrawing deadline whose first line has left (identity).
+    private final java.util.Set<Deadline> leaving = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    private long withdrawnExpired;
+
+    public synchronized long withdrawnExpired() {
+        return withdrawnExpired;
+    }
+
+    private boolean holds(Deadline d) {
+        for (ArrayDeque<Entry> q : queues) {
+            for (Entry x : q) {
+                if (x.deadline == d) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Ostinato: take back every offer with a withdrawing deadline that is due and has not started to leave.
+    private void withdrawExpired(long nowMs) {
+        java.util.List<Deadline> due = null;
+        for (ArrayDeque<Entry> q : queues) {
+            for (Entry e : q) {
+                Deadline d = e.deadline;
+                if (d != null && d.onWithdrawn() != null && nowMs >= e.expiresAtMs && !leaving.contains(d)) {
+                    if (due == null) {
+                        due = new java.util.ArrayList<>();
+                    }
+                    boolean seen = false;
+                    for (Deadline x : due) {
+                        seen |= x == d;
+                    }
+                    if (!seen) {
+                        due.add(d);
+                    }
+                }
+            }
+        }
+        if (due == null) {
+            return;
+        }
+        for (Deadline d : due) {
+            int lines = 0;
+            for (ArrayDeque<Entry> q : queues) {
+                for (Iterator<Entry> it = q.iterator(); it.hasNext(); ) {
+                    if (it.next().deadline == d) {
+                        it.remove();
+                        lines++;
+                    }
+                }
+            }
+            withdrawnExpired++;
+            log.accept("swarm: " + d.label() + " withdrawn, still queued after " + d.expiresInMs() + " ms (" + lines
+                    + (lines == 1 ? " line, " : " lines, ") + queued() + " queued)");
+            try {
+                d.onWithdrawn().run();
+            } catch (RuntimeException ignored) {
+                // the sender's bookkeeping must not stop the link
+            }
         }
     }
 
@@ -275,6 +358,19 @@ public final class SwarmRateLimiter {
 
     /** Ostinato: lines waiting at {@code p}. */
     public synchronized int queued(SwarmPriority p) { return queues[p.ordinal()].size(); }
+
+    /**
+     * Ostinato: Phase 2c. Lines a new line at {@code p} would wait behind (that priority and every more urgent one). A
+     * sender whose line carries a measured age (observation reports) offers it only when this is 0, so the age is
+     * read when the line actually leaves, not seconds earlier.
+     */
+    public synchronized int queuedAtOrAbove(SwarmPriority p) {
+        int n = 0;
+        for (int i = 0; i <= p.ordinal(); i++) {
+            n += queues[i].size();
+        }
+        return n;
+    }
     public synchronized long withdrawn() { return withdrawn; }
     public synchronized long expiredQueued() { return expiredQueued; }
     private final java.util.LinkedHashSet<String> loggedExpired = new java.util.LinkedHashSet<>(); // Ostinato:

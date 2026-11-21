@@ -116,6 +116,11 @@ public final class LeaseMessage {
         return r != null && RESOURCE.matcher(r).matches();
     }
 
+    // Ostinato: Phase 2c. Whether {@code e} fits the extra field (OFFER ob= tokens are built from observations).
+    public static boolean validExtra(String e) {
+        return e != null && EXTRA.matcher(e).matches();
+    }
+
     /** Ostinato: the compact v2 form (see the class comment). */
     public String encode() {
         return "2|" + op.code() + "|" + id2(leaseId) + "|" + resource + "|" + Long.toString(gen, 36) + "|"
