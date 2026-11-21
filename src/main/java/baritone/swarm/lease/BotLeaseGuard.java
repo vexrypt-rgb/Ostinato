@@ -91,6 +91,11 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
 
     public static final String OBS_STALE = "obs-stale";
     public static final String OBS_UNKNOWN = "obs-unknown";
+    /**
+     * Ostinato: Phase 2c part 2. The observation's blocks are not loaded where the bot stands: it walks toward them,
+     * acting on nothing, and checks again (walk-to-verify). Never a reject on its own.
+     */
+    public static final String OBS_APPROACH = CommandProtocol.OBS_APPROACH;
 
     public interface Sender {
         /** Send an SWL body to {@code to}; false when it could not be queued. */
@@ -148,6 +153,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         // and whether this bot already checked it in its own world.
         String expect;
         boolean verified;
+        boolean approaching; // Ostinato: walk-to-verify in progress (its command is held by the protocol)
 
         Lease(UUID leaseId, String resource, long gen, UUID commandId, String coordinator) {
             this.leaseId = leaseId;
@@ -571,9 +577,10 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
     // lease a coordinator restart had to survive. Two bounds keep a command that never starts from holding the
     // resource forever: no renew once the protocol settled the command without starting it (rejected, e.g. busy),
     // and none once the first grant is D/2 old. Such a lease then expires at its last deadline, at most 1.5 D
-    // after the grant.
+    // after the grant. Ostinato: Phase 2c part 2 - a lease whose bot is walking to verify its observation keeps
+    // renewing; the protocol's approach budget (CommandProtocol.APPROACH_MS) ends it if the walk never verifies.
     private boolean renewsBeforeStart(Lease l, long now, Set<UUID> settled) {
-        return !settled.contains(l.commandId) && now - l.grantedAt < l.durationMs / 2;
+        return !settled.contains(l.commandId) && (now - l.grantedAt < l.durationMs / 2 || l.approaching);
     }
 
     /**
@@ -827,7 +834,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         } catch (RuntimeException e) {
             why = OBS_UNKNOWN;
         }
-        if (why != null && !OBS_STALE.equals(why)) {
+        if (why != null && !OBS_STALE.equals(why) && !OBS_APPROACH.equals(why)) {
             why = OBS_UNKNOWN;
         }
         synchronized (this) {
@@ -837,26 +844,73 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             }
             if (why == null) {
                 l.verified = true;
+                l.approaching = false;
                 log.accept("swarm-lease: verified lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource="
                         + l.resource + " obs=" + expect);
                 return null;
             }
-            Phase from = l.phase;
-            l.phase = Phase.DONE;
-            markEnded(l);
-            if (l.endReason == null) {
-                l.endReason = why;
+            if (OBS_APPROACH.equals(why)) {
+                if (!l.approaching) {
+                    l.approaching = true;
+                    log.accept("swarm-lease: approaching lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource="
+                            + l.resource + " obs=" + expect + " (not loaded here; walking to it, acting on nothing until"
+                            + " it is verified)");
+                }
+                return OBS_APPROACH;
             }
-            l.exec = ExecutionState.FAILED;
-            l.obs = OBS_STALE.equals(why) ? ObservationState.STALE : ObservationState.UNKNOWN;
-            l.active = false;
-            l.reportOwed = true;
-            l.expiryLogged = true;
-            log.accept("swarm-lease: done lease=" + l.leaseId + " gen=" + l.gen + " bot=self reason=" + why
-                    + " was=" + from.name().toLowerCase(Locale.ROOT) + " resource=" + l.resource + " obs=" + expect
-                    + " (not acting on the shared observation)");
+            endUnverified(l, why, expect);
             return why;
         }
+    }
+
+    /**
+     * Ostinato: Phase 2c part 2. The protocol stopped holding the approaching command: {@code why} null only clears the
+     * approach (the command was rejected for another reason, e.g. busy); otherwise the lease ends unverified with that
+     * reason (obs-unknown: not verified within the approach budget).
+     */
+    @Override
+    public void approachEnded(UUID commandId, String why) {
+        synchronized (this) {
+            Lease l = commandId == null ? null : byCommand.get(commandId);
+            if (l == null || !l.approaching) {
+                return;
+            }
+            l.approaching = false;
+            if (why != null && l.phase != Phase.DONE) {
+                log.accept("swarm-lease: approach of lease=" + l.leaseId + " gen=" + l.gen + " ended unverified ("
+                        + why + ")");
+                endUnverified(l, why, l.expect);
+            }
+        }
+    }
+
+    /** Ostinato: Phase 2c part 2. The box an approaching lease walks to, or null. */
+    public synchronized ReservationKey approachTarget() {
+        for (Lease l : leases.values()) {
+            if (l.approaching && l.phase != Phase.DONE) {
+                return ReservationKey.parse(l.resource);
+            }
+        }
+        return null;
+    }
+
+    // Caller holds this. The shared observation did not hold here: the lease ends without acting on it.
+    private void endUnverified(Lease l, String why, String expect) {
+        Phase from = l.phase;
+        l.phase = Phase.DONE;
+        l.approaching = false;
+        markEnded(l);
+        if (l.endReason == null) {
+            l.endReason = why;
+        }
+        l.exec = ExecutionState.FAILED;
+        l.obs = OBS_STALE.equals(why) ? ObservationState.STALE : ObservationState.UNKNOWN;
+        l.active = false;
+        l.reportOwed = true;
+        l.expiryLogged = true;
+        log.accept("swarm-lease: done lease=" + l.leaseId + " gen=" + l.gen + " bot=self reason=" + why
+                + " was=" + from.name().toLowerCase(Locale.ROOT) + " resource=" + l.resource + " obs=" + expect
+                + " (not acting on the shared observation)");
     }
 
     @Override

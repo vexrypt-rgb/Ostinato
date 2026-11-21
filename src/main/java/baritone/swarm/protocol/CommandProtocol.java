@@ -105,6 +105,14 @@ public final class CommandProtocol {
     private long nextCapsProbe = Long.MAX_VALUE;
     /** How long a command that arrived before its lease grant waits for the grant. */
     public static final long HOLD_MS = 2_000L;
+    /**
+     * Ostinato: Phase 2c part 2, walk-to-verify. A lease check that returns this ("not loaded here") holds the command
+     * while the bot walks toward the observation, re-checked every {@link #APPROACH_CHECK_MS}, for at most
+     * {@link #APPROACH_MS} (and never past the command's own deadline); then it is rejected obs-unknown as before.
+     */
+    public static final String OBS_APPROACH = "obs-approach";
+    public static final long APPROACH_MS = 60_000L;
+    public static final long APPROACH_CHECK_MS = 500L;
 
     public CommandProtocol(BotIdentity self, Set<String> members, Wire wire, Executor executor, Policy policy,
                            LongSupplier clock, Consumer<String> log, long retryMs) {
@@ -767,6 +775,7 @@ public final class CommandProtocol {
         pumpStops(); // Ostinato: one stop re-check per tick, before outcomes are polled.
         pumpLeaseStops(); // Ostinato: lease expiry stops run with or without the link.
         sweepHeld();
+        pumpApproaches(); // Ostinato: Phase 2c part 2, walk-to-verify
         List<UUID> running = new ArrayList<>();
         synchronized (lock) {
             if (!linkUp) {
@@ -1150,7 +1159,21 @@ public final class CommandProtocol {
         }
     }
 
+    // Ostinato: Phase 2c part 2. A command that was held for its approach and is now decided another way leaves the
+    // approach: started (verified), or rejected for any reason, in which case the lease's approach is ended too.
     private Decision decide(String transport, String from, Parsed p) {
+        holdingForApproach = false;
+        Decision d = decide0(transport, from, p);
+        if (!holdingForApproach && approaching.remove(p.id) != null && d.kind != Kind.START) {
+            LeaseHooks hooks = leaseHooks;
+            if (hooks != null) {
+                hooks.approachEnded(p.id, null);
+            }
+        }
+        return d;
+    }
+
+    private Decision decide0(String transport, String from, Parsed p) {
         if (!validToken(from) || !from.equals(p.issuer)) {
             log.accept("swarm: rejected forged command " + p.id + " on " + transport);
             return Decision.ack(from, rejectAck(p.id, "forged", ExecutionState.FAILED));
@@ -1227,6 +1250,21 @@ public final class CommandProtocol {
             // Ostinato: Phase 2c. A lease chosen from a shared observation runs only after the bot checked that
             // observation in its own world. A failed check is a stored reject: never auto-retried.
             String why = hooks.verify(p.id);
+            if (OBS_APPROACH.equals(why)) {
+                if (!entry.ownerEmergency && (busy() || approachingOther(p.id))) {
+                    hooks.approachEnded(p.id, null);
+                    return Decision.ack(from, rememberReject(p, "busy"));
+                }
+                holdingForApproach = true;
+                if (!approaching.containsKey(p.id)) {
+                    long now = clock.getAsLong();
+                    approaching.put(p.id, new Approach(new Held(p, transport, from, now),
+                            Math.min(now + APPROACH_MS, p.deadline), now + APPROACH_CHECK_MS));
+                    log.accept("swarm: approaching for " + p.id + " (shared observation not loaded here; held until"
+                            + " verified)");
+                }
+                return Decision.ack(from, null);
+            }
             if (why != null) {
                 log.accept("swarm: rejected " + p.id + " " + why + " (shared observation not verified locally)");
                 return Decision.ack(from, rememberReject(p, why));
@@ -1234,7 +1272,7 @@ public final class CommandProtocol {
         }
         // A verified inline command (eta, help, echo) may run beside an in-flight path.
         // A second path or world action may not: that would be a second active task.
-        if (!entry.ownerEmergency && !completesInline(p.name) && busy()) {
+        if (!entry.ownerEmergency && !completesInline(p.name) && (busy() || approachingOther(p.id))) {
             return Decision.ack(from, rememberReject(p, "busy"));
         }
         if (!reserve(p, true, null, ExecutionState.ACCEPTED, ObservationState.CONFIRMED, entry)) {
@@ -1915,6 +1953,15 @@ public final class CommandProtocol {
          * once, before the command starts. Null to go on; else the reject reason (obs-stale, obs-unknown). Called
          * under the protocol lock: must not call back.
          */
+        /**
+         * Ostinato: Phase 2c part 2. The protocol stopped holding {@code commandId} for its approach: {@code why} null
+         * when it was decided another way (started, or rejected e.g. busy), else the reason the approach ended
+         * (obs-unknown: not verified within the budget). Called without the protocol lock or under it; must not call
+         * back.
+         */
+        default void approachEnded(UUID commandId, String why) {
+        }
+
         default String verify(UUID commandId) {
             return null;
         }
@@ -1934,6 +1981,79 @@ public final class CommandProtocol {
         VALID,
         /** Expired, revoked or superseded. */
         EXPIRED
+    }
+
+    // Ostinato: Phase 2c part 2. Commands held while the bot walks to verify their shared observation.
+    private final Map<UUID, Approach> approaching = new LinkedHashMap<>();
+    private boolean holdingForApproach; // set by decide when it (re)holds a command for its approach
+
+    private static final class Approach {
+        final Held h;
+        final long deadline;
+        long nextCheck;
+
+        Approach(Held h, long deadline, long nextCheck) {
+            this.h = h;
+            this.deadline = deadline;
+            this.nextCheck = nextCheck;
+        }
+    }
+
+    /** True while {@code commandId} is held for its approach (walk-to-verify). */
+    public boolean isApproaching(UUID commandId) {
+        synchronized (lock) {
+            return approaching.containsKey(commandId);
+        }
+    }
+
+    // Ostinato: Phase 2c part 2. Caller holds lock. Another command may not start while one is approaching.
+    private boolean approachingOther(UUID id) {
+        for (UUID a : approaching.keySet()) {
+            if (!a.equals(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Ostinato: Phase 2c part 2. Re-check approaching commands; give up at the budget. Once per client tick.
+    private void pumpApproaches() {
+        List<Approach> recheck = new ArrayList<>();
+        List<UUID> gaveUp = new ArrayList<>();
+        List<Decision> sends = new ArrayList<>();
+        synchronized (lock) {
+            if (!linkUp || approaching.isEmpty()) {
+                return;
+            }
+            long now = clock.getAsLong();
+            for (Iterator<Approach> it = approaching.values().iterator(); it.hasNext(); ) {
+                Approach a = it.next();
+                if (now >= a.deadline) {
+                    it.remove();
+                    gaveUp.add(a.h.p.id);
+                    log.accept("swarm: rejected " + a.h.p.id + " " + leaseUnknown() + " (not verified within "
+                            + (a.deadline - a.h.deadline) + " ms of approaching)");
+                    sends.add(Decision.ack(a.h.from, rememberReject(a.h.p, leaseUnknown())));
+                } else if (now >= a.nextCheck) {
+                    a.nextCheck = now + APPROACH_CHECK_MS;
+                    recheck.add(a);
+                }
+            }
+        }
+        LeaseHooks hooks = leaseHooks;
+        for (UUID id : gaveUp) {
+            if (hooks != null) {
+                hooks.approachEnded(id, leaseUnknown());
+            }
+        }
+        deliver(sends);
+        for (Approach a : recheck) {
+            process(a.h.transport, a.h.from, a.h.p);
+        }
+    }
+
+    private static String leaseUnknown() {
+        return "obs-unknown";
     }
 
     private static final class Held {

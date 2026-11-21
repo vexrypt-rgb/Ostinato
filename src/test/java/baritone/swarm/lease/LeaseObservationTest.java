@@ -174,6 +174,113 @@ public class LeaseObservationTest {
         assertTrue(odd.logged("obs-unknown (shared observation not verified locally)"));
     }
 
+    // ---- Ostinato: Phase 2c part 2, walk-to-verify ------------------------------------------------------------
+
+    private static final String OTHER = "v:o:40,10,40:41,11,41";
+
+    /** A check that answers "not loaded here" until {@code loaded[0]} is set, then {@code after}. */
+    private static BotLeaseGuard.ObsCheck approachUntil(boolean[] loaded, String after, List<String> calls) {
+        return (res, exp) -> {
+            calls.add(res);
+            return loaded[0] ? after : BotLeaseGuard.OBS_APPROACH;
+        };
+    }
+
+    @Test
+    public void aFarObservationIsApproachedThenVerifiedThenRun() throws Exception {
+        LeaseSupport s = active();
+        boolean[] loaded = {false};
+        List<String> calls = new ArrayList<>();
+        s.guard.setObsCheck(approachUntil(loaded, null, calls));
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4"));
+        s.pump();
+        assertEquals("nothing runs before the observation is verified", 0, s.bobExec.count("mine"));
+        assertTrue(s.logged("swarm-lease: approaching lease=" + id));
+        assertTrue(s.logged("(shared observation not loaded here; held until verified)"));
+        assertEquals(VEIN, String.valueOf(s.guard.approachTarget()));
+        assertEquals(BotLeaseGuard.Phase.VALID, s.guard.phaseOf(id));
+        s.run(3_000L, 500L);
+        assertEquals(0, s.bobExec.count("mine"));
+        assertTrue("re-checked while walking", calls.size() >= 4);
+        loaded[0] = true;
+        s.run(1_000L, 500L);
+        assertEquals(1, s.bobExec.count("mine"));
+        assertTrue(s.logged("swarm-lease: verified lease=" + id));
+        assertNull("the approach is over", s.guard.approachTarget());
+        assertFalse(s.logged("(shared observation not verified locally)"));
+        assertEquals(1, s.loggedCount("swarm-lease: approaching lease=" + id));
+    }
+
+    @Test
+    public void staleOnArrivalIsRejectedAndReported() throws Exception {
+        LeaseSupport s = active();
+        boolean[] loaded = {false};
+        s.guard.setObsCheck(approachUntil(loaded, BotLeaseGuard.OBS_STALE, new ArrayList<>()));
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4"));
+        s.pump();
+        s.run(2_000L, 500L);
+        loaded[0] = true;
+        s.run(CommandProtocol.HOLD_MS * 5, 500L);
+        assertEquals(0, s.bobExec.count("mine"));
+        assertTrue(s.logged("obs-stale (shared observation not verified locally)"));
+        assertEquals(BotLeaseGuard.Phase.DONE, s.guard.phaseOf(id));
+        assertNull(s.guard.approachTarget());
+    }
+
+    @Test
+    public void anApproachThatNeverLoadsEndsUnknownAtTheBudget() throws Exception {
+        LeaseSupport s = active();
+        s.guard.setObsCheck(approachUntil(new boolean[]{false}, null, new ArrayList<>()));
+        UUID id = LeaseSupport.leaseIdOf(s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4"));
+        s.pump();
+        s.run(CommandProtocol.APPROACH_MS - 5_000L, 500L);
+        assertEquals("still approaching inside the budget (the lease keeps renewing)", VEIN,
+                String.valueOf(s.guard.approachTarget()));
+        assertFalse(s.logged("reason=lease-expired"));
+        s.run(15_000L, 500L);
+        assertEquals(0, s.bobExec.count("mine"));
+        assertTrue(s.logged("obs-unknown (not verified within"));
+        assertEquals("rejected once", 1, s.loggedCount("obs-unknown (not verified within"));
+        assertEquals(BotLeaseGuard.Phase.DONE, s.guard.phaseOf(id));
+        assertNull(s.guard.approachTarget());
+        boolean reported = false;
+        for (LeaseMessage m : sent(s, "Bob", LeaseMessage.Op.REPORT)) {
+            if (id.equals(m.leaseId) && m.extra.contains("reason=obs-unknown")) {
+                reported = true;
+            }
+        }
+        assertTrue("the coordinator hears why", reported);
+    }
+
+    @Test
+    public void aBusyBotDoesNotApproach() throws Exception {
+        LeaseSupport s = active();
+        s.coord.lease("Bob", OTHER, "mine coal_ore"); // a plain lease: runs, and stays running
+        s.pump();
+        assertEquals(1, s.bobExec.count("mine"));
+        s.guard.setObsCheck(approachUntil(new boolean[]{false}, null, new ArrayList<>()));
+        s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4");
+        s.pump();
+        assertEquals(1, s.bobExec.count("mine"));
+        assertNull("busy: no walking off", s.guard.approachTarget());
+        assertTrue(s.logged("busy"));
+        assertFalse(s.logged("(shared observation not loaded here; held until verified)"));
+    }
+
+    @Test
+    public void nothingElseStartsWhileApproaching() throws Exception {
+        LeaseSupport s = active();
+        s.guard.setObsCheck(approachUntil(new boolean[]{false}, null, new ArrayList<>()));
+        s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4");
+        s.pump();
+        assertEquals(VEIN, String.valueOf(s.guard.approachTarget()));
+        s.coord.lease("Bob", OTHER, "mine coal_ore");
+        s.pump();
+        s.run(1_000L, 500L);
+        assertEquals("the approaching bot is busy", 0, s.bobExec.count("mine"));
+        assertEquals(VEIN, String.valueOf(s.guard.approachTarget()));
+    }
+
     /** Deliver only lease messages (offer, accept, grant); protocol commands stay queued, so nothing starts. */
     private static void pumpLeaseOnly(LeaseSupport s) {
         List<LeaseSupport.Msg> batch;
