@@ -863,7 +863,12 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
             }
             if (why == null) {
                 l.verified = true;
+                boolean wasApproaching = l.approaching;
                 l.approaching = false;
+                if (wasApproaching) {
+                    // Ostinato: Phase 2c part 2 - the command starts right after this; the approach must not overlap it.
+                    releaseApproach();
+                }
                 log.accept("swarm-lease: verified lease=" + l.leaseId + " gen=" + l.gen + " bot=self resource="
                         + l.resource + " obs=" + expect);
                 return null;
@@ -899,6 +904,27 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
                 log.accept("swarm-lease: approach of lease=" + l.leaseId + " gen=" + l.gen + " ended unverified ("
                         + why + ")");
                 endUnverified(l, why, l.expect);
+            }
+        }
+    }
+
+    private volatile Runnable approachRelease;
+
+    /**
+     * Ostinato: Phase 2c part 2. Called (under the guard lock, on the protocol's thread) the moment an approaching
+     * lease verifies, just before its command starts: stop the approach movement now. Must not call back.
+     */
+    public void setApproachRelease(Runnable r) {
+        approachRelease = r;
+    }
+
+    private void releaseApproach() {
+        Runnable r = approachRelease;
+        if (r != null) {
+            try {
+                r.run();
+            } catch (RuntimeException ignored) {
+                // the leased command still starts; the next tick releases the approach anyway
             }
         }
     }

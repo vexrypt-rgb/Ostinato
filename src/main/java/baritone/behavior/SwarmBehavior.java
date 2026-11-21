@@ -365,6 +365,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2c - a lease chosen from a shared observation is checked against this bot's own world
             // before it acts; a stale record is reported back as a correction.
             g.setObsCheck(this::checkObservation);
+            // Ostinato: Phase 2c part 2 - the approach stops the moment its lease verifies, before the command starts.
+            g.setApproachRelease(this::releaseApproachNow);
         }
         CommandProtocol p = liveProtocol();
         if (p != null && p != leaseBoundTo) {
@@ -417,6 +419,19 @@ public final class SwarmBehavior extends Behavior implements Helper {
             approachGoal = null;
             approachBox = null;
         }
+    }
+
+    /** The approaching lease verified: stop the approach now, so it never overlaps the leased command. */
+    private void releaseApproachNow() {
+        ApproachProcess ap = baritone.getApproachProcess();
+        if (approachGoal != null && ap.goal() == approachGoal) {
+            ap.stop();
+        }
+        if (approachBox != null) {
+            logDirect("swarm-lease: approach to " + approachBox + " over (verified; its command starts now)");
+        }
+        approachGoal = null;
+        approachBox = null;
     }
 
     /** True while this bot's approach goal is what moves it. Every break, place and container action is denied. */

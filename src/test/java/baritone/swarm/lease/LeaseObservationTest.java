@@ -211,6 +211,25 @@ public class LeaseObservationTest {
         assertEquals(1, s.loggedCount("swarm-lease: approaching lease=" + id));
     }
 
+    // Ostinato: p2c2 slice 1 rerun (21 Nov). The approach was still moving the bot when the mine started; it must be
+    // released before the leased command starts, never after.
+    @Test
+    public void theApproachIsReleasedBeforeItsCommandStarts() throws Exception {
+        LeaseSupport s = active();
+        boolean[] loaded = {false};
+        s.guard.setObsCheck(approachUntil(loaded, null, new ArrayList<>()));
+        List<Integer> minesStartedAtRelease = new ArrayList<>();
+        s.guard.setApproachRelease(() -> minesStartedAtRelease.add(s.bobExec.count("mine")));
+        s.coord.lease("Bob", VEIN, "mine iron_ore", "iron_ore.4");
+        s.pump();
+        s.run(2_000L, 500L);
+        assertTrue("no release while still approaching", minesStartedAtRelease.isEmpty());
+        loaded[0] = true;
+        s.run(1_000L, 500L);
+        assertEquals(1, s.bobExec.count("mine"));
+        assertEquals("released once, before the mine started", List.of(0), minesStartedAtRelease);
+    }
+
     @Test
     public void staleOnArrivalIsRejectedAndReported() throws Exception {
         LeaseSupport s = active();
