@@ -4,6 +4,8 @@ import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.IBaritoneProcess;
+import baritone.api.pathing.goals.Goal;
+import baritone.api.pathing.goals.GoalNear;
 import baritone.api.schematic.ISchematic;
 import baritone.api.schematic.format.ISchematicFormat;
 import baritone.api.schematic.partition.PartitionAxis;
@@ -34,6 +36,10 @@ import baritone.swarm.lease.LeaseFence;
 import baritone.swarm.lease.LeaseMessage;
 import baritone.swarm.lease.LeaseRate;
 import baritone.swarm.lease.ReservationResolver;
+import baritone.swarm.lease.ReservationKey;
+import baritone.swarm.lease.LeasedVein;
+import baritone.process.ApproachProcess;
+import baritone.pathing.movement.CalculationContext;
 import baritone.swarm.protocol.CommandProtocol;
 import baritone.swarm.protocol.RegistryExecutor;
 import baritone.swarm.roster.SwarmRoster;
@@ -51,6 +57,7 @@ import baritone.swarm.world.ObservationVerifier;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 
 import java.io.File;
@@ -336,7 +343,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
             BotLeaseGuard g = new BotLeaseGuard(leaseSender, SwarmBehavior::nowMs, this::logDirect,
                     SwarmBehavior::allowedCoordinator, this::stopLeasedProcess, BotLeaseGuard.LEASED_COMMANDS);
             leaseGuard = g;
-            LeaseFence.install(() -> g.invalidActive() && leasedInControl());
+            // Ostinato: Phase 2c part 2 - while the bot walks to verify an observation it acts on nothing.
+            LeaseFence.install(() -> (g.invalidActive() && leasedInControl()) || approachInControl());
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
             LeaseFence.installGeometry((kind, x, y, z) -> {
                 boolean out = leasedInControl() && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z));
@@ -357,6 +365,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2c - a lease chosen from a shared observation is checked against this bot's own world
             // before it acts; a stale record is reported back as a correction.
             g.setObsCheck(this::checkObservation);
+            // Ostinato: Phase 2c part 2 - the approach stops the moment its lease verifies, before the command starts.
+            g.setApproachRelease(this::releaseApproachNow);
         }
         CommandProtocol p = liveProtocol();
         if (p != null && p != leaseBoundTo) {
@@ -365,7 +375,86 @@ public final class SwarmBehavior extends Behavior implements Helper {
             leaseBoundTo = p;
         }
         leaseGuard.tick();
+        driveApproach(leaseGuard);
         logLeaseRate();
+    }
+
+    // ---- Ostinato: Phase 2c part 2, walk-to-verify --------------------------------------------------------------
+
+    /** How close the approach walks to the observation's box centre; it usually verifies long before. */
+    static final int APPROACH_RADIUS = 24;
+    private Goal approachGoal;
+    private ReservationKey approachBox;
+    private long nextApproachFenceLogAt = Long.MIN_VALUE;
+
+    /**
+     * While a lease waits for its observation to load here, walk toward it with the custom goal process; once the
+     * guard stops approaching (verified, stale, gave up) release that goal, so the leased command or nothing runs.
+     */
+    private void driveApproach(BotLeaseGuard g) {
+        ReservationKey box = g.approachTarget();
+        ApproachProcess ap = baritone.getApproachProcess();
+        if (box != null && (approachBox == null || !box.toString().equals(approachBox.toString()))) {
+            int[] c = LeasedVein.centre(box);
+            approachGoal = new GoalNear(new BlockPos(c[0], c[1], c[2]), APPROACH_RADIUS);
+            approachBox = box;
+            ap.approach(approachGoal);
+            logDirect("swarm-lease: walking to " + box + " to verify it (goal near " + c[0] + "," + c[1] + "," + c[2]
+                    + "; no breaking, no placing, no fall over "
+                    + CalculationContext.APPROACH_MAX_FALL + " blocks)");
+        } else if (box != null && ap.noRoute()) {
+            // Ostinato: Phase 2c part 2 - no route under the approach limits: end unknown now, not at the budget.
+            UUID cmd = g.approachCommand();
+            CommandProtocol p = liveProtocol();
+            if (cmd != null && p != null) {
+                p.giveUpApproach(cmd, "no approach route");
+            } else if (cmd != null) {
+                g.approachEnded(cmd, BotLeaseGuard.OBS_UNKNOWN);
+            }
+        } else if (box == null && approachBox != null) {
+            if (ap.goal() == approachGoal) {
+                ap.stop();
+            }
+            logDirect("swarm-lease: approach to " + approachBox + " over");
+            approachGoal = null;
+            approachBox = null;
+        }
+    }
+
+    /** The approaching lease verified: stop the approach now, so it never overlaps the leased command. */
+    private void releaseApproachNow() {
+        ApproachProcess ap = baritone.getApproachProcess();
+        if (approachGoal != null && ap.goal() == approachGoal) {
+            ap.stop();
+        }
+        if (approachBox != null) {
+            logDirect("swarm-lease: approach to " + approachBox + " over (verified; its command starts now)");
+        }
+        approachGoal = null;
+        approachBox = null;
+    }
+
+    /** True while this bot's approach goal is what moves it. Every break, place and container action is denied. */
+    private boolean approachInControl() {
+        Goal goal = approachGoal;
+        if (goal == null) {
+            return false;
+        }
+        try {
+            ApproachProcess ap = baritone.getApproachProcess();
+            boolean on = ap.isActive() && ap.goal() == goal;
+            if (on) {
+                long now = nowMs();
+                if (now >= nextApproachFenceLogAt) {
+                    nextApproachFenceLogAt = now + 2_000L;
+                    logDirect("swarm-lease: fence denied an action while approaching " + approachBox + " (fenceDenials="
+                            + (LeaseFence.denials() + 1) + ")");
+                }
+            }
+            return on;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private long nextRateLogAt = Long.MIN_VALUE;
@@ -659,6 +748,10 @@ public final class SwarmBehavior extends Behavior implements Helper {
             obsReporter.correction(resource, r.key, r.detail, nowMs());
             logDirect("swarm-obs: stale " + resource + " (" + r.why + "); reporting the correction");
             return BotLeaseGuard.OBS_STALE;
+        }
+        String answer = BotLeaseGuard.answerFor(r); // Ostinato: Phase 2c part 2 - by the notLoaded flag, never the text
+        if (BotLeaseGuard.OBS_APPROACH.equals(answer)) {
+            return answer; // walk closer, then check again
         }
         logDirect("swarm-obs: cannot verify " + resource + " (" + r.why + ")");
         return BotLeaseGuard.OBS_UNKNOWN;

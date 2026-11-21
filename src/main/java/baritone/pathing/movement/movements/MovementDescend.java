@@ -237,6 +237,11 @@ public class MovementDescend extends Movement {
         double costSoFar = 0;
         int effectiveStartHeight = y;
         for (int fallHeight = from; true; fallHeight++) {
+            if (fallHeight - 1 > context.approachMaxFall) {
+                // Ostinato: Phase 2c part 2. fallHeight N lands the feet N - 1 blocks lower; an approach never falls
+                // further than approachMaxFall, onto water or not.
+                return false;
+            }
             int newY = y - fallHeight;
             if (newY < context.worldMinY /* Ostinato: was context.world.getMinY() */) {
                 // when pathing in the end, where you could plausibly fall into the void

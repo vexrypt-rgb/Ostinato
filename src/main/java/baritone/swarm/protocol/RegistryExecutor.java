@@ -185,7 +185,7 @@ public final class RegistryExecutor implements CommandProtocol.Executor {
             Optional<IBaritoneProcess> cur = mgr.mostRecentInControl();
             if (cur.isPresent() && cur.get().isActive()) {
                 seenActivity.add(id); // Ostinato:
-                processOf.putIfAbsent(id, cur.get()); // Ostinato: the process this command started
+                pin(id, cur.get()); // Ostinato: only the process this command started
                 captureGoal(id, name); // Ostinato:
                 return null;
             }
@@ -258,6 +258,26 @@ public final class RegistryExecutor implements CommandProtocol.Executor {
             return ((IGetToBlockProcess) p).outcome();
         }
         return null;
+    }
+
+    /**
+     * Ostinato: pin {@code id} to {@code p} only if p records outcomes and its request advanced since the command
+     * started, i.e. p is running this command's request. Any other process seen in control (one left over from earlier,
+     * a survival or approach process, one with no outcome API) is never pinned; the poll keeps looking, and the outcome
+     * falls back to the one recording process whose request this command started. p2c2 slice 1 rerun (21 Nov): the
+     * swarm's approach process was still in control on the mine command's first poll, the command was pinned to it,
+     * and the mine's recorded success was never read.
+     */
+    private void pin(UUID id, IBaritoneProcess p) {
+        if (processOf.containsKey(id)) {
+            return;
+        }
+        Map<IBaritoneProcess, Long> before = requestBefore.get(id);
+        ProcessOutcome o = outcomeOf(p);
+        if (before == null || o == null || !before.containsKey(p) || o.request() <= before.get(p)) {
+            return;
+        }
+        processOf.put(id, p);
     }
 
     /**

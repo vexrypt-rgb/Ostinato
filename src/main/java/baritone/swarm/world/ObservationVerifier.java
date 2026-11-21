@@ -43,12 +43,27 @@ public final class ObservationVerifier {
         /** For STALE: the key of what is there now, or null when it is gone. */
         public final String key;
         public final String detail;
+        /**
+         * Ostinato: Phase 2c part 2. UNKNOWN only because blocks the check needs are not loaded here (none of the box,
+         * or part of it, or the vein runs into an unloaded chunk). A bot may walk closer and check again; any other
+         * UNKNOWN (other dimension, bad key, box too big) it may not.
+         */
+        public final boolean notLoaded;
 
         Result(State state, String why, String key, String detail) {
+            this(state, why, key, detail, false);
+        }
+
+        Result(State state, String why, String key, String detail, boolean notLoaded) {
             this.state = state;
             this.why = why;
             this.key = key;
             this.detail = detail;
+            this.notLoaded = notLoaded;
+        }
+
+        static Result unloaded(String why) {
+            return new Result(State.UNKNOWN, why, null, null, true);
         }
 
         @Override
@@ -115,7 +130,7 @@ public final class ObservationVerifier {
                 for (int z = k.z1; z <= k.z2; z++) {
                     String b = w.block(x, y, z);
                     if (b == null) {
-                        return new Result(State.UNKNOWN, "vein not loaded", null, null);
+                        return Result.unloaded("vein not loaded");
                     }
                     boolean match = ore == null ? isOre(b) : ore.equals(shortId(b));
                     if (match && seed == null) {
@@ -130,7 +145,7 @@ public final class ObservationVerifier {
         ReservationResolver.Result r = ReservationResolver.vein(dim, seed[0], seed[1], seed[2], w);
         if (r.error != null) {
             if (r.error.contains("unloaded")) {
-                return new Result(State.UNKNOWN, r.error, null, null);
+                return Result.unloaded(r.error); // the vein runs into chunks not loaded here
             }
             return new Result(State.STALE, r.error, null, null);
         }
@@ -154,7 +169,7 @@ public final class ObservationVerifier {
             for (int z = k.z1; z <= k.z2; z++) {
                 String b = w.block(x, k.y1, z);
                 if (b == null) {
-                    return new Result(State.UNKNOWN, "chest not loaded", null, null);
+                    return Result.unloaded("chest not loaded");
                 }
                 if (!b.endsWith("chest") && !b.endsWith("barrel")) {
                     return new Result(State.STALE, "no container at " + x + "," + k.y1 + "," + z, null, null);
@@ -170,7 +185,7 @@ public final class ObservationVerifier {
             return new Result(State.UNKNOWN, "bad key", null, null);
         }
         int cx = (k.x1 + k.x2) >> 1, cy = (k.y1 + k.y2) >> 1, cz = (k.z1 + k.z2) >> 1;
-        return w.block(cx, cy, cz) == null ? new Result(State.UNKNOWN, "region not loaded", null, null)
+        return w.block(cx, cy, cz) == null ? Result.unloaded("region not loaded")
                 : new Result(State.CONFIRMED, "region loaded", null, null);
     }
 
@@ -186,7 +201,7 @@ public final class ObservationVerifier {
         }
         String b = w.block(x, y, z);
         if (b == null) {
-            return new Result(State.UNKNOWN, "block not loaded", null, null);
+            return Result.unloaded("block not loaded");
         }
         String now = shortId(b);
         if (detail == null || shortId(detail).equals(now)) {

@@ -11,6 +11,7 @@ import baritone.api.pathing.goals.GoalBlock; // Ostinato:
 import baritone.api.process.ICustomGoalProcess; // Ostinato:
 import baritone.api.process.IBaritoneProcess; // Ostinato:
 import baritone.api.process.IMineProcess; // Ostinato:
+import baritone.api.process.IGetToBlockProcess; // Ostinato:
 import baritone.api.process.ProcessOutcome; // Ostinato:
 import baritone.api.utils.IPlayerContext; // Ostinato:
 import baritone.api.utils.BetterBlockPos; // Ostinato:
@@ -31,6 +32,27 @@ public class RegistryExecutorTest { // Ostinato:
     private ProcessOutcome mineOutcome = new ProcessOutcome(3, ProcessOutcome.State.SUCCEEDED, ProcessOutcome.Reason.NONE); // Ostinato: an earlier request
     private boolean mineActive; // Ostinato:
     private boolean mineInControl; // Ostinato:
+    private IBaritoneProcess otherInControl; // Ostinato: another process holding control (wins over the mine)
+    private final ProcessOutcome gtbOutcome = new ProcessOutcome(2, ProcessOutcome.State.SUCCEEDED, ProcessOutcome.Reason.NONE); // Ostinato:
+    private final IGetToBlockProcess gtb = (IGetToBlockProcess) Proxy.newProxyInstance(IGetToBlockProcess.class.getClassLoader(), // Ostinato:
+            new Class<?>[]{IGetToBlockProcess.class}, (p, method, args) -> { // Ostinato:
+                switch (method.getName()) { // Ostinato:
+                    case "outcome": return gtbOutcome; // Ostinato: an earlier request, ended long ago
+                    case "isActive": return true; // Ostinato:
+                    case "hashCode": return System.identityHashCode(p); // Ostinato:
+                    case "equals": return p == args[0]; // Ostinato:
+                    default: return null; // Ostinato:
+                } // Ostinato:
+            }); // Ostinato:
+    private final IBaritoneProcess plain = (IBaritoneProcess) Proxy.newProxyInstance(IBaritoneProcess.class.getClassLoader(), // Ostinato:
+            new Class<?>[]{IBaritoneProcess.class}, (p, method, args) -> { // Ostinato: no outcome API (like the approach)
+                switch (method.getName()) { // Ostinato:
+                    case "isActive": return true; // Ostinato:
+                    case "hashCode": return System.identityHashCode(p); // Ostinato:
+                    case "equals": return p == args[0]; // Ostinato:
+                    default: return null; // Ostinato:
+                } // Ostinato:
+            }); // Ostinato:
     private final IMineProcess mine = (IMineProcess) Proxy.newProxyInstance(IMineProcess.class.getClassLoader(), // Ostinato:
             new Class<?>[]{IMineProcess.class}, (p, method, args) -> { // Ostinato:
                 switch (method.getName()) { // Ostinato:
@@ -55,7 +77,8 @@ public class RegistryExecutorTest { // Ostinato:
         ICustomGoalProcess process = proxy(ICustomGoalProcess.class, name -> // Ostinato:
                 "isActive".equals(name) ? active : goal); // Ostinato:
         IPathingControlManager control = proxy(IPathingControlManager.class, name -> // Ostinato:
-                mineInControl ? Optional.<IBaritoneProcess>of(mine) : Optional.empty()); // Ostinato:
+                otherInControl != null ? Optional.of(otherInControl) // Ostinato:
+                        : mineInControl ? Optional.<IBaritoneProcess>of(mine) : Optional.empty()); // Ostinato:
         IPathingBehavior behavior = proxy(IPathingBehavior.class, name -> // Ostinato:
                 "cancelEverything".equals(name) ? stopAccepted // Ostinato:
                         : "isPathing".equals(name) ? pathing : Optional.empty()); // Ostinato:
@@ -68,6 +91,7 @@ public class RegistryExecutorTest { // Ostinato:
                 case "getPathingBehavior": return behavior; // Ostinato:
                 case "getPlayerContext": return context; // Ostinato:
                 case "getMineProcess": return mine; // Ostinato:
+                case "getGetToBlockProcess": return gtb; // Ostinato:
                 default: return null; // Ostinato:
             } // Ostinato:
         }); // Ostinato:
@@ -228,5 +252,33 @@ public class RegistryExecutorTest { // Ostinato:
         assertNull(RegistryExecutor.verdict(mineRequest(8, ProcessOutcome.State.RUNNING, ProcessOutcome.Reason.NONE), 7)); // Ostinato:
         assertNull(RegistryExecutor.verdict(mineRequest(8, ProcessOutcome.State.UNKNOWN, ProcessOutcome.Reason.UNKNOWN), 7)); // Ostinato:
         assertNull(RegistryExecutor.verdict(null, 7)); // Ostinato:
+    } // Ostinato:
+    // Ostinato: p2c2 slice 1 rerun (21 Nov). The mine's result must not be lost to a process that happened to hold control
+    // on the command's first poll.
+    private void mineSucceedsBehind(IBaritoneProcess first) { // Ostinato:
+        RegistryExecutor executor = executor(); // Ostinato:
+        UUID id = UUID.randomUUID(); // Ostinato:
+        active = false; // Ostinato:
+        assertTrue(executor.start(id, "mine", "diamond_ore")); // Ostinato:
+        mineOutcome = mineRequest(4, ProcessOutcome.State.RUNNING, ProcessOutcome.Reason.NONE); // Ostinato:
+        otherInControl = first; // Ostinato: still in control on the first poll
+        assertNull(executor.poll(id)); // Ostinato:
+        otherInControl = null; // Ostinato: now the mine runs
+        mineInControl = true; // Ostinato:
+        mineActive = true; // Ostinato:
+        assertNull(executor.poll(id)); // Ostinato:
+        mineActive = false; // Ostinato:
+        mineInControl = false; // Ostinato:
+        mineOutcome = mineRequest(4, ProcessOutcome.State.SUCCEEDED, ProcessOutcome.Reason.NONE); // Ostinato:
+        assertEquals(ExecutionState.SUCCEEDED, executor.poll(id)); // Ostinato:
+        assertFalse(executor.unverifiedIdle(id)); // Ostinato:
+    } // Ostinato:
+
+    @Test public void anotherProcessInControlAtTheFirstPollDoesNotTakeTheMinesResult() { // Ostinato:
+        mineSucceedsBehind(gtb); // Ostinato: records outcomes, but its request did not advance for this command
+    } // Ostinato:
+
+    @Test public void aProcessWithNoOutcomeApiInControlFirstDoesNotTakeTheMinesResult() { // Ostinato:
+        mineSucceedsBehind(plain); // Ostinato:
     } // Ostinato:
 } // Ostinato:

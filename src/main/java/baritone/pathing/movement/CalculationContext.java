@@ -71,38 +71,38 @@ public class CalculationContext {
     public final WorldData worldData;
     public final BlockStateInterface bsi;
     public final ToolSet toolSet;
-    public final boolean hasWaterBucket;
-    public final boolean hasBoat;
+    public boolean hasWaterBucket; // Ostinato: not final, restrictForApproach() clears it
+    public boolean hasBoat; // Ostinato: not final, restrictForApproach() clears it
     /** Free boats already out in the world (block longs); boarding one skips placing our own. */
-    public final java.util.Set<Long> freeBoats;
+    public java.util.Set<Long> freeBoats; // Ostinato: not final, see restrictForApproach()
     /** Feet-level cells of things we can ride, for {@link #mountAt}. */
-    public final java.util.Set<Long> freeMounts;
+    public java.util.Set<Long> freeMounts; // Ostinato: not final, see restrictForApproach()
     /** Fall through offset holes by steering in the air, see MovementDescend.steerThrough. */
-    public final boolean allowSteeredFalls;
+    public boolean allowSteeredFalls; // Ostinato: not final, restrictForApproach() clears it
     public final int maxFallHeightBoat;
     public final boolean aquaAffinity;
-    public final boolean hasThrowaway;
+    public boolean hasThrowaway; // Ostinato: not final, restrictForApproach() clears it
     public final boolean canSprint;
     protected final double placeBlockCost; // protected because you should call the function instead
-    public final boolean allowBreak;
-    public final List<Block> allowBreakAnyway;
-    public final boolean allowParkour;
-    public final boolean allowParkourPlace;
+    public boolean allowBreak; // Ostinato: not final, restrictForApproach() clears it
+    public List<Block> allowBreakAnyway; // Ostinato: not final, see restrictForApproach()
+    public boolean allowParkour; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowParkourPlace; // Ostinato: not final, restrictForApproach() clears it
     /** Ostinato: jump and momentum-hop costing searches run in the native library ({@code nativeAcceleration}). */
     public final boolean nativeSearch;
     public final boolean allowJumpAtBuildLimit;
-    public final boolean allowParkourAscend;
-    public final boolean allowParkourFourGap;
-    public final boolean allowNeos;
-    public final boolean allowClimbJumps;
-    public final boolean allowTasJumps;
-    public final boolean allowMomentumJumps;
+    public boolean allowParkourAscend; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowParkourFourGap; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowNeos; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowClimbJumps; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowTasJumps; // Ostinato: not final, restrictForApproach() clears it
+    public boolean allowMomentumJumps; // Ostinato: not final, restrictForApproach() clears it
     /** A ladder or vine on the hotbar and allowLadderClutch on, see MovementDescend.dynamicFallCost. */
-    public final boolean hasClutchItem;
+    public boolean hasClutchItem; // Ostinato: not final, restrictForApproach() clears it
     /** Ostinato: allowLadderClutch, snapshotted. Existing ladders past the old 11 block cutoff use LadderClutch.grabs. */
-    public final boolean ladderGrab;
+    public boolean ladderGrab; // Ostinato: not final, restrictForApproach() clears it
     /** Ostinato: allowGodBridge, and assumeSafeWalk is off. A backplace traverse costs a walk instead of a sneak. */
-    public final boolean allowGodBridge;
+    public boolean allowGodBridge; // Ostinato: not final, restrictForApproach() clears it
     /** The clutch item is a ladder (vines win if both are there) and pickupLadders is on, so a clutch also costs the pickup. */
     public final boolean clutchPicksUp;
     /** The clutch item is a ladder (a vine can go on any wall, a ladder needs us to be about 0.6 off it). */
@@ -124,9 +124,16 @@ public class CalculationContext {
     public final int frostWalker;
     public final boolean allowDiagonalDescend;
     public final boolean allowDiagonalAscend;
-    public final boolean allowDownward;
+    public boolean allowDownward; // Ostinato: not final, restrictForApproach() clears it
     public int minFallHeight;
     public int maxFallHeightNoWater;
+    /**
+     * Ostinato: Phase 2c part 2. The longest fall a path may plan, of any kind (onto water, bucket, boat, clutch or a
+     * plain landing). Unlimited except in an approach context ({@link #restrictForApproach()}).
+     */
+    public int approachMaxFall = Integer.MAX_VALUE;
+    /** Ostinato: true for a context made by {@link #restrictForApproach()}. */
+    public boolean approach;
     public final int maxFallHeightBucket;
     public final double waterWalkSpeed;
     public final double breakBlockAdditionalCost;
@@ -179,6 +186,53 @@ public class CalculationContext {
     public final int worldHeight;
     /** Level.getMaxY(): the top block row, worldMinY + worldHeight - 1. */
     public final int worldMaxY;
+
+    /**
+     * Ostinato: Phase 2c part 2, walk-to-verify. The fall an approach may take: 3 blocks, the longest fall that never
+     * deals damage (vanilla fall damage is distance - 3), so an approach can never hurt the bot or drop it somewhere it
+     * cannot come back from; it rules out long falls onto water too (p2c2 slice 1: a bot heading for a far vein dropped
+     * ~87 blocks off a y=150 strip into water).
+     */
+    public static final int APPROACH_MAX_FALL = 3;
+
+    /**
+     * Ostinato: Phase 2c part 2. Turns this context into an approach context: a swarm bot walking to verify a shared
+     * observation plans routes it may actually take while the lease fence denies every break and place. No breaking
+     * (nor downward mining), no placing (bridges, pillars, parkour places, water buckets, boats, ladder clutches,
+     * mounts), no jump kinds beyond plain walking, and no fall over {@link #APPROACH_MAX_FALL}. Only the approach uses
+     * it; every other path keeps its context unchanged.
+     */
+    public CalculationContext restrictForApproach() {
+        this.approach = true;
+        this.allowBreak = false;
+        this.allowBreakAnyway = new ArrayList<>();
+        this.allowDownward = false;
+        this.hasThrowaway = false;
+        this.hasWaterBucket = false;
+        this.hasBoat = false;
+        this.freeBoats = java.util.Collections.emptySet();
+        this.freeMounts = java.util.Collections.emptySet();
+        this.allowSteeredFalls = false;
+        this.hasClutchItem = false;
+        this.ladderGrab = false;
+        this.allowGodBridge = false;
+        this.allowParkour = false;
+        this.allowParkourPlace = false;
+        this.allowParkourAscend = false;
+        this.allowParkourFourGap = false;
+        this.allowNeos = false;
+        this.allowClimbJumps = false;
+        this.allowTasJumps = false;
+        this.allowMomentumJumps = false;
+        this.approachMaxFall = APPROACH_MAX_FALL;
+        this.maxFallHeightNoWater = Math.min(this.maxFallHeightNoWater, APPROACH_MAX_FALL);
+        return this;
+    }
+
+    /** Ostinato: Phase 2c part 2. A fresh approach context for {@code baritone}, safe for the path thread. */
+    public static CalculationContext forApproach(IBaritone baritone) {
+        return new CalculationContext(baritone, true).restrictForApproach();
+    }
 
     public CalculationContext(IBaritone baritone) {
         this(baritone, false);
