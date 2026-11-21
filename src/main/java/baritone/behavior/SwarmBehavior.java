@@ -57,6 +57,7 @@ import baritone.swarm.world.RunEpoch;
 import baritone.swarm.world.ObservationOffer; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationVerifier;
 import baritone.swarm.world.ObsRefresh;
+import baritone.swarm.world.LoadedWorld;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
 import net.minecraft.client.player.LocalPlayer;
@@ -409,6 +410,11 @@ public final class SwarmBehavior extends Behavior implements Helper {
             LeaseFence.install(() -> (g.invalidActive() && leasedInControl()) || approachInControl());
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
             LeaseFence.installGeometry((kind, x, y, z) -> {
+                // Ostinato: Phase 2c part 2 slice 3 - a region lease is re-verified right before its first action inside.
+                if (leasedInControl() && g.regionEntry(kind, dimChar(), x, y, z, this::regionLoaded) != null) {
+                    logFenceDenied(kind, x, y, z);
+                    return true;
+                }
                 boolean out = leasedInControl() && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z));
                 if (out) {
                     logFenceDenied(kind, x, y, z); // Ostinato: Phase 2c - the fence is visible in the log
@@ -1527,6 +1533,12 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         obsWorldOverride = tag;
         return "swarm-obs: world id set to " + tag;
+    }
+
+    /** Ostinato: Phase 2c part 2 slice 3. Every chunk the box touches is held by this client. */
+    private boolean regionLoaded(ReservationKey k) {
+        net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+        return w != null && LoadedWorld.boxHeld(k.x1, k.z1, k.x2, k.z2, (cx, cz) -> w.getChunkSource().hasChunk(cx, cz));
     }
 
     /**

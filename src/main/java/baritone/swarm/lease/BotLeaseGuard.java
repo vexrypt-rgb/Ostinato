@@ -173,6 +173,7 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         String expect;
         boolean verified;
         boolean approaching; // Ostinato: walk-to-verify in progress (its command is held by the protocol)
+        boolean entryChecked; // Ostinato: Phase 2c part 2 slice 3 - a REGION lease's entry check passed once
 
         Lease(UUID leaseId, String resource, long gen, UUID commandId, String coordinator) {
             this.leaseId = leaseId;
@@ -950,6 +951,67 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         Lease l = commandId == null ? null : byCommand.get(commandId);
         return l != null && l.authorized(mono.getAsLong()) && coordinatorIs(issuer)
                 && l.coordinator != null && l.coordinator.equalsIgnoreCase(issuer);
+    }
+
+    /**
+     * Ostinato: Phase 2c part 2, slice 3 (S5 for region entry). Right before the active leased command's first break or
+     * place inside a REGION lease's box, re-check that lease once: every chunk the box touches is loaded here
+     * ({@code loaded}) and the lease is still authorized for this bot (which includes its generation: a newer one
+     * ends this lease on arrival). Pass: logged once, later actions inside are not re-checked. Fail: the lease ends with reason
+     * {@code region-entry: <why>} (its process is stopped, the coordinator gets a REPORT) and this action is denied.
+     *
+     * @return null to let the action go ahead (also when no region lease applies), else why it is denied
+     */
+    public String regionEntry(LeaseFence.Kind kind, char dim, int x, int y, int z,
+                              java.util.function.Predicate<ReservationKey> loaded) {
+        if (kind != LeaseFence.Kind.BREAK && kind != LeaseFence.Kind.PLACE) {
+            return null;
+        }
+        List<Runnable> after = new ArrayList<>();
+        String denied = null;
+        synchronized (this) {
+            long now = mono.getAsLong();
+            for (Lease l : leases.values()) {
+                if (!l.active || l.entryChecked) {
+                    continue;
+                }
+                ReservationKey k = ReservationKey.parse(l.resource);
+                if (k == null || k.type != ReservationKey.Type.REGION || !k.contains(dim, x, y, z)) {
+                    continue;
+                }
+                String why;
+                boolean isLoaded;
+                try {
+                    isLoaded = loaded != null && loaded.test(k);
+                } catch (RuntimeException e) {
+                    isLoaded = false;
+                }
+                // A newer generation of the region ends this lease the moment it is heard of (lease-superseded), and a
+                // GRANT of another generation is rejected, so "still this generation" is part of "still authorized".
+                if (!isLoaded) {
+                    why = "not loaded";
+                } else if (!l.authorized(now)) {
+                    why = "not reserved (lease " + l.phase.name().toLowerCase(Locale.ROOT)
+                            + (l.endReason == null ? "" : ", " + l.endReason) + ")";
+                } else {
+                    why = null;
+                }
+                if (why == null) {
+                    l.entryChecked = true;
+                    log.accept("swarm-lease: entering " + l.resource + " re-verified (loaded, lease " + l.leaseId
+                            + " gen=" + l.gen + " authorized " + Math.max(0, l.authUntil - now) + " ms more)");
+                    continue;
+                }
+                denied = "region-entry: " + why;
+                log.accept("swarm-lease: " + denied + " for " + l.resource + " at " + x + "," + y + "," + z
+                        + "; nothing done inside, ending lease=" + l.leaseId);
+                endLease(l, Phase.EXPIRED, denied, after);
+            }
+        }
+        for (Runnable r : after) {
+            r.run();
+        }
+        return denied;
     }
 
     /** Ostinato: Phase 2c part 2. The command of the lease that is approaching, or null. */
