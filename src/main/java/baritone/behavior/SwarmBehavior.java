@@ -45,7 +45,8 @@ import baritone.swarm.transport.SwarmRateLimiter;
 import baritone.swarm.world.ObservationMessage; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationRecord;
 import baritone.swarm.world.ObservationReporter;
-import baritone.swarm.world.RunEpoch; // Ostinato: Phase 2c
+import baritone.swarm.world.RunEpoch;
+import baritone.swarm.world.ObservationOffer; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationVerifier;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
@@ -613,18 +614,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         boolean spool = l.transport.isLocal(to);
         SwarmRateLimiter lim = spool ? null : l.status.limiter;
-        obsReporter.tick(now, spool, m -> {
-            // Ostinato: Phase 2c - one priority for every observation message of this bot, so they leave in the order
-            // they were numbered (p2ch run 4: a gone report at HIGH overtook an earlier report at NORMAL).
-            SwarmPriority p = SwarmPriority.NORMAL;
-            // Ostinato: Phase 2c - entry ages are read now; over chat, a frame offered behind queued lines would leave
-            // seconds later with that stale age and look newer to the coordinator (p2ch run 3: ~24 s). Wait for a free
-            // link instead; the entries stay pending and age honestly.
-            if (lim != null && lim.queuedAtOrAbove(p) > 0) {
-                return false;
-            }
-            return l.obsSend.send(to, m.encode(), p);
-        });
+        // Ostinato: Phase 2c - one priority, offered over chat only to a free link, each hand-over logged
+        // (ObservationOffer).
+        obsReporter.tick(now, spool, m -> ObservationOffer.offer(m, to, lim, l.obsSend::send, line -> logDirect(line)));
     }
 
     /** Ostinato: Phase 2c. SWO inbound, on the tick thread. */
