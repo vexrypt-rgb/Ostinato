@@ -75,6 +75,8 @@ final class LeaseSupport {
         final List<UUID> started = new ArrayList<>();
         boolean confirm = true;
         ExecutionState poll;
+        /** Ostinato: per-command permission overrides (live, tunnel is OWNER: ICommand's default). */
+        final Map<String, CommandPermission> permissions = new LinkedHashMap<>();
 
         int count(String name) {
             Integer n = byName.get(name.toLowerCase(Locale.ROOT));
@@ -93,7 +95,8 @@ final class LeaseSupport {
                 return null;
             }
             String key = name.toLowerCase(Locale.ROOT);
-            return CommandCatalog.infer(key, CommandCatalog.defaultPermission(key));
+            CommandPermission over = permissions.get(key);
+            return CommandCatalog.infer(key, over != null ? over : CommandCatalog.defaultPermission(key));
         }
 
         @Override
@@ -140,7 +143,17 @@ final class LeaseSupport {
     LeaseCoordinator coord;
     private boolean pumping;
 
+    /** Ostinato: the configured owner of both nodes (Alice by default, so Alice's owner-only commands are allowed). */
+    final String owner;
+    /** Ostinato: the coordinator Bob's guard accepts leases from (Alice by default). */
+    String guardCoordinator = "Alice";
+
     LeaseSupport(Path dir) {
+        this(dir, "Alice");
+    }
+
+    LeaseSupport(Path dir, String owner) {
+        this.owner = owner;
         this.dir = dir;
         this.store = new CoordinatorStore(dir.resolve("coordinator.state"));
         aliceP = node("Alice", "alicekey", aliceExec);
@@ -174,7 +187,7 @@ final class LeaseSupport {
 
     BotLeaseGuard newGuard() {
         return new BotLeaseGuard(sender("Bob"), mono::get, log::add,
-                () -> "Alice", id -> {
+                () -> guardCoordinator, id -> {
                     stopCalls.add(id);
                     return stopOk;
                 }, null);
@@ -214,7 +227,7 @@ final class LeaseSupport {
     private CommandProtocol node(String name, String key, Exec exec) {
         return new CommandProtocol(new CommandProtocol.BotIdentity(name, key), Set.of("Alice", "Bob"),
                 (to, type, body) -> queue(name, to, type, body), exec,
-                new CommandProtocol.Policy("Alice", true, false, AgentPolicy.DEFAULT_TOOLS),
+                new CommandProtocol.Policy(owner, true, false, AgentPolicy.DEFAULT_TOOLS),
                 wall::get, log::add, 1_000L);
     }
 

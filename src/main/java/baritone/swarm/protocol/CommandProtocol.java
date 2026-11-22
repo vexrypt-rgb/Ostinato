@@ -111,6 +111,12 @@ public final class CommandProtocol {
      * {@link #APPROACH_MS} (and never past the command's own deadline); then it is rejected obs-unknown as before.
      */
     public static final String OBS_APPROACH = "obs-approach";
+    /**
+     * Ostinato: Phase 2c part 2, slice 3. Owner-only commands a non-owner issuer may still run, but only as a leased
+     * command carrying a valid, current REGION lease from the configured coordinator (and so only inside that region's
+     * fence). Owner-only otherwise, as before. Lease-scoped authority, not a general swarm permission.
+     */
+    public static final Set<String> LEASE_SCOPED_OWNER_COMMANDS = Set.of("tunnel");
     public static final long APPROACH_MS = 60_000L;
     public static final long APPROACH_CHECK_MS = 500L;
 
@@ -979,8 +985,9 @@ public final class CommandProtocol {
                 Held h = it.next();
                 if (now >= h.deadline) {
                     it.remove();
-                    log.accept("swarm: rejected " + h.p.id + " nolease (no grant within " + HOLD_MS + " ms)");
-                    sends.add(Decision.ack(h.from, rememberReject(h.p, "nolease")));
+                    String why = h.scoped ? "unauthorized" : "nolease"; // Ostinato: no lease, no lease-scoped authority
+                    log.accept("swarm: rejected " + h.p.id + " " + why + " (no grant within " + HOLD_MS + " ms)");
+                    sends.add(Decision.ack(h.from, rememberReject(h.p, why)));
                 }
             }
         }
@@ -1217,6 +1224,7 @@ public final class CommandProtocol {
         if (denied != null) {
             return Decision.ack(from, rememberReject(p, denied));
         }
+        boolean scoped = leaseScoped(p, entry); // Ostinato: authority comes from the command's region lease
         String missing = localCap(entry);
         if (missing != null) {
             return Decision.ack(from, rememberReject(p, missing));
@@ -1236,16 +1244,28 @@ public final class CommandProtocol {
         if (hooks != null && hooks.needsLease(p.name, entry)) {
             LeaseState ls = hooks.state(p.id);
             if (ls == LeaseState.EXPIRED) {
+                if (scoped) {
+                    log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner needs a valid"
+                            + " region lease; the lease is not valid)");
+                    return Decision.ack(from, rememberReject(p, "unauthorized"));
+                }
                 log.accept("swarm: rejected " + p.id + " nolease (lease not valid)");
                 return Decision.ack(from, rememberReject(p, "nolease"));
             }
             if (ls != LeaseState.VALID) {
                 Held h = held.get(p.id);
                 if (h == null) {
-                    held.put(p.id, new Held(p, transport, from, clock.getAsLong() + HOLD_MS));
+                    h = new Held(p, transport, from, clock.getAsLong() + HOLD_MS);
+                    h.scoped = scoped;
+                    held.put(p.id, h);
                     log.accept("swarm: holding " + p.id + " for its lease grant");
                 }
                 return Decision.ack(from, null);
+            }
+            if (scoped && !hooks.regionLeaseFrom(p.id, p.issuer)) {
+                log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner runs only under a"
+                        + " current region lease from the coordinator)");
+                return Decision.ack(from, rememberReject(p, "unauthorized"));
             }
             // Ostinato: Phase 2c. A lease chosen from a shared observation runs only after the bot checked that
             // observation in its own world. A failed check is a stored reject: never auto-retried.
@@ -1356,8 +1376,12 @@ public final class CommandProtocol {
         CommandPermission perm = entry.permission;
         switch (perm) {
             case OWNER: {
-                String owner = policy.ownerName == null || policy.ownerName.isBlank() ? self.memberId() : policy.ownerName;
-                if (!AgentPolicy.ownerAllowed(true, owner, p.issuer)) {
+                if (!issuerIsOwnerFor(p)) {
+                    LeaseHooks hooks = leaseHooks;
+                    if (LEASE_SCOPED_OWNER_COMMANDS.contains(p.name.toLowerCase(Locale.ROOT)) && hooks != null
+                            && hooks.coordinatorIs(p.issuer)) {
+                        break; // Ostinato: lease-scoped; the lease step decides (a current region lease or unauthorized)
+                    }
                     return "unauthorized";
                 }
                 break;
@@ -1962,6 +1986,19 @@ public final class CommandProtocol {
         default void approachEnded(UUID commandId, String why) {
         }
 
+        /** Ostinato: Phase 2c part 2 slice 3. Whether {@code member} is the configured lease coordinator. */
+        default boolean coordinatorIs(String member) {
+            return false;
+        }
+
+        /**
+         * Ostinato: Phase 2c part 2 slice 3. Whether {@code commandId} carries a valid, current REGION lease granted by
+         * {@code issuer}, the configured coordinator (lease-scoped authority for {@link #LEASE_SCOPED_OWNER_COMMANDS}).
+         */
+        default boolean regionLeaseFrom(UUID commandId, String issuer) {
+            return false;
+        }
+
         default String verify(UUID commandId) {
             return null;
         }
@@ -2080,11 +2117,24 @@ public final class CommandProtocol {
         return "obs-unknown";
     }
 
+    // Ostinato: the configured owner may issue owner-only commands.
+    private boolean issuerIsOwnerFor(Parsed p) {
+        String owner = policy.ownerName == null || policy.ownerName.isBlank() ? self.memberId() : policy.ownerName;
+        return AgentPolicy.ownerAllowed(true, owner, p.issuer);
+    }
+
+    // Ostinato: an owner-only, lease-scoped command from a non-owner: its authority is its region lease.
+    private boolean leaseScoped(Parsed p, CommandCatalog.Entry entry) {
+        return entry.permission == CommandPermission.OWNER
+                && LEASE_SCOPED_OWNER_COMMANDS.contains(p.name.toLowerCase(Locale.ROOT)) && !issuerIsOwnerFor(p);
+    }
+
     private static final class Held {
         final Parsed p;
         final String transport;
         final String from;
         final long deadline;
+        boolean scoped; // Ostinato: a lease-scoped command: no grant means unauthorized, not nolease
 
         Held(Parsed p, String transport, String from, long deadline) {
             this.p = p;

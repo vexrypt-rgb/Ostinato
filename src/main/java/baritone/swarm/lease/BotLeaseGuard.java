@@ -991,6 +991,33 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return denied;
     }
 
+    /** Ostinato: Phase 2c part 2 slice 3. Whether {@code member} is the configured coordinator. */
+    @Override
+    public boolean coordinatorIs(String member) {
+        String c;
+        try {
+            c = allowedSource.get();
+        } catch (RuntimeException e) {
+            return false;
+        }
+        return member != null && c != null && !c.isEmpty() && c.equalsIgnoreCase(member);
+    }
+
+    /**
+     * Ostinato: Phase 2c part 2 slice 3. Lease-scoped authority: {@code commandId} is bound to a lease that is authorized
+     * now, is a REGION lease, and was granted by {@code issuer}, who is the configured coordinator.
+     */
+    @Override
+    public synchronized boolean regionLeaseFrom(UUID commandId, String issuer) {
+        Lease l = commandId == null ? null : byCommand.get(commandId);
+        if (l == null || !l.authorized(mono.getAsLong()) || !coordinatorIs(issuer)
+                || l.coordinator == null || !l.coordinator.equalsIgnoreCase(issuer)) {
+            return false;
+        }
+        ReservationKey k = ReservationKey.parse(l.resource);
+        return k != null && k.type == ReservationKey.Type.REGION;
+    }
+
     /** Ostinato: Phase 2c part 2. The command of the lease that is approaching, or null. */
     public synchronized UUID approachCommand() {
         for (Lease l : leases.values()) {
