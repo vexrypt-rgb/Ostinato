@@ -2181,6 +2181,29 @@ public final class Settings {
     public final Setting<Boolean> swarmCoordinator = new Setting<>(false);
 
     /**
+     * Ostinato: Phase 3 command center read feed. On, this bot writes {@code bots/<name>.json} about once a second and
+     * {@code terrain/<name>.json} every 10 s into {@link #swarmCenterDir} (plus {@code coordinator.json} while it runs
+     * the lease coordinator), for the standalone command-center window. Read-only data out; nothing a bot does
+     * depends on it. Off: nothing is written and no thread starts.
+     */
+    public final Setting<Boolean> swarmCenterFeed = new Setting<>(false);
+
+    /**
+     * Ostinato: Phase 3 command host. On, this bot listens on 127.0.0.1 (ephemeral port, HMAC-signed requests only) for
+     * the command-center window and runs each request through the unified registry as a window call, exactly like a
+     * button in the in-game window. Also writes {@code catalog.json}, {@code host.json} and {@code host.key}. One
+     * bot per swarm (the owner's issuer). Off: no socket.
+     */
+    public final Setting<Boolean> swarmCenterHost = new Setting<>(false);
+
+    /**
+     * Ostinato: Phase 3 shared command-center directory, the same absolute path on every bot of this PC. Empty means
+     * {@code center} next to {@link #swarmLocalSpoolDir} when that is set, else {@code ostinato/center} in the game
+     * directory (not shared across instances).
+     */
+    public final Setting<String> swarmCenterDir = new Setting<>("");
+
+    /**
      * Ostinato: the member whose lease messages bots accept. Empty means the circle owner (the first roster lead).
      * Lease messages from anyone else are ignored and counted.
      */

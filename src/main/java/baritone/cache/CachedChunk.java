@@ -222,6 +222,11 @@ public final class CachedChunk {
         }
     }
 
+    /** Ostinato: Phase 3 terrain feed. The top block's y in column (x, z) of this chunk, above the dimension floor. */
+    public final int surfaceY(int x, int z) {
+        return heightMap[z << 4 | x];
+    }
+
     public final BlockState[] getOverview() {
         return overview;
     }

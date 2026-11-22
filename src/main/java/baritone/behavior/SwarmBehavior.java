@@ -18,6 +18,8 @@ import baritone.api.utils.Helper;
 import baritone.swarm.SwarmBuild;
 import baritone.swarm.SwarmConfig;
 import baritone.swarm.SwarmControl;
+import baritone.swarm.center.feed.BotFeed;
+import baritone.swarm.center.host.CenterFeedService;
 import baritone.swarm.SwarmEndpoint;
 import baritone.swarm.SwarmKeys;
 import baritone.swarm.SwarmSample;
@@ -182,6 +184,65 @@ public final class SwarmBehavior extends Behavior implements Helper {
             startedWith = was; // so a settings change still restarts the link
         }
         refreshSamples();
+        if (event.getType() == TickEvent.Type.IN) {
+            centerTick(); // Ostinato: Phase 3 command-center feed and host; off unless swarmCenterFeed/Host
+        }
+    }
+
+    // ---- Ostinato: Phase 3 command center -------------------------------------------------------------------
+
+    private final CenterFeedService centerFeed =
+            new CenterFeedService(baritone, new CenterInputs(), this::logDirect);
+
+    /** Ostinato: read-only feed out, owner window commands in; a failure here never reaches the swarm tick. */
+    private void centerTick() {
+        try {
+            centerFeed.tick(Baritone.settings(), net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath());
+        } catch (Throwable t) {
+            if (!String.valueOf(t).equals(centerFailure)) {
+                centerFailure = String.valueOf(t);
+                logDirect("center-feed: tick failed: " + t);
+            }
+        }
+    }
+
+    private String centerFailure;
+
+    /** Ostinato: the command-center feed service (tests, #center). */
+    public CenterFeedService centerFeed() {
+        return centerFeed;
+    }
+
+    /** Ostinato: copies of this behavior's swarm state for the feed. Client thread. */
+    private final class CenterInputs implements CenterFeedService.Inputs {
+        @Override
+        public CenterFeedService.SwarmPart swarm(boolean commandHost) {
+            Link l = link;
+            CommandProtocol p = l != null ? l.protocol : retainedProtocol;
+            long now = nowMs();
+            int seen = 0;
+            for (PeerView v : peerViews) {
+                if (v.link().lastSeenMs() >= 0 && now - v.link().lastSeenMs() < SwarmControl.PEER_TIMEOUT_MS) {
+                    seen++;
+                }
+            }
+            boolean up = l != null && (l.protocol == null || l.protocol.linkUp());
+            BotLeaseGuard g = leaseGuard;
+            return new CenterFeedService.SwarmPart(commandHost, leaseCoordinator != null,
+                    p == null ? List.of() : p.feedExecutions(BotFeed.MAX_EXECUTIONS),
+                    g == null ? List.of() : g.feedLeases(), localSample,
+                    new BotFeed.Link(up, seen, failure));
+        }
+
+        @Override
+        public LeaseCoordinator coordinator() {
+            return leaseCoordinator;
+        }
+
+        @Override
+        public WorldKnowledge knowledge() {
+            return worldKnowledge;
+        }
     }
 
     /** Ostinato: once a second, cache this client's figures and the peer list for the command center. */
@@ -1063,7 +1124,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
     static String settingsKey(Settings s) {
         StringBuilder b = new StringBuilder();
         for (Settings.Setting<?> setting : s.allSettings) {
-            if (setting.getName().startsWith("swarm") && setting != s.swarmEnabled) {
+            // Ostinato: Phase 3 command-center settings never touch the link, so changing them must not restart it.
+            if (setting.getName().startsWith("swarm") && setting != s.swarmEnabled
+                    && !setting.getName().startsWith("swarmCenter")) {
                 b.append(setting.getName()).append('=').append(setting.value).append('\n');
             }
         }

@@ -1018,6 +1018,33 @@ public final class LeaseCoordinator {
         return out;
     }
 
+    /**
+     * Ostinato: Phase 3 read API. The records {@link #describe()} prints, as command-center feed records (copies; the
+     * coordinator is not changed). Reservation keys carry their box.
+     */
+    public synchronized List<baritone.swarm.center.feed.CoordinatorFeed.Lease> feedLeases() {
+        List<baritone.swarm.center.feed.CoordinatorFeed.Lease> out = new ArrayList<>();
+        long w = wall.getAsLong();
+        for (LeaseRecord r : records.values()) {
+            if (!(r.state.live() || (r.state == LeaseRecord.State.EXPIRED && w < r.notBeforeWall))) {
+                continue;
+            }
+            ReservationKey k = ReservationKey.parse(r.resource);
+            out.add(new baritone.swarm.center.feed.CoordinatorFeed.Lease(String.valueOf(r.leaseId), r.resource,
+                    k == null ? "key" : k.type.name().toLowerCase(Locale.ROOT), k == null ? '?' : k.dim,
+                    k == null ? null : new int[]{k.x1, k.y1, k.z1, k.x2, k.y2, k.z2}, r.bot, r.gen,
+                    r.state.name().toLowerCase(Locale.ROOT), r.commandLine,
+                    r.exec == null ? "" : r.exec.name().toLowerCase(Locale.ROOT),
+                    r.obs == null ? "" : r.obs.name().toLowerCase(Locale.ROOT), r.endReason));
+        }
+        return out;
+    }
+
+    /** Ostinato: Phase 3 read API. The coordinator mode, lower case. */
+    public synchronized String feedMode() {
+        return mode.name().toLowerCase(Locale.ROOT);
+    }
+
     // ---- helpers ----------------------------------------------------------------------------------------
 
     private long durationFor(String bot) {

@@ -1,0 +1,76 @@
+// Ostinato: Phase 3 command-center window. Compiles the window's sources straight from the mod's source tree, with
+// only the JDK on the class path: a Minecraft (or Baritone core) import in any of them fails this build. The same
+// files also compile into the mod jar, so `#center` can start this window from the jar it runs from.
+plugins {
+    id 'java'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+def shared = [
+        // read API and command channel
+        'baritone/swarm/center/feed/**',
+        'baritone/swarm/center/channel/**',
+        // the window
+        'baritone/swarm/center/app/**',
+        // pure pieces shared with the in-game window and the registry
+        'baritone/swarm/center/ButtonModel.java',
+        'baritone/swarm/center/RegistryEntry.java',
+        'baritone/swarm/center/RegistryResult.java',
+        'baritone/swarm/center/TileRoute.java',
+        'baritone/swarm/center/TileStatus.java',
+        'baritone/swarm/center/BotSnapshot.java',
+        'baritone/swarm/center/CenterLayout.java',
+        'baritone/swarm/center/CenterTheme.java',
+        'baritone/swarm/SwarmSample.java',
+        'baritone/api/command/ArgDecl.java',
+        'baritone/api/command/ArgKind.java',
+        'baritone/api/command/CommandPermission.java',
+        'baritone/api/command/FormDecl.java',
+        'baritone/api/command/FormPlacement.java',
+        'baritone/api/swarm/protocol/ExecutionState.java',
+        'baritone/api/swarm/protocol/ObservationState.java',
+]
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['../src/main/java', '../src/api/java']
+            include shared
+        }
+        resources {
+            srcDirs = []
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+application {
+    mainClass = 'baritone.swarm.center.app.CenterApp'
+}
+
+test {
+    systemProperty 'java.awt.headless', 'true'
+    // Ostinato: the source lints read the shared tree
+    systemProperty 'ostinato.src', file('../src').absolutePath
+    testLogging {
+        events 'failed'
+        exceptionFormat 'full'
+    }
+}

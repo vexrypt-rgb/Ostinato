@@ -1139,6 +1139,29 @@ public final class CommandProtocol {
         }
     }
 
+    /**
+     * Ostinato: Phase 3 read API. The newest {@code max} commands in this bot's ledger (what it was asked to run), as
+     * command-center feed records. A copy taken under the protocol lock; nothing is changed.
+     */
+    public List<baritone.swarm.center.feed.BotFeed.Execution> feedExecutions(int max) {
+        synchronized (lock) {
+            long now = clock.getAsLong();
+            List<Tracked> all = new ArrayList<>(ledger.values());
+            all.sort((a, b) -> Long.compare(b.storedAtMs, a.storedAtMs));
+            List<baritone.swarm.center.feed.BotFeed.Execution> out = new ArrayList<>();
+            for (Tracked t : all) {
+                if (out.size() >= max) {
+                    break;
+                }
+                out.add(new baritone.swarm.center.feed.BotFeed.Execution(String.valueOf(t.id), t.name, t.issuer,
+                        t.execution == null ? "" : t.execution.name().toLowerCase(java.util.Locale.ROOT),
+                        t.observation == null ? "unknown" : t.observation.name().toLowerCase(java.util.Locale.ROOT),
+                        Math.max(0, now - t.storedAtMs), t.endReason));
+            }
+            return out;
+        }
+    }
+
     public ISwarmStatusView openStatusView() {
         StatusView view = new StatusView();
         synchronized (lock) {
