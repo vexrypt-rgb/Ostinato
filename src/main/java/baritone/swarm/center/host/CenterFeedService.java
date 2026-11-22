@@ -3,6 +3,7 @@ package baritone.swarm.center.host;
 import baritone.Baritone;
 import baritone.api.Settings;
 import baritone.cache.WorldData;
+import baritone.swarm.center.UnifiedChat;
 import baritone.swarm.center.feed.BotFeed;
 import baritone.swarm.center.feed.CenterFeed;
 import baritone.swarm.center.feed.CoordinatorFeed;
@@ -23,8 +24,8 @@ import java.util.function.Supplier;
  * Ostinato: Phase 3 command center, bot side. Ticked from {@code SwarmBehavior} on the client thread. With
  * {@code swarmCenterFeed} on it builds this bot's feed once a second (a few getters, cost reported as
  * {@code gatherUs}) and hands the write to one daemon thread; the coordinator feed rides along while this bot runs
- * the lease coordinator; terrain is read from the cache on that thread every 10 s. Off: no thread, no file, and
- * {@link #tick} returns at once.
+ * the lease coordinator; terrain is read from the cache on that thread every 10 s. With {@code swarmCenterHost} on it
+ * also runs the {@link CenterHost}. Both off: no thread, no socket, no file, and {@link #tick} returns at once.
  *
  * <p>Nothing here feeds back into the bot. A full or failing writer drops a write (the window shows the feed as
  * stale); it never blocks the tick.
@@ -49,8 +50,9 @@ public final class CenterFeedService {
     private final Inputs inputs;
     private final Consumer<String> log;
     private ExecutorService writer;
+    private CenterHost host;
     private Path dir;
-    private long nextFeedMs, nextTerrainMs;
+    private long nextFeedMs, nextTerrainMs, nextCatalogMs, nextHostTryMs;
     private long seq;
     private long dropped;
     private String lastError;
@@ -76,8 +78,10 @@ public final class CenterFeedService {
     }
 
     public void tick(Settings s, Path gameDir) {
-        if (!s.swarmCenterFeed.value) {
-            if (writer != null) {
+        boolean feed = s.swarmCenterFeed.value;
+        boolean hostOn = s.swarmCenterHost.value;
+        if (!feed && !hostOn) {
+            if (writer != null || host != null) {
                 close();
             }
             return;
@@ -95,6 +99,15 @@ public final class CenterFeedService {
         }
         dir = want;
         long wall = System.currentTimeMillis();
+        if (hostOn) {
+            hostTick(name, wall);
+        } else if (host != null) {
+            host.close();
+            host = null;
+        }
+        if (!feed) {
+            return;
+        }
         if (writer == null) {
             writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(4), r -> {
                 Thread t = new Thread(r, "ostinato-center-feed");
@@ -104,7 +117,7 @@ public final class CenterFeedService {
         }
         if (wall >= nextFeedMs) {
             nextFeedMs = wall + CenterFeed.BOT_PERIOD_MS;
-            BotFeed bot = BotFeedGather.gather(baritone, name, wall, ++seq, inputs.swarm(false));
+            BotFeed bot = BotFeedGather.gather(baritone, name, wall, ++seq, inputs.swarm(host != null));
             Path file = CenterFeed.botFile(dir, name);
             submit(() -> CenterFeed.writeAtomic(file, bot.toJson()));
             LeaseCoordinator c = inputs.coordinator();
@@ -137,6 +150,34 @@ public final class CenterFeedService {
         return p == null ? null : new BotFeed.Pos(BotFeedGather.dim(p.level()), p.getX(), p.getY(), p.getZ(), 0);
     }
 
+    private void hostTick(String name, long wall) {
+        if (host != null && !host.self().equals(name)) {
+            host.close();
+            host = null;
+        }
+        if (host == null) {
+            if (wall < nextHostTryMs) {
+                return;
+            }
+            nextHostTryMs = wall + 30_000; // a failed start is retried, not every tick
+            try {
+                host = new CenterHost(dir, name, UnifiedChat::registry,
+                        line -> baritone.getCommandManager().execute(line),
+                        () -> Baritone.settings().agentOwner.value, log, System::currentTimeMillis);
+                nextCatalogMs = wall + 10_000;
+            } catch (IOException | RuntimeException e) {
+                log.accept("center-host: not started: " + e.getMessage());
+                return;
+            }
+        }
+        host.drain();
+        if (wall >= nextCatalogMs) {
+            nextCatalogMs = wall + 10_000;
+            CenterHost h = host;
+            submitOrRun(() -> h.writeCatalog());
+        }
+    }
+
     private interface IoTask {
         void run() throws IOException;
     }
@@ -159,17 +200,37 @@ public final class CenterFeedService {
         });
     }
 
+    private void submitOrRun(IoTask task) {
+        if (writer != null) {
+            submit(task);
+            return;
+        }
+        try {
+            task.run();
+        } catch (IOException | RuntimeException ignored) {
+            // the catalog is rewritten in 10 s
+        }
+    }
+
     /** Writes that failed or were dropped (for tests and #swarm status). */
     public long dropped() {
         return dropped;
+    }
+
+    public CenterHost host() {
+        return host;
     }
 
     public Path directory() {
         return dir;
     }
 
-    /** Stops the writer thread. Feed files stay; the window sees them go stale, then offline. */
+    /** Stops the writer thread and the host. Feed files stay; the window sees them go stale, then offline. */
     public void close() {
+        if (host != null) {
+            host.close();
+            host = null;
+        }
         if (writer != null) {
             writer.shutdown();
             writer = null;
