@@ -14,6 +14,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -37,6 +38,7 @@ public final class MapView implements LayoutView {
     private final JPanel menu;
     private final JToggleButton overworld, nether, end;
     private final SelectInspector inspector;
+    private final AreaBar areaBar;
     private SwarmView last = SwarmView.EMPTY;
     private Path groupsFile;
 
@@ -67,9 +69,23 @@ public final class MapView implements LayoutView {
                     saveGroups();
                 }
                 inspector.sync(last, canvas.selection.names());
+                areaBar.sync(last, canvas.selection.names(), canvas.dim());
+            }
+
+            @Override
+            public void areaDrawn(int x1, int z1, int x2, int z2) {
+                List<Integer> ys = new ArrayList<>();
+                for (String name : canvas.selection.names()) {
+                    SwarmView.BotState b = last.bot(name);
+                    if (b != null && b.feed().pos() != null) {
+                        ys.add(b.feed().pos().blockY());
+                    }
+                }
+                areaBar.setArea(x1, z1, x2, z2, ys);
             }
         });
         inspector = new SelectInspector(style, commands);
+        areaBar = new AreaBar(style, commands, armed -> canvas.areaArmed = armed);
 
         JPanel header = style.panel(new BorderLayout(), style.surface());
         header.setBorder(style.box(style.line(), 0, 6));
@@ -83,6 +99,7 @@ public final class MapView implements LayoutView {
         dims.add(layerToggle(dims, "Observations", "map:toggle:observations", on -> canvas.showObservations = on));
         dims.add(layerToggle(dims, "Paths", "map:toggle:paths", on -> canvas.showPaths = on));
         dims.add(layerToggle(dims, "Terrain", "map:toggle:terrain", on -> canvas.showTerrain = on));
+        dims.add(areaBar.tool());
         header.add(dims, BorderLayout.WEST);
         JPanel info = style.panel(new FlowLayout(FlowLayout.RIGHT, 12, 0), null);
         bots = style.label("0 bots", style.muted(), Font.PLAIN, 12f);
@@ -110,9 +127,12 @@ public final class MapView implements LayoutView {
         lines.add(legend);
         lines.add(keys);
         lines.add(hover);
-        south.add(inspector.component(), BorderLayout.NORTH);
-        south.add(lines, BorderLayout.CENTER);
-        south.add(menu, BorderLayout.SOUTH);
+        south.add(areaBar.bar(), BorderLayout.NORTH);
+        JPanel under = style.panel(new BorderLayout(), null);
+        under.add(inspector.component(), BorderLayout.NORTH);
+        under.add(lines, BorderLayout.CENTER);
+        under.add(menu, BorderLayout.SOUTH);
+        south.add(under, BorderLayout.CENTER);
         root.add(south, BorderLayout.SOUTH);
         root.add(canvas, BorderLayout.CENTER);
     }
@@ -131,7 +151,10 @@ public final class MapView implements LayoutView {
     private JToggleButton dimButton(ButtonGroup group, JPanel row, String label, char dim) {
         JToggleButton b = style.toggle(label);
         b.setName("map:dim:" + dim);
-        b.addActionListener(e -> canvas.setDim(dim));
+        b.addActionListener(e -> {
+            canvas.setDim(dim);
+            areaBar.sync(last, canvas.selection.names(), dim);
+        });
         group.add(b);
         row.add(b);
         return b;
@@ -187,6 +210,11 @@ public final class MapView implements LayoutView {
         return canvas.selection.names();
     }
 
+    /** Inclusive XZ of the drawn area, or null when none has been dragged. */
+    public int[] area() {
+        return canvas.areaBounds();
+    }
+
     public MapGroups groups() {
         return canvas.groups;
     }
@@ -215,6 +243,7 @@ public final class MapView implements LayoutView {
         last = view == null ? SwarmView.EMPTY : view;
         canvas.setView(last);
         inspector.sync(last, canvas.selection.names());
+        areaBar.sync(last, canvas.selection.names(), canvas.dim());
         int n = 0;
         if (view != null) {
             for (SwarmView.BotState b : view.bots()) {
