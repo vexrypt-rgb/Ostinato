@@ -75,8 +75,15 @@ public final class CenterShell {
 
         body = style.panel(cards, style.bg());
         root.add(body, BorderLayout.CENTER);
-        add(new WallView(style, commands));
-        add(new MapView(style, commands));
+        WallView wall = new WallView(style, commands);
+        MapView map = new MapView(style, commands);
+        add(wall);
+        add(map);
+        wall.onOpenOnMap(name -> {
+            show(CenterLayout.MAP);
+            onPick.accept(CenterLayout.MAP);
+            map.centerOn(name);
+        });
 
         JPanel footer = style.panel(new BorderLayout(12, 0), style.surface());
         footer.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, style.line()),

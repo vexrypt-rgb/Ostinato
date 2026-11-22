@@ -22,6 +22,7 @@ import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Ostinato: Phase 3 window, the Mission control wall (the default layout and the reference slice). One
@@ -46,6 +47,7 @@ public final class WallView implements LayoutView {
     private List<String> shown = List.of();
     private String selected;
     private SwarmView last = SwarmView.EMPTY;
+    private Consumer<String> onOpen = name -> {};
 
     public WallView(AppStyle style, Commands commands) {
         this.style = style;
@@ -97,6 +99,11 @@ public final class WallView implements LayoutView {
         return selected;
     }
 
+    /** Double-click on a tile. The shell uses this to switch to the map centered on that bot. */
+    public void onOpenOnMap(Consumer<String> open) {
+        onOpen = open == null ? name -> {} : open;
+    }
+
     /** Opens the focus panel on {@code name}, or closes it when {@code name} is null. */
     public void select(String name) {
         selected = name == null || name.isBlank() ? null : name;
@@ -119,6 +126,7 @@ public final class WallView implements LayoutView {
                     t = new TileView(style, commands, n);
                     String bot = n;
                     t.onSelect(() -> select(bot));
+                    t.onOpen(() -> onOpen.accept(bot));
                 }
                 keep.put(n, t);
             }
