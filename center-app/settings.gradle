@@ -1,0 +1,4 @@
+// Ostinato: Phase 3 command-center window, a standalone build with no Minecraft. Run from the repo root:
+//   ./gradlew -p center-app test        unit + UI tests (headless AWT), no client or server needed
+//   ./gradlew -p center-app run --args="--fake 8"
+rootProject.name = 'ostinato-center-app'

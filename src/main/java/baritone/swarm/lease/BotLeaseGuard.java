@@ -1094,6 +1094,21 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return out;
     }
 
+    /** Ostinato: Phase 3 read API. The leases {@link #describe()} prints, as command-center feed records (copies). */
+    public synchronized List<baritone.swarm.center.feed.BotFeed.HeldLease> feedLeases() {
+        List<baritone.swarm.center.feed.BotFeed.HeldLease> out = new ArrayList<>();
+        long now = mono.getAsLong();
+        for (Lease l : leases.values()) {
+            if (l.phase == Phase.DONE) {
+                continue;
+            }
+            out.add(new baritone.swarm.center.feed.BotFeed.HeldLease(String.valueOf(l.leaseId), l.gen, l.resource,
+                    l.phase.name().toLowerCase(Locale.ROOT), l.phase == Phase.VALID ? Math.max(0, l.authUntil - now) : -1,
+                    l.active));
+        }
+        return out;
+    }
+
     // ---- test access ------------------------------------------------------------------------------------
 
     synchronized Phase phaseOf(UUID leaseId) {

@@ -90,6 +90,16 @@ public final class CachedRegion implements ICachedRegion {
         return null;
     }
 
+    /** Ostinato: Phase 3 terrain feed. The cached chunk at region-local chunk (x, z), 0 to 31, or null. Read only. */
+    public final CachedChunk chunkAt(int chunkX, int chunkZ) {
+        return chunks[chunkX][chunkZ];
+    }
+
+    /** Ostinato: Phase 3 terrain feed. The dimension floor that cached heights are measured from. */
+    public final int minY() {
+        return dimension.minY();
+    }
+
     @Override
     public final boolean isCached(int x, int z) {
         return chunks[x >> 4][z >> 4] != null;

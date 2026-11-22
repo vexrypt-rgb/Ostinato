@@ -563,6 +563,40 @@ public final class WorldKnowledge {
     }
 
     /** Status lines for {@code #swarm obs}. */
+    /**
+     * Ostinato: Phase 3 read API. The newest {@code max} records (terrain and entities, by version), as command-center
+     * feed records. A copy: unlike {@link #status} it does not purge expired entities, so reading changes nothing.
+     */
+    public synchronized List<baritone.swarm.center.feed.CoordinatorFeed.Observation> feedObservations(int max) {
+        long now = mono.getAsLong();
+        List<ObservationRecord> all = new ArrayList<>(terrain.values());
+        all.addAll(entities.values());
+        all.sort(Comparator.comparingLong((ObservationRecord r) -> -r.version));
+        List<baritone.swarm.center.feed.CoordinatorFeed.Observation> out = new ArrayList<>();
+        for (ObservationRecord r : all) {
+            if (out.size() >= max) {
+                break;
+            }
+            int[] box = null;
+            if (r.kind == ObservationRecord.Kind.VEIN || r.kind == ObservationRecord.Kind.CHEST) {
+                ReservationKey k = ReservationKey.parse(r.key);
+                box = k == null ? null : new int[]{k.x1, k.y1, k.z1, k.x2, k.y2, k.z2};
+            } else if (r.kind == ObservationRecord.Kind.BLOCK || r.kind == ObservationRecord.Kind.STRUCTURE) {
+                int[] p = ObservationRecord.xyz(r.key.substring(4));
+                box = p == null ? null : new int[]{p[0], p[1], p[2], p[0], p[1], p[2]};
+            }
+            out.add(new baritone.swarm.center.feed.CoordinatorFeed.Observation(r.key,
+                    r.kind.name().toLowerCase(Locale.ROOT), r.dim, box, r.bot, r.confidence, r.detail,
+                    r.state.name().toLowerCase(Locale.ROOT), r.suspect, Math.max(0, now - r.observedAt)));
+        }
+        return out;
+    }
+
+    /** Ostinato: Phase 3 read API. How many records the store holds (terrain plus entities). */
+    public synchronized int feedSize() {
+        return terrain.size() + entities.size();
+    }
+
     public synchronized List<String> status(int maxRecords) {
         long now = mono.getAsLong();
         purgeEntities(now);
