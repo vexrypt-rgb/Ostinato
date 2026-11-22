@@ -44,16 +44,24 @@ public final class ThemeChoice {
             if (file == null || !Files.isRegularFile(file)) {
                 return DEFAULT;
             }
-            for (String raw : Files.readAllLines(file)) {
-                String line = raw.trim();
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
-                String found = canonical(line);
-                return found == null ? DEFAULT : found;
-            }
+            return parse(Files.readString(file));
         } catch (RuntimeException | IOException ignored) {
             return DEFAULT;
+        }
+    }
+
+    /** The choice in a file's text, or {@link #DEFAULT} when it is empty or not a built-in. */
+    public static String parse(String text) {
+        if (text == null) {
+            return DEFAULT;
+        }
+        for (String raw : text.split("\\R")) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            String found = canonical(line);
+            return found == null ? DEFAULT : found;
         }
         return DEFAULT;
     }

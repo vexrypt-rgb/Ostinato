@@ -115,8 +115,8 @@ public final class MapView implements LayoutView {
         menu.setName("map:menu");
         menu.setVisible(false);
         JPanel south = style.panel(new BorderLayout(), style.surface());
-        JLabel legend = style.label("region solid edge · vein dashed · chest square · key listed"
-                + " · vein diamond · chest square · block circle · structure frame · waypoint plus"
+        JLabel legend = style.label("Leases: region solid edge · vein dashed · chest square · key listed"
+                + "   Observations: vein diamond · chest square · block circle · structure frame · waypoint plus"
                 + " · confirmed filled · stale hollow · gone cross · suspect ring", style.muted(), Font.PLAIN, 11f);
         legend.setName("map:legend");
         keys = style.label("no key leases", style.muted(), Font.PLAIN, 11f);
@@ -124,6 +124,7 @@ public final class MapView implements LayoutView {
         hover = style.label(" ", style.text(), Font.PLAIN, 11f);
         hover.setName("map:hover");
         JPanel lines = style.panel(new java.awt.GridLayout(3, 1), null);
+        lines.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 8, 0, 8));
         lines.add(legend);
         lines.add(keys);
         lines.add(hover);

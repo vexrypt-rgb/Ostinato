@@ -96,9 +96,14 @@ public final class CenterApp {
                 shell.setPrefsDir(prefs);
             }
             JFrame frame = frame(shell, pos);
+            Probe probe = new Probe(logger, first(a, "shots") == null ? null : Path.of(first(a, "shots")));
             worker.scheduleWithFixedDelay(() -> {
                 SwarmView view = source.snapshot();
-                SwingUtilities.invokeLater(() -> shell.update(view));
+                CenterShell.Prefs read = CenterShell.readPrefs(prefs);
+                SwingUtilities.invokeLater(() -> {
+                    shell.update(view, read);
+                    probe.after(shell, view);
+                });
                 logger.tiles(view);
             }, 0, REFRESH_MS, TimeUnit.MILLISECONDS);
             for (String auto : a.getOrDefault("auto", List.of())) {
@@ -199,6 +204,17 @@ public final class CenterApp {
         }
         worker.schedule(() -> SwingUtilities.invokeLater(() -> {
             String bot = f[1], form = f[2];
+            if ("@".equals(bot)) {
+                // Ostinato: live checks press a header button (layout toggle, theme pick) by component name.
+                Component any = find(shell.component(), form);
+                if (any instanceof AbstractButton button) {
+                    logger.line("auto: press @" + form);
+                    button.doClick();
+                } else {
+                    logger.line("auto: no button " + form);
+                }
+                return;
+            }
             for (Map.Entry<String, String> e : values.entrySet()) {
                 Component c = find(shell.component(), "tile:" + bot + ":field:" + form + ":" + e.getKey());
                 if (c instanceof JTextField t) {
@@ -278,6 +294,85 @@ public final class CenterApp {
                 line("tile " + b.name() + " " + b.freshness().name().toLowerCase(java.util.Locale.ROOT) + " age="
                         + b.ageMs() + " pos=" + TileText.position(b.feed()) + " task=" + TileText.task(b.feed())
                         + " health=" + b.feed().health() + " alerts=" + view.alertsFor(b.name()).size());
+            }
+        }
+    }
+
+    /**
+     * Ostinato: what a live check reads from the window log. A {@code state} line (and, with {@code --shots <dir>},
+     * a PNG of the window) whenever the shown layout or theme changes; a {@code map} line every 3 s while the map is
+     * shown: each bot in the map's dimension with its feed position, its marker's screen point, and which bot the
+     * hit test finds there. Runs on the Swing thread after a refresh; does nothing else while the state is unchanged.
+     */
+    static final class Probe {
+        private final Logger logger;
+        private final Path shots;
+        private String state;
+        private int shot;
+        private long nextMap;
+
+        Probe(Logger logger, Path shots) {
+            this.logger = logger;
+            this.shots = shots;
+        }
+
+        void after(CenterShell shell, SwarmView view) {
+            String now = "layout=" + shell.shown().wire() + " theme=" + shell.themeName();
+            if (!now.equals(state)) {
+                state = now;
+                logger.line("state " + now);
+                snap(shell, shell.shown().wire() + "-" + shell.themeName());
+            }
+            if (shell.shown() != CenterLayout.MAP || view.readAtMs() < nextMap) {
+                return;
+            }
+            nextMap = view.readAtMs() + 3_000;
+            if (!(find(shell.component(), "map:canvas") instanceof MapCanvas canvas) || !canvas.isVisible() || canvas.getWidth() <= 0) {
+                return;
+            }
+            StringBuilder line = new StringBuilder("map dim=" + canvas.dim() + " size=" + canvas.getWidth() + "x"
+                    + canvas.getHeight());
+            for (SwarmView.BotState b : view.bots()) {
+                double[] at = canvas.markerScreen(b.name());
+                if (at == null || b.feed().pos() == null) {
+                    continue;
+                }
+                int sx = (int) Math.round(at[0]);
+                int sy = (int) Math.round(at[1]);
+                line.append(" | ").append(b.name()).append(" feed=").append(Math.round(b.feed().pos().x())).append(',')
+                        .append(Math.round(b.feed().pos().z())).append(" screen=").append(sx).append(',').append(sy)
+                        .append(" hit=").append(canvas.hit(sx, sy));
+            }
+            logger.line(line.toString());
+        }
+
+        void snap(CenterShell shell, String name) {
+            if (shots == null) {
+                return;
+            }
+            Component c = shell.component();
+            // Ostinato: run the layout that setText and a theme rebuild only queued, so the PNG is what the screen shows.
+            c.validate();
+            if (c.getWidth() <= 0 || c.getHeight() <= 0) {
+                return;
+            }
+            try {
+                Files.createDirectories(shots);
+                // At the screen's scale (a 200% panel lays text out at 2x; a 1x print hints wider and clips it).
+                double scale = c.getGraphicsConfiguration() == null ? 1
+                        : c.getGraphicsConfiguration().getDefaultTransform().getScaleX();
+                java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                        (int) Math.ceil(c.getWidth() * scale), (int) Math.ceil(c.getHeight() * scale),
+                        java.awt.image.BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D g = img.createGraphics();
+                g.scale(scale, scale);
+                c.printAll(g);
+                g.dispose();
+                Path out = shots.resolve(String.format("%02d-%s.png", ++shot, name));
+                javax.imageio.ImageIO.write(img, "png", out.toFile());
+                logger.line("shot " + out.getFileName());
+            } catch (IOException | RuntimeException e) {
+                logger.line("shot failed " + e);
             }
         }
     }
