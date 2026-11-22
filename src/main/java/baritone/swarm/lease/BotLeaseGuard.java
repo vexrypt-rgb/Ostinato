@@ -944,13 +944,21 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
 
     /**
      * Ostinato: lease-scoped authority. {@code commandId} is bound to a lease that is authorized now and was granted by
-     * {@code issuer}, who is the configured coordinator. Any reservation type (vein, region, chest...).
+     * {@code issuer}, who is the configured coordinator; with {@code regionOnly} it must also be a REGION lease (tunnel),
+     * else any reservation type (mine: vein, region, an observed vein).
      */
     @Override
-    public synchronized boolean leaseFrom(UUID commandId, String issuer) {
+    public synchronized boolean leaseFrom(UUID commandId, String issuer, boolean regionOnly) {
         Lease l = commandId == null ? null : byCommand.get(commandId);
-        return l != null && l.authorized(mono.getAsLong()) && coordinatorIs(issuer)
-                && l.coordinator != null && l.coordinator.equalsIgnoreCase(issuer);
+        if (l == null || !l.authorized(mono.getAsLong()) || !coordinatorIs(issuer)
+                || l.coordinator == null || !l.coordinator.equalsIgnoreCase(issuer)) {
+            return false;
+        }
+        if (!regionOnly) {
+            return true;
+        }
+        ReservationKey k = ReservationKey.parse(l.resource);
+        return k != null && k.type == ReservationKey.Type.REGION;
     }
 
     /**
