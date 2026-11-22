@@ -59,6 +59,7 @@ final class TileView {
     private boolean selected;
     private TileStatus lastStatus = new TileStatus(TileStatus.Level.IDLE, "idle");
     private Runnable onSelect = () -> {};
+    private Runnable onOpen = () -> {};
 
     TileView(AppStyle style, Commands commands, String bot) {
         this.style = style;
@@ -71,6 +72,9 @@ final class TileView {
             public void mouseClicked(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     onSelect.run();
+                    if (e.getClickCount() >= 2) {
+                        onOpen.run();
+                    }
                 }
             }
         });
@@ -172,6 +176,11 @@ final class TileView {
 
     void onSelect(Runnable select) {
         onSelect = select == null ? () -> {} : select;
+    }
+
+    /** A double-click opens this bot on the war-room map. */
+    void onOpen(Runnable open) {
+        onOpen = open == null ? () -> {} : open;
     }
 
     /** Border stays one width so a state change never shifts the grid. Selection uses the accent. */

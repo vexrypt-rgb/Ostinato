@@ -159,7 +159,8 @@ public class WallViewTest {
         ui.click("header.layout.map");
         assertEquals(CenterLayout.MAP, ui.shell.shown());
         assertEquals(CenterLayout.MAP, picked[0]);
-        assertTrue(ui.text("map.placeholder").contains("3 bots"));
+        assertEquals("3 bots", ui.text("map:bots"));
+        assertTrue(ui.has("map:canvas"));
     }
 
     @Test public void buttonsNeverTakeFocus() {
