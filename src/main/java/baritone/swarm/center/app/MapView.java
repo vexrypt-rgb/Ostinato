@@ -12,6 +12,8 @@ import javax.swing.JToggleButton;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -20,7 +22,7 @@ import java.util.List;
  * pixels per block. A Y slider is not drawn: the feed is a surface overview, not a cave cut.
  *
  * <p>Names: {@code map}, {@code map:canvas}, {@code map:cursor}, {@code map:bots}, {@code map:dim:o|n|e},
- * {@code map:menu}, {@code map:center:<bot>}.
+ * {@code map:menu}, {@code map:center:<bot>}, {@code select:inspector}.
  */
 public final class MapView implements LayoutView {
 
@@ -34,6 +36,9 @@ public final class MapView implements LayoutView {
     private final JLabel keys;
     private final JPanel menu;
     private final JToggleButton overworld, nether, end;
+    private final SelectInspector inspector;
+    private SwarmView last = SwarmView.EMPTY;
+    private Path groupsFile;
 
     public MapView(AppStyle style, Commands commands) {
         this.style = style;
@@ -55,7 +60,16 @@ public final class MapView implements LayoutView {
             public void hover(String text) {
                 hover.setText(text == null || text.isEmpty() ? " " : text);
             }
+
+            @Override
+            public void selectionChanged(boolean groupsStored) {
+                if (groupsStored) {
+                    saveGroups();
+                }
+                inspector.sync(last, canvas.selection.names());
+            }
         });
+        inspector = new SelectInspector(style, commands);
 
         JPanel header = style.panel(new BorderLayout(), style.surface());
         header.setBorder(style.box(style.line(), 0, 6));
@@ -96,6 +110,7 @@ public final class MapView implements LayoutView {
         lines.add(legend);
         lines.add(keys);
         lines.add(hover);
+        south.add(inspector.component(), BorderLayout.NORTH);
         south.add(lines, BorderLayout.CENTER);
         south.add(menu, BorderLayout.SOUTH);
         root.add(south, BorderLayout.SOUTH);
@@ -168,9 +183,38 @@ public final class MapView implements LayoutView {
         return canvas.centerOn(name);
     }
 
+    public List<String> selected() {
+        return canvas.selection.names();
+    }
+
+    public MapGroups groups() {
+        return canvas.groups;
+    }
+
+    /** Control groups are read and written under {@code <dir>/prefs/<user>.properties}. */
+    public void setPrefsDir(Path dir) {
+        groupsFile = dir == null ? null : MapGroups.file(dir);
+        if (groupsFile != null) {
+            canvas.groups.read(groupsFile);
+        }
+    }
+
+    private void saveGroups() {
+        if (groupsFile == null) {
+            return;
+        }
+        try {
+            canvas.groups.save(groupsFile);
+        } catch (IOException ignored) {
+            // The in-memory group is kept. The next store tries the file again.
+        }
+    }
+
     @Override
     public void update(SwarmView view) {
-        canvas.setView(view);
+        last = view == null ? SwarmView.EMPTY : view;
+        canvas.setView(last);
+        inspector.sync(last, canvas.selection.names());
         int n = 0;
         if (view != null) {
             for (SwarmView.BotState b : view.bots()) {

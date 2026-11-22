@@ -12,6 +12,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -25,7 +26,8 @@ import java.util.List;
 /**
  * Ostinato: Phase 3 window, the war-room drawing surface. Terrain is rasterized into one backbuffer the size of the
  * view (never one image per slice per zoom). Markers, paths, the chunk grid and the minimap are drawn on top.
- * Arrow keys pan when this canvas is given the key event; the wheel zooms. Nothing here asks for focus.
+ * Arrow keys pan when this canvas is given the key event; the wheel zooms. A click marks the canvas as the place
+ * control-group keys apply; nothing here asks for focus.
  */
 final class MapCanvas extends javax.swing.JComponent {
 
@@ -37,6 +39,9 @@ final class MapCanvas extends javax.swing.JComponent {
 
         /** Tooltip for whatever the pointer is over, or empty. */
         void hover(String text);
+
+        /** The selection or a control group changed. {@code groupsStored} means a slot was just written. */
+        void selectionChanged(boolean groupsStored);
     }
 
     final MapCamera camera = new MapCamera();
@@ -50,8 +55,17 @@ final class MapCanvas extends javax.swing.JComponent {
     boolean showObservations = true;
     boolean showPaths = true;
     boolean showTerrain = true;
+    final MapSelection selection = new MapSelection();
+    final MapGroups groups = new MapGroups();
     private int pressX, pressY;
+    private int originX, originY, currentX, currentY;
     private boolean panning;
+    private boolean boxing;
+    private boolean boxMoved;
+    private boolean boxAdd;
+    private int boxButton;
+    /** Set by a click on this canvas. Control-group keys and Esc apply only while this is set. */
+    private boolean pointerFocus;
 
     MapCanvas(AppStyle style, Listener listener) {
         this.style = style;
@@ -64,13 +78,36 @@ final class MapCanvas extends javax.swing.JComponent {
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                pressX = e.getX();
-                pressY = e.getY();
+                pointerFocus = true;
+                originX = pressX = currentX = e.getX();
+                originY = pressY = currentY = e.getY();
+                boxMoved = false;
+                boxing = false;
                 String hit = hit(e.getX(), e.getY());
+                boolean shift = (e.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0;
                 if (e.getButton() == MouseEvent.BUTTON3) {
                     listener.markerMenu(hit);
+                    boxing = true;
+                    boxAdd = false;
+                    boxButton = MouseEvent.BUTTON3;
                     panning = false;
-                } else if (e.getButton() == MouseEvent.BUTTON1 && hit == null) {
+                } else if (e.getButton() == MouseEvent.BUTTON1 && hit != null) {
+                    if (shift) {
+                        selection.shiftClick(hit);
+                    } else {
+                        selection.click(hit);
+                    }
+                    listener.markerMenu(null);
+                    listener.selectionChanged(false);
+                    panning = false;
+                    repaint();
+                } else if (e.getButton() == MouseEvent.BUTTON1 && shift) {
+                    boxing = true;
+                    boxAdd = true;
+                    boxButton = MouseEvent.BUTTON1;
+                    panning = false;
+                    listener.markerMenu(null);
+                } else if (e.getButton() == MouseEvent.BUTTON1) {
                     panning = true;
                     listener.markerMenu(null);
                 } else {
@@ -80,19 +117,37 @@ final class MapCanvas extends javax.swing.JComponent {
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (!panning) {
+                currentX = e.getX();
+                currentY = e.getY();
+                if (panning) {
+                    camera.panPixels(e.getX() - pressX, e.getY() - pressY);
+                    pressX = e.getX();
+                    pressY = e.getY();
+                    placed = true;
+                    repaint();
                     return;
                 }
-                camera.panPixels(e.getX() - pressX, e.getY() - pressY);
-                pressX = e.getX();
-                pressY = e.getY();
-                placed = true;
-                repaint();
+                if (boxing && Math.abs(e.getX() - originX) + Math.abs(e.getY() - originY) >= 4) {
+                    if (!boxMoved && boxButton == MouseEvent.BUTTON3) {
+                        listener.markerMenu(null);
+                    }
+                    boxMoved = true;
+                    repaint();
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                currentX = e.getX();
+                currentY = e.getY();
+                if (boxing && boxMoved) {
+                    selection.box(screenMarkers(), originX, originY, currentX, currentY, boxAdd);
+                    listener.selectionChanged(false);
+                }
+                boxing = false;
+                boxMoved = false;
                 panning = false;
+                repaint();
             }
 
             @Override
@@ -113,6 +168,9 @@ final class MapCanvas extends javax.swing.JComponent {
         addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                if (groupKey(e)) {
+                    return;
+                }
                 int step = 32;
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_LEFT -> camera.panPixels(step, 0);
@@ -125,6 +183,52 @@ final class MapCanvas extends javax.swing.JComponent {
                 repaint();
             }
         });
+    }
+
+    /** Esc clears. Ctrl+1..9 stores the selection, 1..9 recalls it. Ignored until the canvas has been clicked. */
+    private boolean groupKey(KeyEvent e) {
+        boolean esc = e.getKeyCode() == KeyEvent.VK_ESCAPE;
+        int slot = slotOf(e.getKeyCode());
+        if (!esc && slot == 0) {
+            return false;
+        }
+        if (!pointerFocus && !isFocusOwner()) {
+            return true;
+        }
+        if (esc) {
+            selection.clear();
+        } else if ((e.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0) {
+            groups.store(slot, selection.names());
+            listener.selectionChanged(true);
+            repaint();
+            return true;
+        } else {
+            selection.replace(groups.recall(slot));
+        }
+        listener.selectionChanged(false);
+        repaint();
+        return true;
+    }
+
+    private static int slotOf(int code) {
+        if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_9) {
+            return code - KeyEvent.VK_1 + 1;
+        }
+        if (code >= KeyEvent.VK_NUMPAD1 && code <= KeyEvent.VK_NUMPAD9) {
+            return code - KeyEvent.VK_NUMPAD1 + 1;
+        }
+        return 0;
+    }
+
+    private void drawSelectionBox(Graphics2D g) {
+        if (!boxing || !boxMoved) {
+            return;
+        }
+        int x = Math.min(originX, currentX);
+        int y = Math.min(originY, currentY);
+        g.setColor(new Color(style.theme.accent()));
+        g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{4f, 3f}, 0f));
+        g.drawRect(x, y, Math.max(1, Math.abs(currentX - originX)), Math.max(1, Math.abs(currentY - originY)));
     }
 
     void setView(SwarmView view) {
@@ -247,6 +351,7 @@ final class MapCanvas extends javax.swing.JComponent {
             drawObservations(g);
         }
         drawMarkers(g);
+        drawSelectionBox(g);
         drawMinimap(g, w, h);
         g.dispose();
         graphics.drawImage(buffer, 0, 0, null);
@@ -372,6 +477,11 @@ final class MapCanvas extends javax.swing.JComponent {
             g.setColor(color);
             g.setStroke(new BasicStroke(2f));
             drawShape(g, status.level(), sx, sy);
+            if (selection.contains(b.name())) {
+                g.setColor(new Color(style.theme.accent()));
+                g.drawOval(sx - 12, sy - 12, 24, 24);
+                g.setColor(color);
+            }
             drawFacing(g, p.yaw(), sx, sy);
             g.setColor(new Color(style.theme.text()));
             g.drawString(status.level().glyph + " " + b.name(), sx + 10, sy - 8);
