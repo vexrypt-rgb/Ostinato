@@ -29,6 +29,7 @@ public final class FakeBot {
     final List<BotFeed.HeldLease> leases = new ArrayList<>();
     BotFeed.Perf perf = new BotFeed.Perf(12, 200, 3, 900, 2048, 2, 30, 0, 0);
     BotFeed.Link link = new BotFeed.Link(true, 2, "");
+    long gatherUs = 40;
 
     FakeBot(String name) {
         this.name = name;
@@ -42,6 +43,9 @@ public final class FakeBot {
     public FakeBot runMode(String mode) { this.runMode = mode; return this; }
     public FakeBot server(String s) { this.server = s; return this; }
     public FakeBot at(double x, double y, double z) { this.x = x; this.y = y; this.z = z; this.inWorld = true; return this; }
+    public FakeBot yaw(float yaw) { this.yaw = yaw; return this; }
+    public FakeBot perf(BotFeed.Perf p) { this.perf = p == null ? BotFeed.Perf.UNKNOWN : p; return this; }
+    public FakeBot gather(long us) { this.gatherUs = us; return this; }
     public FakeBot dim(char d) { this.dim = d; return this; }
     public FakeBot notInWorld() { this.inWorld = false; return this; }
     public FakeBot health(int h) { this.health = h; return this; }
@@ -54,12 +58,21 @@ public final class FakeBot {
 
     /** Adds a ledger entry: {@code execution("goto", "running", 2000)}. */
     public FakeBot execution(String command, String state, long ageMs) {
-        executions.add(new BotFeed.Execution("cmd-" + executions.size(), command, "Copper", state, "unknown", ageMs, ""));
+        return execution(command, state, ageMs, "");
+    }
+
+    public FakeBot execution(String command, String state, long ageMs, String endReason) {
+        executions.add(new BotFeed.Execution("cmd-" + executions.size(), command, "Copper", state, "unknown", ageMs,
+                endReason));
         return this;
     }
 
     public FakeBot lease(String resource, String phase) {
-        leases.add(new BotFeed.HeldLease("lease-" + leases.size(), 1, resource, phase, 20_000, true));
+        return lease(resource, 1, phase, 20_000);
+    }
+
+    public FakeBot lease(String resource, long gen, String phase, long leftMs) {
+        leases.add(new BotFeed.HeldLease("lease-" + leases.size(), gen, resource, phase, leftMs, true));
         return this;
     }
 
@@ -71,6 +84,6 @@ public final class FakeBot {
     public BotFeed build(long nowMs, long seq) {
         return new BotFeed(name, nowMs - ageMs, seq, server, runMode, commandHost, coordinator,
                 inWorld ? new BotFeed.Pos(dim, x, y, z, yaw) : null, health, 20, hunger, dead, process, path, inventory,
-                executions, leases, perf, link, 40);
+                executions, leases, perf, link, gatherUs);
     }
 }

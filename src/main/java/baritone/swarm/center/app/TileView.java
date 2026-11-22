@@ -22,6 +22,8 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,7 +48,7 @@ final class TileView {
     private final Commands commands;
     final String bot;
     final JPanel root;
-    private final JLabel glyph, name, status, task, inventory, position, preview, result;
+    private final JLabel glyph, name, status, task, inventory, position, perf, progress, preview, result;
     private final Bars bars;
     private final JPanel alerts;
     private final JPanel actions;
@@ -54,6 +56,9 @@ final class TileView {
     private String host;
     private final Map<String, Map<String, JTextField>> fields = new LinkedHashMap<>();
     private String armedDespawn;
+    private boolean selected;
+    private TileStatus lastStatus = new TileStatus(TileStatus.Level.IDLE, "idle");
+    private Runnable onSelect = () -> {};
 
     TileView(AppStyle style, Commands commands, String bot) {
         this.style = style;
@@ -61,6 +66,14 @@ final class TileView {
         this.bot = bot;
         root = style.panel(new BorderLayout(0, 6), style.surface());
         root.setName("tile:" + bot);
+        root.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    onSelect.run();
+                }
+            }
+        });
 
         JPanel head = style.panel(new BorderLayout(6, 0), null);
         glyph = named(style.label(TileStatus.Level.IDLE.glyph, style.muted(), Font.BOLD, 14f), "glyph");
@@ -74,14 +87,16 @@ final class TileView {
         JPanel body = style.panel(null, null);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         task = named(style.label(" ", style.text(), Font.PLAIN, 12f), "task");
+        progress = named(style.label(" ", style.accent(), Font.PLAIN, 11f), "progress");
         position = named(style.label(" ", style.faint(), Font.PLAIN, 11f), "position");
         bars = new Bars(style);
         bars.setName("tile:" + bot + ":bars");
+        perf = named(style.label(" ", style.muted(), Font.PLAIN, 11f), "perf");
         inventory = named(style.label(" ", style.muted(), Font.PLAIN, 11f), "inventory");
         alerts = style.panel(null, null);
         alerts.setLayout(new BoxLayout(alerts, BoxLayout.Y_AXIS));
         alerts.setName("tile:" + bot + ":alerts");
-        for (JComponent c : new JComponent[]{task, position, bars, inventory, alerts}) {
+        for (JComponent c : new JComponent[]{task, progress, position, bars, perf, inventory, alerts}) {
             c.setAlignmentX(Component.LEFT_ALIGNMENT);
             body.add(c);
             body.add(Box.createVerticalStrut(3));
@@ -114,9 +129,13 @@ final class TileView {
         status.setText(s.word());
         status.setForeground(s.alert() ? style.level(s.level()) : style.muted());
         task.setText(TileText.task(b.feed()));
+        String step = TileDetails.progress(b.feed().path());
+        progress.setText(step.isEmpty() ? " " : step);
+        progress.setVisible(!step.isEmpty());
         String age = TileText.age(b);
         position.setText(TileText.position(b.feed()) + (age.isEmpty() ? "" : " · " + age));
         bars.set(b.feed().health(), b.feed().hunger());
+        perf.setText(TileDetails.perfStrip(b.feed().perf()));
         inventory.setText(TileText.inventory(b.feed().inventory()));
 
         alerts.removeAll();
@@ -129,8 +148,8 @@ final class TileView {
         }
         alerts.revalidate();
 
-        // Ostinato: border keeps one width so a state change never shifts the grid.
-        root.setBorder(style.box(s.alert() ? style.level(s.level()) : style.line(), 2, 8));
+        lastStatus = s;
+        applyBorder();
 
         List<ButtonModel> forms = view.catalog() == null ? List.of()
                 : view.catalog().models(baritone.api.command.FormPlacement.TILE);
@@ -143,6 +162,22 @@ final class TileView {
         if (forms.isEmpty()) {
             preview.setText(view.catalog() == null ? "commands off: no catalog from a command host" : " ");
         }
+    }
+
+    /** Selects this tile (accent border). A click on the tile body calls {@code onSelect}. */
+    void setSelected(boolean on) {
+        selected = on;
+        applyBorder();
+    }
+
+    void onSelect(Runnable select) {
+        onSelect = select == null ? () -> {} : select;
+    }
+
+    /** Border stays one width so a state change never shifts the grid. Selection uses the accent. */
+    private void applyBorder() {
+        root.setBorder(style.box(selected ? style.accent()
+                : lastStatus.alert() ? style.level(lastStatus.level()) : style.line(), 2, 8));
     }
 
     /**
