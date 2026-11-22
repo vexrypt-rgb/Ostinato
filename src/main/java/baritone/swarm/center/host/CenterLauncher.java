@@ -20,6 +20,9 @@ import java.util.Optional;
  */
 public final class CenterLauncher {
 
+    /** JVM flags of the window process. */
+    public static final List<String> JVM_FLAGS = List.of("-Xmx128m", "-XX:+UseSerialGC");
+
     private CenterLauncher() {}
 
     /** The command line, without starting anything (tests and the launch log). */
@@ -28,7 +31,9 @@ public final class CenterLauncher {
         Path bin = javaHome.resolve("bin").resolve(windows ? "javaw.exe" : "java");
         List<String> cmd = new ArrayList<>();
         cmd.add(bin.toString());
-        cmd.add("-Xmx256m");
+        // Ostinato: a small heap and the serial collector keep the window near 180 MB private (p3cc run 1: 363 MB
+        // with -Xmx256m and the default collector).
+        cmd.addAll(JVM_FLAGS);
         cmd.add("-Dostinato.windowPos=" + (windowPos == null || windowPos.isBlank() ? CenterApp.DEFAULT_POS : windowPos));
         cmd.add("-cp");
         cmd.add(classPath);

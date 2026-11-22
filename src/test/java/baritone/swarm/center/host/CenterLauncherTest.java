@@ -15,6 +15,7 @@ public class CenterLauncherTest {
         List<String> cmd = CenterLauncher.command(Path.of("C:/jdk"), "C:/mods/ostinato.jar", Path.of("C:/swarm/center"), "");
         assertTrue(cmd.get(0).replace('\\', '/').startsWith("C:/jdk/bin/java"));
         assertTrue(cmd.contains("-Dostinato.windowPos=2600,40"));
+        assertTrue("small heap, serial GC", cmd.containsAll(CenterLauncher.JVM_FLAGS));
         assertTrue(cmd.contains("baritone.swarm.center.app.CenterApp"));
         assertEquals("--dir", cmd.get(cmd.indexOf("baritone.swarm.center.app.CenterApp") + 1));
     }
