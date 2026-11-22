@@ -3,11 +3,13 @@ package baritone.swarm.center.app;
 import baritone.swarm.center.CenterLayout;
 import baritone.swarm.center.feed.SwarmView;
 
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
@@ -15,6 +17,8 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +26,9 @@ import java.util.Map;
 /**
  * Ostinato: Phase 3 window, the Mission control wall (the default layout and the reference slice). One
  * {@link TileView} per bot in the feed, in name order, in as many columns as fit ({@link #TILE_WIDTH} each). Tiles
- * are kept across refreshes and only added or removed when the set of bots changes.
+ * are kept across refreshes and only added or removed when the set of bots changes. Clicking a tile opens the
+ * {@link FocusPanel} at the right; Esc or its close button returns to the full grid. The selection survives
+ * refreshes and bots joining or leaving, and clears when the selected bot vanishes.
  */
 public final class WallView implements LayoutView {
 
@@ -34,8 +40,12 @@ public final class WallView implements LayoutView {
     private final JScrollPane scroll;
     private final JLabel empty;
     private final JPanel holder;
+    private final JPanel root;
+    private final FocusPanel focus;
     private final Map<String, TileView> tiles = new LinkedHashMap<>();
     private List<String> shown = List.of();
+    private String selected;
+    private SwarmView last = SwarmView.EMPTY;
 
     public WallView(AppStyle style, Commands commands) {
         this.style = style;
@@ -56,6 +66,20 @@ public final class WallView implements LayoutView {
         scroll.setBackground(style.bg());
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         scroll.setName("wall");
+        scroll.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+                "focus-clear");
+        scroll.getActionMap().put("focus-clear", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                select(null);
+            }
+        });
+
+        focus = new FocusPanel(style, () -> select(null));
+        root = style.panel(new BorderLayout(), style.bg());
+        root.setName("wall.frame");
+        root.add(scroll, BorderLayout.CENTER);
+        root.add(focus, BorderLayout.EAST);
     }
 
     @Override
@@ -65,18 +89,38 @@ public final class WallView implements LayoutView {
 
     @Override
     public JComponent component() {
-        return scroll;
+        return root;
+    }
+
+    /** The selected bot, or null when the wall is showing the full grid. */
+    public String selected() {
+        return selected;
+    }
+
+    /** Opens the focus panel on {@code name}, or closes it when {@code name} is null. */
+    public void select(String name) {
+        selected = name == null || name.isBlank() ? null : name;
+        applySelection();
     }
 
     @Override
     public void update(SwarmView view) {
-        List<String> names = view.bots().stream().map(SwarmView.BotState::name).toList();
+        last = view == null ? SwarmView.EMPTY : view;
+        List<String> names = last.bots().stream().map(SwarmView.BotState::name).toList();
+        if (selected != null && last.bot(selected) == null) {
+            selected = null;
+        }
         if (!names.equals(shown)) {
             grid.removeAll();
             Map<String, TileView> keep = new LinkedHashMap<>();
             for (String n : names) {
                 TileView t = tiles.get(n);
-                keep.put(n, t != null ? t : new TileView(style, commands, n));
+                if (t == null) {
+                    t = new TileView(style, commands, n);
+                    String bot = n;
+                    t.onSelect(() -> select(bot));
+                }
+                keep.put(n, t);
             }
             tiles.clear();
             tiles.putAll(keep);
@@ -88,12 +132,22 @@ public final class WallView implements LayoutView {
             grid.revalidate();
             grid.repaint();
         }
-        for (SwarmView.BotState b : view.bots()) {
+        for (SwarmView.BotState b : last.bots()) {
             TileView t = tiles.get(b.name());
             if (t != null) {
-                t.update(view, b);
+                t.update(last, b);
             }
         }
+        applySelection();
+    }
+
+    private void applySelection() {
+        for (Map.Entry<String, TileView> e : tiles.entrySet()) {
+            e.getValue().setSelected(e.getKey().equals(selected));
+        }
+        focus.show(last, selected);
+        root.revalidate();
+        root.repaint();
     }
 
     /** The tile for a bot, for tests. */
