@@ -37,6 +37,7 @@ public final class CenterShell {
     private final JPanel body;
     private final List<LayoutView> views = new ArrayList<>();
     private final Map<CenterLayout, JToggleButton> toggles = new EnumMap<>(CenterLayout.class);
+    private final MapView map;
     private CenterLayout shown;
     private Consumer<CenterLayout> onPick = l -> {};
 
@@ -76,7 +77,7 @@ public final class CenterShell {
         body = style.panel(cards, style.bg());
         root.add(body, BorderLayout.CENTER);
         WallView wall = new WallView(style, commands);
-        MapView map = new MapView(style, commands);
+        map = new MapView(style, commands);
         add(wall);
         add(map);
         wall.onOpenOnMap(name -> {
@@ -133,6 +134,11 @@ public final class CenterShell {
 
     public List<LayoutView> views() {
         return List.copyOf(views);
+    }
+
+    /** Per-user prefs (control groups, and later the layout and theme) live under this directory. */
+    public void setPrefsDir(java.nio.file.Path dir) {
+        map.setPrefsDir(dir);
     }
 
     /** One refresh, on the Swing thread. Every card is updated, shown or not, so switching is instant. */
