@@ -42,6 +42,9 @@ final class MapCanvas extends javax.swing.JComponent {
 
         /** The selection or a control group changed. {@code groupsStored} means a slot was just written. */
         void selectionChanged(boolean groupsStored);
+
+        /** A finished area drag, in inclusive block coordinates. */
+        void areaDrawn(int x1, int z1, int x2, int z2);
     }
 
     final MapCamera camera = new MapCamera();
@@ -66,6 +69,12 @@ final class MapCanvas extends javax.swing.JComponent {
     private int boxButton;
     /** Set by a click on this canvas. Control-group keys and Esc apply only while this is set. */
     private boolean pointerFocus;
+    /** When set, a plain left drag draws an area instead of panning. */
+    boolean areaArmed;
+    private boolean areaDragging;
+    private boolean areaMoved;
+    private boolean areaSet;
+    private int areaX1, areaZ1, areaX2, areaZ2;
 
     MapCanvas(AppStyle style, Listener listener) {
         this.style = style;
@@ -83,9 +92,15 @@ final class MapCanvas extends javax.swing.JComponent {
                 originY = pressY = currentY = e.getY();
                 boxMoved = false;
                 boxing = false;
+                areaDragging = false;
+                areaMoved = false;
                 String hit = hit(e.getX(), e.getY());
                 boolean shift = (e.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0;
-                if (e.getButton() == MouseEvent.BUTTON3) {
+                if (e.getButton() == MouseEvent.BUTTON1 && areaArmed && !shift) {
+                    areaDragging = true;
+                    panning = false;
+                    listener.markerMenu(null);
+                } else if (e.getButton() == MouseEvent.BUTTON3) {
                     listener.markerMenu(hit);
                     boxing = true;
                     boxAdd = false;
@@ -119,6 +134,13 @@ final class MapCanvas extends javax.swing.JComponent {
             public void mouseDragged(MouseEvent e) {
                 currentX = e.getX();
                 currentY = e.getY();
+                if (areaDragging) {
+                    if (Math.abs(e.getX() - originX) + Math.abs(e.getY() - originY) >= 4) {
+                        areaMoved = true;
+                    }
+                    repaint();
+                    return;
+                }
                 if (panning) {
                     camera.panPixels(e.getX() - pressX, e.getY() - pressY);
                     pressX = e.getX();
@@ -140,6 +162,22 @@ final class MapCanvas extends javax.swing.JComponent {
             public void mouseReleased(MouseEvent e) {
                 currentX = e.getX();
                 currentY = e.getY();
+                if (areaDragging) {
+                    if (areaMoved) {
+                        commitArea();
+                    } else {
+                        String hit = hit(e.getX(), e.getY());
+                        if (hit != null) {
+                            selection.click(hit);
+                            listener.selectionChanged(false);
+                        }
+                    }
+                    areaDragging = false;
+                    areaMoved = false;
+                    panning = false;
+                    repaint();
+                    return;
+                }
                 if (boxing && boxMoved) {
                     selection.box(screenMarkers(), originX, originY, currentX, currentY, boxAdd);
                     listener.selectionChanged(false);
@@ -218,6 +256,42 @@ final class MapCanvas extends javax.swing.JComponent {
             return code - KeyEvent.VK_NUMPAD1 + 1;
         }
         return 0;
+    }
+
+    /** Inclusive XZ of the drawn area, or null. */
+    int[] areaBounds() {
+        return areaSet ? new int[]{areaX1, areaZ1, areaX2, areaZ2} : null;
+    }
+
+    private void commitArea() {
+        syncSize();
+        double[] a = camera.screenToWorld(originX, originY);
+        double[] b = camera.screenToWorld(currentX, currentY);
+        areaX1 = (int) Math.floor(Math.min(a[0], b[0]));
+        areaZ1 = (int) Math.floor(Math.min(a[1], b[1]));
+        areaX2 = (int) Math.floor(Math.max(a[0], b[0]));
+        areaZ2 = (int) Math.floor(Math.max(a[1], b[1]));
+        areaSet = true;
+        listener.areaDrawn(areaX1, areaZ1, areaX2, areaZ2);
+    }
+
+    private void drawArea(Graphics2D g) {
+        g.setStroke(new BasicStroke(2f));
+        g.setFont(getFont());
+        if (areaDragging && areaMoved) {
+            int x = Math.min(originX, currentX);
+            int y = Math.min(originY, currentY);
+            g.setColor(new Color(style.theme.accent()));
+            g.drawRect(x, y, Math.max(1, Math.abs(currentX - originX)), Math.max(1, Math.abs(currentY - originY)));
+        }
+        if (!areaSet) {
+            return;
+        }
+        MapOverlay.Rect r = MapOverlay.screenBox(camera, new int[]{areaX1, 0, areaZ1, areaX2, 0, areaZ2});
+        g.setColor(new Color(style.theme.accent()));
+        g.drawRect(r.x(), r.y(), r.w(), r.h());
+        g.setColor(new Color(style.theme.text()));
+        g.drawString((areaX2 - areaX1 + 1) + " x " + (areaZ2 - areaZ1 + 1), r.x() + 2, Math.max(12, r.y() - 2));
     }
 
     private void drawSelectionBox(Graphics2D g) {
@@ -352,6 +426,7 @@ final class MapCanvas extends javax.swing.JComponent {
         }
         drawMarkers(g);
         drawSelectionBox(g);
+        drawArea(g);
         drawMinimap(g, w, h);
         g.dispose();
         graphics.drawImage(buffer, 0, 0, null);
