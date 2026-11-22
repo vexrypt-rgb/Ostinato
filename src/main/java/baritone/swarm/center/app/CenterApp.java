@@ -358,9 +358,14 @@ public final class CenterApp {
             }
             try {
                 Files.createDirectories(shots);
-                java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(c.getWidth(), c.getHeight(),
+                // At the screen's scale (a 200% panel lays text out at 2x; a 1x print hints wider and clips it).
+                double scale = c.getGraphicsConfiguration() == null ? 1
+                        : c.getGraphicsConfiguration().getDefaultTransform().getScaleX();
+                java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                        (int) Math.ceil(c.getWidth() * scale), (int) Math.ceil(c.getHeight() * scale),
                         java.awt.image.BufferedImage.TYPE_INT_RGB);
                 java.awt.Graphics2D g = img.createGraphics();
+                g.scale(scale, scale);
                 c.printAll(g);
                 g.dispose();
                 Path out = shots.resolve(String.format("%02d-%s.png", ++shot, name));
