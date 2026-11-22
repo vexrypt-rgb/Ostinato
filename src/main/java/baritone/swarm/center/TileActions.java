@@ -1,7 +1,5 @@
 package baritone.swarm.center;
 
-import baritone.api.command.FormPlacement;
-
 import java.util.Map;
 
 /**
@@ -18,25 +16,9 @@ public final class TileActions {
 
     private TileActions() {}
 
+    /** Ostinato: the rule lives in {@link TileRoute} so the standalone window previews the same line. */
     public static String route(ButtonModel button, String bot, Map<String, String> values) {
-        String line = button.line(values);
-        if (button.form().placement() != FormPlacement.TILE) {
-            return line;
-        }
-        if (bot == null || bot.isBlank() || "local".equalsIgnoreCase(bot)) {
-            return line;
-        }
-        String command = button.command();
-        if ("goto".equals(command) || "mine".equals(command)) {
-            return "swarm send " + bot + " " + line;
-        }
-        if ("swarm".equals(command) && "cancel".equals(button.form().id())) {
-            String id = values == null ? null : values.get("id");
-            if (id == null || id.isBlank()) {
-                return "swarm send " + bot + " cancel";
-            }
-        }
-        return line;
+        return TileRoute.route(button, bot, values);
     }
 
     /**
