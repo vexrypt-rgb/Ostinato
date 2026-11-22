@@ -34,6 +34,9 @@ final class MapCanvas extends javax.swing.JComponent {
 
         /** Right-click on a marker. {@code bot} is null when the click missed. */
         void markerMenu(String bot);
+
+        /** Tooltip for whatever the pointer is over, or empty. */
+        void hover(String text);
     }
 
     final MapCamera camera = new MapCamera();
@@ -43,6 +46,10 @@ final class MapCanvas extends javax.swing.JComponent {
     private char dim = 'o';
     private boolean placed;
     private BufferedImage buffer;
+    boolean showLeases = true;
+    boolean showObservations = true;
+    boolean showPaths = true;
+    boolean showTerrain = true;
     private int pressX, pressY;
     private boolean panning;
 
@@ -91,6 +98,7 @@ final class MapCanvas extends javax.swing.JComponent {
             @Override
             public void mouseMoved(MouseEvent e) {
                 reportCursor(e.getX(), e.getY());
+                listener.hover(tipAt(e.getX(), e.getY()));
             }
         };
         addMouseListener(mouse);
@@ -229,7 +237,15 @@ final class MapCanvas extends javax.swing.JComponent {
         Graphics2D g = buffer.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         drawGrid(g, w, h);
-        drawPaths(g);
+        if (showLeases) {
+            drawLeases(g, w, h);
+        }
+        if (showPaths) {
+            drawPaths(g);
+        }
+        if (showObservations) {
+            drawObservations(g);
+        }
         drawMarkers(g);
         drawMinimap(g, w, h);
         g.dispose();
@@ -248,7 +264,7 @@ final class MapCanvas extends javax.swing.JComponent {
                 slices.add(t);
             }
         }
-        if (slices.isEmpty()) {
+        if (!showTerrain || slices.isEmpty()) {
             return;
         }
         int zoom = camera.zoom();
@@ -436,5 +452,117 @@ final class MapCanvas extends javax.swing.JComponent {
             g.setColor(new Color(BotColors.of(bot.name())));
             g.fillRect(sx - 2, sy - 2, 4, 4);
         }
+    }
+
+    private void drawLeases(Graphics2D g, int w, int h) {
+        g.setFont(getFont());
+        for (MapOverlay.LeaseMark lease : MapOverlay.leases(view.coordinator(), dim)) {
+            if (lease.box() == null) {
+                continue;
+            }
+            MapOverlay.Rect r = MapOverlay.screenBox(camera, lease.box());
+            int rgb = leaseRgb(lease.type());
+            Color color = lease.live() ? new Color(rgb)
+                    : new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 110);
+            g.setColor(color);
+            if ("vein".equals(lease.type())) {
+                g.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{6f, 4f}, 0f));
+                g.drawRect(r.x(), r.y(), r.w(), r.h());
+            } else if ("chest".equals(lease.type())) {
+                g.setStroke(new BasicStroke(2f));
+                int cx = r.x() + r.w() / 2;
+                int cy = r.y() + r.h() / 2;
+                g.fillRect(cx - 4, cy - 4, 8, 8);
+            } else {
+                g.setStroke(new BasicStroke(2f));
+                g.drawRect(r.x(), r.y(), r.w(), r.h());
+            }
+            int[] at = MapOverlay.labelAt(r, w, h, 8, 12);
+            g.setColor(new Color(style.theme.text()));
+            g.drawString(lease.label(), at[0], at[1]);
+        }
+    }
+
+    private void drawObservations(Graphics2D g) {
+        g.setStroke(new BasicStroke(2f));
+        for (MapOverlay.ObsMark obs : MapOverlay.observations(view.coordinator(), dim)) {
+            if (obs.box() == null) {
+                continue;
+            }
+            MapOverlay.Rect r = MapOverlay.screenBox(camera, obs.box());
+            int sx = r.x() + r.w() / 2;
+            int sy = r.y() + r.h() / 2;
+            g.setColor(new Color(style.theme.accent()));
+            drawObsShape(g, obs.kind(), obs.state(), obs.suspect(), sx, sy);
+        }
+    }
+
+    /** Kind picks the shape; state picks filled, hollow, cross or a suspect ring. */
+    static void drawObsShape(Graphics2D g, String kind, String state, boolean suspect, int sx, int sy) {
+        boolean hollow = "stale".equals(state) || "gone".equals(state);
+        int r = 6;
+        switch (kind == null ? "" : kind) {
+            case "chest" -> {
+                if (hollow) g.drawRect(sx - r, sy - r, r * 2, r * 2);
+                else g.fillRect(sx - r, sy - r, r * 2, r * 2);
+            }
+            case "block" -> {
+                if (hollow) g.drawOval(sx - r, sy - r, r * 2, r * 2);
+                else g.fillOval(sx - r, sy - r, r * 2, r * 2);
+            }
+            case "structure" -> g.drawRect(sx - r - 2, sy - r, (r + 2) * 2, r * 2);
+            case "waypoint" -> {
+                g.drawLine(sx - r, sy, sx + r, sy);
+                g.drawLine(sx, sy - r, sx, sy + r);
+            }
+            default -> { // vein, and anything else: a diamond
+                int[] xs = {sx, sx - r, sx, sx + r};
+                int[] ys = {sy - r, sy, sy + r, sy};
+                if (hollow) g.drawPolygon(xs, ys, 4);
+                else g.fillPolygon(xs, ys, 4);
+            }
+        }
+        if ("gone".equals(state)) {
+            g.drawLine(sx - r, sy - r, sx + r, sy + r);
+            g.drawLine(sx - r, sy + r, sx + r, sy - r);
+        }
+        if (suspect) {
+            g.drawOval(sx - r - 3, sy - r - 3, (r + 3) * 2, (r + 3) * 2);
+        }
+    }
+
+    private int leaseRgb(String type) {
+        return switch (type) {
+            case "vein" -> style.theme.warn();
+            case "chest" -> style.theme.ok();
+            default -> style.theme.accent();
+        };
+    }
+
+    private String tipAt(int sx, int sy) {
+        if (showLeases) {
+            for (MapOverlay.LeaseMark lease : MapOverlay.leases(view.coordinator(), dim)) {
+                if (lease.box() == null) {
+                    continue;
+                }
+                if (MapOverlay.screenBox(camera, lease.box()).contains(sx, sy)) {
+                    return lease.tip();
+                }
+            }
+        }
+        if (showObservations) {
+            for (MapOverlay.ObsMark obs : MapOverlay.observations(view.coordinator(), dim)) {
+                if (obs.box() == null) {
+                    continue;
+                }
+                MapOverlay.Rect r = MapOverlay.screenBox(camera, obs.box());
+                int cx = r.x() + r.w() / 2;
+                int cy = r.y() + r.h() / 2;
+                if (Math.abs(sx - cx) <= 8 && Math.abs(sy - cy) <= 8) {
+                    return obs.tip();
+                }
+            }
+        }
+        return "";
     }
 }

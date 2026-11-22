@@ -12,6 +12,7 @@ import javax.swing.JToggleButton;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.util.List;
 
 /**
  * Ostinato: Phase 3 window, the War room map. Top-down XZ of the selected dimension, terrain from the bots' feeds,
@@ -29,6 +30,8 @@ public final class MapView implements LayoutView {
     private final MapCanvas canvas;
     private final JLabel cursor;
     private final JLabel bots;
+    private final JLabel hover;
+    private final JLabel keys;
     private final JPanel menu;
     private final JToggleButton overworld, nether, end;
 
@@ -47,6 +50,11 @@ public final class MapView implements LayoutView {
             public void markerMenu(String bot) {
                 showMenu(bot);
             }
+
+            @Override
+            public void hover(String text) {
+                hover.setText(text == null || text.isEmpty() ? " " : text);
+            }
         });
 
         JPanel header = style.panel(new BorderLayout(), style.surface());
@@ -57,6 +65,10 @@ public final class MapView implements LayoutView {
         nether = dimButton(group, dims, "Nether", 'n');
         end = dimButton(group, dims, "End", 'e');
         overworld.setSelected(true);
+        dims.add(layerToggle(dims, "Leases", "map:toggle:leases", on -> canvas.showLeases = on));
+        dims.add(layerToggle(dims, "Observations", "map:toggle:observations", on -> canvas.showObservations = on));
+        dims.add(layerToggle(dims, "Paths", "map:toggle:paths", on -> canvas.showPaths = on));
+        dims.add(layerToggle(dims, "Terrain", "map:toggle:terrain", on -> canvas.showTerrain = on));
         header.add(dims, BorderLayout.WEST);
         JPanel info = style.panel(new FlowLayout(FlowLayout.RIGHT, 12, 0), null);
         bots = style.label("0 bots", style.muted(), Font.PLAIN, 12f);
@@ -71,8 +83,34 @@ public final class MapView implements LayoutView {
         menu = style.panel(new FlowLayout(FlowLayout.LEFT, 4, 0), style.surface());
         menu.setName("map:menu");
         menu.setVisible(false);
-        root.add(menu, BorderLayout.SOUTH);
+        JPanel south = style.panel(new BorderLayout(), style.surface());
+        JLabel legend = style.label("region solid edge · vein dashed · chest square · key listed"
+                + " · vein diamond · chest square · block circle · structure frame · waypoint plus"
+                + " · confirmed filled · stale hollow · gone cross · suspect ring", style.muted(), Font.PLAIN, 11f);
+        legend.setName("map:legend");
+        keys = style.label("no key leases", style.muted(), Font.PLAIN, 11f);
+        keys.setName("map:keys");
+        hover = style.label(" ", style.text(), Font.PLAIN, 11f);
+        hover.setName("map:hover");
+        JPanel lines = style.panel(new java.awt.GridLayout(3, 1), null);
+        lines.add(legend);
+        lines.add(keys);
+        lines.add(hover);
+        south.add(lines, BorderLayout.CENTER);
+        south.add(menu, BorderLayout.SOUTH);
+        root.add(south, BorderLayout.SOUTH);
         root.add(canvas, BorderLayout.CENTER);
+    }
+
+    private JToggleButton layerToggle(JPanel row, String label, String name, java.util.function.Consumer<Boolean> set) {
+        JToggleButton b = style.toggle(label);
+        b.setName(name);
+        b.setSelected(true);
+        b.addActionListener(e -> {
+            set.accept(b.isSelected());
+            canvas.repaint();
+        });
+        return b;
     }
 
     private JToggleButton dimButton(ButtonGroup group, JPanel row, String label, char dim) {
@@ -142,6 +180,8 @@ public final class MapView implements LayoutView {
             }
         }
         bots.setText(n + (n == 1 ? " bot" : " bots"));
+        List<String> keyLines = MapOverlay.keys(view == null ? null : view.coordinator());
+        keys.setText(keyLines.isEmpty() ? "no key leases" : String.join(" | ", keyLines));
         if (canvas.dim() == 'o' && !overworld.isSelected()) {
             overworld.setSelected(true);
         } else if (canvas.dim() == 'n' && !nether.isSelected()) {
