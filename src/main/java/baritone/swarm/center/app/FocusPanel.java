@@ -9,10 +9,13 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.Scrollable;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Rectangle;
 
 /**
  * Ostinato: Phase 3 window, the wall's focus panel. One bot, opened without leaving the wall. The grid stays; this
@@ -28,7 +31,7 @@ final class FocusPanel extends JPanel {
 
     private final AppStyle style;
     private final JLabel title;
-    private final JLabel position, dimension, path, executions, leases, inventory, perf, link, age, gather, alerts;
+    private final JTextArea position, dimension, path, executions, leases, inventory, perf, link, age, gather, alerts;
     private final Runnable onClose;
 
     FocusPanel(AppStyle style, Runnable onClose) {
@@ -51,7 +54,9 @@ final class FocusPanel extends JPanel {
         head.add(close, BorderLayout.EAST);
         add(head, BorderLayout.NORTH);
 
-        JPanel body = style.panel(null, style.surface());
+        JPanel body = new Body();
+        body.setBackground(style.surface());
+        body.setOpaque(true);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
         position = row(body, "Position", "focus:position");
@@ -76,10 +81,24 @@ final class FocusPanel extends JPanel {
         setVisible(false);
     }
 
-    private JLabel row(JPanel body, String caption, String name) {
+    private JTextArea row(JPanel body, String caption, String name) {
         JLabel cap = style.label(caption, style.faint(), Font.PLAIN, 10f);
         cap.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel value = style.label(" ", style.text(), Font.PLAIN, 11f);
+        // Ostinato: long values (path, perf, inventory) wrap inside the narrow panel instead of being cut off.
+        JTextArea value = new JTextArea(" ") {
+            @Override
+            public Dimension getMaximumSize() {
+                return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+            }
+        };
+        value.setFont(style.label(" ", style.text(), Font.PLAIN, 11f).getFont());
+        value.setForeground(style.text());
+        value.setOpaque(false);
+        value.setEditable(false);
+        value.setFocusable(false);
+        value.setLineWrap(true);
+        value.setWrapStyleWord(true);
+        value.setBorder(BorderFactory.createEmptyBorder());
         value.setName(name);
         value.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(cap);
@@ -124,5 +143,14 @@ final class FocusPanel extends JPanel {
         alerts.setText(TileDetails.alerts(view.alertsFor(b.name())));
         setVisible(true);
         revalidate();
+    }
+
+    /** Follows the viewport's width, so the values wrap rather than scroll sideways. */
+    private static final class Body extends JPanel implements Scrollable {
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(Rectangle r, int o, int d) { return 16; }
+        @Override public int getScrollableBlockIncrement(Rectangle r, int o, int d) { return Math.max(16, r.height - 16); }
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
     }
 }

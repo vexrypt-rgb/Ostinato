@@ -98,7 +98,8 @@ public final class CenterApp {
             JFrame frame = frame(shell, pos);
             worker.scheduleWithFixedDelay(() -> {
                 SwarmView view = source.snapshot();
-                SwingUtilities.invokeLater(() -> shell.update(view));
+                CenterShell.Prefs read = CenterShell.readPrefs(prefs);
+                SwingUtilities.invokeLater(() -> shell.update(view, read));
                 logger.tiles(view);
             }, 0, REFRESH_MS, TimeUnit.MILLISECONDS);
             for (String auto : a.getOrDefault("auto", List.of())) {

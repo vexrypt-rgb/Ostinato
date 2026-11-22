@@ -109,6 +109,9 @@ public final class UiHarness {
     public String text(String name) {
         Component c = find(name);
         assertNotNull("no component " + name, c);
+        if (c instanceof javax.swing.text.JTextComponent area) {
+            return area.getText();
+        }
         return c instanceof JLabel l ? l.getText() : ((AbstractButton) c).getText();
     }
 
@@ -146,10 +149,25 @@ public final class UiHarness {
     }
 
     static void layout(Component c) {
+        // Ostinato: off the Swing thread, setText defers its revalidate, so layouts keep stale cached sizes.
+        invalidateAll(c);
+        doLayoutAll(c);
+    }
+
+    private static void invalidateAll(Component c) {
+        c.invalidate();
+        if (c instanceof Container k) {
+            for (Component child : k.getComponents()) {
+                invalidateAll(child);
+            }
+        }
+    }
+
+    private static void doLayoutAll(Component c) {
         c.doLayout();
         if (c instanceof Container k) {
             for (Component child : k.getComponents()) {
-                layout(child);
+                doLayoutAll(child);
             }
         }
     }

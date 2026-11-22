@@ -40,14 +40,26 @@ public final class LayoutStore {
             if (file == null || !Files.isRegularFile(file)) {
                 return CenterLayout.WALL;
             }
-            for (String raw : Files.readAllLines(file)) {
+            return parse(Files.readString(file));
+        } catch (RuntimeException | IOException ignored) {
+            return CenterLayout.WALL;
+        }
+    }
+
+    /** The layout in a file's text: the first line that is not blank or a comment. Anything else is the wall. */
+    public static CenterLayout parse(String text) {
+        if (text == null) {
+            return CenterLayout.WALL;
+        }
+        try {
+            for (String raw : text.split("\\R")) {
                 String line = raw.trim();
                 if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
                 return CenterLayout.parse(line);
             }
-        } catch (RuntimeException | IOException ignored) {
+        } catch (RuntimeException ignored) {
             return CenterLayout.WALL;
         }
         return CenterLayout.WALL;

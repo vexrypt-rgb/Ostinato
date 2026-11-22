@@ -31,6 +31,22 @@ public class LayoutMemoryTest {
         assertEquals(CenterLayout.WALL, LayoutStore.load(file));
     }
 
+    @Test public void prefsAreReadAsTextOffTheSwingThread() throws Exception {
+        Path dir = temporary.getRoot().toPath();
+        assertEquals(CenterShell.Prefs.NONE, CenterShell.readPrefs(dir));
+        assertEquals(CenterShell.Prefs.NONE, CenterShell.readPrefs(null));
+        LayoutStore.save(LayoutStore.sharedFile(dir), CenterLayout.MAP);
+        baritone.swarm.center.ThemeChoice.save(baritone.swarm.center.ThemeChoice.file(dir), "light");
+        CenterShell.Prefs p = CenterShell.readPrefs(dir);
+        assertEquals(CenterLayout.MAP, LayoutStore.parse(p.layout()));
+        assertEquals("light", baritone.swarm.center.ThemeChoice.parse(p.theme()));
+        assertEquals(CenterLayout.WALL, LayoutStore.parse(null));
+        assertEquals(CenterLayout.WALL, LayoutStore.parse("# only a comment\r\n\r\n"));
+        assertEquals(CenterLayout.MAP, LayoutStore.parse("# c\r\nmap\r\n"));
+        assertEquals("dark", baritone.swarm.center.ThemeChoice.parse("purple\n"));
+        assertEquals("high-contrast", baritone.swarm.center.ThemeChoice.parse("# c\nHigh Contrast\n"));
+    }
+
     @Test public void theSharedFileIsPerUserUnderPrefs() {
         Path dir = temporary.getRoot().toPath();
         Path shared = LayoutStore.sharedFile(dir);

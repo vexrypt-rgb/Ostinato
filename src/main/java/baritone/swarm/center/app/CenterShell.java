@@ -200,9 +200,35 @@ public final class CenterShell {
     /** Per-user prefs (control groups, layout, and theme) live under this directory. */
     public void setPrefsDir(Path dir) {
         prefsDir = dir;
-        followTheme();
+        Prefs p = readPrefs(dir);
+        followTheme(p.theme());
         map.setPrefsDir(dir);
-        followLayout();
+        followLayout(p.layout());
+    }
+
+    public Path prefsDir() {
+        return prefsDir;
+    }
+
+    /** The shared layout and theme files as text; null where a file is missing or unreadable. */
+    public record Prefs(String layout, String theme) {
+        public static final Prefs NONE = new Prefs(null, null);
+    }
+
+    /** Reads both prefs files. Call it off the Swing thread (the app's worker does, next to the feed snapshot). */
+    public static Prefs readPrefs(Path dir) {
+        if (dir == null) {
+            return Prefs.NONE;
+        }
+        return new Prefs(readText(LayoutStore.sharedFile(dir)), readText(ThemeChoice.file(dir)));
+    }
+
+    private static String readText(Path file) {
+        try {
+            return Files.isRegularFile(file) ? Files.readString(file) : null;
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     /** Header toggle and a tile opened on the map: switch now, remember it, and tell the host. */
@@ -330,50 +356,24 @@ public final class CenterShell {
     }
 
     /** A missing file keeps the current card. Garbage in the file is the wall. */
-    private void followLayout() {
-        if (prefsDir == null) {
-            return;
-        }
-        Path file = LayoutStore.sharedFile(prefsDir);
-        String text;
-        try {
-            if (!Files.isRegularFile(file)) {
-                return;
-            }
-            text = Files.readString(file);
-        } catch (IOException e) {
-            return;
-        }
-        if (text.equals(layoutSeen)) {
+    private void followLayout(String text) {
+        if (prefsDir == null || text == null || text.equals(layoutSeen)) {
             return;
         }
         layoutSeen = text;
-        CenterLayout loaded = LayoutStore.load(file);
+        CenterLayout loaded = LayoutStore.parse(text);
         if (loaded != shown) {
             show(loaded);
         }
     }
 
     /** A missing file keeps the current theme. An unknown name is Default dark. */
-    private void followTheme() {
-        if (applying || prefsDir == null) {
-            return;
-        }
-        Path file = ThemeChoice.file(prefsDir);
-        String text;
-        try {
-            if (!Files.isRegularFile(file)) {
-                return;
-            }
-            text = Files.readString(file);
-        } catch (IOException e) {
-            return;
-        }
-        if (text.equals(themeSeen)) {
+    private void followTheme(String text) {
+        if (applying || prefsDir == null || text == null || text.equals(themeSeen)) {
             return;
         }
         themeSeen = text;
-        String name = ThemeChoice.load(file);
+        String name = ThemeChoice.parse(text);
         if (name.equals(themeName)) {
             return;
         }
@@ -418,9 +418,16 @@ public final class CenterShell {
 
     /** One refresh, on the Swing thread. Every card is updated, shown or not, so switching is instant. */
     public void update(SwarmView view) {
+        update(view, readPrefs(prefsDir));
+    }
+
+    /** One refresh with prefs already read off the Swing thread ({@link #readPrefs}). */
+    public void update(SwarmView view, Prefs prefs) {
         last = view == null ? SwarmView.EMPTY : view;
-        followLayout();
-        followTheme();
+        view = last;
+        Prefs p = prefs == null ? Prefs.NONE : prefs;
+        followLayout(p.layout());
+        followTheme(p.theme());
         server.setText("Server " + view.server());
         String h = view.hostBot();
         host.setText(h == null ? TileStatus.Level.WARN.glyph + " no command host" : "Host " + h);
