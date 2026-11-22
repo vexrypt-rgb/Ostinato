@@ -115,6 +115,36 @@ final class AreaBar {
         refresh();
     }
 
+    /** Keep a drawn box without resetting the Y fields the user typed. */
+    void keepBox(int x1, int z1, int x2, int z2) {
+        ax1 = Math.min(x1, x2);
+        ax2 = Math.max(x1, x2);
+        az1 = Math.min(z1, z2);
+        az2 = Math.max(z1, z2);
+        haveArea = true;
+        size.setText((ax2 - ax1 + 1) + " x " + (az2 - az1 + 1));
+    }
+
+    void arm(boolean on) {
+        tool.setSelected(on);
+    }
+
+    void mine(boolean on) {
+        if (on) {
+            mineMode.setSelected(true);
+        } else {
+            gotoMode.setSelected(true);
+        }
+    }
+
+    boolean mineSelected() {
+        return mineMode.isSelected();
+    }
+
+    void refreshNow() {
+        refresh();
+    }
+
     void sync(SwarmView view, List<String> selected, char dim) {
         this.view = view == null ? SwarmView.EMPTY : view;
         this.selected = selected == null ? List.of() : List.copyOf(selected);

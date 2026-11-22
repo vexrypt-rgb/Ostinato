@@ -70,6 +70,69 @@ public record CenterTheme(
             0x56B4E9, 0xF0E442, 0xFF9A4D
     );
 
+    /** Display label for a built-in name. {@code ThemeStore.label} uses this. */
+    public static String label(String name) {
+        return switch (name == null ? "" : name) {
+            case "dark" -> "Default dark";
+            case "light" -> "Light";
+            case "high-contrast" -> "High contrast";
+            case "colorblind" -> "Colorblind safe";
+            default -> name == null ? "" : name;
+        };
+    }
+
+    /** A built-in theme. An unknown name is Default dark. */
+    public static CenterTheme builtIn(String name) {
+        return switch (name == null ? "" : name) {
+            case "light" -> LIGHT;
+            case "high-contrast" -> HIGH_CONTRAST;
+            case "colorblind" -> COLORBLIND_SAFE;
+            default -> DEFAULT_DARK;
+        };
+    }
+
+    /** Status tokens. Idle is the muted token; the others are the status tokens already on the theme. */
+    public int statusOk() { return ok; }
+    public int statusIdle() { return muted; }
+    public int statusWarn() { return warn; }
+    public int statusBad() { return danger; }
+
+    /**
+     * Twelve identity colors. The same name always lands on the same slot. The colorblind-safe theme uses
+     * {@link #COLORBLIND_IDENTITY}; every other theme uses {@link #IDENTITY}. Markers use this palette.
+     */
+    public static final int[] IDENTITY = {
+            0x5B8DEF, 0xE07A3D, 0x3DDC8A, 0xD6C04A, 0xC46BD0, 0x4ECDC4,
+            0xE06B8A, 0x8A7AE0, 0x7DDE4A, 0xE0A05A, 0x5AA0E0, 0xE07070
+    };
+
+    /**
+     * Twelve colors that stay at least ΔE 10 apart under simulated deuteranopia and protanopia.
+     * Light enough to read on the dark map.
+     */
+    public static final int[] COLORBLIND_IDENTITY = {
+            0xC75A5A, 0xA200F2, 0xF2F200, 0x6DC6F2, 0x9E9E00, 0x6DF2C6,
+            0x9E4781, 0x6DF283, 0x905AC7, 0x6DF2F2, 0x9E4F00, 0xF26DB0
+    };
+
+    public int[] identityPalette() {
+        return equals(COLORBLIND_SAFE) ? COLORBLIND_IDENTITY : IDENTITY;
+    }
+
+    public int identity(String name) {
+        return identityAt(identityPalette(), name);
+    }
+
+    public static int identityAt(int[] palette, String name) {
+        int[] colors = palette == null || palette.length == 0 ? IDENTITY : palette;
+        int h = 0;
+        String n = name == null ? "" : name;
+        for (int i = 0; i < n.length(); i++) {
+            h = 31 * h + n.charAt(i);
+        }
+        return colors[Math.floorMod(h, colors.length)];
+    }
+
     public int token(String name) {
         return switch (name) {
             case "background" -> background;
@@ -118,6 +181,12 @@ public record CenterTheme(
         need(problems, "warn", warn, "surface", surface, 4.5);
         need(problems, "danger", danger, "surface", surface, 4.5);
         need(problems, "accent", accent, "surface", surface, 4.5);
+        for (int i = 0; i < grounds.length; i++) {
+            need(problems, "status-ok", statusOk(), groundNames[i], grounds[i], 4.5);
+            need(problems, "status-idle", statusIdle(), groundNames[i], grounds[i], 4.5);
+            need(problems, "status-warn", statusWarn(), groundNames[i], grounds[i], 4.5);
+            need(problems, "status-bad", statusBad(), groundNames[i], grounds[i], 4.5);
+        }
         return problems;
     }
 
@@ -144,5 +213,63 @@ public record CenterTheme(
     private static double channel(int value) {
         double c = value / 255.0;
         return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    /** Machado, Oliveira and Fernandes 2009, full severity, on linear RGB. */
+    public static final double[][] PROTAN = {
+            {0.152286, 1.052583, -0.204868},
+            {0.114503, 0.786281, 0.099216},
+            {-0.003882, -0.048116, 1.051998}
+    };
+    public static final double[][] DEUTAN = {
+            {0.367322, 0.860646, -0.227968},
+            {0.280085, 0.672501, 0.047413},
+            {-0.011820, 0.042940, 0.968881}
+    };
+
+    /** CIE76 ΔE between two colors after the given color-vision matrix. */
+    public static double deltaE(int a, int b, double[][] matrix) {
+        double[] x = lab(simulate(a, matrix));
+        double[] y = lab(simulate(b, matrix));
+        double dl = x[0] - y[0];
+        double da = x[1] - y[1];
+        double db = x[2] - y[2];
+        return Math.sqrt(dl * dl + da * da + db * db);
+    }
+
+    private static double[] simulate(int rgb, double[][] m) {
+        double r = linear((rgb >> 16) & 0xFF);
+        double g = linear((rgb >> 8) & 0xFF);
+        double b = linear(rgb & 0xFF);
+        double[] out = new double[3];
+        for (int i = 0; i < 3; i++) {
+            out[i] = Math.max(0, Math.min(1, m[i][0] * r + m[i][1] * g + m[i][2] * b));
+        }
+        return out;
+    }
+
+    private static double linear(int value) {
+        double c = value / 255.0;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    private static double[] lab(double[] linearRgb) {
+        double r = linearRgb[0];
+        double g = linearRgb[1];
+        double b = linearRgb[2];
+        double x = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b;
+        double y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b;
+        double z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b;
+        double xn = 0.95047;
+        double yn = 1.0;
+        double zn = 1.08883;
+        double l = 116 * labf(y / yn) - 16;
+        double aa = 500 * (labf(x / xn) - labf(y / yn));
+        double bb = 200 * (labf(y / yn) - labf(z / zn));
+        return new double[]{l, aa, bb};
+    }
+
+    private static double labf(double t) {
+        return t > 0.008856451679035631 ? Math.cbrt(t) : t / 0.12841854934601665 + 0.13793103448275862;
     }
 }

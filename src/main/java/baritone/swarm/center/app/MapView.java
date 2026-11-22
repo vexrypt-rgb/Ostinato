@@ -210,6 +210,52 @@ public final class MapView implements LayoutView {
         return canvas.selection.names();
     }
 
+    /** Replace the selection and refresh the inspector. */
+    public void replaceSelection(List<String> names) {
+        canvas.selection.replace(names);
+        inspector.sync(last, canvas.selection.names());
+        areaBar.sync(last, canvas.selection.names(), canvas.dim());
+    }
+
+    /** Zoom and center the user left the camera at, and keep the next refresh from framing a bot. */
+    public void placeCamera(int zoom, double x, double z) {
+        canvas.camera.setZoom(zoom);
+        canvas.camera.setCenter(x, z);
+        canvas.markPlaced();
+    }
+
+    /** Put a theme rebuild back where the map was: camera, dimension, selection, groups, area. */
+    public void restoreMap(int zoom, double x, double z, char dim, List<String> selected, String groups,
+                           int[] area, boolean armed, boolean mine) {
+        canvas.camera.setZoom(zoom);
+        canvas.camera.setCenter(x, z);
+        canvas.markPlaced();
+        canvas.setDim(dim);
+        canvas.selection.replace(selected);
+        if (groups != null) {
+            canvas.groups.parse(groups);
+        }
+        if (area != null && area.length == 4) {
+            canvas.setAreaWorld(area[0], area[1], area[2], area[3]);
+            areaBar.keepBox(area[0], area[1], area[2], area[3]);
+        }
+        canvas.areaArmed = armed;
+        areaBar.arm(armed);
+        areaBar.mine(mine);
+    }
+
+    public boolean areaArmed() {
+        return canvas.areaArmed;
+    }
+
+    public boolean areaMine() {
+        return areaBar.mineSelected();
+    }
+
+    public void refreshArea() {
+        areaBar.refreshNow();
+    }
+
     /** Inclusive XZ of the drawn area, or null when none has been dragged. */
     public int[] area() {
         return canvas.areaBounds();

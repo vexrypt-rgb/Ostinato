@@ -13,7 +13,9 @@ import baritone.api.command.exception.CommandInvalidStateException;
 import baritone.api.command.exception.CommandInvalidTypeException;
 import baritone.swarm.center.CenterRuntime;
 import baritone.swarm.center.CenterTheme;
+import baritone.swarm.center.ThemeChoice;
 import baritone.swarm.center.ThemeStore;
+import baritone.swarm.center.host.CenterFeedService;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -73,12 +75,19 @@ public class ThemeCommand extends Command {
         CenterTheme theme = ThemeStore.theme(dir, name);
         try {
             ThemeStore.save(dir, name);
+            if (Baritone.settings().swarmCenterFeed.value) {
+                ThemeChoice.save(ThemeChoice.file(centerDir()), name);
+            }
         } catch (IOException e) {
             throw new CommandInvalidStateException("theme: could not save the choice");
         }
         CenterRuntime.theme(name, theme);
         List<String> problems = theme.aaProblems();
         logDirect("theme: " + name + (problems.isEmpty() ? "" : " (below WCAG AA: " + String.join(", ", problems) + ")"));
+    }
+
+    private Path centerDir() {
+        return CenterFeedService.dir(Baritone.settings(), net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath());
     }
 
     private Path directory() {

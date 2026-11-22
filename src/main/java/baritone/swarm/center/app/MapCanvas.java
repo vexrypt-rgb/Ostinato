@@ -313,6 +313,18 @@ final class MapCanvas extends javax.swing.JComponent {
         repaint();
     }
 
+    void markPlaced() {
+        placed = true;
+    }
+
+    void setAreaWorld(int x1, int z1, int x2, int z2) {
+        areaSet = true;
+        areaX1 = Math.min(x1, x2);
+        areaX2 = Math.max(x1, x2);
+        areaZ1 = Math.min(z1, z2);
+        areaZ2 = Math.max(z1, z2);
+    }
+
     void setDim(char dim) {
         this.dim = dim;
         repaint();
@@ -515,7 +527,7 @@ final class MapCanvas extends javax.swing.JComponent {
                 continue;
             }
             BotFeed.Route path = b.feed().path();
-            g.setColor(new Color(BotColors.of(b.name())));
+            g.setColor(new Color(style.theme.identity(b.name())));
             double sx = camera.screenX(p.x());
             double sy = camera.screenZ(p.z());
             for (int[] node : path.nodes()) {
@@ -547,7 +559,7 @@ final class MapCanvas extends javax.swing.JComponent {
             }
             int sx = (int) Math.round(camera.screenX(p.x()));
             int sy = (int) Math.round(camera.screenZ(p.z()));
-            Color color = new Color(BotColors.of(b.name()));
+            Color color = new Color(style.theme.identity(b.name()));
             TileStatus status = Alerts.status(b, view.alertsFor(b.name()));
             g.setColor(color);
             g.setStroke(new BasicStroke(2f));
@@ -634,7 +646,7 @@ final class MapCanvas extends javax.swing.JComponent {
             }
             int sx = mx + 6 + (int) Math.round((p.x() - minX) * scale);
             int sy = my + 6 + (int) Math.round((p.z() - minZ) * scale);
-            g.setColor(new Color(BotColors.of(bot.name())));
+            g.setColor(new Color(style.theme.identity(bot.name())));
             g.fillRect(sx - 2, sy - 2, 4, 4);
         }
     }
