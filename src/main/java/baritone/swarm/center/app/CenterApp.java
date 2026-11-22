@@ -351,6 +351,8 @@ public final class CenterApp {
                 return;
             }
             Component c = shell.component();
+            // Ostinato: run the layout that setText and a theme rebuild only queued, so the PNG is what the screen shows.
+            c.validate();
             if (c.getWidth() <= 0 || c.getHeight() <= 0) {
                 return;
             }
