@@ -3,7 +3,7 @@ package baritone.swarm.center.app;
 import baritone.swarm.center.CenterLayout;
 import baritone.swarm.center.CenterTheme;
 import baritone.swarm.center.app.fake.FakeCommandPort;
-import baritone.swarm.center.app.fake.FakeSwarm;
+import baritone.swarm.center.app.fake.DemoSwarm;
 import baritone.swarm.center.channel.CenterClient;
 import baritone.swarm.center.channel.CommandPort;
 import baritone.swarm.center.feed.FeedReader;
@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
  * <pre>
  *   java -cp &lt;jar&gt; baritone.swarm.center.app.CenterApp --dir &lt;swarmCenterDir&gt;
  *        [--theme dark|light|high-contrast|colorblind] [--layout wall|map] [--pos x,y] [--log file]
- *        [--fake N]                               fake swarm of N bots, no files, no host
+ *        [--fake N]                               moving demo swarm of N bots (DemoSwarm), no files, no host
  *        [--auto "secs|bot|formId|arg=value,..."] press a tile button programmatically (live checks; no mouse)
  * </pre>
  *
@@ -67,9 +67,9 @@ public final class CenterApp {
         SwarmSource source;
         CommandPort port;
         if (first(a, "fake") != null) {
-            FakeSwarm fake = FakeSwarm.many(Integer.parseInt(first(a, "fake")), System::currentTimeMillis);
-            source = fake;
-            port = new FakeCommandPort(fake.hostName());
+            DemoSwarm demo = new DemoSwarm(Math.max(1, Integer.parseInt(first(a, "fake"))), System::currentTimeMillis);
+            source = demo;
+            port = new FakeCommandPort(demo.swarm().hostName());
         } else {
             Path dir = Path.of(first(a, "dir"));
             source = new FeedReader(dir, System::currentTimeMillis);
