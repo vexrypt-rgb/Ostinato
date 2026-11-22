@@ -2,9 +2,11 @@ package baritone.swarm.center.app;
 
 import baritone.swarm.center.CenterLayout;
 import baritone.swarm.center.CenterTheme;
+import baritone.swarm.center.app.fake.DemoSwarm;
 import baritone.swarm.center.app.fake.FakeCommandPort;
 import baritone.swarm.center.app.fake.FakeSwarm;
 import baritone.swarm.center.channel.CenterRequest;
+import baritone.swarm.center.feed.SwarmSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
@@ -44,13 +46,20 @@ public final class UiHarness {
     /** The clock of the fake swarm and of the commands. */
     public final AtomicLong now;
     public final FakeSwarm swarm;
+    /** What {@link #refresh} reads: the fake swarm itself, or a {@link DemoSwarm} that moves it. */
+    public final SwarmSource source;
     public final FakeCommandPort port;
     public final Commands commands;
     public final CenterShell shell;
 
     public UiHarness(AtomicLong now, FakeSwarm swarm, CenterTheme theme, CenterLayout layout) {
+        this(now, swarm, swarm, theme, layout);
+    }
+
+    public UiHarness(AtomicLong now, FakeSwarm swarm, SwarmSource source, CenterTheme theme, CenterLayout layout) {
         this.now = now;
         this.swarm = swarm;
+        this.source = source;
         this.port = new FakeCommandPort(swarm.hostName());
         this.commands = new Commands(port, Runnable::run, Runnable::run, now::get);
         this.shell = new CenterShell(new AppStyle(theme), commands, layout);
@@ -68,6 +77,13 @@ public final class UiHarness {
         return new UiHarness(now, FakeSwarm.many(n, now::get), theme, CenterLayout.WALL);
     }
 
+    /** The moving demo swarm ({@link DemoSwarm}: paths, leases, observations, terrain) in this theme and layout. */
+    public static UiHarness demo(int n, CenterTheme theme, CenterLayout layout) {
+        AtomicLong now = new AtomicLong(1_000_000);
+        DemoSwarm d = new DemoSwarm(n, now::get);
+        return new UiHarness(now, d.swarm(), d, theme, layout);
+    }
+
     public UiHarness advance(long ms) {
         now.addAndGet(ms);
         return this;
@@ -75,7 +91,7 @@ public final class UiHarness {
 
     /** One window refresh with the swarm as it is now, laid out at {@link #WIDTH} x {@link #HEIGHT}. */
     public UiHarness refresh() {
-        shell.update(swarm.snapshot());
+        shell.update(source.snapshot());
         shell.component().setSize(WIDTH, HEIGHT);
         layout(shell.component());
         layout(shell.component()); // Ostinato: the wall picks its column count from the first pass
