@@ -66,15 +66,17 @@ public final class CenterApp {
         }
         SwarmSource source;
         CommandPort port;
+        Path dir = null;
         if (first(a, "fake") != null) {
             DemoSwarm demo = new DemoSwarm(Math.max(1, Integer.parseInt(first(a, "fake"))), System::currentTimeMillis);
             source = demo;
             port = new FakeCommandPort(demo.swarm().hostName());
         } else {
-            Path dir = Path.of(first(a, "dir"));
+            dir = Path.of(first(a, "dir"));
             source = new FeedReader(dir, System::currentTimeMillis);
             port = new CenterClient(dir, System::currentTimeMillis);
         }
+        final Path prefs = dir;
         CenterTheme theme = theme(first(a, "theme"));
         CenterLayout layout = first(a, "layout") == null ? CenterLayout.WALL : CenterLayout.parse(first(a, "layout"));
         String pos = first(a, "pos") != null ? first(a, "pos") : System.getProperty("ostinato.windowPos", DEFAULT_POS);
@@ -90,6 +92,9 @@ public final class CenterApp {
         commands.onReply(r -> logger.line("reply " + (r.admitted() ? "admitted" : "refused") + " " + r.summary()));
         SwingUtilities.invokeAndWait(() -> {
             CenterShell shell = new CenterShell(new AppStyle(theme), commands, layout);
+            if (prefs != null) {
+                shell.setPrefsDir(prefs);
+            }
             JFrame frame = frame(shell, pos);
             worker.scheduleWithFixedDelay(() -> {
                 SwarmView view = source.snapshot();

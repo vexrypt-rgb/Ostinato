@@ -1,6 +1,9 @@
 package baritone.swarm.center.app;
 
+import baritone.api.command.FormPlacement;
+import baritone.swarm.center.ButtonModel;
 import baritone.swarm.center.CenterLayout;
+import baritone.swarm.center.LayoutStore;
 import baritone.swarm.center.TileStatus;
 import baritone.swarm.center.channel.CenterReply;
 import baritone.swarm.center.feed.SwarmView;
@@ -14,6 +17,9 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -38,11 +44,16 @@ public final class CenterShell {
     private final List<LayoutView> views = new ArrayList<>();
     private final Map<CenterLayout, JToggleButton> toggles = new EnumMap<>(CenterLayout.class);
     private final MapView map;
+    private final Commands commands;
     private CenterLayout shown;
     private Consumer<CenterLayout> onPick = l -> {};
+    private Path prefsDir;
+    private String layoutSeen;
+    private SwarmView last = SwarmView.EMPTY;
 
     public CenterShell(AppStyle style, Commands commands, CenterLayout initial) {
         this.style = style;
+        this.commands = commands;
         root = style.panel(new BorderLayout(), style.bg());
         root.setName("shell");
 
@@ -63,10 +74,7 @@ public final class CenterShell {
         for (CenterLayout l : CenterLayout.values()) {
             JToggleButton t = style.toggle(l == CenterLayout.WALL ? "Wall" : "War room");
             t.setName("header.layout." + l.wire());
-            t.addActionListener(e -> {
-                show(l);
-                onPick.accept(l);
-            });
+            t.addActionListener(e -> pick(l));
             group.add(t);
             toggles.put(l, t);
             right.add(t);
@@ -81,8 +89,7 @@ public final class CenterShell {
         add(wall);
         add(map);
         wall.onOpenOnMap(name -> {
-            show(CenterLayout.MAP);
-            onPick.accept(CenterLayout.MAP);
+            pick(CenterLayout.MAP);
             map.centerOn(name);
         });
 
@@ -136,13 +143,81 @@ public final class CenterShell {
         return List.copyOf(views);
     }
 
-    /** Per-user prefs (control groups, and later the layout and theme) live under this directory. */
-    public void setPrefsDir(java.nio.file.Path dir) {
+    /** Per-user prefs (control groups, layout, and later the theme) live under this directory. */
+    public void setPrefsDir(Path dir) {
+        prefsDir = dir;
         map.setPrefsDir(dir);
+        followLayout();
+    }
+
+    /** Header toggle and a tile opened on the map: switch now, remember it, and tell the host. */
+    private void pick(CenterLayout l) {
+        show(l);
+        saveLayout(l);
+        sendLayout(l);
+        onPick.accept(l);
+    }
+
+    private void saveLayout(CenterLayout l) {
+        if (prefsDir == null || l == null) {
+            return;
+        }
+        try {
+            Path file = LayoutStore.sharedFile(prefsDir);
+            LayoutStore.save(file, l);
+            layoutSeen = Files.readString(file);
+        } catch (IOException ignored) {
+            // The card already switched. The next refresh follows whatever the file still says.
+        }
+    }
+
+    /** A missing file keeps the current card. Garbage in the file is the wall. */
+    private void followLayout() {
+        if (prefsDir == null) {
+            return;
+        }
+        Path file = LayoutStore.sharedFile(prefsDir);
+        String text;
+        try {
+            if (!Files.isRegularFile(file)) {
+                return;
+            }
+            text = Files.readString(file);
+        } catch (IOException e) {
+            return;
+        }
+        if (text.equals(layoutSeen)) {
+            return;
+        }
+        layoutSeen = text;
+        CenterLayout loaded = LayoutStore.load(file);
+        if (loaded != shown) {
+            show(loaded);
+        }
+    }
+
+    private void sendLayout(CenterLayout l) {
+        String id = l == CenterLayout.MAP ? "layout-map" : "layout-wall";
+        ButtonModel form = null;
+        if (last.catalog() != null) {
+            for (ButtonModel m : last.catalog().models(FormPlacement.HEADER)) {
+                if (id.equals(m.form().id())) {
+                    form = m;
+                    break;
+                }
+            }
+        }
+        if (form != null) {
+            commands.press(form, Map.of(), last.hostBot(), null);
+        } else {
+            commands.line("center layout " + l.wire(), last.hostBot(), null);
+        }
     }
 
     /** One refresh, on the Swing thread. Every card is updated, shown or not, so switching is instant. */
     public void update(SwarmView view) {
+        last = view == null ? SwarmView.EMPTY : view;
+        followLayout();
         server.setText("Server " + view.server());
         String h = view.hostBot();
         host.setText(h == null ? TileStatus.Level.WARN.glyph + " no command host" : "Host " + h);

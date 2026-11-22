@@ -30,6 +30,7 @@ def shared = [
         'baritone/swarm/center/TileStatus.java',
         'baritone/swarm/center/BotSnapshot.java',
         'baritone/swarm/center/CenterLayout.java',
+        'baritone/swarm/center/LayoutStore.java',
         'baritone/swarm/center/CenterTheme.java',
         'baritone/swarm/SwarmSample.java',
         'baritone/api/command/ArgDecl.java',

@@ -96,7 +96,10 @@ public class CenterCommand extends Command {
                 logDirect("center: closed");
             }
             case "layout" -> {
-                Path file = LayoutStore.file(directory());
+                // Ostinato: the standalone window reads prefs/layout-<user>.txt. Keep the config file too.
+                boolean feed = Baritone.settings().swarmCenterFeed.value;
+                Path shared = feed ? LayoutStore.sharedFile(centerDir()) : null;
+                Path file = shared != null ? shared : LayoutStore.file(directory());
                 if (!args.hasAny()) {
                     logDirect("center: layout " + LayoutStore.load(file).wire());
                     return;
@@ -111,6 +114,9 @@ public class CenterCommand extends Command {
                 }
                 try {
                     LayoutStore.save(file, layout);
+                    if (shared != null) {
+                        LayoutStore.save(LayoutStore.file(directory()), layout);
+                    }
                 } catch (IOException e) {
                     throw new CommandInvalidStateException("center: could not save layout");
                 }
