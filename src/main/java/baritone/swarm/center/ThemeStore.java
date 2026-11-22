@@ -52,13 +52,7 @@ public final class ThemeStore {
 
     /** Display label for the header picker. */
     public static String label(String name) {
-        return switch (name) {
-            case "dark" -> "Default dark";
-            case "light" -> "Light";
-            case "high-contrast" -> "High contrast";
-            case "colorblind" -> "Colorblind safe";
-            default -> name;
-        };
+        return CenterTheme.label(name);
     }
 
     public static Path themesDir(Path configDir) {

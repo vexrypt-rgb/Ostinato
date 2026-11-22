@@ -86,6 +86,20 @@ public class CenterThemeTest {
         return new BotSnapshot("Bot", health, 20, task, state, seen, "whisper", null, "local");
     }
 
+    @Test public void colorblindIdentityColorsStayTenApart() {
+        int[] colors = CenterTheme.COLORBLIND_IDENTITY;
+        assertEquals(12, colors.length);
+        for (int i = 0; i < colors.length; i++) {
+            for (int j = i + 1; j < colors.length; j++) {
+                assertTrue(CenterTheme.deltaE(colors[i], colors[j], CenterTheme.PROTAN) >= 10);
+                assertTrue(CenterTheme.deltaE(colors[i], colors[j], CenterTheme.DEUTAN) >= 10);
+            }
+        }
+        assertEquals(12, CenterTheme.IDENTITY.length);
+        assertEquals("Default dark", CenterTheme.label("dark"));
+        assertEquals("Colorblind safe", ThemeStore.label("colorblind"));
+    }
+
     @Test public void statusHasGlyphAndWordNotJustColor() {
         Set<String> glyphs = new HashSet<>();
         for (TileStatus.Level level : TileStatus.Level.values()) {
