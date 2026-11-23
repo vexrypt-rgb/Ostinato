@@ -477,6 +477,61 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         if (l.endedAt == Long.MIN_VALUE) {
             l.endedAt = mono.getAsLong();
         }
+        leaseEnded(l);
+    }
+
+    // ---- Ostinato: slice 3 S5b fix - a lease end stops the in-flight work before the next action (LeaseEndStop) ----
+    /** Boxes of leases whose command had started and that have ended; the fence denies inside them until idle. */
+    private final List<ReservationKey> endedBoxes = new ArrayList<>();
+    /** A started lease ended and its process/path has not been stopped yet. */
+    private boolean endCancelPending;
+
+    // Caller holds this.
+    private void leaseEnded(Lease l) {
+        if (!l.started) {
+            return; // nothing ran for it: nothing in flight
+        }
+        ReservationKey k = ReservationKey.parse(l.resource);
+        if (k != null && !endedBoxes.contains(k)) {
+            endedBoxes.add(k);
+        }
+        endCancelPending = true;
+    }
+
+    public synchronized boolean endCancelPending() {
+        return endCancelPending;
+    }
+
+    public synchronized void endCancelDone() {
+        endCancelPending = false;
+    }
+
+    /** Whether (x, y, z) is inside an ended lease's box and no current lease of this bot covers it. */
+    public synchronized boolean insideEndedBox(char dim, int x, int y, int z) {
+        boolean inside = false;
+        for (ReservationKey k : endedBoxes) {
+            if (k.contains(dim, x, y, z)) {
+                inside = true;
+                break;
+            }
+        }
+        if (!inside) {
+            return false;
+        }
+        long now = mono.getAsLong();
+        for (Lease l : leases.values()) {
+            if (l.active && l.authorized(now)) {
+                ReservationKey k = ReservationKey.parse(l.resource);
+                if (k != null && k.contains(dim, x, y, z)) {
+                    return false; // a new lease covers it
+                }
+            }
+        }
+        return true;
+    }
+
+    public synchronized void clearEndedBoxes() {
+        endedBoxes.clear();
     }
 
     private void onReconcileRequest(String from) {

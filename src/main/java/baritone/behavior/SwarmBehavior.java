@@ -39,6 +39,7 @@ import baritone.swarm.lease.LeaseMessage;
 import baritone.swarm.lease.LeaseRate;
 import baritone.swarm.lease.ReservationResolver;
 import baritone.swarm.lease.ReservationKey;
+import baritone.swarm.lease.LeaseEndStop;
 import baritone.swarm.lease.LeasedVein;
 import baritone.process.ApproachProcess;
 import baritone.pathing.movement.CalculationContext;
@@ -409,7 +410,15 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2c part 2 - while the bot walks to verify an observation it acts on nothing.
             LeaseFence.install(() -> (g.invalidActive() && leasedInControl()) || approachInControl());
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
+            // Ostinato: slice 3 S5b fix - any lease end stops the in-flight path before the next action; until the bot is
+            // idle the fence keeps denying inside the ended lease's box.
+            LeaseEndStop endStop = new LeaseEndStop(g, leaseEndBot(), this::logDirect);
+            leaseEndStop = endStop;
             LeaseFence.installGeometry((kind, x, y, z) -> {
+                if (endStop.denied(kind, dimChar(), x, y, z)) {
+                    logFenceDenied(kind, x, y, z);
+                    return true;
+                }
                 // Ostinato: Phase 2c part 2 slice 3 - a region lease is re-verified right before its first action inside.
                 if (leasedInControl() && g.regionEntry(kind, dimChar(), x, y, z, this::regionLoaded) != null) {
                     logFenceDenied(kind, x, y, z);
@@ -445,6 +454,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             leaseBoundTo = p;
         }
         leaseGuard.tick();
+        if (leaseEndStop != null) {
+            leaseEndStop.tick(); // Ostinato: slice 3 S5b fix
+        }
         driveApproach(leaseGuard);
         logLeaseRate();
     }
@@ -837,6 +849,46 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         logDirect("swarm-obs: cannot verify " + resource + " (" + r.why + ")");
         return BotLeaseGuard.OBS_UNKNOWN;
+    }
+
+    // Ostinato: slice 3 S5b fix.
+    private LeaseEndStop leaseEndStop;
+
+    private LeaseEndStop.Bot leaseEndBot() {
+        return new LeaseEndStop.Bot() {
+            @Override
+            public void stopLeasedProcesses() {
+                for (IBaritoneProcess p : leasedProcesses()) {
+                    if (p.isActive()) {
+                        p.onLostControl();
+                    }
+                }
+            }
+
+            @Override
+            public boolean otherProcessInControl() {
+                Optional<IBaritoneProcess> p = baritone.getPathingControlManager().mostRecentInControl();
+                return p.isPresent() && p.get().isActive() && !leasedProcesses().contains(p.get());
+            }
+
+            @Override
+            public boolean cancelSegmentIfSafe() {
+                return baritone.getPathingBehavior().cancelSegmentIfSafe();
+            }
+
+            @Override
+            public boolean idle() {
+                if (baritone.getPathingBehavior().isPathing() || baritone.getPathingBehavior().getInProgress().isPresent()) {
+                    return false;
+                }
+                for (IBaritoneProcess p : leasedProcesses()) {
+                    if (p.isActive()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        };
     }
 
     /** Ostinato: Phase 2c. One log line per 2 s when the reservation fence denies an action. */
