@@ -47,6 +47,23 @@ public final class Phase0Probe implements AbstractGameEventListener {
 
     private final Baritone baritone;
     private static final boolean RELATIVE = Boolean.getBoolean("ostinato.phase0.relative");
+    /** Ostinato: chunks (cx,cz;cx,cz) reported as held or not on a C line every 20 ticks; empty = off. */
+    private static final List<int[]> CHUNKS = parseChunks(System.getProperty("ostinato.phase0.chunks", ""));
+
+    static List<int[]> parseChunks(String text) {
+        List<int[]> out = new ArrayList<>();
+        for (String part : text.split(";")) {
+            String[] v = part.trim().split(",");
+            if (v.length == 2) {
+                try {
+                    out.add(new int[]{Integer.parseInt(v[0].trim()), Integer.parseInt(v[1].trim())});
+                } catch (NumberFormatException ignored) {
+                    // not a chunk: skipped
+                }
+            }
+        }
+        return out;
+    }
     /** Ostinato: also a T line every tick (position, speed, yaw, keys, the movement and the kinematic branch). */
     private static final boolean TRACE = Boolean.getBoolean("ostinato.phase0.trace");
     private final List<int[]> spec = new ArrayList<>();
@@ -149,6 +166,16 @@ public final class Phase0Probe implements AbstractGameEventListener {
         if (ticks % 20 == 0) {
             write(String.format(Locale.ROOT, "P t=%d leg=%d x=%.3f y=%.3f z=%.3f drv=%s", ticks, leg,
                     player.getX(), player.getY(), player.getZ(), drv));
+        }
+        if (!CHUNKS.isEmpty() && ticks % 20 == 0) {
+            // Ostinato: harness check that named chunks are (not) held here; the client's chunk source, never the level
+            var mc = Minecraft.getInstance();
+            StringBuilder sb = new StringBuilder("C t=" + ticks + " rd=" + mc.options.renderDistance().get());
+            for (int[] c : CHUNKS) {
+                boolean held = mc.level != null && mc.level.getChunkSource().hasChunk(c[0], c[1]);
+                sb.append(' ').append(c[0]).append(',').append(c[1]).append('=').append(held ? 1 : 0);
+            }
+            write(sb.toString());
         }
         if (TRACE) {
             trace(player, ex, drv);
