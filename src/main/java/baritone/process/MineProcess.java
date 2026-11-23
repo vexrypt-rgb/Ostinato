@@ -188,10 +188,11 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         updateLoucaSystem();
         int mineGoalUpdateInterval = Baritone.settings().mineGoalUpdateInterval.value;
         List<BlockPos> curr = new ArrayList<>(knownOreLocations);
-        // Ostinato: Phase 2c - while a vein lease is held, ore outside its box is not a target (the fence would deny it).
-        ReservationKey vein = LeaseFence.veinTarget();
-        if (vein != null) {
-            curr.removeIf(pos -> !LeasedVein.keep(vein, pos.getX(), pos.getY(), pos.getZ(), filter.has(baritone.bsi.get0(pos))));
+        // Ostinato: Phase 2c - while a vein or region lease is held, ore outside its box is not a target (the fence
+        // would deny it).
+        ReservationKey leased = LeaseFence.mineBox();
+        if (leased != null) {
+            curr.removeIf(pos -> !LeasedVein.keep(leased, pos.getX(), pos.getY(), pos.getZ(), filter.has(baritone.bsi.get0(pos))));
         }
         if (mineGoalUpdateInterval != 0 && tickCount++ % mineGoalUpdateInterval == 0) { // big brain
             CalculationContext context = new CalculationContext(baritone, true);
@@ -410,8 +411,8 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             } else {
                 chosen = locs2;
             }
-            // Ostinato: Phase 2c - a held vein lease limits the targets to its box.
-            ReservationKey held = LeaseFence.veinTarget();
+            // Ostinato: Phase 2c - a held vein or region lease limits the targets to its box.
+            ReservationKey held = LeaseFence.mineBox();
             if (held != null) {
                 chosen.removeIf(pos -> !LeasedVein.keep(held, pos.getX(), pos.getY(), pos.getZ(),
                         filter.has(context.get(pos.getX(), pos.getY(), pos.getZ()))));

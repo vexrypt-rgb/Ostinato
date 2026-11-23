@@ -1066,6 +1066,24 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return null;
     }
 
+    /**
+     * Ostinato: the box a started, authorised vein or region lease confines the mine to, or null. The mine drops ore
+     * targets outside it: the fence denies those breaks (a region fences every break), so heading for them only loops.
+     */
+    public synchronized ReservationKey activeMineBox(char dim) {
+        long now = mono.getAsLong();
+        for (Lease l : leases.values()) {
+            if (!l.active || !l.authorized(now) || (l.expect != null && !l.verified)) {
+                continue;
+            }
+            ReservationKey k = ReservationKey.parse(l.resource);
+            if (k != null && (k.type == ReservationKey.Type.VEIN || k.type == ReservationKey.Type.REGION) && k.dim == dim) {
+                return k;
+            }
+        }
+        return null;
+    }
+
     private static boolean appliesTo(ReservationKey.Type t, LeaseFence.Kind kind, boolean ore) {
         switch (t) {
             case VEIN:
