@@ -205,6 +205,10 @@ public final class KinematicController {
         traceGain = Double.NaN;
         branch = "rollout";
         int r = drive(baritone, path, pathPosition);
+        if (r < 0 && brakeBeforeHandover(baritone, path, pathPosition)) {
+            r = pathPosition; // Ostinato: still ours this tick, braking (see brakeBeforeHandover)
+            branch = "brake";
+        }
         traceTick = ctx.player().tickCount;
         traceR = r;
         traceWhy = r < 0 ? declined : branch;
@@ -230,6 +234,123 @@ public final class KinematicController {
                     ctx.player().getX(), ctx.player().getY(), ctx.player().getZ(), v.x, v.y, v.z, ctx.player().onGround(), Mth.wrapDegrees(ctx.player().getYRot()), traceWhy));
         }
         return r;
+    }
+
+    // ---- Ostinato: no hand-over at speed toward a drop (p2c2 s2run2; swarm-gate-logs/ledge repro3) ------------------
+    /**
+     * Horizontal speed (blocks/tick) above which a hand-over is braked first, and at or below which a braked player
+     * counts as stopped. Walking speed is about 0.216, sprinting 0.28.
+     */
+    static final double BRAKE_FROM = 0.05, BRAKE_STOPPED = 0.02;
+    /** A brake gives up after this many ticks (and the next one waits {@link #BRAKE_REST}), so it can never hold the path. */
+    static final int BRAKE_MAX = 20, BRAKE_REST = 40;
+    /** How far ahead along the ground velocity the drop is looked for, and how deep it must be to count. */
+    static final double DROP_LOOK = 0.8;
+    static final int DROP_DEPTH = 3;
+    private int braked, brakeRest;
+    /** Hand-overs braked so far (all controllers; the live harness counts them). */
+    public static volatile long brakes;
+
+    /**
+     * Ostinato: the controller is about to hand a flat walking step back to Baritone while the player still moves at
+     * walking speed toward a drop of {@link #DROP_DEPTH}+ blocks that the path does not go into. Seen live (ledge
+     * fixture, 10 of 10; p2c2 s2run2): a step into a mined-out ore cell on a 1-wide ledge, then a 90-degree turn along
+     * it. The controller declined the turn and handed over at 0.136 blocks/tick toward the drop; Baritone's traverse
+     * pressed forward at once while the camera still faced the drop, and the player went over the side. Instead hold
+     * sneak (vanilla keeps a sneaking player on the edge) with no movement keys, turn toward the step's destination,
+     * and hand over once stopped and facing it. Every other hand-over is untouched.
+     */
+    private boolean brakeBeforeHandover(Baritone baritone, IPath path, int pathPosition) {
+        if (brakeRest > 0) {
+            brakeRest--;
+            braked = 0;
+            return false;
+        }
+        var p = ctx.player();
+        if (pathPosition >= path.movements().size() || !p.onGround() || p.isInWater() || p.isInLava()
+                || !flatWalk(path.movements().get(pathPosition))) {
+            braked = 0;
+            return false;
+        }
+        IMovement mv = path.movements().get(pathPosition);
+        BetterBlockPos dest = mv.getDest();
+        net.minecraft.world.phys.Vec3 v = p.getDeltaMovement();
+        double speed = Math.hypot(v.x, v.z);
+        float toDest = (float) Math.toDegrees(Math.atan2(-(dest.x + 0.5 - p.getX()), dest.z + 0.5 - p.getZ()));
+        boolean facing = Math.abs(Mth.wrapDegrees(toDest - p.getYRot())) < 25;
+        boolean need;
+        if (braked > 0) {
+            need = speed > BRAKE_STOPPED || !facing;
+        } else {
+            world.reset();
+            need = speed > BRAKE_FROM && dropAhead(world, p.getX(), p.getY(), p.getZ(), v.x, v.z, upcoming(path, pathPosition));
+        }
+        if (!need) {
+            braked = 0;
+            return false;
+        }
+        if (braked >= BRAKE_MAX) {
+            braked = 0;
+            brakeRest = BRAKE_REST;
+            return false;
+        }
+        if (braked++ == 0) {
+            brakes++;
+            Helper.HELPER.logDebug("kinematic: braking before handing over (moving " + String.format(java.util.Locale.ROOT, "%.2f", speed)
+                    + " toward a drop at " + ctx.playerFeet() + ")");
+        }
+        baritone.getLookBehavior().human();
+        baritone.getLookBehavior().updateTarget(new Rotation(toDest, p.getXRot()), true);
+        InputOverrideHandler in = baritone.getInputOverrideHandler();
+        in.clearAllKeys();
+        in.setInputForceState(Input.SNEAK, true);
+        return true;
+    }
+
+    /** A walking step on the level: the only kind braked (a descend, fall or jump goes over its edge on purpose). */
+    static boolean flatWalk(IMovement mv) {
+        return flatWalk(mv instanceof MovementTraverse || mv instanceof MovementDiagonal || mv instanceof MovementStraight,
+                mv.getSrc().y, mv.getDest().y);
+    }
+
+    static boolean flatWalk(boolean walkingStep, int srcY, int destY) {
+        return walkingStep && destY == srcY;
+    }
+
+    /** The cells the path stands in from {@code pathPosition} on, a few movements ahead. */
+    private static java.util.Set<Long> upcoming(IPath path, int pathPosition) {
+        java.util.Set<Long> cells = new java.util.HashSet<>();
+        List<IMovement> moves = path.movements();
+        for (int k = pathPosition; k < moves.size() && k < pathPosition + 4; k++) {
+            BetterBlockPos d = moves.get(k).getDest();
+            cells.add(BlockPos.asLong(d.x, d.y, d.z));
+        }
+        return cells;
+    }
+
+    /**
+     * Ostinato: whether a player at (x, y, z) moving (vx, vz) on the ground heads for a drop: the column
+     * {@link #DROP_LOOK} ahead along the velocity has no collision in the {@link #DROP_DEPTH} blocks under the feet, and
+     * the path does not stand in that cell ({@code pathCells}: packed feet positions). Pure, for tests.
+     */
+    static boolean dropAhead(PlayerSim.World w, double x, double y, double z, double vx, double vz, java.util.Set<Long> pathCells) {
+        double hs = Math.hypot(vx, vz);
+        if (hs < 1e-6) {
+            return false;
+        }
+        double ax = x + vx / hs * DROP_LOOK, az = z + vz / hs * DROP_LOOK;
+        int bx = Mth.floor(ax), bz = Mth.floor(az), feet = Mth.floor(y + 1e-6);
+        if (bx == Mth.floor(x) && bz == Mth.floor(z)) {
+            return false; // still over the cell the player stands in
+        }
+        for (int dy = 0; dy >= -2; dy--) {
+            if (pathCells.contains(BlockPos.asLong(bx, feet + dy, bz))) {
+                return false; // the path goes there (a step down onto it is the path's own)
+            }
+        }
+        List<double[]> boxes = new ArrayList<>();
+        w.collect(bx + 0.001, feet - DROP_DEPTH, bz + 0.001, bx + 0.999, y - 1e-3, bz + 0.999, boxes);
+        return boxes.isEmpty();
     }
 
     /** Ostinato: why the controller left the last tick to Baritone before it looked at the stretch (trace only). */

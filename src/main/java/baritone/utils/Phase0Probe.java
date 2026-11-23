@@ -9,6 +9,7 @@ import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalXZ;
 import baritone.api.utils.BetterBlockPos;
+import baritone.api.utils.input.Input;
 import baritone.pathing.path.PathExecutor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -46,6 +47,8 @@ public final class Phase0Probe implements AbstractGameEventListener {
 
     private final Baritone baritone;
     private static final boolean RELATIVE = Boolean.getBoolean("ostinato.phase0.relative");
+    /** Ostinato: also a T line every tick (position, speed, yaw, keys, the movement and the kinematic branch). */
+    private static final boolean TRACE = Boolean.getBoolean("ostinato.phase0.trace");
     private final List<int[]> spec = new ArrayList<>();
     private final List<Goal> route = new ArrayList<>();
     private final List<String> routeText = new ArrayList<>();
@@ -146,6 +149,9 @@ public final class Phase0Probe implements AbstractGameEventListener {
         if (ticks % 20 == 0) {
             write(String.format(Locale.ROOT, "P t=%d leg=%d x=%.3f y=%.3f z=%.3f drv=%s", ticks, leg,
                     player.getX(), player.getY(), player.getZ(), drv));
+        }
+        if (TRACE) {
+            trace(player, ex, drv);
         }
         if (ticks % WINDOW == 0) {
             write("S t=" + ticks + " leg=" + leg + " " + windowStats());
@@ -285,6 +291,32 @@ public final class Phase0Probe implements AbstractGameEventListener {
         long n = 0;
         for (GarbageCollectorMXBean b : ManagementFactory.getGarbageCollectorMXBeans()) n += Math.max(0, b.getCollectionTime());
         return n;
+    }
+
+    private void trace(net.minecraft.client.player.LocalPlayer player, PathExecutor ex, String drv) {
+        var v = player.getDeltaMovement();
+        var in = baritone.getInputOverrideHandler();
+        String keys = (in.isInputForcedDown(Input.MOVE_FORWARD) ? "W" : "") + (in.isInputForcedDown(Input.MOVE_BACK) ? "S" : "")
+                + (in.isInputForcedDown(Input.MOVE_LEFT) ? "A" : "") + (in.isInputForcedDown(Input.MOVE_RIGHT) ? "D" : "")
+                + (in.isInputForcedDown(Input.SPRINT) ? "R" : "") + (in.isInputForcedDown(Input.JUMP) ? "J" : "")
+                + (in.isInputForcedDown(Input.SNEAK) ? "N" : "");
+        String mv = "-";
+        String why = "-";
+        if (ex != null) {
+            int pos = ex.getPosition();
+            var moves = ex.getPath().movements();
+            if (pos >= 0 && pos < moves.size()) {
+                var m = moves.get(pos);
+                mv = pos + ":" + m.getClass().getSimpleName().replace("Movement", "") + ":" + m.getSrc().x + "," + m.getSrc().y + "," + m.getSrc().z
+                        + ">" + m.getDest().x + "," + m.getDest().y + "," + m.getDest().z;
+            }
+            if (ex.kinematic().traceTick == player.tickCount) {
+                why = String.valueOf(ex.kinematic().traceWhy).replace(' ', '_');
+            }
+        }
+        write(String.format(Locale.ROOT, "T ms=%d t=%d x=%.3f y=%.3f z=%.3f vx=%.3f vy=%.3f vz=%.3f yaw=%.1f og=%b drv=%s mv=%s kin=%s keys=%s", System.currentTimeMillis(), ticks,
+                player.getX(), player.getY(), player.getZ(), v.x, v.y, v.z, net.minecraft.util.Mth.wrapDegrees(player.getYRot()),
+                player.onGround(), drv, mv, why, keys.isEmpty() ? "-" : keys));
     }
 
     private void write(String line) {
