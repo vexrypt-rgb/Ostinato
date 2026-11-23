@@ -64,6 +64,8 @@ public final class LeaseRecord {
     public transient long offeredAtMono;
     public transient long lastGrantMono = Long.MIN_VALUE;
     public transient boolean commandSent;
+    /** Ostinato: wall-clock ms when the lease was released here (0 when not, or before a restart). Not persisted. */
+    public transient long endedWall;
 
     public LeaseRecord(UUID leaseId, String resource, long gen, UUID commandId, String bot, String commandLine,
                        State state) {

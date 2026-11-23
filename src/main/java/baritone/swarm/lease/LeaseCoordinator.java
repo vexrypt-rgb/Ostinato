@@ -456,6 +456,7 @@ public final class LeaseCoordinator {
             return;
         }
         r.state = LeaseRecord.State.RELEASED;
+        r.endedWall = wall.getAsLong(); // Ostinato: Phase 3 feed
         if (r.endReason == null) {
             r.endReason = "rack";
         }
@@ -491,6 +492,7 @@ public final class LeaseCoordinator {
         boolean terminal = r.exec != null && r.exec.terminal();
         if (r.state.live() && !active && (terminal || "done".equals(x.get("phase")))) {
             r.state = LeaseRecord.State.RELEASED;
+            r.endedWall = wall.getAsLong(); // Ostinato: Phase 3 feed
             persist();
             log.accept("swarm-lease: released lease=" + r.leaseId + " gen=" + r.gen + " bot=" + r.bot + " exec="
                     + (r.exec == null ? "none" : r.exec.label()) + " obs=" + r.obs.label());
@@ -928,6 +930,7 @@ public final class LeaseCoordinator {
         if (target.state == LeaseRecord.State.OFFERED) {
             // Never granted (grants are persisted first), so nothing runs under it.
             target.state = LeaseRecord.State.RELEASED;
+            target.endedWall = wall.getAsLong(); // Ostinato: Phase 3 feed
             target.endReason = "revoked-before-grant";
         } else {
             target.state = LeaseRecord.State.REVOKING;
@@ -1018,15 +1021,21 @@ public final class LeaseCoordinator {
         return out;
     }
 
+    /** Ostinato: how long a released lease stays in the command-center feed. */
+    static final long FEED_RELEASED_MS = 60_000L;
+
     /**
-     * Ostinato: Phase 3 read API. The records {@link #describe()} prints, as command-center feed records (copies; the
+     * Ostinato: Phase 3 read API. The records {@link #describe()} prints (plus leases released in the last minute), as command-center feed records (copies; the
      * coordinator is not changed). Reservation keys carry their box.
      */
     public synchronized List<baritone.swarm.center.feed.CoordinatorFeed.Lease> feedLeases() {
         List<baritone.swarm.center.feed.CoordinatorFeed.Lease> out = new ArrayList<>();
         long w = wall.getAsLong();
         for (LeaseRecord r : records.values()) {
-            if (!(r.state.live() || (r.state == LeaseRecord.State.EXPIRED && w < r.notBeforeWall))) {
+            // Ostinato: a lease released in the last minute stays too, so the map can draw it faded with its end.
+            boolean recentlyReleased = r.state == LeaseRecord.State.RELEASED && r.endedWall > 0
+                    && w - r.endedWall < FEED_RELEASED_MS;
+            if (!(r.state.live() || recentlyReleased || (r.state == LeaseRecord.State.EXPIRED && w < r.notBeforeWall))) {
                 continue;
             }
             ReservationKey k = ReservationKey.parse(r.resource);
