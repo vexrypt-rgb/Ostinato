@@ -111,4 +111,13 @@ public interface IBaritoneProcess {
     }
 
     String displayName0();
+
+    /**
+     * Ostinato: the outcome of this process's latest request, for processes that record one (mine, get-to-block,
+     * custom goal, builder, farm, follow, explore). {@link ProcessOutcome#NONE} for the others: a swarm command run by
+     * one of those reports no verified result, and a process going idle is never taken for success.
+     */
+    default ProcessOutcome outcome() {
+        return ProcessOutcome.NONE;
+    }
 }

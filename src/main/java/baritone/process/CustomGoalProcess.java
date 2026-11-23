@@ -17,6 +17,7 @@
 
 package baritone.process;
 
+import baritone.api.process.ProcessOutcome;
 import baritone.Baritone;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.process.ICustomGoalProcess;
@@ -51,8 +52,16 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
      */
     private State state;
 
+    /** Ostinato: one request per {@link #path()}; succeeds only when it ends with the player in the goal. */
+    private final RequestOutcome requestOutcome = new RequestOutcome();
+
     public CustomGoalProcess(Baritone baritone) {
         super(baritone);
+    }
+
+    @Override
+    public ProcessOutcome outcome() {
+        return requestOutcome.outcome();
     }
 
     @Override
@@ -76,6 +85,7 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
 
     @Override
     public void path() {
+        requestOutcome.start(); // Ostinato: goto, path, come (setGoalAndPath) each start a request
         this.state = State.PATH_REQUESTED;
     }
 
@@ -103,13 +113,22 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                 // return FORCE_REVALIDATE_GOAL_AND_PATH just once
                 PathingCommand ret = new PathingCommand(this.goal, PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
                 this.state = State.EXECUTING;
+                requestOutcome.running(); // Ostinato:
                 return ret;
             case EXECUTING:
                 if (calcFailed) {
+                    requestOutcome.endFor(ProcessOutcome.Reason.UNREACHABLE); // Ostinato:
                     onLostControl();
                     return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);
                 }
                 if (this.goal == null || (this.goal.isInGoal(ctx.playerFeet()) && this.goal.isInGoal(baritone.getPathingBehavior().pathStart()))) {
+                    // Ostinato: in the goal is this request's result (the goto contract: idle in the goal succeeded)
+                    if (this.goal == null) {
+                        requestOutcome.endFor(ProcessOutcome.Reason.INVALIDATED_GOAL);
+                    } else {
+                        requestOutcome.didOne();
+                        requestOutcome.endFor(ProcessOutcome.Reason.NONE);
+                    }
                     onLostControl(); // we're there xd
                     if (Baritone.settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
@@ -129,6 +148,7 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
 
     @Override
     public void onLostControl() {
+        requestOutcome.finish(); // Ostinato: an end it did not choose (stop, another process) is a cancel
         this.state = State.NONE;
         this.goal = null;
     }
