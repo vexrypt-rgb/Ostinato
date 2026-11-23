@@ -56,7 +56,9 @@ public final class Commands {
     /** Whether the form can be sent as filled in. */
     public static boolean ready(ButtonModel button, Map<String, String> values, String bot) {
         try {
-            button.line(TileRoute.fill(button, values, bot));
+            Map<String, String> filled = TileRoute.fill(button, values, bot);
+            button.line(filled);
+            TileRoute.route(button, bot, filled); // Ostinato: a route can refuse too (a cancel with no id)
             return true;
         } catch (IllegalArgumentException e) {
             return false;

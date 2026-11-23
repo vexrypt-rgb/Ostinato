@@ -56,6 +56,7 @@ final class TileView {
     private String host;
     private final Map<String, Map<String, JTextField>> fields = new LinkedHashMap<>();
     private String armedDespawn;
+    private String cancelTarget;
     private boolean selected;
     private TileStatus lastStatus = new TileStatus(TileStatus.Level.IDLE, "idle");
     private Runnable onSelect = () -> {};
@@ -126,6 +127,7 @@ final class TileView {
     }
 
     void update(SwarmView view, SwarmView.BotState b) {
+        cancelTarget = TileText.cancelTarget(b.feed().executions());
         List<Alert> mine = view.alertsFor(bot);
         TileStatus s = Alerts.status(b, mine);
         glyph.setText(s.level().glyph);
@@ -243,7 +245,16 @@ final class TileView {
                 out.put(e.getKey(), e.getValue().getText());
             }
         }
+        withCancelTarget(b, out, cancelTarget);
         return out;
+    }
+
+    /** Ostinato: a Cancel with no typed id stops the bot's running command (the protocol cancels by id only). */
+    static void withCancelTarget(ButtonModel b, Map<String, String> values, String target) {
+        String typed = values.get("id");
+        if ("cancel".equals(b.form().id()) && (typed == null || typed.isBlank()) && target != null) {
+            values.put("id", target);
+        }
     }
 
     private void showPreview(ButtonModel b) {

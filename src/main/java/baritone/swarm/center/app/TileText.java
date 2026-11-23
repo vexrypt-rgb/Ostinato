@@ -72,4 +72,22 @@ public final class TileText {
     public static String age(SwarmView.BotState b) {
         return b.freshness() == SwarmView.Freshness.FRESH ? "" : "updated " + b.ageMs() / 1000 + " s ago";
     }
+
+    /**
+     * The command a tile's Cancel stops: the newest execution still accepted or running that is not itself a cancel,
+     * or null when nothing is running. The protocol cancels by id only (a bare cancel is rejected).
+     */
+    public static String cancelTarget(java.util.List<baritone.swarm.center.feed.BotFeed.Execution> executions) {
+        if (executions == null) {
+            return null;
+        }
+        baritone.swarm.center.feed.BotFeed.Execution best = null;
+        for (baritone.swarm.center.feed.BotFeed.Execution e : executions) {
+            boolean live = "running".equals(e.execution()) || "accepted".equals(e.execution());
+            if (live && !"cancel".equals(e.command()) && !e.id().isBlank() && (best == null || e.ageMs() < best.ageMs())) {
+                best = e;
+            }
+        }
+        return best == null ? null : best.id();
+    }
 }
