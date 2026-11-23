@@ -91,13 +91,16 @@ public class SelectViewTest {
         ui.click("select:Azalea:button:mine");
         assertEquals(1, ui.sent().size());
         assertTrue(ui.text("select:Azalea:result").startsWith("not sent:"));
-        ui.click("select:Azalea:button:cancel");
+        ui.click("select:Azalea:button:cancel"); // nothing running: not sent
+        assertEquals(1, ui.sent().size());
+        assertEquals("not sent: no running command to cancel", ui.text("select:Azalea:result"));
         ui.click("select:Spelunker:button:cancel");
+        ui.click("select:Azalea:button:goto"); // sent again, so the request counts below stay as they were
         assertEquals(3, ui.sent().size());
         assertEquals("cancel", ui.sent().get(1).formId());
-        assertEquals("Azalea", ui.sent().get(1).bot());
-        assertEquals("Spelunker", ui.sent().get(2).bot());
-        assertEquals(CenterRequest.Op.PRESS, ui.sent().get(2).op());
+        assertEquals("Spelunker", ui.sent().get(1).bot());
+        assertEquals("cmd-0", ui.sent().get(1).values().get("id"));
+        assertEquals(CenterRequest.Op.PRESS, ui.sent().get(1).op());
         ui.click("select:Azalea:button:despawn");
         assertEquals(3, ui.sent().size());
         assertEquals("Confirm despawn", ui.text("select:Azalea:button:despawn"));

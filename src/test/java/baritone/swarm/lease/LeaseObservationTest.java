@@ -385,6 +385,30 @@ public class LeaseObservationTest {
         assertNull("a region is not a vein", r.guard.activeVein('o'));
     }
 
+    // Ostinato: live check p3w run 5. A leased region mine kept heading for ore outside its box (the fence denied the
+    // break 300+ times and nothing was mined), because only a vein lease limited the mine's targets.
+    @Test
+    public void theMineBoxIsTheStartedVeinOrRegionLease() throws Exception {
+        LeaseSupport r = active();
+        r.coord.lease("Bob", "r:o:0,10,0:1,11,1", "mine iron_ore");
+        pumpLeaseOnly(r);
+        assertNull("granted, not started", r.guard.activeMineBox('o'));
+        r.pump();
+        assertEquals(1, r.bobExec.count("mine"));
+        assertEquals("r:o:0,10,0:1,11,1", String.valueOf(r.guard.activeMineBox('o')));
+        assertNull("other dimension", r.guard.activeMineBox('n'));
+        assertNull("a region is still not a vein", r.guard.activeVein('o'));
+        r.bobExec.poll = ExecutionState.SUCCEEDED;
+        r.tick();
+        r.tick();
+        assertNull("the mine ended, the lease is released", r.guard.activeMineBox('o'));
+
+        LeaseSupport s = active();
+        s.coord.lease("Bob", VEIN, "mine iron_ore");
+        s.pump();
+        assertEquals(VEIN, String.valueOf(s.guard.activeMineBox('o')));
+    }
+
     @Test
     public void busyReasonCoversOverlappingBoxes() throws Exception {
         LeaseSupport s = active();

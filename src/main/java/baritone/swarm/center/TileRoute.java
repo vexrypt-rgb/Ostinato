@@ -7,8 +7,9 @@ import java.util.Map;
 /**
  * Ostinato: where a tile button's line runs. Pure, so the in-game window ({@link TileActions}), the command host and
  * the standalone window all compute the same line: goto and mine aimed at another bot become
- * {@code swarm send <bot> <line>} on the host; a cancel with no id for another bot becomes
- * {@code swarm send <bot> cancel}; everything else runs as written.
+ * {@code swarm send <bot> <line>} on the host; a cancel names the command it stops ({@code swarm cancel <id>}, run on
+ * the host that issued it) and a cancel with no id is refused, because the protocol rejects a bare cancel
+ * ({@code bad-cancel-target}); everything else runs as written.
  */
 public final class TileRoute {
 
@@ -19,18 +20,19 @@ public final class TileRoute {
         if (button.form().placement() != FormPlacement.TILE) {
             return line;
         }
+        if ("swarm".equals(button.command()) && "cancel".equals(button.form().id())) {
+            String id = values == null ? null : values.get("id");
+            if (id == null || id.isBlank()) {
+                throw new IllegalArgumentException("no running command to cancel");
+            }
+            return line;
+        }
         if (bot == null || bot.isBlank() || "local".equalsIgnoreCase(bot)) {
             return line;
         }
         String command = button.command();
         if ("goto".equals(command) || "mine".equals(command)) {
             return "swarm send " + bot + " " + line;
-        }
-        if ("swarm".equals(command) && "cancel".equals(button.form().id())) {
-            String id = values == null ? null : values.get("id");
-            if (id == null || id.isBlank()) {
-                return "swarm send " + bot + " cancel";
-            }
         }
         return line;
     }

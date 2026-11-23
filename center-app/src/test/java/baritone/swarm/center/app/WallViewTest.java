@@ -105,11 +105,11 @@ public class WallViewTest {
         assertEquals("▲ Copper: #swarm send Azalea goto 1 2 3 - busy", ui.text("tile:Azalea:result"));
     }
 
-    @Test public void cancelWithNoIdTargetsTheBot() {
+    @Test public void cancelTargetsTheBotsRunningCommand() {
         ui.refresh();
         ui.click("tile:Spelunker:button:cancel");
         assertEquals("cancel", ui.sent().get(0).formId());
-        assertEquals("● Copper: #swarm send Spelunker cancel - accepted", ui.text("tile:Spelunker:result"));
+        assertEquals("● Copper: #swarm cancel cmd-0 - accepted", ui.text("tile:Spelunker:result"));
     }
 
     @Test public void despawnNeedsASecondClick() {

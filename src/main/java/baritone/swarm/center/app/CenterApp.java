@@ -109,6 +109,11 @@ public final class CenterApp {
             for (String auto : a.getOrDefault("auto", List.of())) {
                 scheduleAuto(worker, shell, auto, logger);
             }
+            if (first(a, "auto-file") != null) {
+                Path autoFile = Path.of(first(a, "auto-file"));
+                worker.scheduleWithFixedDelay(() -> runAutoFile(autoFile, worker, shell, logger), 250, 250,
+                        TimeUnit.MILLISECONDS);
+            }
             logger.line("shown at " + frame.getX() + "," + frame.getY());
         });
     }
@@ -204,6 +209,21 @@ public final class CenterApp {
         }
         worker.schedule(() -> SwingUtilities.invokeLater(() -> {
             String bot = f[1], form = f[2];
+            if ("@set".equals(bot)) {
+                // Ostinato: live checks fill a named field (area:ore, area:y1, ...).
+                Component field = find(shell.component(), form);
+                if (field instanceof javax.swing.text.JTextComponent t) {
+                    t.setText(f.length > 3 ? f[3] : "");
+                    logger.line("auto: set " + form + "=" + t.getText());
+                } else {
+                    logger.line("auto: no field " + form);
+                }
+                return;
+            }
+            if ("@map".equals(bot)) {
+                logger.line("auto: map " + form + " -> " + mapAuto(shell, form));
+                return;
+            }
             if ("@".equals(bot)) {
                 // Ostinato: live checks press a header button (layout toggle, theme pick) by component name.
                 Component any = find(shell.component(), form);
@@ -229,6 +249,90 @@ public final class CenterApp {
                 logger.line("auto: no button tile:" + bot + ":button:" + form);
             }
         }), delay, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Ostinato: {@code --auto-file <path>}: a live check writes auto specs without the delay ({@code bot|form|values},
+     * one per line); the worker reads the file, deletes it, and runs each line at once, in order. Lets a check press
+     * the next button only after the previous reply, instead of guessing delays at start.
+     */
+    static void runAutoFile(Path file, ScheduledExecutorService worker, CenterShell shell, Logger logger) {
+        List<String> lines;
+        try {
+            if (!Files.isRegularFile(file)) {
+                return;
+            }
+            lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            Files.delete(file);
+        } catch (IOException | RuntimeException e) {
+            return; // the writer still has it open; next poll
+        }
+        for (String line : lines) {
+            if (!line.isBlank()) {
+                scheduleAuto(worker, shell, "0|" + line.trim(), logger);
+            }
+        }
+    }
+
+    /**
+     * Ostinato: map gestures for live checks, dispatched as synthetic mouse events on the map canvas (the same code
+     * path as a click or drag, without moving the mouse). {@code select:A+B} clicks A's marker, then shift-clicks the
+     * others; {@code area:x1,z1,x2,z2} places the camera on the box, arms the area tool and drags corner to corner
+     * (inclusive blocks). Returns what the map then holds.
+     */
+    static String mapAuto(CenterShell shell, String spec) {
+        MapView map = null;
+        for (LayoutView v : shell.views()) {
+            if (v instanceof MapView m) {
+                map = m;
+            }
+        }
+        if (map == null || !(find(shell.component(), "map:canvas") instanceof javax.swing.JComponent canvas)) {
+            return "no map";
+        }
+        if (spec.startsWith("select:")) {
+            String[] names = spec.substring("select:".length()).split("\\+");
+            map.centerOn(names[0]);
+            for (int i = 0; i < names.length; i++) {
+                double[] at = map.markerScreen(names[i]);
+                if (at == null) {
+                    return "no marker " + names[i] + "; selected=" + map.selected();
+                }
+                int mods = i == 0 ? 0 : java.awt.event.InputEvent.SHIFT_DOWN_MASK;
+                int sx = (int) Math.round(at[0]);
+                int sy = (int) Math.round(at[1]);
+                long now = System.currentTimeMillis();
+                canvas.dispatchEvent(new java.awt.event.MouseEvent(canvas, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                        now, mods, sx, sy, 1, false, java.awt.event.MouseEvent.BUTTON1));
+                canvas.dispatchEvent(new java.awt.event.MouseEvent(canvas, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                        now, mods, sx, sy, 1, false, java.awt.event.MouseEvent.BUTTON1));
+            }
+            return "selected=" + map.selected();
+        }
+        if (spec.startsWith("area:")) {
+            String[] n = spec.substring("area:".length()).split(",");
+            int x1 = Integer.parseInt(n[0].trim()), z1 = Integer.parseInt(n[1].trim());
+            int x2 = Integer.parseInt(n[2].trim()), z2 = Integer.parseInt(n[3].trim());
+            map.placeCamera(8, (x1 + x2 + 1) / 2.0, (z1 + z2 + 1) / 2.0);
+            if (!map.areaArmed() && find(shell.component(), "area:tool") instanceof AbstractButton tool) {
+                tool.doClick();
+            }
+            MapCamera cam = map.camera();
+            int ax = (int) Math.round(cam.screenX(Math.min(x1, x2) + 0.25));
+            int az = (int) Math.round(cam.screenZ(Math.min(z1, z2) + 0.25));
+            int bx = (int) Math.round(cam.screenX(Math.max(x1, x2) + 0.75));
+            int bz = (int) Math.round(cam.screenZ(Math.max(z1, z2) + 0.75));
+            long now = System.currentTimeMillis();
+            canvas.dispatchEvent(new java.awt.event.MouseEvent(canvas, java.awt.event.MouseEvent.MOUSE_PRESSED, now, 0,
+                    ax, az, 1, false, java.awt.event.MouseEvent.BUTTON1));
+            canvas.dispatchEvent(new java.awt.event.MouseEvent(canvas, java.awt.event.MouseEvent.MOUSE_DRAGGED, now,
+                    java.awt.event.InputEvent.BUTTON1_DOWN_MASK, bx, bz, 0, false, java.awt.event.MouseEvent.BUTTON1));
+            canvas.dispatchEvent(new java.awt.event.MouseEvent(canvas, java.awt.event.MouseEvent.MOUSE_RELEASED, now, 0,
+                    bx, bz, 1, false, java.awt.event.MouseEvent.BUTTON1));
+            int[] a = map.area();
+            return a == null ? "no area" : "area=" + a[0] + "," + a[1] + "," + a[2] + "," + a[3];
+        }
+        return "bad map spec";
     }
 
     /** Depth-first search by component name. */
@@ -300,7 +404,7 @@ public final class CenterApp {
 
     /**
      * Ostinato: what a live check reads from the window log. A {@code state} line (and, with {@code --shots <dir>},
-     * a PNG of the window) whenever the shown layout or theme changes; a {@code map} line every 3 s while the map is
+     * a PNG of the window) whenever the shown layout or theme changes; a {@code map} line every second while the map is
      * shown: each bot in the map's dimension with its feed position, its marker's screen point, and which bot the
      * hit test finds there. Runs on the Swing thread after a refresh; does nothing else while the state is unchanged.
      */
@@ -326,7 +430,7 @@ public final class CenterApp {
             if (shell.shown() != CenterLayout.MAP || view.readAtMs() < nextMap) {
                 return;
             }
-            nextMap = view.readAtMs() + 3_000;
+            nextMap = view.readAtMs() + 1_000;
             if (!(find(shell.component(), "map:canvas") instanceof MapCanvas canvas) || !canvas.isVisible() || canvas.getWidth() <= 0) {
                 return;
             }
@@ -342,6 +446,30 @@ public final class CenterApp {
                 line.append(" | ").append(b.name()).append(" feed=").append(Math.round(b.feed().pos().x())).append(',')
                         .append(Math.round(b.feed().pos().z())).append(" screen=").append(sx).append(',').append(sy)
                         .append(" hit=").append(canvas.hit(sx, sy));
+            }
+            MapCamera cam = null;
+            for (LayoutView v : shell.views()) {
+                if (v instanceof MapView m) {
+                    cam = m.camera();
+                }
+            }
+            for (MapOverlay.LeaseMark lease : MapOverlay.leases(view.coordinator(), canvas.dim())) {
+                if (lease.box() == null || cam == null) {
+                    continue;
+                }
+                int[] b = lease.box();
+                MapOverlay.Rect r = MapOverlay.screenBox(cam, b);
+                int ex = (int) Math.round(cam.screenX(Math.min(b[0], b[3])));
+                int ez = (int) Math.round(cam.screenZ(Math.min(b[2], b[5])));
+                int ew = (Math.abs(b[3] - b[0]) + 1) * cam.zoom();
+                int eh = (Math.abs(b[5] - b[2]) + 1) * cam.zoom();
+                line.append(" | lease ").append(lease.id()).append(' ').append(lease.bot()).append(" gen=")
+                        .append(lease.gen()).append(" state=").append(lease.state()).append(" live=")
+                        .append(lease.live()).append(" box=").append(b[0]).append(',').append(b[1]).append(',')
+                        .append(b[2]).append(',').append(b[3]).append(',').append(b[4]).append(',').append(b[5])
+                        .append(" rect=").append(r.x()).append(',').append(r.y()).append(',').append(r.w())
+                        .append(',').append(r.h()).append(" expect=").append(ex).append(',').append(ez).append(',')
+                        .append(ew).append(',').append(eh);
             }
             logger.line(line.toString());
         }

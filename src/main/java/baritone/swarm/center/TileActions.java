@@ -27,8 +27,14 @@ public final class TileActions {
      */
     public static RegistryResult press(UnifiedRegistry registry, RegistryCall call, ButtonModel button,
                                        Map<String, String> values, String bot, Sink sink) {
-        String line = button.line(values);
-        String routed = route(button, bot, values);
+        String line;
+        String routed;
+        try {
+            line = button.line(values);
+            routed = route(button, bot, values);
+        } catch (IllegalArgumentException e) {
+            return RegistryResult.denied(e.getMessage()); // Ostinato: for example a cancel with no running command
+        }
         RegistryCall scoped = call.withLine(line);
         if (bot != null && !bot.isBlank()) {
             scoped = scoped.withScope(RegistryCall.Scope.ONE, bot);

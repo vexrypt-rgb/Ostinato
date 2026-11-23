@@ -419,6 +419,8 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // seen-only scan knows no ore there yet. Only the mine asks, and only an active (started) lease answers,
             // so this needs no in-control check (on its first tick the mine is not in control yet).
             LeaseFence.installVein(() -> g.activeVein(dimChar()));
+            // Ostinato: a vein or region lease limits the mine's targets to its box (the fence denies the rest).
+            LeaseFence.installMineBox(() -> g.activeMineBox(dimChar()));
             // Ostinato: Phase 2c - a leased mine that emptied its vein withdraws this bot's reports of it.
             LeaseFence.installMinedOut((box, ores) -> {
                 obsReporter.minedOut(box, ores, nowMs());

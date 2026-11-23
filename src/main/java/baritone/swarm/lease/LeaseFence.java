@@ -44,6 +44,24 @@ public final class LeaseFence {
         check = OFF;
         geometry = NO_GEOMETRY;
         vein = NO_VEIN; // Ostinato: Phase 2c
+        mineBox = NO_VEIN;
+    }
+
+    private static volatile Supplier<ReservationKey> mineBox = () -> null;
+
+    /** Ostinato: supplies the vein or region box the active leased mine is confined to (null when none). */
+    public static void installMineBox(Supplier<ReservationKey> b) {
+        mineBox = b == null ? NO_VEIN : b;
+    }
+
+    /** Ostinato: the box the active leased mine may take targets from, or null. A broken supplier gives null. */
+    public static ReservationKey mineBox() {
+        Supplier<ReservationKey> b = mineBox;
+        try {
+            return b.get();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** Ostinato: Phase 2c. Supplies the vein box the active leased mine holds (null when none). */

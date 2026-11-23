@@ -128,4 +128,18 @@ public class LeasedVeinTest {
         LeaseFence.installVein(null);
         assertNull(LeaseFence.veinTarget());
     }
+
+    // Ostinato: live check p3w run 6. A region-leased mine that saw no ore in its box (or had emptied it) wandered
+    // instead of heading for the box or ending, so the lease never ended. The box it steers for is the vein, else the
+    // region; a mine holding neither keeps its own targets.
+    @Test
+    public void aRegionLeaseIsSteeredForLikeAVein() {
+        ReservationKey vein = ReservationKey.parse("v:o:0,10,0:1,11,1");
+        ReservationKey region = ReservationKey.parse("r:o:320,148,310:323,156,313");
+        assertEquals(region, LeasedVein.steerBox(null, region));
+        assertEquals(vein, LeasedVein.steerBox(vein, vein));
+        assertEquals(vein, LeasedVein.steerBox(vein, region));
+        assertNull(LeasedVein.steerBox(null, null));
+        assertNull("a chest lease is not a mine box", LeasedVein.steerBox(null, ReservationKey.parse("c:o:5,64,5")));
+    }
 }

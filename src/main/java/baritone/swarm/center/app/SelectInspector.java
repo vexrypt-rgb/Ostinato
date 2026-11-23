@@ -106,6 +106,7 @@ final class SelectInspector {
         final Map<String, Map<String, JTextField>> fields = new LinkedHashMap<>();
         List<String> built = List.of();
         String armedDespawn;
+        String cancelTarget;
 
         Card(String bot) {
             this.bot = bot;
@@ -145,6 +146,7 @@ final class SelectInspector {
                 return;
             }
             actions.setVisible(true);
+            cancelTarget = TileText.cancelTarget(b.feed().executions());
             task.setText(TileText.task(b.feed()));
             position.setText(TileText.position(b.feed()));
             inventory.setText(TileText.inventory(b.feed().inventory()));
@@ -212,6 +214,7 @@ final class SelectInspector {
                     out.put(e.getKey(), e.getValue().getText());
                 }
             }
+            TileView.withCancelTarget(b, out, cancelTarget);
             return out;
         }
 
