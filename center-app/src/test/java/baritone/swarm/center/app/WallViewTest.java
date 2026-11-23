@@ -86,7 +86,7 @@ public class WallViewTest {
     @Test public void mineSendsBothFields() {
         ui.refresh();
         ui.type("tile:Spelunker:field:mine:count", "16").type("tile:Spelunker:field:mine:block", "iron_ore");
-        assertEquals("#swarm send Spelunker mine 16 iron_ore", ui.text("tile:Spelunker:preview"));
+        assertEquals("#swarm lease Spelunker obs:iron_ore mine 16 iron_ore", ui.text("tile:Spelunker:preview")); // Ostinato: mine runs under a lease
         ui.click("tile:Spelunker:button:mine");
         assertEquals(Map.of("count", "16", "block", "iron_ore"), ui.sent().get(0).values());
     }

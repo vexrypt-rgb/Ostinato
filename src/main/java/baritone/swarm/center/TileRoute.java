@@ -6,8 +6,9 @@ import java.util.Map;
 
 /**
  * Ostinato: where a tile button's line runs. Pure, so the in-game window ({@link TileActions}), the command host and
- * the standalone window all compute the same line: goto and mine aimed at another bot become
- * {@code swarm send <bot> <line>} on the host; a cancel names the command it stops ({@code swarm cancel <id>}, run on
+ * the standalone window all compute the same line: goto aimed at another bot becomes
+ * {@code swarm send <bot> <line>} on the host and mine a leased offer {@code swarm lease <bot> obs:<block> <line>} (mine
+ * from a non-owner runs only under a lease); a cancel names the command it stops ({@code swarm cancel <id>}, run on
  * the host that issued it) and a cancel with no id is refused, because the protocol rejects a bare cancel
  * ({@code bad-cancel-target}); everything else runs as written.
  */
@@ -31,10 +32,26 @@ public final class TileRoute {
             return line;
         }
         String command = button.command();
-        if ("goto".equals(command) || "mine".equals(command)) {
+        if ("goto".equals(command)) {
             return "swarm send " + bot + " " + line;
         }
+        if ("mine".equals(command)) {
+            // Ostinato: mine from a non-owner runs only under a lease from the coordinator, so the tile offers one: the
+            // coordinator picks a known vein of the first block named, and the bot mines inside that lease's fence.
+            return "swarm lease " + bot + " obs:" + firstBlock(line) + " " + line;
+        }
         return line;
+    }
+
+    /** The first block a {@code mine [count] <block...>} line names, without its {@code minecraft:} namespace. */
+    static String firstBlock(String mineLine) {
+        String[] w = mineLine.trim().split("\\s+");
+        for (int i = 1; i < w.length; i++) {
+            if (!w[i].matches("\\d+")) {
+                return w[i].startsWith("minecraft:") ? w[i].substring("minecraft:".length()) : w[i];
+            }
+        }
+        throw new IllegalArgumentException("mine names no block");
     }
 
     /** The values a tile sends: a form with a {@code name} argument gets the tile's bot unless one was typed. */
