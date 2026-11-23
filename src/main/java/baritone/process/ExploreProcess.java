@@ -17,6 +17,7 @@
 
 package baritone.process;
 
+import baritone.api.process.ProcessOutcome;
 import baritone.Baritone;
 import baritone.api.cache.ICachedWorld;
 import baritone.api.pathing.goals.Goal;
@@ -61,6 +62,28 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
     public void explore(int centerX, int centerZ) {
         explorationOrigin = new BlockPos(centerX, 0, centerZ);
         distanceCompleted = 0;
+        requestOutcome.start(); // Ostinato:
+        heading.clear();
+    }
+
+    // ---- Ostinato: the outcome of each explore request (a swarm command reports success only from this) -----------
+    private final RequestOutcome requestOutcome = new RequestOutcome();
+    /** The chunks the last tick's goal headed for; one of them now explored counts as work done. */
+    private final java.util.List<long[]> heading = new ArrayList<>();
+    private List<long[]> lastChunks = new ArrayList<>();
+
+    @Override
+    public ProcessOutcome outcome() {
+        return requestOutcome.outcome();
+    }
+
+    private void countExplored(IChunkFilter filter) {
+        for (long[] c : heading) {
+            if (filter.isAlreadyExplored((int) c[0], (int) c[1]) == Status.EXPLORED) {
+                requestOutcome.didOne();
+            }
+        }
+        heading.clear();
     }
 
     @Override
@@ -80,7 +103,9 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        requestOutcome.running(); // Ostinato:
         if (calcFailed) {
+            requestOutcome.endFor(ProcessOutcome.Reason.UNREACHABLE); // Ostinato:
             logDirect("Failed");
             if (Baritone.settings().notificationOnExploreFinished.value) {
                 logNotification("Exploration failed", true);
@@ -89,7 +114,9 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
             return null;
         }
         IChunkFilter filter = calcFilter();
+        countExplored(filter); // Ostinato:
         if (!Baritone.settings().disableCompletionCheck.value && filter.countRemain() == 0) {
+            requestOutcome.endFor(ProcessOutcome.Reason.NONE); // Ostinato: none explored here: a no-op
             logDirect("Explored all chunks");
             if (Baritone.settings().notificationOnExploreFinished.value) {
                 logNotification("Explored all chunks", false);
@@ -102,6 +129,7 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
             logDebug("awaiting region load from disk");
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
+        heading.addAll(lastChunks); // Ostinato: the chunks this goal heads for
         return new PathingCommand(new GoalComposite(closestUncached), PathingCommandType.FORCE_REVALIDATE_GOAL_AND_PATH);
     }
 
@@ -110,6 +138,7 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
         int chunkZ = center.getZ() >> 4;
         int count = Math.min(filter.countRemain(), Baritone.settings().exploreChunkSetMinimumSize.value);
         List<BlockPos> centers = new ArrayList<>();
+        List<long[]> chunks = new ArrayList<>(); // Ostinato: the unexplored chunks the centres stand for
         int renderDistance = Baritone.settings().worldExploringChunkOffset.value;
         for (int dist = distanceCompleted; ; dist++) {
             for (int dx = -dist; dx <= dist; dx++) {
@@ -145,12 +174,14 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
                         centerZ += offset;
                     }
                     centers.add(new BlockPos(centerX, 0, centerZ));
+                    chunks.add(new long[]{chunkX + dx, chunkZ + dz});
                 }
             }
             if (dist % 10 == 0) {
                 count = Math.min(filter.countRemain(), Baritone.settings().exploreChunkSetMinimumSize.value);
             }
             if (centers.size() >= count) {
+                lastChunks = chunks;
                 return centers.stream().map(pos -> createGoal(pos.getX(), pos.getZ())).toArray(Goal[]::new);
             }
             if (centers.isEmpty()) {
@@ -291,6 +322,7 @@ public final class ExploreProcess extends BaritoneProcessHelper implements IExpl
 
     @Override
     public void onLostControl() {
+        requestOutcome.finish(); // Ostinato: an end it did not choose (stop, another process) is a cancel
         explorationOrigin = null;
     }
 

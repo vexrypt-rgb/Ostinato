@@ -23,8 +23,6 @@ import baritone.api.command.ICommand;
 import baritone.api.command.manager.ICommandManager;
 import baritone.api.pathing.calc.IPathingControlManager;
 import baritone.api.process.IBaritoneProcess;
-import baritone.api.process.IGetToBlockProcess; // Ostinato:
-import baritone.api.process.IMineProcess; // Ostinato:
 import baritone.api.process.ProcessOutcome; // Ostinato:
 import baritone.api.pathing.goals.Goal; // Ostinato:
 import baritone.api.swarm.protocol.ExecutionState;
@@ -235,29 +233,31 @@ public final class RegistryExecutor implements CommandProtocol.Executor {
     /** Ostinato: the outcome request numbers of the processes that record outcomes, right now. */
     private Map<IBaritoneProcess, Long> outcomeRequests() {
         Map<IBaritoneProcess, Long> m = new java.util.HashMap<>();
-        try {
-            IMineProcess mine = baritone.getMineProcess();
-            if (mine != null) {
-                m.put(mine, mine.outcome().request());
+        // Ostinato: every process that records outcomes. Each on its own: one that cannot be read leaves the others.
+        java.util.List<Supplier<? extends IBaritoneProcess>> recording = java.util.List.of(baritone::getMineProcess,
+                baritone::getGetToBlockProcess, baritone::getCustomGoalProcess, baritone::getBuilderProcess,
+                baritone::getFarmProcess, baritone::getFollowProcess, baritone::getExploreProcess);
+        for (Supplier<? extends IBaritoneProcess> get : recording) {
+            try {
+                IBaritoneProcess p = get.get();
+                ProcessOutcome o = p == null ? null : outcomeOf(p);
+                if (o != null) {
+                    m.put(p, o.request());
+                }
+            } catch (Throwable ignored) {
+                // this process cannot be compared against; a command it runs cannot be verified
             }
-            IGetToBlockProcess gtb = baritone.getGetToBlockProcess();
-            if (gtb != null) {
-                m.put(gtb, gtb.outcome().request());
-            }
-        } catch (Throwable ignored) {
-            // no outcome-recording process to compare against: the command cannot be verified
         }
         return m;
     }
 
+    /** Ostinato: the process's recorded outcome ({@link ProcessOutcome#NONE} if it records none), or null if unreadable. */
     static ProcessOutcome outcomeOf(IBaritoneProcess p) {
-        if (p instanceof IMineProcess) {
-            return ((IMineProcess) p).outcome();
+        try {
+            return p == null ? null : p.outcome();
+        } catch (RuntimeException e) {
+            return null;
         }
-        if (p instanceof IGetToBlockProcess) {
-            return ((IGetToBlockProcess) p).outcome();
-        }
-        return null;
     }
 
     /**

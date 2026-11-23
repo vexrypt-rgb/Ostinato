@@ -17,6 +17,7 @@
 
 package baritone.process;
 
+import baritone.api.process.ProcessOutcome;
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
 import baritone.api.pathing.goals.Goal;
@@ -101,6 +102,43 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         return active;
     }
 
+    // ---- Ostinato: the outcome of each farm request (a swarm command reports success only from this) --------------
+    private final RequestOutcome requestOutcome = new RequestOutcome();
+    /** Ripe crops and open farmland or soul sand within reach on the last tick: one that changed counts as work done. */
+    private final List<BlockPos> watchHarvest = new ArrayList<>(), watchPlant = new ArrayList<>();
+
+    @Override
+    public ProcessOutcome outcome() {
+        return requestOutcome.outcome();
+    }
+
+    /** Counts crops harvested and cells planted since the last tick (within reach, so the bot's own work). */
+    private void countFarmed() {
+        if (ctx.world() == null) {
+            return;
+        }
+        for (BlockPos pos : watchHarvest) {
+            if (!readyForHarvest(ctx.world(), pos, ctx.world().getBlockState(pos))) {
+                requestOutcome.didOne();
+            }
+        }
+        for (BlockPos pos : watchPlant) {
+            if (!(ctx.world().getBlockState(pos.above()).getBlock() instanceof AirBlock)) {
+                requestOutcome.didOne();
+            }
+        }
+        watchHarvest.clear();
+        watchPlant.clear();
+    }
+
+    private void watch(List<BlockPos> from, List<BlockPos> into, BetterBlockPos feet, double reach) {
+        for (BlockPos pos : from) {
+            if (feet.distSqr(pos) <= reach * reach) {
+                into.add(pos);
+            }
+        }
+    }
+
     @Override
     public void farm(int range, BlockPos pos) {
         if (pos == null) {
@@ -111,6 +149,9 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         this.range = range;
         active = true;
         locations = null;
+        requestOutcome.start(); // Ostinato:
+        watchHarvest.clear();
+        watchPlant.clear();
     }
 
     private enum Harvest {
@@ -194,6 +235,8 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
+        requestOutcome.running(); // Ostinato:
+        countFarmed(); // Ostinato:
         if (Baritone.settings().mineGoalUpdateInterval.value != 0 && tickCount++ % Baritone.settings().mineGoalUpdateInterval.value == 0) {
             ArrayList<Block> scan = new ArrayList<>();
             for (Harvest harvest : Harvest.values()) {
@@ -267,6 +310,9 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         baritone.getInputOverrideHandler().clearAllKeys();
         BetterBlockPos playerPos = ctx.playerFeet();
         double blockReachDistance = ctx.playerController().getBlockReachDistance();
+        watch(toBreak, watchHarvest, playerPos, blockReachDistance); // Ostinato:
+        watch(openFarmland, watchPlant, playerPos, blockReachDistance);
+        watch(openSoulsand, watchPlant, playerPos, blockReachDistance);
         for (BlockPos pos : toBreak) {
             if (playerPos.distSqr(pos) > blockReachDistance * blockReachDistance) {
                 continue;
@@ -337,6 +383,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         }
 
         if (calcFailed) {
+            requestOutcome.endFor(ProcessOutcome.Reason.UNREACHABLE); // Ostinato:
             logDirect("Farm failed");
             if (Baritone.settings().notificationOnFarmFail.value) {
                 logNotification("Farm failed", true);
@@ -383,6 +430,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
             }
         }
         if (goalz.isEmpty()) {
+            requestOutcome.endFor(ProcessOutcome.Reason.MISSING_RESOURCE); // Ostinato: nothing left to do
             logDirect("Farm failed");
             if (Baritone.settings().notificationOnFarmFail.value) {
                 logNotification("Farm failed", true);
@@ -395,6 +443,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
 
     @Override
     public void onLostControl() {
+        requestOutcome.finish(); // Ostinato: an end it did not choose (stop, another process) is a cancel
         active = false;
     }
 
