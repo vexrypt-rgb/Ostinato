@@ -344,7 +344,9 @@ public class Phase1GateTest {
 
     @Test
     public void gate_noAutoRetryMineOrPlaceOnUnknown() {
-        World w = World.create();
+        // Ostinato: Alice is the owner here: a non-owner's plain mine is now unauthorized (lease-scoped), and this test
+        // is about not retrying a non-idempotent command, not about who may send it.
+        World w = World.create(new CommandProtocol.Policy("Alice", true, false, AgentPolicy.DEFAULT_TOOLS));
         String sent = w.alice.submit("Bob", "mine 1");
         w.exchange();
         UUID id = idOf(sent);

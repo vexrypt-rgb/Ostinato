@@ -111,6 +111,12 @@ public final class CommandProtocol {
      * {@link #APPROACH_MS} (and never past the command's own deadline); then it is rejected obs-unknown as before.
      */
     public static final String OBS_APPROACH = "obs-approach";
+    /**
+     * Ostinato: swarm commands a non-owner may run only as a leased command carrying a valid, current lease granted by
+     * the configured coordinator (and so only inside that lease's fence). The owner is not limited. A bot with leases
+     * off takes them from its owner only. Lease-scoped authority, as for an owner-only leased tunnel.
+     */
+    public static final Set<String> LEASE_SCOPED_SWARM_COMMANDS = Set.of("mine");
     public static final long APPROACH_MS = 60_000L;
     public static final long APPROACH_CHECK_MS = 500L;
 
@@ -979,8 +985,9 @@ public final class CommandProtocol {
                 Held h = it.next();
                 if (now >= h.deadline) {
                     it.remove();
-                    log.accept("swarm: rejected " + h.p.id + " nolease (no grant within " + HOLD_MS + " ms)");
-                    sends.add(Decision.ack(h.from, rememberReject(h.p, "nolease")));
+                    String why = h.scoped ? "unauthorized" : "nolease"; // Ostinato: no lease, no lease-scoped authority
+                    log.accept("swarm: rejected " + h.p.id + " " + why + " (no grant within " + HOLD_MS + " ms)");
+                    sends.add(Decision.ack(h.from, rememberReject(h.p, why)));
                 }
             }
         }
@@ -1240,6 +1247,7 @@ public final class CommandProtocol {
         if (denied != null) {
             return Decision.ack(from, rememberReject(p, denied));
         }
+        boolean scoped = leaseScoped(p, entry); // Ostinato: authority comes from the command's lease
         String missing = localCap(entry);
         if (missing != null) {
             return Decision.ack(from, rememberReject(p, missing));
@@ -1256,19 +1264,35 @@ public final class CommandProtocol {
         // Ostinato: Phase 2a. A lease-needing command runs only under a valid lease bound to its id. The
         // coordinator sends the grant first; a command that overtakes its grant waits HOLD_MS, then nolease.
         LeaseHooks hooks = leaseHooks;
+        if (scoped && (hooks == null || !hooks.needsLease(p.name, entry))) {
+            log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner runs only under a lease)");
+            return Decision.ack(from, rememberReject(p, "unauthorized"));
+        }
         if (hooks != null && hooks.needsLease(p.name, entry)) {
             LeaseState ls = hooks.state(p.id);
             if (ls == LeaseState.EXPIRED) {
+                if (scoped) {
+                    log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner needs a valid"
+                            + " lease; the lease is not valid)");
+                    return Decision.ack(from, rememberReject(p, "unauthorized"));
+                }
                 log.accept("swarm: rejected " + p.id + " nolease (lease not valid)");
                 return Decision.ack(from, rememberReject(p, "nolease"));
             }
             if (ls != LeaseState.VALID) {
                 Held h = held.get(p.id);
                 if (h == null) {
-                    held.put(p.id, new Held(p, transport, from, clock.getAsLong() + HOLD_MS));
+                    h = new Held(p, transport, from, clock.getAsLong() + HOLD_MS);
+                    h.scoped = scoped;
+                    held.put(p.id, h);
                     log.accept("swarm: holding " + p.id + " for its lease grant");
                 }
                 return Decision.ack(from, null);
+            }
+            if (scoped && !hooks.leaseFrom(p.id, p.issuer)) {
+                log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner runs only under a"
+                        + " current lease from the coordinator)");
+                return Decision.ack(from, rememberReject(p, "unauthorized"));
             }
             // Ostinato: Phase 2c. A lease chosen from a shared observation runs only after the bot checked that
             // observation in its own world. A failed check is a stored reject: never auto-retried.
@@ -1388,6 +1412,9 @@ public final class CommandProtocol {
             case SWARM:
                 if (!members.contains(p.issuer)) {
                     return "unauthorized";
+                }
+                if (leaseScoped(p, entry) && (leaseHooks == null || !leaseHooks.coordinatorIs(p.issuer))) {
+                    return "unauthorized"; // Ostinato: no lease can come from this issuer (not the coordinator, or leases off)
                 }
                 break;
             case AI:
@@ -1989,6 +2016,19 @@ public final class CommandProtocol {
             return null;
         }
 
+        /** Ostinato: whether {@code member} is the configured lease coordinator. */
+        default boolean coordinatorIs(String member) {
+            return false;
+        }
+
+        /**
+         * Ostinato: whether {@code commandId} carries a valid, current lease granted by {@code issuer}, the configured
+         * coordinator (lease-scoped authority for {@link #LEASE_SCOPED_SWARM_COMMANDS}).
+         */
+        default boolean leaseFrom(UUID commandId, String issuer) {
+            return false;
+        }
+
         /** A command started. Must not call back into the protocol. */
         default void started(UUID commandId, String name) {
         }
@@ -2103,11 +2143,18 @@ public final class CommandProtocol {
         return "obs-unknown";
     }
 
+    // Ostinato: a lease-scoped swarm command from a non-owner: its authority is its lease.
+    private boolean leaseScoped(Parsed p, CommandCatalog.Entry entry) {
+        return entry.permission == CommandPermission.SWARM
+                && LEASE_SCOPED_SWARM_COMMANDS.contains(p.name.toLowerCase(Locale.ROOT)) && !issuerIsOwner(p.issuer);
+    }
+
     private static final class Held {
         final Parsed p;
         final String transport;
         final String from;
         final long deadline;
+        boolean scoped; // Ostinato: a lease-scoped command: no grant means unauthorized, not nolease
 
         Held(Parsed p, String transport, String from, long deadline) {
             this.p = p;

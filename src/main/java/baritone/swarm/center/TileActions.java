@@ -3,8 +3,8 @@ package baritone.swarm.center;
 import java.util.Map;
 
 /**
- * Ostinato: a tile button is a registry form. Goto and mine aimed at another bot are sent with
- * {@code swarm send}, and that send is itself an owner command in the same registry.
+ * Ostinato: a tile button is a registry form. Goto aimed at another bot is sent with {@code swarm send} and mine
+ * with a leased {@code swarm lease} offer; that send or offer is itself an owner command in the same registry.
  * Despawn, spawn, layout, and stop-all stay on their own lines. Closing the window is not a command.
  */
 public final class TileActions {
