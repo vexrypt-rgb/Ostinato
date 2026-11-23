@@ -98,6 +98,17 @@ public final class LeasedVein {
         return k == null || !ore || k.contains(k.dim, x, y, z);
     }
 
+    /**
+     * Ostinato: the box a leased mine with no known target heads for and ends in once it holds none of the ore: the
+     * verified vein, else the region the mine was ordered to work. Null (keep the mine's own targets) otherwise.
+     */
+    public static ReservationKey steerBox(ReservationKey vein, ReservationKey mineBox) {
+        if (vein != null) {
+            return vein;
+        }
+        return mineBox != null && mineBox.type == ReservationKey.Type.REGION ? mineBox : null;
+    }
+
     /** The centre block of the box. */
     public static int[] centre(ReservationKey k) {
         return new int[]{Math.floorDiv(k.x1 + k.x2, 2), Math.floorDiv(k.y1 + k.y2, 2), Math.floorDiv(k.z1 + k.z2, 2)};

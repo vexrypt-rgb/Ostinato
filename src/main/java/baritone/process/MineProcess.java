@@ -431,8 +431,10 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         // Ostinato: Phase 2c - a held vein lease was verified in this bot's world before the command ran, so head for
         // its box rather than wander; once the box is loaded and holds none of the ore, the vein is done.
         ReservationKey vein = LeaseFence.veinTarget();
-        if (vein != null) {
-            return veinGoal(vein, filter, legit);
+        // Ostinato: a region lease too: head for the ordered box, and end once it holds none of the ore.
+        ReservationKey steer = LeasedVein.steerBox(vein, LeaseFence.mineBox());
+        if (steer != null) {
+            return veinGoal(steer, filter, legit);
         }
         if (LegitTargets.active()) {
             // Ostinato: no visible ore. One bot may cave, branch, or swim. This is not a path toward a cached ore.
@@ -485,6 +487,10 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         if (scan.state == LeasedVein.State.UNKNOWN) {
             int[] c = LeasedVein.centre(vein);
             return new PathingCommand(new GoalNear(new BlockPos(c[0], c[1], c[2]), 3), PathingCommandType.REVALIDATE_GOAL_AND_PATH);
+        }
+        if (scan.state == LeasedVein.State.MINED_OUT && vein.type != ReservationKey.Type.VEIN) {
+            logDirect("swarm-lease: region " + vein + " holds none of the ore here, ending the leased mine");
+            return null;
         }
         if (scan.state == LeasedVein.State.MINED_OUT) {
             logDirect("swarm-lease: vein " + vein + " mined out here, ending the leased mine");
