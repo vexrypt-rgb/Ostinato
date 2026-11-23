@@ -132,6 +132,7 @@ public class TunnelLeaseAuthorityTest {
     public void otherOwnerOnlyCommandsStayOwnerOnly() throws Exception {
         LeaseSupport s = nonOwnerCoordinator();
         // Ostinato: build is owner-only and not lease-scoped (since main 1431a6807 mine is lease-scoped too, any lease type)
+        s.bobExec.permissions.put("build", CommandPermission.OWNER); // owner-only live (ICommand default)
         s.coord.lease("Bob", "v:o:0,10,0:1,11,1", "build house");
         s.pump();
         s.run(CommandProtocol.HOLD_MS * 3, 500L);
