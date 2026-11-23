@@ -115,8 +115,10 @@ public final class CommandCatalog {
         boolean mutate = caps.contains("mining") || caps.contains("building") || caps.contains("inventory")
                 || "place".equals(n) || "drop".equals(n) || "craft".equals(n) || "use".equals(n);
         boolean emergency = perm == CommandPermission.OWNER && isEmergencyName(n);
+        // Ostinato: only commands that cannot run bare need arguments over the swarm. path, come, farm (all in range),
+        // explore (from here), tunnel (straight ahead), goal (here) and home (the home waypoint) are complete without.
         boolean args = switch (n) {
-            case "goto", "come", "follow", "goal", "home", "mine", "tunnel", "farm", "build", "path", "explore" -> true;
+            case "goto", "follow", "mine", "build" -> true;
             default -> false;
         };
         return new Entry(n, List.of(), perm, caps, false, mutate, false, args, emergency, null);
