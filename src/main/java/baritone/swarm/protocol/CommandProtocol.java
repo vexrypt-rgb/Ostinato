@@ -112,11 +112,13 @@ public final class CommandProtocol {
      */
     public static final String OBS_APPROACH = "obs-approach";
     /**
-     * Ostinato: swarm commands a non-owner may run only as a leased command carrying a valid, current lease granted by
-     * the configured coordinator (and so only inside that lease's fence). The owner is not limited. A bot with leases
-     * off takes them from its owner only. Lease-scoped authority, as for an owner-only leased tunnel.
+     * Ostinato: lease-scoped authority, one rule for every leased command. A non-owner may run these only as a leased
+     * command carrying a valid, current lease granted by the configured coordinator (and so only inside that lease's
+     * fence); the value says whether the lease must be a REGION lease. The owner is not limited. A bot with leases off
+     * takes them from its owner only. mine (SWARM in the registry): any lease type. tunnel (owner-only in the registry,
+     * Phase 2c part 2 slice 3): a region lease only. Any other owner-only command stays owner-only.
      */
-    public static final Set<String> LEASE_SCOPED_SWARM_COMMANDS = Set.of("mine");
+    public static final Map<String, Boolean> LEASE_SCOPED_COMMANDS = Map.of("mine", false, "tunnel", true);
     public static final long APPROACH_MS = 60_000L;
     public static final long APPROACH_CHECK_MS = 500L;
 
@@ -1289,7 +1291,7 @@ public final class CommandProtocol {
                 }
                 return Decision.ack(from, null);
             }
-            if (scoped && !hooks.leaseFrom(p.id, p.issuer)) {
+            if (scoped && !hooks.leaseFrom(p.id, p.issuer, LEASE_SCOPED_COMMANDS.get(p.name.toLowerCase(Locale.ROOT)))) {
                 log.accept("swarm: rejected " + p.id + " unauthorized (" + p.name + " from a non-owner runs only under a"
                         + " current lease from the coordinator)");
                 return Decision.ack(from, rememberReject(p, "unauthorized"));
@@ -1403,8 +1405,14 @@ public final class CommandProtocol {
         CommandPermission perm = entry.permission;
         switch (perm) {
             case OWNER: {
-                String owner = policy.ownerName == null || policy.ownerName.isBlank() ? self.memberId() : policy.ownerName;
-                if (!AgentPolicy.ownerAllowed(true, owner, p.issuer)) {
+                if (leaseScoped(p, entry)) {
+                    // Ostinato: lease-scoped; the lease step decides (a current lease from the coordinator, or unauthorized)
+                    if (leaseHooks == null || !leaseHooks.coordinatorIs(p.issuer)) {
+                        return "unauthorized";
+                    }
+                    break;
+                }
+                if (!issuerIsOwner(p.issuer)) {
                     return "unauthorized";
                 }
                 break;
@@ -2023,9 +2031,9 @@ public final class CommandProtocol {
 
         /**
          * Ostinato: whether {@code commandId} carries a valid, current lease granted by {@code issuer}, the configured
-         * coordinator (lease-scoped authority for {@link #LEASE_SCOPED_SWARM_COMMANDS}).
+         * coordinator, and with {@code regionOnly} is a REGION lease (lease-scoped authority, {@link #LEASE_SCOPED_COMMANDS}).
          */
-        default boolean leaseFrom(UUID commandId, String issuer) {
+        default boolean leaseFrom(UUID commandId, String issuer, boolean regionOnly) {
             return false;
         }
 
@@ -2143,10 +2151,10 @@ public final class CommandProtocol {
         return "obs-unknown";
     }
 
-    // Ostinato: a lease-scoped swarm command from a non-owner: its authority is its lease.
+    // Ostinato: a lease-scoped command (owner-only or swarm) from a non-owner: its authority is its lease.
     private boolean leaseScoped(Parsed p, CommandCatalog.Entry entry) {
-        return entry.permission == CommandPermission.SWARM
-                && LEASE_SCOPED_SWARM_COMMANDS.contains(p.name.toLowerCase(Locale.ROOT)) && !issuerIsOwner(p.issuer);
+        return (entry.permission == CommandPermission.SWARM || entry.permission == CommandPermission.OWNER)
+                && LEASE_SCOPED_COMMANDS.containsKey(p.name.toLowerCase(Locale.ROOT)) && !issuerIsOwner(p.issuer);
     }
 
     private static final class Held {

@@ -1,6 +1,7 @@
 package baritone.behavior;
 
 import baritone.Baritone;
+import baritone.api.utils.input.Input;
 import baritone.api.Settings;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.IBaritoneProcess;
@@ -39,6 +40,7 @@ import baritone.swarm.lease.LeaseMessage;
 import baritone.swarm.lease.LeaseRate;
 import baritone.swarm.lease.ReservationResolver;
 import baritone.swarm.lease.ReservationKey;
+import baritone.swarm.lease.LeaseEndStop;
 import baritone.swarm.lease.LeasedVein;
 import baritone.process.ApproachProcess;
 import baritone.pathing.movement.CalculationContext;
@@ -57,6 +59,7 @@ import baritone.swarm.world.RunEpoch;
 import baritone.swarm.world.ObservationOffer; // Ostinato: Phase 2c
 import baritone.swarm.world.ObservationVerifier;
 import baritone.swarm.world.ObsRefresh;
+import baritone.swarm.world.LoadedWorld;
 import baritone.swarm.world.WorldKnowledge;
 import baritone.api.swarm.protocol.ExternalCommandHook;
 import net.minecraft.client.player.LocalPlayer;
@@ -408,7 +411,20 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2c part 2 - while the bot walks to verify an observation it acts on nothing.
             LeaseFence.install(() -> (g.invalidActive() && leasedInControl()) || approachInControl());
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
+            // Ostinato: slice 3 S5b fix - any lease end stops the in-flight path before the next action; until the bot is
+            // idle the fence keeps denying inside the ended lease's box.
+            LeaseEndStop endStop = new LeaseEndStop(g, leaseEndBot(), this::logDirect, SwarmBehavior::nowMs);
+            leaseEndStop = endStop;
             LeaseFence.installGeometry((kind, x, y, z) -> {
+                if (endStop.denied(kind, dimChar(), x, y, z)) {
+                    logFenceDenied(kind, x, y, z);
+                    return true;
+                }
+                // Ostinato: Phase 2c part 2 slice 3 - a region lease is re-verified right before its first action inside.
+                if (leasedInControl() && g.regionEntry(kind, dimChar(), x, y, z, this::regionLoaded) != null) {
+                    logFenceDenied(kind, x, y, z);
+                    return true;
+                }
                 boolean out = leasedInControl() && g.outsideReservation(kind, dimChar(), x, y, z, isOre(x, y, z));
                 if (out) {
                     logFenceDenied(kind, x, y, z); // Ostinato: Phase 2c - the fence is visible in the log
@@ -439,6 +455,9 @@ public final class SwarmBehavior extends Behavior implements Helper {
             leaseBoundTo = p;
         }
         leaseGuard.tick();
+        if (leaseEndStop != null) {
+            leaseEndStop.tick(); // Ostinato: slice 3 S5b fix
+        }
         driveApproach(leaseGuard);
         logLeaseRate();
     }
@@ -831,6 +850,58 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         logDirect("swarm-obs: cannot verify " + resource + " (" + r.why + ")");
         return BotLeaseGuard.OBS_UNKNOWN;
+    }
+
+    // Ostinato: slice 3 S5b fix.
+    private LeaseEndStop leaseEndStop;
+
+    private LeaseEndStop.Bot leaseEndBot() {
+        return new LeaseEndStop.Bot() {
+            @Override
+            public void releaseForcedInputs() {
+                // the same release #stop does (PathingBehavior.cancelEverything): every key when safe, the clicks always
+                baritone.getPathingBehavior().releaseForcedInputs(baritone.getPathingBehavior().isSafeToCancel());
+            }
+
+            @Override
+            public boolean clickForced() {
+                return baritone.getInputOverrideHandler().isInputForcedDown(Input.CLICK_LEFT)
+                        || baritone.getInputOverrideHandler().isInputForcedDown(Input.CLICK_RIGHT);
+            }
+
+            @Override
+            public void stopLeasedProcesses() {
+                for (IBaritoneProcess p : leasedProcesses()) {
+                    if (p.isActive()) {
+                        p.onLostControl();
+                    }
+                }
+            }
+
+            @Override
+            public boolean otherProcessInControl() {
+                Optional<IBaritoneProcess> p = baritone.getPathingControlManager().mostRecentInControl();
+                return p.isPresent() && p.get().isActive() && !leasedProcesses().contains(p.get());
+            }
+
+            @Override
+            public boolean cancelSegmentIfSafe() {
+                return baritone.getPathingBehavior().cancelSegmentIfSafe();
+            }
+
+            @Override
+            public boolean idle() {
+                if (baritone.getPathingBehavior().isPathing() || baritone.getPathingBehavior().getInProgress().isPresent()) {
+                    return false;
+                }
+                for (IBaritoneProcess p : leasedProcesses()) {
+                    if (p.isActive()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        };
     }
 
     /** Ostinato: Phase 2c. One log line per 2 s when the reservation fence denies an action. */
@@ -1527,6 +1598,12 @@ public final class SwarmBehavior extends Behavior implements Helper {
         }
         obsWorldOverride = tag;
         return "swarm-obs: world id set to " + tag;
+    }
+
+    /** Ostinato: Phase 2c part 2 slice 3. Every chunk the box touches is held by this client. */
+    private boolean regionLoaded(ReservationKey k) {
+        net.minecraft.client.multiplayer.ClientLevel w = ctx.minecraft().level;
+        return w != null && LoadedWorld.boxHeld(k.x1, k.z1, k.x2, k.z2, (cx, cz) -> w.getChunkSource().hasChunk(cx, cz));
     }
 
     /**

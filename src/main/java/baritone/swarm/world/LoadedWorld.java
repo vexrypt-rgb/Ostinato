@@ -44,6 +44,21 @@ public final class LoadedWorld implements ReservationResolver.World {
 
     private final Client client;
 
+    /**
+     * Ostinato: Phase 2c part 2 slice 3. True when every chunk the box x1..x2, z1..z2 touches is held ({@code held}
+     * answers per chunk, e.g. ClientChunkCache.hasChunk).
+     */
+    public static boolean boxHeld(int x1, int z1, int x2, int z2, java.util.function.BiPredicate<Integer, Integer> held) {
+        for (int cx = Math.min(x1, x2) >> 4; cx <= Math.max(x1, x2) >> 4; cx++) {
+            for (int cz = Math.min(z1, z2) >> 4; cz <= Math.max(z1, z2) >> 4; cz++) {
+                if (!held.test(cx, cz)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public LoadedWorld(Client client) {
         this.client = client;
     }
