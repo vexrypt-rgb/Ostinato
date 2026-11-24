@@ -726,7 +726,7 @@ public class LeaseCoordinatorTest {
     @Test
     public void noOfferForCommandThatWouldNotSend() throws Exception {
         LeaseSupport s = active();
-        String r = s.coord.lease("Bob", "t1", "tunnel");
+        String r = s.coord.lease("Bob", "t1", "mine"); // Ostinato: a bare tunnel is a complete command now; bare mine is not
         assertTrue(r, r.contains("not offering") && r.contains("missing arguments"));
         assertTrue(s.take(LeaseMessage.TYPE, LeaseMessage.Op.OFFER).isEmpty());
         assertTrue(s.coord.lease("Bob", "t1", "mine diamond_ore").contains("gen 1"));
