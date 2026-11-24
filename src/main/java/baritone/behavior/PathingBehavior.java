@@ -17,6 +17,8 @@
 
 package baritone.behavior;
 
+import baritone.api.utils.IInputOverrideHandler;
+import baritone.api.utils.input.Input;
 import baritone.pathing.kinematic.KinematicController;
 import baritone.pathing.decide.PathDecisionMatrix;
 import baritone.pathing.calc.HierarchicalPathFinder;
@@ -539,7 +541,28 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             }
         }
         baritone.getPathingControlManager().cancelEverything(); // regardless of if we can stop the current segment, we can still stop the processes
+        releaseForcedInputs(doIt); // Ostinato: a stop with no path segment left the processes' forced clicks held
         return doIt;
+    }
+
+    /**
+     * Ostinato: what a stop lets go of. The segment cancel clears the forced keys only when a path segment exists, so a
+     * process that broke blocks standing still (the builder: tunnel, build) left Input.CLICK_LEFT forced after #stop,
+     * and BlockBreakHelper kept breaking whatever the camera faced (p2c2 slice 3 rerun 3). Every forced input is
+     * released when letting go of movement is safe; the clicks always (releasing a click never drops the player).
+     */
+    public void releaseForcedInputs(boolean safe) {
+        releaseOnStop(baritone.getInputOverrideHandler(), safe);
+        baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+    }
+
+    static void releaseOnStop(IInputOverrideHandler in, boolean safe) {
+        if (safe) {
+            in.clearAllKeys();
+        } else {
+            in.setInputForceState(Input.CLICK_LEFT, false);
+            in.setInputForceState(Input.CLICK_RIGHT, false);
+        }
     }
 
     public boolean calcFailedLastTick() { // NOT exposed on public api
