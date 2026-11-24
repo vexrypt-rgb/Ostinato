@@ -530,6 +530,10 @@ public final class BotLeaseGuard implements CommandProtocol.LeaseHooks {
         return true;
     }
 
+    public synchronized boolean hasEndedBoxes() {
+        return !endedBoxes.isEmpty();
+    }
+
     public synchronized void clearEndedBoxes() {
         endedBoxes.clear();
     }

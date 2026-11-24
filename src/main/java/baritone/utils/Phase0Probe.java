@@ -326,7 +326,8 @@ public final class Phase0Probe implements AbstractGameEventListener {
         String keys = (in.isInputForcedDown(Input.MOVE_FORWARD) ? "W" : "") + (in.isInputForcedDown(Input.MOVE_BACK) ? "S" : "")
                 + (in.isInputForcedDown(Input.MOVE_LEFT) ? "A" : "") + (in.isInputForcedDown(Input.MOVE_RIGHT) ? "D" : "")
                 + (in.isInputForcedDown(Input.SPRINT) ? "R" : "") + (in.isInputForcedDown(Input.JUMP) ? "J" : "")
-                + (in.isInputForcedDown(Input.SNEAK) ? "N" : "");
+                + (in.isInputForcedDown(Input.SNEAK) ? "N" : "") + (in.isInputForcedDown(Input.CLICK_LEFT) ? "L" : "")
+                + (in.isInputForcedDown(Input.CLICK_RIGHT) ? "U" : "");
         String mv = "-";
         String why = "-";
         if (ex != null) {

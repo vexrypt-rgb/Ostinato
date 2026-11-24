@@ -1,6 +1,7 @@
 package baritone.behavior;
 
 import baritone.Baritone;
+import baritone.api.utils.input.Input;
 import baritone.api.Settings;
 import baritone.api.event.events.TickEvent;
 import baritone.api.process.IBaritoneProcess;
@@ -412,7 +413,7 @@ public final class SwarmBehavior extends Behavior implements Helper {
             // Ostinato: Phase 2b - actions outside the active leased command's reservation box are denied.
             // Ostinato: slice 3 S5b fix - any lease end stops the in-flight path before the next action; until the bot is
             // idle the fence keeps denying inside the ended lease's box.
-            LeaseEndStop endStop = new LeaseEndStop(g, leaseEndBot(), this::logDirect);
+            LeaseEndStop endStop = new LeaseEndStop(g, leaseEndBot(), this::logDirect, SwarmBehavior::nowMs);
             leaseEndStop = endStop;
             LeaseFence.installGeometry((kind, x, y, z) -> {
                 if (endStop.denied(kind, dimChar(), x, y, z)) {
@@ -856,6 +857,18 @@ public final class SwarmBehavior extends Behavior implements Helper {
 
     private LeaseEndStop.Bot leaseEndBot() {
         return new LeaseEndStop.Bot() {
+            @Override
+            public void releaseForcedInputs() {
+                // the same release #stop does (PathingBehavior.cancelEverything): every key when safe, the clicks always
+                baritone.getPathingBehavior().releaseForcedInputs(baritone.getPathingBehavior().isSafeToCancel());
+            }
+
+            @Override
+            public boolean clickForced() {
+                return baritone.getInputOverrideHandler().isInputForcedDown(Input.CLICK_LEFT)
+                        || baritone.getInputOverrideHandler().isInputForcedDown(Input.CLICK_RIGHT);
+            }
+
             @Override
             public void stopLeasedProcesses() {
                 for (IBaritoneProcess p : leasedProcesses()) {
